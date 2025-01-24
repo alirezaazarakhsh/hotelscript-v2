@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import environ
+from datetime import timedelta
 
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
@@ -54,13 +55,18 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'debug_toolbar',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
+    'authentication',
     'drf_yasg',
 ]
 
 MIDDLEWARE = [
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # 'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -153,4 +159,34 @@ SWAGGER_SETTINGS = {
             'in': 'header'
       }
     }
+}
+
+AUTHENTICATION_BACKENDS = (
+    'authentication.backends.UserAuthBackend',
+    'authentication.backends.AdminAuthBackend',
+)
+
+AUTH_USER_MODEL = "authentication.User"
+OTP_VALID_TIME = 2
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
+    'SIGNING_KEY': SECRET_KEY,
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    "TOKEN_OBTAIN_SERIALIZER": "authentication.serializers.UserTokenObtainPairSerializer",
+}
+
+DRF_STANDARDIZED_ERRORS = {
+    "EXCEPTION_FORMATTER_CLASS": "safarname24.exception_formatter.ExceptionFormatter"
 }
