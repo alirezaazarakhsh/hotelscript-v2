@@ -4,6 +4,9 @@ from . import views
 app_name = 'authentication'
 
 urlpatterns = [
+    path('profile/',  include([
+        path('real/', views.UserProfileRetrieveUpdateView.as_view(), name='user-profile-retrieve-update'),
+    ])),         
     path('auth/', include([
         path('', views.AuthView.as_view(), name='auth'),
         path('logout/', views.APILogoutView.as_view(), name='logout'),

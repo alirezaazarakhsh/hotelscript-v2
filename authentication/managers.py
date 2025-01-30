@@ -1,7 +1,6 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.db.models import Q
 from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.auth import get_user_model
 
 class UserManager(BaseUserManager):
     def create_user(self, phone_number=None, **other_fields):

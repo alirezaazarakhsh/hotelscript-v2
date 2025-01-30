@@ -8,3 +8,7 @@ def validate_phone_number(value):
 def validate_national_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
+
+def validate_postal_code(value):
+    if not re.match(r'^\d{10}$', value):
+        raise ValidationError('کد پستی باید 10 رقمی باشد')

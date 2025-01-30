@@ -11,9 +11,11 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from .serializers import AuthSerializer
+from .serializers import AuthSerializer, UserProfileSerializer
 from .utils import generate_otp_code, send_otp_code
 from .models import User, OTP
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework.generics import RetrieveUpdateAPIView
 
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -23,33 +25,38 @@ class APILogoutView(APIView):
         #     token: OutstandingToken
         #     for token in OutstandingToken.objects.filter(user=request.user):
         #         _, _ = BlacklistedToken.objects.get_or_create(token=token)
-        #     return Response({
-        #         "data": None,
-        #         "message": "",
-        #     })
-        if refresh_token := self.request.data.get('refresh_token'):
-            outstanding_token = RefreshToken(token=refresh_token)
-            outstanding_token.blacklist()
-            return Response({
-                "data": None,
-                "message": "",
-            })
-        else:
-            return Response(
-                {
-                    "message": "refresh_token is required"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        #     return Response()
+        try:
+            if refresh_token := self.request.data.get('refresh_token'):
+                outstanding_token = RefreshToken(token=refresh_token)
+                outstanding_token.blacklist()
+                return Response()
+            else:
+                return Response(
+                    {
+                        "detail": "refresh_token is required"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Exception as e:
+                return Response(
+                    {
+                        "detail": str(e)
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
 class AuthView(APIView):
     permission_classes = (AllowAny,)
 
+    @swagger_auto_schema(
+        request_body=AuthSerializer
+    )
     def post(self, request):
-        if request.user.is_authenticated :
+        if request.user.is_authenticated:
             return Response(
                 {
-                    "message": _("you are already logged in")
+                    "detail": _("you are already logged in")
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -65,7 +72,7 @@ class AuthView(APIView):
             if wait_time_seconds >= 0:
                 return Response(
                     {
-                        "message": _("wait up to %(minute)d minute to receive the verfication code again") % {'minute': wait_time_seconds // 60 + 1}
+                        "detail": _("wait up to %(minute)d minute to receive the verfication code again") % {'minute': wait_time_seconds // 60 + 1}
                     },
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
@@ -78,17 +85,14 @@ class AuthView(APIView):
         otp.save()
         send_otp_code(code, phone)
 
-        return Response({
-            "data": None,
-            "message": "",
-        })
+        return Response()
 
 class TokenObtainPairView(JwtTokenObtainPairView):
     def post(self, request, *args, **kwargs):
         if request.user.is_authenticated :
             return Response(
                 {
-                    "message": _("you are already logged in")
+                    "detail": _("you are already logged in")
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -100,13 +104,7 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         except TokenError as e:
             raise InvalidToken(e.args[0])
 
-        return Response(
-            {
-                "data": serializer.validated_data,
-                "message": "",
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response(serializer.validated_data)
 
 class TokenRefreshView(JwtTokenRefreshView):
     def post(self, request, *args, **kwargs):
@@ -117,10 +115,11 @@ class TokenRefreshView(JwtTokenRefreshView):
         except TokenError as e:
             raise InvalidToken(e.args[0])
 
-        return Response(
-            {
-                "data": serializer.validated_data,
-                "message": "",
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserProfileSerializer
+
+    def get_object(self):
+        return self.request.user

@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from safarname24.serializers import ErrorMessageSerializerMixin
 from .validators import validate_phone_number
+from django.contrib.auth import get_user_model
 
 class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSerializerMixin):
     username_field = "phone"
@@ -57,3 +58,28 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
 class AuthSerializer(serializers.Serializer):
     phone = serializers.CharField(required=True,
                                   validators=(validate_phone_number,))
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = get_user_model()
+        fields = [
+            'phone_number',
+            'first_name',
+            'last_name',
+            'email',
+            'national_code',
+            'postal_code',
+            'address',
+        ]
+        read_only_fields = ['phone_number']
+        extra_kwargs = {
+            'first_name': {
+                'required': True
+            },
+            'last_name': {
+                'required': True
+            },
+            'national_code': {
+                'required': True
+            },
+        }
