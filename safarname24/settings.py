@@ -176,6 +176,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'safarname24.renderers.ResponseRenderer',
+    ),
 }
 
 SIMPLE_JWT = {
@@ -187,6 +190,6 @@ SIMPLE_JWT = {
     "TOKEN_OBTAIN_SERIALIZER": "authentication.serializers.UserTokenObtainPairSerializer",
 }
 
-DRF_STANDARDIZED_ERRORS = {
-    "EXCEPTION_FORMATTER_CLASS": "safarname24.exception_formatter.ExceptionFormatter"
-}
+INTERNAL_IPS = [
+    '127.0.0.1',
+]

@@ -9,7 +9,11 @@ from .managers import UserManager
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.conf import settings
-from .validators import validate_phone_number, validate_national_code
+from .validators import (
+    validate_phone_number,
+    validate_national_code,
+    validate_postal_code
+)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -19,6 +23,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(verbose_name=_('ایمیل'), unique=True, null=True, blank=True)
     phone_number = models.CharField(verbose_name=_('موبایل'), max_length=11, validators=(validate_phone_number,), unique=True, null=True, blank=True)
     national_code = models.CharField(verbose_name=_('کد ملی'), max_length=10, validators=(validate_national_code,), unique=True, null=True, blank=True)
+    postal_code = models.CharField(verbose_name=_('کد پستی'), max_length=10, validators=(validate_postal_code,), null=True, blank=True)
+    address = models.CharField(verbose_name=_('آدرس مسکونی'), max_length=256, null=True, blank=True)
     is_staff = models.BooleanField(verbose_name=_('دسترسی به ادمین جنگو'), default=False)
     is_active = models.BooleanField(verbose_name=_('فعال'), default=True)
     date_joined = models.DateTimeField(verbose_name=_('تاریخ ثبت نام'), auto_now_add=True)
