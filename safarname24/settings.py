@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
+# Add Debug Toolbar only when DEBUG is True
 if DEBUG:
     INSTALLED_APPS.append('debug_toolbar')
     MIDDLEWARE = [
@@ -130,7 +131,7 @@ SWAGGER_SETTINGS = {
             'type': 'apiKey',
             'name': 'Authorization',
             'in': 'header'
-      }
+        }
     }
 }
 
