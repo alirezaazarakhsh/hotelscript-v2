@@ -17,6 +17,10 @@ jobs:
         image: postgres:13
         ports:
           - 5432:5432  
+        env:
+          POSTGRES_DB: ${DB_NAME}
+          POSTGRES_USER: ${DB_USER}
+          POSTGRES_PASSWORD: ${DB_PASSWORD}
 
     steps:
     - name: Checkout code
@@ -45,15 +49,15 @@ jobs:
 
     - name: Install dependencies
       run: |
-        docker-compose -f docker-compose.yml run backend pip install --no-cache-dir -r /app/requirements.txt
+        docker-compose -f docker-compose.yml run web pip install --no-cache-dir -r /app/requirements.txt
 
     - name: Run Django migrations
       run: |
-        docker-compose -f docker-compose.yml run backend python manage.py migrate
+        docker-compose -f docker-compose.yml run web python manage.py migrate
 
     - name: Run Django tests
       run: |
-        docker-compose -f docker-compose.yml run backend python manage.py test
+        docker-compose -f docker-compose.yml run web python manage.py test
 
     - name: Set up SSH
       run: |
