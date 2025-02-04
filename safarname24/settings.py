@@ -1,6 +1,7 @@
 import environ
 from pathlib import Path
 from datetime import timedelta
+import sys
 
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
@@ -45,8 +46,8 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
-# Add Debug Toolbar only when DEBUG is True
-if DEBUG:
+# Add Debug Toolbar only when DEBUG is True and not during tests
+if DEBUG and 'test' not in sys.argv:
     INSTALLED_APPS.append('debug_toolbar')
     MIDDLEWARE = [
         "debug_toolbar.middleware.DebugToolbarMiddleware",
