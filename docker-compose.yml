@@ -36,7 +36,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: "alirezaazarakhsh20@gmail.com"
       PGADMIN_DEFAULT_PASSWORD: "password"
     volumes:
-      - /var/lib/backsafarname:/var/lib/pgadmin
+      - /var/lib/backsafarname:/var/lib/pgadmin/storage
     ports:
       - "5050:80"
     depends_on:
