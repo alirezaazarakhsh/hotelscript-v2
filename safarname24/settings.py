@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'authentication',
+    'config',
     'drf_yasg',
 ]
 
@@ -176,10 +177,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_RENDERER_CLASSES': (
-        'safarname24.renderers.ResponseRenderer',
-    ),
 }
+if not DEBUG:
+    REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
+        'safarname24.renderers.ResponseRenderer',
+    )
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=30),
@@ -193,3 +195,5 @@ SIMPLE_JWT = {
 INTERNAL_IPS = [
     '127.0.0.1',
 ]
+
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
