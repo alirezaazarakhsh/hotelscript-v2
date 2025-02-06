@@ -97,7 +97,7 @@ class HeaderMenu(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk is None and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
-            raise ValidationError(f'تنها به تعداد${HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
+            raise ValidationError(f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
 
         if self.pk:
             current_instance = HeaderMenu.objects.get(pk=self.pk)
@@ -142,7 +142,7 @@ class QuickAccess(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk is None and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
-            raise ValidationError(f'تنها به تعداد${QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
+            raise ValidationError(f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
 
         if self.pk:
             current_instance = QuickAccess.objects.get(pk=self.pk)

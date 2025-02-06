@@ -38,6 +38,15 @@ class HeaderMenuAdmin(admin.ModelAdmin):
         'page',
     )
 
+    def save_model(self, request, obj, form, change):
+        if not change and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
+            messages.error(request, f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return HeaderMenu.objects.count() < HeaderMenu.MAX_ALLOWED_INSTANCES
+
 @admin.register(QuickAccess)
 class QuickAccessAdmin(admin.ModelAdmin):
     list_display = (
@@ -51,6 +60,15 @@ class QuickAccessAdmin(admin.ModelAdmin):
         'title',
         'page',
     )
+
+    def save_model(self, request, obj, form, change):
+        if not change and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
+            messages.error(request, f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return QuickAccess.objects.count() < QuickAccess.MAX_ALLOWED_INSTANCES
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
@@ -101,6 +119,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
         'header_sub_title',
         'footer_title',
     )
+
     def save_model(self, request, obj, form, change):
         if not change and SiteConfig.objects.exists():
             messages.error(request, 'تنها یک کانفیگ برای سایت میتوان ساخت')
