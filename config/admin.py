@@ -3,6 +3,7 @@ from .models import (
     Page,
     HeaderMenu,
     QuickAccess,
+    Section,
 )
 
 # Register your models here.
@@ -45,5 +46,19 @@ class QuickAccessAdmin(admin.ModelAdmin):
     search_fields = (
         'order',
         'title',
+        'page',
+    )
+
+@admin.register(Section)
+class SectionAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'sub_title',
+        'page',
+    )
+    search_fields = (
+        'title',
+        'sub_title',
         'page',
     )

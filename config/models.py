@@ -7,13 +7,26 @@ from django.core.validators import (
     RegexValidator,
 )
 
-AVAILABLE_PAGES = [
+AVAILABLE_PAGES = (
     ('home', 'صفحه اصلی'),
     ('about', 'درباره ما'),
     ('contact', 'تماس با ما'),
     ('magazine', 'مجله گردشگری'),
     ('best-hotels', 'بهترین هتل‌ها'),
-]
+)
+
+AVAILABLE_SECTIONS = (
+    ('recommended-hotels', 'هتل‌های پیشنهادی'),
+    ('popular-cities', 'شهرهای پربازدید'),
+    ('incredible-hotels', 'هتل‌های شگفت‌انگیز'),
+    ('best-selling-hotels', 'هتل‌های پرفروش'),
+    ('top-hotels', 'هتل‌های برتر'),
+    ('enaging-blogs', 'بلاگ های جذاب'),
+    ('customer-reviews', 'نظرات مشتریان'),
+    ('contact-us', 'تماس با ما'),
+    ('social-media', 'سوشال مدیا'),
+    ('contact-form', 'فرم تماس با ما'),
+)
 
 # Create your models here.
 class Page(models.Model):
@@ -51,7 +64,6 @@ class Page(models.Model):
             self.path = '/' + self.path
         super(Page, self).save(*args, **kwargs)
     
-
 class HeaderMenu(models.Model):
     MAX_ALLOWED_INSTANCES = 5
 
@@ -124,6 +136,9 @@ class QuickAccess(models.Model):
         verbose_name = 'دسترسی سریع'
         verbose_name_plural = 'دسترسی‌های سریع'
         ordering = ('order',)
+    
+    def __str__(self):
+        return f'{self.order}. {self.title}'
 
     def save(self, *args, **kwargs):
         if self.pk is None and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
@@ -138,3 +153,37 @@ class QuickAccess(models.Model):
                     QuickAccess.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
+class Section(models.Model):
+    section = models.CharField(
+        verbose_name=_('بخش'),
+        choices=AVAILABLE_SECTIONS,
+        max_length=64,
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    sub_title = models.CharField(
+        verbose_name=_('زیر عنوان'),
+        max_length=256,
+    )
+    page = models.OneToOneField(
+        Page,
+        verbose_name=_('صفحه'),
+        on_delete=models.CASCADE,
+        related_name='sections'
+    )
+
+    class Meta:
+        verbose_name = 'بخش'
+        verbose_name_plural = 'بخش‌ها'
+        constraints = (
+            models.UniqueConstraint(
+                fields=('section', 'page'),
+                name='unique_section_page'
+            ),
+        )
+    
+    def __str__(self):
+        return f'{self.title} - {self.page}'
