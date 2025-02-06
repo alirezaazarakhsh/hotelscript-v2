@@ -187,3 +187,41 @@ class Section(models.Model):
     
     def __str__(self):
         return f'{self.title} - {self.page}'
+
+class SiteConfig(models.Model):
+    header_logo = models.ImageField(
+        verbose_name=_('لوگوی هدر'),
+        upload_to='images/logo/'
+    )
+    header_title = models.CharField(
+        verbose_name=_('عنوان هدر'),
+        max_length=32,
+    )
+    header_sub_title = models.CharField(
+        verbose_name=_('زیر عنوان هدر'),
+        max_length=64,
+    )
+    footer_logo = models.ImageField(
+        verbose_name=_('لوگوی فوتر'),
+        upload_to='images/logo/',
+    )
+    footer_title = models.CharField(
+        verbose_name=_('عنوان فوتر'),
+        max_length=32,
+    )
+    footer_description = models.TextField(
+        verbose_name=_('توضیحات فوتر'),
+    )
+
+    class Meta:
+        verbose_name = 'کانفیگ سایت'
+        verbose_name_plural = 'کانفیگ سایت'
+    
+    def __str__(self):
+        return f'کانفیگ سایت {self.header_title}'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and SiteConfig.objects.exists():
+            raise ValidationError('تنها یک کانفیگ برای سایت میتوانید بسازید!')
+        return super(SiteConfig, self).save(*args, **kwargs)
+    
