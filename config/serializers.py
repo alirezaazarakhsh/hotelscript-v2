@@ -5,6 +5,7 @@ from .models import (
     QuickAccess,
     Section,
     SiteConfig,
+    Slide,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -44,4 +45,11 @@ class SiteConfigSerializer(serializers.ModelSerializer):
         exclude = (
             'id',
         )
-    
+
+class SlideSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Slide
+        exclude = (
+            'id',
+            'is_active',
+        )

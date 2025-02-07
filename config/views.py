@@ -14,6 +14,7 @@ from .serializers import (
     QuickAccessSerializer,
     SectionSerializer,
     SiteConfigSerializer,
+    SlideSerializer,
 )
 from .models import (
     Page,
@@ -21,6 +22,7 @@ from .models import (
     QuickAccess,
     Section,
     SiteConfig,
+    Slide,
 )
 
 # Create your views here.
@@ -69,3 +71,9 @@ class SiteConfigRetrieveView(RetrieveAPIView):
 
     def get_object(self):
         return SiteConfig.objects.first()
+
+class SlideListView(ListAPIView):
+    queryset = Slide.actives.all()
+    permission_classes = (AllowAny,)
+    serializer_class = SlideSerializer
+    pagination_class = None

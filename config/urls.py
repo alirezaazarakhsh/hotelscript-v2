@@ -9,4 +9,5 @@ urlpatterns = [
     path('header-menus/', views.HeaderMenuListView.as_view(), name='header-menus'),
     path('quick-access/', views.QuickAccessListView.as_view(), name='quick-access'),
     path('sections/', views.SectionListView.as_view(), name='sections'),
+    path('slides/', views.SlideListView.as_view(), name='slides'),
 ]
