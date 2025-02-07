@@ -7,11 +7,11 @@ from .models import (
     QuickAccess,
     Section,
     SiteConfig,
-    Slider,
+    Slide,
 )
 from .forms import (
     SiteConfigAdminForm,
-    SliderAdminForm,
+    SlideAdminForm,
 )
 
 # Register your models here.
@@ -108,9 +108,9 @@ class SiteConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not SiteConfig.objects.exists()
 
-@admin.register(Slider)
-class SliderAdmin(admin.ModelAdmin):
-    form = SliderAdminForm
+@admin.register(Slide)
+class SlideAdmin(admin.ModelAdmin):
+    form = SlideAdminForm
     list_display = (
         'id',
         'order',

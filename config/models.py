@@ -226,7 +226,7 @@ class SiteConfig(models.Model):
             raise ValidationError('تنها یک کانفیگ برای سایت میتوانید بسازید!')
         return super(SiteConfig, self).save(*args, **kwargs)
 
-class Slider(models.Model):
+class Slide(models.Model):
     order = models.PositiveSmallIntegerField(
         verbose_name=_('ترتیب'),
         unique=True,
@@ -237,7 +237,7 @@ class Slider(models.Model):
     )
     image = models.ImageField(
         verbose_name=_('عکس'),
-        upload_to='images/slider/',
+        upload_to='images/slides/',
     )
     link = models.URLField(
         verbose_name=_('لینک'),
@@ -254,8 +254,8 @@ class Slider(models.Model):
     actives = ActiveManager()
 
     class Meta:
-        verbose_name = 'اسلایدر'
-        verbose_name_plural = 'اسلایدر'
+        verbose_name = 'اسلاید'
+        verbose_name_plural = 'اسلایدها'
         ordering = ('order',)
     
     def __str__(self):
@@ -263,11 +263,11 @@ class Slider(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:
-            current_instance = Slider.objects.get(pk=self.pk)
+            current_instance = Slide.objects.get(pk=self.pk)
             if current_instance.order != self.order:
                 if current_instance.order < self.order:
-                    Slider.objects.filter(order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
+                    Slide.objects.filter(order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
                 else:
-                    Slider.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
+                    Slide.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
