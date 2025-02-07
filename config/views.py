@@ -25,28 +25,22 @@ from .models import (
 
 # Create your views here.
 class PageListView(ListAPIView):
+    queryset = Page.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = PageSerializer
     pagination_class = None
 
-    def get_queryset(self):
-        return Page.objects.all()
-
 class HeaderMenuListView(ListAPIView):
+    queryset = HeaderMenu.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = HeaderMenuSerializer
     pagination_class = None
 
-    def get_queryset(self):
-        return HeaderMenu.objects.all()
-
 class QuickAccessListView(ListAPIView):
+    queryset = QuickAccess.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = QuickAccessSerializer
     pagination_class = None
-
-    def get_queryset(self):
-        return QuickAccess.objects.all()
 
 class SectionListView(ListAPIView):
     queryset = Section.objects.all()
