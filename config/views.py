@@ -5,10 +5,12 @@ from rest_framework.generics import (
 )
 from .serializers import (
     PageSerializer,
+    HeaderMenuSerializer,
     SiteConfigSerializer,
 )
 from .models import (
     Page,
+    HeaderMenu,
     SiteConfig,
 )
 
@@ -20,6 +22,14 @@ class PageListView(ListAPIView):
 
     def get_queryset(self):
         return Page.objects.all()
+
+class HeaderMenuListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HeaderMenuSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return HeaderMenu.objects.all()
 
 class SiteConfigRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
