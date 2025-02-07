@@ -3,6 +3,7 @@ from .models import (
     Page,
     HeaderMenu,
     QuickAccess,
+    Section,
     SiteConfig,
 )
 
@@ -27,6 +28,14 @@ class QuickAccessSerializer(serializers.ModelSerializer):
         model = QuickAccess
         exclude = (
             'id',
+        )
+
+class SectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Section
+        exclude = (
+            'id',
+            'page',
         )
 
 class SiteConfigSerializer(serializers.ModelSerializer):
