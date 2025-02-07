@@ -6,11 +6,13 @@ from rest_framework.generics import (
 from .serializers import (
     PageSerializer,
     HeaderMenuSerializer,
+    QuickAccessSerializer,
     SiteConfigSerializer,
 )
 from .models import (
     Page,
     HeaderMenu,
+    QuickAccess,
     SiteConfig,
 )
 
@@ -30,6 +32,14 @@ class HeaderMenuListView(ListAPIView):
 
     def get_queryset(self):
         return HeaderMenu.objects.all()
+
+class QuickAccessListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = QuickAccessSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return QuickAccess.objects.all()
 
 class SiteConfigRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)

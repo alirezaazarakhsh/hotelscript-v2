@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import (
     Page,
     HeaderMenu,
+    QuickAccess,
     SiteConfig,
 )
 
@@ -16,6 +17,14 @@ class HeaderMenuSerializer(serializers.ModelSerializer):
     page = PageSerializer()
     class Meta:
         model = HeaderMenu
+        exclude = (
+            'id',
+        )
+
+class QuickAccessSerializer(serializers.ModelSerializer):
+    page = PageSerializer()
+    class Meta:
+        model = QuickAccess
         exclude = (
             'id',
         )
