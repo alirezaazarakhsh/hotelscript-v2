@@ -21,14 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env('DJANGO_DEBUG')
 
-ALLOWED_HOSTS = [
-    'safarnameh24.com',
-    'www.safarnameh24.com',
-    'cps.safarnameh24.com',
-    'www.cps.safarnameh.com',
-    '91.107.134.107',
-    'localhost',
-]
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -47,30 +40,24 @@ INSTALLED_APPS = [
     'drf_yasg',
 ]
 
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
 # Add Debug Toolbar only when DEBUG is True and not during tests
 if DEBUG and 'test' not in sys.argv:
-    INSTALLED_APPS.append('debug_toolbar')
+    INSTALLED_APPS += [
+        'debug_toolbar'
+    ]
     MIDDLEWARE = [
         "debug_toolbar.middleware.DebugToolbarMiddleware",
-    ] + [
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    ]
-else:
-    MIDDLEWARE = [
-        'django.middleware.security.SecurityMiddleware',
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.csrf.CsrfViewMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    ]
+    ] + MIDDLEWARE
 
 ROOT_URLCONF = 'safarname24.urls'
 
@@ -128,6 +115,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SWAGGER_SETTINGS = {
+    'DEFAULT_AUTO_SCHEMA_CLASS': 'safarname24.swagger_schemas.CustomSwaggerAutoSchema',
     'SECURITY_DEFINITIONS': {
         'Bearer': {
             'type': 'apiKey',
@@ -152,6 +140,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
+    'PAGE_SIZE': 10,  
 }
 if not DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
@@ -170,5 +160,3 @@ SIMPLE_JWT = {
 INTERNAL_IPS = [
     '127.0.0.1',
 ]
-
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])

@@ -6,14 +6,28 @@ from django.core.validators import (
     MaxValueValidator,
     RegexValidator,
 )
+from .managers import ActiveManager
 
-AVAILABLE_PAGES = [
+AVAILABLE_PAGES = (
     ('home', 'صفحه اصلی'),
     ('about', 'درباره ما'),
     ('contact', 'تماس با ما'),
     ('magazine', 'مجله گردشگری'),
     ('best-hotels', 'بهترین هتل‌ها'),
-]
+)
+
+AVAILABLE_SECTIONS = (
+    ('recommended-hotels', 'هتل‌های پیشنهادی'),
+    ('popular-cities', 'شهرهای پربازدید'),
+    ('incredible-hotels', 'هتل‌های شگفت‌انگیز'),
+    ('best-selling-hotels', 'هتل‌های پرفروش'),
+    ('top-hotels', 'هتل‌های برتر'),
+    ('enaging-blogs', 'بلاگ های جذاب'),
+    ('customer-reviews', 'نظرات مشتریان'),
+    ('contact-us', 'تماس با ما'),
+    ('social-media', 'سوشال مدیا'),
+    ('contact-form', 'فرم تماس با ما'),
+)
 
 # Create your models here.
 class Page(models.Model):
@@ -51,7 +65,6 @@ class Page(models.Model):
             self.path = '/' + self.path
         super(Page, self).save(*args, **kwargs)
     
-
 class HeaderMenu(models.Model):
     MAX_ALLOWED_INSTANCES = 5
 
@@ -85,7 +98,7 @@ class HeaderMenu(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk is None and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
-            raise ValidationError(f'تنها به تعداد${HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
+            raise ValidationError(f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
 
         if self.pk:
             current_instance = HeaderMenu.objects.get(pk=self.pk)
@@ -124,10 +137,13 @@ class QuickAccess(models.Model):
         verbose_name = 'دسترسی سریع'
         verbose_name_plural = 'دسترسی‌های سریع'
         ordering = ('order',)
+    
+    def __str__(self):
+        return f'{self.order}. {self.title}'
 
     def save(self, *args, **kwargs):
         if self.pk is None and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
-            raise ValidationError(f'تنها به تعداد${QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
+            raise ValidationError(f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
 
         if self.pk:
             current_instance = QuickAccess.objects.get(pk=self.pk)
@@ -136,5 +152,122 @@ class QuickAccess(models.Model):
                     QuickAccess.objects.filter(order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
                 else:
                     QuickAccess.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
+
+        super().save(*args, **kwargs)
+
+class Section(models.Model):
+    section = models.CharField(
+        verbose_name=_('بخش'),
+        choices=AVAILABLE_SECTIONS,
+        max_length=64,
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    sub_title = models.CharField(
+        verbose_name=_('زیر عنوان'),
+        max_length=256,
+    )
+    page = models.OneToOneField(
+        Page,
+        verbose_name=_('صفحه'),
+        on_delete=models.CASCADE,
+        related_name='sections'
+    )
+
+    class Meta:
+        verbose_name = 'بخش'
+        verbose_name_plural = 'بخش‌ها'
+        constraints = (
+            models.UniqueConstraint(
+                fields=('section', 'page'),
+                name='unique_section_page'
+            ),
+        )
+    
+    def __str__(self):
+        return f'{self.title} - {self.page}'
+
+class SiteConfig(models.Model):
+    header_logo = models.ImageField(
+        verbose_name=_('لوگوی هدر'),
+        upload_to='images/logo/'
+    )
+    header_title = models.CharField(
+        verbose_name=_('عنوان هدر'),
+        max_length=32,
+    )
+    header_sub_title = models.CharField(
+        verbose_name=_('زیر عنوان هدر'),
+        max_length=64,
+    )
+    footer_logo = models.ImageField(
+        verbose_name=_('لوگوی فوتر'),
+        upload_to='images/logo/',
+    )
+    footer_title = models.CharField(
+        verbose_name=_('عنوان فوتر'),
+        max_length=32,
+    )
+    footer_description = models.TextField(
+        verbose_name=_('توضیحات فوتر'),
+    )
+
+    class Meta:
+        verbose_name = 'کانفیگ سایت'
+        verbose_name_plural = 'کانفیگ سایت'
+    
+    def __str__(self):
+        return f'کانفیگ سایت {self.header_title}'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and SiteConfig.objects.exists():
+            raise ValidationError('تنها یک کانفیگ برای سایت میتوانید بسازید!')
+        return super(SiteConfig, self).save(*args, **kwargs)
+
+class Slide(models.Model):
+    order = models.PositiveSmallIntegerField(
+        verbose_name=_('ترتیب'),
+        unique=True,
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/slides/',
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=512,
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(
+        verbose_name=_('فعال'),
+        default=True,
+    )
+
+    objects = models.Manager()
+    actives = ActiveManager()
+
+    class Meta:
+        verbose_name = 'اسلاید'
+        verbose_name_plural = 'اسلایدها'
+        ordering = ('order',)
+    
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            current_instance = Slide.objects.get(pk=self.pk)
+            if current_instance.order != self.order:
+                if current_instance.order < self.order:
+                    Slide.objects.filter(order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
+                else:
+                    Slide.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
