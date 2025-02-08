@@ -161,4 +161,4 @@ INTERNAL_IPS = [
     '127.0.0.1',
 ]
 
-CSRF_TRUSTED_ORIGINS = env.list('ALLOWED_HOSTS', default=[])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
