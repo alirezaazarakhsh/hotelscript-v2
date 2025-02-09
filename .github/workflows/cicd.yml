@@ -12,33 +12,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      DB_NAME: mydatabase
+      DB_USER: myuser
+      DB_PASSWORD: mypassword
+
     services:
       db:
         image: postgres:13
         ports:
           - 5432:5432  
         env:
-          POSTGRES_DB: ${DB_NAME}
-          POSTGRES_USER: ${DB_USER}
-          POSTGRES_PASSWORD: ${DB_PASSWORD}
+          POSTGRES_DB: $DB_NAME
+          POSTGRES_USER: $DB_USER
+          POSTGRES_PASSWORD: $DB_PASSWORD
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Load .env file
-      run: |
-        echo "Loading .env file"
-        cp ./safarname24/.env .env
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
     - name: Install Docker Compose
-      run: |
-        sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-        docker-compose --version
+      run: sudo apt-get update && sudo apt-get install -y docker-compose-plugin
 
     - name: Cache Docker layers
       uses: actions/cache@v2
@@ -50,36 +47,35 @@ jobs:
 
     - name: Build Docker image
       run: |
-        docker-compose -f docker-compose.yml build
+        docker-compose -f docker-compose.yml --env-file .env build
 
     - name: Install dependencies
       run: |
-        docker-compose -f docker-compose.yml run web pip install --no-cache-dir -r /app/requirements.txt
+        docker-compose -f docker-compose.yml --env-file .env run web pip install --no-cache-dir -r /app/requirements.txt
 
     - name: Run Django migrations
       run: |
-        docker-compose -f docker-compose.yml run web python manage.py migrate
+        docker-compose -f docker-compose.yml --env-file .env run web python manage.py migrate
 
     - name: Run Django tests
       run: |
-        docker-compose -f docker-compose.yml run web python manage.py test
+        docker-compose -f docker-compose.yml --env-file .env run web python manage.py test
 
     - name: Set up SSH
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
-        chmod 600 ~/.ssh/id_rsa
-        chmod 644 ~/.ssh/id_rsa.pub
         ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
       env:
         SERVER_IP: 91.107.134.107
 
     - name: Deploy to server
       run: |
         ssh root@$SERVER_IP << 'EOF'
-          cd /var/hotelscript-v2
-          git pull origin main
+          cd /var/hotelscript-v2 || exit
+          git rev-parse --is-inside-work-tree || exit
+          git pull origin master
           docker-compose down
           docker-compose up -d --build
         EOF
