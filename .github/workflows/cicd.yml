@@ -30,9 +30,10 @@ jobs:
       run: |
         if [ -f ./safarname24/.env ]; then
           echo "Loading .env file"
-          cp ./safarname24/.env .env
+          export $(grep -v '^#' ./safarname24/.env | xargs)
         else
           echo "⚠️ .env file not found!"
+          exit 1
         fi
 
     - name: Set up Docker Buildx
@@ -40,17 +41,17 @@ jobs:
 
     - name: Install Docker Compose
       run: |
-        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
+        sudo apt-get update
+        sudo apt-get install -y docker-compose
         docker-compose --version
 
     - name: Cache Docker layers
       uses: actions/cache@v2
       with:
         path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        key: docker-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-buildx-
+          docker-${{ runner.os }}-
 
     - name: Build Docker image
       run: |
@@ -77,7 +78,7 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+        ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
       env:
         SERVER_IP: 91.107.134.107
 
@@ -86,7 +87,6 @@ jobs:
         ssh root@$SERVER_IP << 'EOF'
           cd /var/hotelscript-v2
           git pull origin master
-          docker-compose pull
           docker-compose down
           docker-compose up -d --build
           docker system prune -f
