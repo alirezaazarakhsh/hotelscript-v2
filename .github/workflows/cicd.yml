@@ -16,8 +16,8 @@ jobs:
       db:
         image: postgres:13
         ports:
-          - 5432:5432  
-        env:
+          - "5432:5432"
+        environment:
           POSTGRES_DB: mydatabase
           POSTGRES_USER: myuser
           POSTGRES_PASSWORD: mypassword
@@ -28,8 +28,12 @@ jobs:
 
     - name: Load .env file
       run: |
-        echo "Loading .env file"
-        cp ./safarname24/.env .env
+        if [ -f ./safarname24/.env ]; then
+          echo "Loading .env file"
+          cp ./safarname24/.env .env
+        else
+          echo "⚠️ .env file not found!"
+        fi
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -72,9 +76,7 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
         chmod 600 ~/.ssh/id_rsa
-        chmod 644 ~/.ssh/id_rsa.pub
         ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
       env:
         SERVER_IP: 91.107.134.107
@@ -83,9 +85,11 @@ jobs:
       run: |
         ssh root@$SERVER_IP << 'EOF'
           cd /var/hotelscript-v2
-          git pull origin main
+          git pull origin master
+          docker-compose pull
           docker-compose down
           docker-compose up -d --build
+          docker system prune -f
         EOF
       env:
         SERVER_IP: 91.107.134.107
