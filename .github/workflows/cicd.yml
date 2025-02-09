@@ -60,6 +60,10 @@ jobs:
       run: |
         docker-compose -f docker-compose.yml run --rm web python manage.py migrate
 
+    - name: Collect static files
+      run: |
+        docker-compose -f docker-compose.yml run --rm web python manage.py collectstatic --noinput
+
     - name: Run Django tests
       run: |
         docker-compose -f docker-compose.yml run --rm web python manage.py test
