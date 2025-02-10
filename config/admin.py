@@ -8,10 +8,12 @@ from .models import (
     SiteConfig,
     Slide,
     Statistic,
+    ChooseReason,
 )
 from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
+    ChooseReasonForm,
 )
 
 # Register your models here.
@@ -125,4 +127,13 @@ class StatisticAdmin(admin.ModelAdmin):
         'id',
         'title',
         'subtitle',
+    )
+
+@admin.register(ChooseReason)
+class ChooseReasonAdmin(admin.ModelAdmin):
+    form = ChooseReasonForm
+    list_display = (
+        'id',
+        'title',
+        'description',
     )

@@ -292,3 +292,23 @@ class Statistic(models.Model):
     
     def __str__(self):
         return self.title
+
+class ChooseReason(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=32,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات')
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/why-choose-us/',
+    )
+
+    class Meta:
+        verbose_name = 'دلیل انتخاب'
+        verbose_name_plural = 'دلایل انتخاب'
+    
+    def __str__(self):
+        return self.title
