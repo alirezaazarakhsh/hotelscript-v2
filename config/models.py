@@ -347,3 +347,34 @@ class Service(models.Model):
     
     def __str__(self):
         return self.title
+
+class ContactInfo(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=128,
+    )
+    value = models.CharField(
+        verbose_name=_('مقدار'),
+        max_length=64,
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=1024,
+        blank=True,
+        null=True,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'راه ارتباطی'
+        verbose_name_plural = 'راه‌های ارتباطی'
+    
+    def __str__(self):
+        return self.title

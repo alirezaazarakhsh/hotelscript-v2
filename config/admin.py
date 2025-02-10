@@ -11,6 +11,7 @@ from .models import (
     ChooseReason,
     FAQ,
     Service,
+    ContactInfo,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -162,4 +163,18 @@ class ServiceAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
         'description',
+    )
+
+@admin.register(ContactInfo)
+class ContactInfoAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+        'value',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
+        'value',
     )
