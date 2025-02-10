@@ -27,6 +27,10 @@ AVAILABLE_SECTIONS = (
     ('contact-us', 'تماس با ما'),
     ('social-media', 'سوشال مدیا'),
     ('contact-form', 'فرم تماس با ما'),
+    ('about-us', 'درباره ما'),
+    ('why-choose-us?', 'دلایل انتخاب'),
+    ('faq', 'سوالات متداول'),
+    ('services-at-a-glance', 'نگاهی به خدمات'),
 )
 
 # Create your models here.
@@ -271,3 +275,20 @@ class Slide(models.Model):
                     Slide.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
+class Statistic(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=32,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'آمار و ارقام'
+        verbose_name_plural = 'آمار و ارقام'
+    
+    def __str__(self):
+        return self.title

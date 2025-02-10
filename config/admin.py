@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.utils.html import format_html
 from .models import (
     Page,
     HeaderMenu,
@@ -8,6 +7,7 @@ from .models import (
     Section,
     SiteConfig,
     Slide,
+    Statistic,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -117,4 +117,12 @@ class SlideAdmin(admin.ModelAdmin):
         'title',
         'link',
         'is_active',
+    )
+
+@admin.register(Statistic)
+class StatisticAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
     )
