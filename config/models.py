@@ -27,6 +27,20 @@ AVAILABLE_SECTIONS = (
     ('contact-us', 'تماس با ما'),
     ('social-media', 'سوشال مدیا'),
     ('contact-form', 'فرم تماس با ما'),
+    ('about-us', 'درباره ما'),
+    ('why-choose-us?', 'دلایل انتخاب'),
+    ('faq', 'سوالات متداول'),
+    ('services-at-a-glance', 'نگاهی به خدمات'),
+)
+
+SOCIAL_MEDIA_OPTIONS = (
+    ('telegram', 'Telegram'),
+    ('instagram', 'Instagram'),
+    ('linkedin', 'LinkedIn'),
+    ('youtube', 'YouTube'),
+    ('facebook', 'Facebook'),
+    ('discord', 'Discord'),
+    ('x', 'X'),
 )
 
 # Create your models here.
@@ -271,3 +285,125 @@ class Slide(models.Model):
                     Slide.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
+class Statistic(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=32,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'آمار و ارقام'
+        verbose_name_plural = 'آمار و ارقام'
+    
+    def __str__(self):
+        return self.title
+
+class ChooseReason(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=32,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات')
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/why-choose-us/',
+    )
+
+    class Meta:
+        verbose_name = 'دلیل انتخاب'
+        verbose_name_plural = 'دلایل انتخاب'
+    
+    def __str__(self):
+        return self.title
+
+class FAQ(models.Model):
+    question = models.TextField(
+        verbose_name=_('سوال'),
+    )
+    answer = models.TextField(
+        verbose_name=_('جواب')
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'سوال متداول'
+        verbose_name_plural = 'سوالات متداول'
+    
+    def __str__(self):
+        return self.question
+
+class Service(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات')
+    )
+
+    class Meta:
+        verbose_name = 'خدمت'
+        verbose_name_plural = 'خدمات'
+    
+    def __str__(self):
+        return self.title
+
+class ContactInfo(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=128,
+    )
+    value = models.CharField(
+        verbose_name=_('مقدار'),
+        max_length=64,
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=1024,
+        blank=True,
+        null=True,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'راه ارتباطی'
+        verbose_name_plural = 'راه‌های ارتباطی'
+    
+    def __str__(self):
+        return self.title
+
+class SocialMedia(models.Model):
+    type = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        choices=SOCIAL_MEDIA_OPTIONS
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=1024,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'شبکه اجتماعی'
+        verbose_name_plural = 'شبکه‌های اجتماعی'
+    
+    def __str__(self):
+        return self.link

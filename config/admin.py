@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.utils.html import format_html
 from .models import (
     Page,
     HeaderMenu,
@@ -8,10 +7,17 @@ from .models import (
     Section,
     SiteConfig,
     Slide,
+    Statistic,
+    ChooseReason,
+    FAQ,
+    Service,
+    ContactInfo,
+    SocialMedia,
 )
 from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
+    ChooseReasonForm,
 )
 
 # Register your models here.
@@ -117,4 +123,71 @@ class SlideAdmin(admin.ModelAdmin):
         'title',
         'link',
         'is_active',
+    )
+
+@admin.register(Statistic)
+class StatisticAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+    )
+
+@admin.register(ChooseReason)
+class ChooseReasonAdmin(admin.ModelAdmin):
+    form = ChooseReasonForm
+    list_display = (
+        'id',
+        'title',
+        'description',
+    )
+
+@admin.register(FAQ)
+class FAQAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'question',
+        'answer',
+    )
+    search_fields = (
+        'question',
+        'answer',
+    )
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'description',
+    )
+    search_fields = (
+        'title',
+        'description',
+    )
+
+@admin.register(ContactInfo)
+class ContactInfoAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+        'value',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
+        'value',
+    )
+
+@admin.register(SocialMedia)
+class SocialMediaAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'type',
+        'link',
+    )
+    search_fields = (
+        'type',
+        'link',
     )
