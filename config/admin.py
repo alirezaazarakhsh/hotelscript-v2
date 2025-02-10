@@ -9,6 +9,7 @@ from .models import (
     Slide,
     Statistic,
     ChooseReason,
+    FAQ,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -136,4 +137,16 @@ class ChooseReasonAdmin(admin.ModelAdmin):
         'id',
         'title',
         'description',
+    )
+
+@admin.register(FAQ)
+class FAQAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'question',
+        'answer',
+    )
+    search_fields = (
+        'question',
+        'answer',
     )

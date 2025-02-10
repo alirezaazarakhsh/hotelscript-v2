@@ -312,3 +312,22 @@ class ChooseReason(models.Model):
     
     def __str__(self):
         return self.title
+
+class FAQ(models.Model):
+    question = models.TextField(
+        verbose_name=_('سوال'),
+    )
+    answer = models.TextField(
+        verbose_name=_('جواب')
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+
+    class Meta:
+        verbose_name = 'سوال متداول'
+        verbose_name_plural = 'سوالات متداول'
+    
+    def __str__(self):
+        return self.question
