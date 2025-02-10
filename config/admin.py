@@ -12,6 +12,7 @@ from .models import (
     FAQ,
     Service,
     ContactInfo,
+    SocialMedia,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -177,4 +178,16 @@ class ContactInfoAdmin(admin.ModelAdmin):
         'title',
         'subtitle',
         'value',
+    )
+
+@admin.register(SocialMedia)
+class SocialMediaAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'type',
+        'link',
+    )
+    search_fields = (
+        'type',
+        'link',
     )

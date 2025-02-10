@@ -33,6 +33,16 @@ AVAILABLE_SECTIONS = (
     ('services-at-a-glance', 'نگاهی به خدمات'),
 )
 
+SOCIAL_MEDIA_OPTIONS = (
+    ('telegram', 'Telegram'),
+    ('instagram', 'Instagram'),
+    ('linkedin', 'LinkedIn'),
+    ('youtube', 'YouTube'),
+    ('facebook', 'Facebook'),
+    ('discord', 'Discord'),
+    ('x', 'X'),
+)
+
 # Create your models here.
 class Page(models.Model):
     title = models.CharField(
@@ -378,3 +388,22 @@ class ContactInfo(models.Model):
     
     def __str__(self):
         return self.title
+
+class SocialMedia(models.Model):
+    type = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        choices=SOCIAL_MEDIA_OPTIONS
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=1024,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'شبکه اجتماعی'
+        verbose_name_plural = 'شبکه‌های اجتماعی'
+    
+    def __str__(self):
+        return self.link
