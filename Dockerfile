@@ -20,9 +20,6 @@ RUN apt-get update && \
     apt-get install -y default-libmysqlclient-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Run collectstatic command
-RUN python manage.py collectstatic --noinput
-
 # Copy start.sh file and set executable permissions
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
