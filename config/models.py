@@ -331,3 +331,19 @@ class FAQ(models.Model):
     
     def __str__(self):
         return self.question
+
+class Service(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات')
+    )
+
+    class Meta:
+        verbose_name = 'خدمت'
+        verbose_name_plural = 'خدمات'
+    
+    def __str__(self):
+        return self.title

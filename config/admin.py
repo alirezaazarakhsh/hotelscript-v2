@@ -10,6 +10,7 @@ from .models import (
     Statistic,
     ChooseReason,
     FAQ,
+    Service,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -149,4 +150,16 @@ class FAQAdmin(admin.ModelAdmin):
     search_fields = (
         'question',
         'answer',
+    )
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'description',
+    )
+    search_fields = (
+        'title',
+        'description',
     )
