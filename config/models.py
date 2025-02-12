@@ -500,3 +500,24 @@ class License(models.Model):
     
     def __str__(self):
         return f'{self.link}'
+
+class Advantage(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیر عنوان'),
+        max_length=256,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+    
+    class Meta:
+        verbose_name = 'مزیت'
+        verbose_name_plural = 'مزایا'
+    
+    def __str__(self):
+        return f'{self.title}'

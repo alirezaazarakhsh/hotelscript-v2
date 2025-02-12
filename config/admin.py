@@ -16,6 +16,7 @@ from .models import (
     Banner,
     EnamadLicense,
     License,
+    Advantage,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -239,4 +240,16 @@ class LicenseAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'link',
+    )
+
+@admin.register(Advantage)
+class AdvantageAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
     )
