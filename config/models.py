@@ -308,8 +308,9 @@ class ChooseReason(models.Model):
         verbose_name=_('عنوان'),
         max_length=32,
     )
-    description = models.TextField(
-        verbose_name=_('توضیحات')
+    description = models.CharField(
+        verbose_name=_('توضیحات'),
+        max_length=450,
     )
     image = models.ImageField(
         verbose_name=_('عکس'),
