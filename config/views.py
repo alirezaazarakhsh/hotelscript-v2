@@ -19,6 +19,7 @@ from .serializers import (
     ChooseReasonSerializer,
     FAQSerializer,
     ServiceSerializer,
+    ContactInfoSerializer,
 )
 from .models import (
     Page,
@@ -31,6 +32,7 @@ from .models import (
     ChooseReason,
     FAQ,
     Service,
+    ContactInfo,
 )
 
 # Create your views here.
@@ -108,4 +110,10 @@ class ServiceListView(ListAPIView):
     queryset = Service.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = ServiceSerializer
+    pagination_class = None
+
+class ContactInfoListView(ListAPIView):
+    queryset = ContactInfo.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = ContactInfoSerializer
     pagination_class = None
