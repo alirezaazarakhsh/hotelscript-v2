@@ -9,6 +9,7 @@ from .models import (
     Statistic,
     ChooseReason,
     FAQ,
+    Service,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -74,6 +75,13 @@ class ChooseReasonSerializer(serializers.ModelSerializer):
 class FAQSerializer(serializers.ModelSerializer):
     class Meta:
         model = FAQ
+        exclude = (
+            'id',
+        )
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
         exclude = (
             'id',
         )

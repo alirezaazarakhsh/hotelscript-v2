@@ -18,6 +18,7 @@ from .serializers import (
     StatisticSerializer,
     ChooseReasonSerializer,
     FAQSerializer,
+    ServiceSerializer,
 )
 from .models import (
     Page,
@@ -29,6 +30,7 @@ from .models import (
     Statistic,
     ChooseReason,
     FAQ,
+    Service,
 )
 
 # Create your views here.
@@ -100,4 +102,10 @@ class FAQListView(ListAPIView):
     queryset = FAQ.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = FAQSerializer
+    pagination_class = None
+
+class ServiceListView(ListAPIView):
+    queryset = Service.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = ServiceSerializer
     pagination_class = None
