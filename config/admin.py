@@ -15,12 +15,14 @@ from .models import (
     SocialMedia,
     Banner,
     EnamadLicense,
+    License,
 )
 from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
     BannerForm,
+    LicenseForm,
 )
 
 # Register your models here.
@@ -227,3 +229,14 @@ class EnamadLicenseAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not EnamadLicense.objects.exists()
+
+@admin.register(License)
+class LicenseAdmin(admin.ModelAdmin):
+    form = LicenseForm
+    list_display = (
+        'id',
+        'link',
+    )
+    search_fields = (
+        'link',
+    )

@@ -483,3 +483,20 @@ class EnamadLicense(models.Model):
         if not self.pk and EnamadLicense.objects.exists():
             raise ValidationError('تنها یک کد اینماد میتوانید بسازید!')
         return super(EnamadLicense, self).save(*args, **kwargs)
+
+class License(models.Model):
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/licenses/',
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=512,
+    )
+
+    class Meta:
+        verbose_name = 'مجوز'
+        verbose_name_plural = 'مجوزها'
+    
+    def __str__(self):
+        return f'{self.link}'
