@@ -15,6 +15,7 @@ from .models import (
     Banner,
     EnamadLicense,
     License,
+    Advantage,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -123,6 +124,13 @@ class EnamadLicenseSerializer(serializers.ModelSerializer):
 class LicenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = License
+        exclude = (
+            'id',
+        )
+
+class AdvantageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Advantage
         exclude = (
             'id',
         )

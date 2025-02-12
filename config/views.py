@@ -24,6 +24,7 @@ from .serializers import (
     BannerSerializer,
     EnamadLicenseSerializer,
     LicenseSerializer,
+    AdvantageSerializer,
 )
 from .models import (
     Page,
@@ -41,6 +42,7 @@ from .models import (
     Banner,
     EnamadLicense,
     License,
+    Advantage,
 )
 
 # Create your views here.
@@ -164,4 +166,10 @@ class LicenseListView(ListAPIView):
     queryset = License.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = LicenseSerializer
+    pagination_class = None
+
+class AdvantageListView(ListAPIView):
+    queryset = Advantage.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = AdvantageSerializer
     pagination_class = None

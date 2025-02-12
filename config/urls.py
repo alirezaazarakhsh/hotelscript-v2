@@ -19,4 +19,5 @@ urlpatterns = [
     path('banners/', views.BannerListView.as_view(), name='banners'),
     path('enamad/', views.EnamadLicenseRetrieveView.as_view(), name='enamad'),
     path('licenses/', views.LicenseListView.as_view(), name='licenses'),
+    path('advantages/', views.AdvantageListView.as_view(), name='advantages'),
 ]
