@@ -17,4 +17,5 @@ urlpatterns = [
     path('contact-info/', views.ContactInfoListView.as_view(), name='contact-info'),
     path('social-media/', views.SocialMediaListView.as_view(), name='social-media'),
     path('banners/', views.BannerListView.as_view(), name='banners'),
+    path('enamad/', views.EnamadLicenseRetrieveView.as_view(), name='enamad'),
 ]

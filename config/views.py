@@ -22,6 +22,7 @@ from .serializers import (
     ContactInfoSerializer,
     SocialMediaSerializer,
     BannerSerializer,
+    EnamadLicenseSerializer,
 )
 from .models import (
     Page,
@@ -37,6 +38,7 @@ from .models import (
     ContactInfo,
     SocialMedia,
     Banner,
+    EnamadLicense,
 )
 
 # Create your views here.
@@ -148,3 +150,10 @@ class BannerListView(ListAPIView):
     ])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+class EnamadLicenseRetrieveView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = EnamadLicenseSerializer
+
+    def get_object(self):
+        return EnamadLicense.objects.first()

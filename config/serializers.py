@@ -13,6 +13,7 @@ from .models import (
     ContactInfo,
     SocialMedia,
     Banner,
+    EnamadLicense,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -109,4 +110,11 @@ class BannerSerializer(serializers.ModelSerializer):
         exclude = (
             'id',
             'page',
+        )
+
+class EnamadLicenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EnamadLicense
+        exclude = (
+            'id',
         )
