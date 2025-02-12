@@ -12,6 +12,7 @@ from .models import (
     Service,
     ContactInfo,
     SocialMedia,
+    Banner,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -100,4 +101,12 @@ class SocialMediaSerializer(serializers.ModelSerializer):
         model = SocialMedia
         exclude = (
             'id',
+        )
+
+class BannerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Banner
+        exclude = (
+            'id',
+            'page',
         )

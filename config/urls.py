@@ -16,4 +16,5 @@ urlpatterns = [
     path('services/', views.ServiceListView.as_view(), name='services'),
     path('contact-info/', views.ContactInfoListView.as_view(), name='contact-info'),
     path('social-media/', views.SocialMediaListView.as_view(), name='social-media'),
+    path('banners/', views.BannerListView.as_view(), name='banners'),
 ]

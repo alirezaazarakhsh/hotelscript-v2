@@ -21,6 +21,7 @@ from .serializers import (
     ServiceSerializer,
     ContactInfoSerializer,
     SocialMediaSerializer,
+    BannerSerializer,
 )
 from .models import (
     Page,
@@ -35,6 +36,7 @@ from .models import (
     Service,
     ContactInfo,
     SocialMedia,
+    Banner,
 )
 
 # Create your views here.
@@ -125,3 +127,24 @@ class SocialMediaListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = SocialMediaSerializer
     pagination_class = None
+
+class BannerListView(ListAPIView):
+    queryset = Banner.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = BannerSerializer
+    pagination_class = None
+    filter_backends = (
+        PageFilter,
+    )
+
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'page',
+            openapi.IN_QUERY,
+            description="Filter by page",
+            type=openapi.TYPE_STRING,
+            required=True,
+        )
+    ])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
