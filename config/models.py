@@ -439,6 +439,7 @@ class Banner(models.Model):
         Page,
         on_delete=models.CASCADE,
         verbose_name=_('صفحه'),
+        related_name='banners',
     )
 
     class Meta:
