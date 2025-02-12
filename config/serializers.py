@@ -14,6 +14,7 @@ from .models import (
     SocialMedia,
     Banner,
     EnamadLicense,
+    License,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -115,6 +116,13 @@ class BannerSerializer(serializers.ModelSerializer):
 class EnamadLicenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = EnamadLicense
+        exclude = (
+            'id',
+        )
+
+class LicenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = License
         exclude = (
             'id',
         )
