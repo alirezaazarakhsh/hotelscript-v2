@@ -20,6 +20,7 @@ from .serializers import (
     FAQSerializer,
     ServiceSerializer,
     ContactInfoSerializer,
+    SocialMediaSerializer,
 )
 from .models import (
     Page,
@@ -33,6 +34,7 @@ from .models import (
     FAQ,
     Service,
     ContactInfo,
+    SocialMedia,
 )
 
 # Create your views here.
@@ -116,4 +118,10 @@ class ContactInfoListView(ListAPIView):
     queryset = ContactInfo.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = ContactInfoSerializer
+    pagination_class = None
+
+class SocialMediaListView(ListAPIView):
+    queryset = SocialMedia.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = SocialMediaSerializer
     pagination_class = None

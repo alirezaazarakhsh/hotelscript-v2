@@ -15,4 +15,5 @@ urlpatterns = [
     path('faqs/', views.FAQListView.as_view(), name='faqs'),
     path('services/', views.ServiceListView.as_view(), name='services'),
     path('contact-info/', views.ContactInfoListView.as_view(), name='contact-info'),
+    path('social-media/', views.SocialMediaListView.as_view(), name='social-media'),
 ]
