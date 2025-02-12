@@ -382,6 +382,10 @@ class ContactInfo(models.Model):
         verbose_name=_('آیکن'),
         max_length=64,
     )
+    show_in_footer = models.BooleanField(
+        verbose_name=_('نمایش در فوتر'),
+        default=False,
+    )
 
     class Meta:
         verbose_name = 'راه ارتباطی'
@@ -401,6 +405,10 @@ class SocialMedia(models.Model):
         max_length=1024,
         unique=True,
     )
+    show_in_footer = models.BooleanField(
+        verbose_name=_('نمایش در فوتر'),
+        default=False,
+    )
 
     class Meta:
         verbose_name = 'شبکه اجتماعی'
@@ -408,3 +416,4 @@ class SocialMedia(models.Model):
     
     def __str__(self):
         return self.link
+
