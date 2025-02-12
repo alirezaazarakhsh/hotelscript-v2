@@ -7,6 +7,7 @@ from .models import (
     SiteConfig,
     Slide,
     Statistic,
+    ChooseReason,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -58,6 +59,13 @@ class SlideSerializer(serializers.ModelSerializer):
 class StatisticSerializer(serializers.ModelSerializer):
     class Meta:
         model = Statistic
+        exclude = (
+            'id',
+        )
+
+class ChooseReasonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChooseReason
         exclude = (
             'id',
         )

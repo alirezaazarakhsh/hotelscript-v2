@@ -11,4 +11,5 @@ urlpatterns = [
     path('sections/', views.SectionListView.as_view(), name='sections'),
     path('slides/', views.SlideListView.as_view(), name='slides'),
     path('statistics/', views.StatisticListView.as_view(), name='statistics'),
+    path('choose-reasons/', views.ChooseReasonListView.as_view(), name='choose-reasons'),
 ]
