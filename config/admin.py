@@ -13,11 +13,13 @@ from .models import (
     Service,
     ContactInfo,
     SocialMedia,
+    Banner,
 )
 from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
+    BannerForm,
 )
 
 # Register your models here.
@@ -190,4 +192,22 @@ class SocialMediaAdmin(admin.ModelAdmin):
     search_fields = (
         'type',
         'link',
+    )
+
+@admin.register(Banner)
+class BannerAdmin(admin.ModelAdmin):
+    form = BannerForm
+    list_display = (
+        'id',
+        'page',
+        'order',
+        'title',
+        'link',
+    )
+    search_fields = (
+        'title',
+        'link',
+    )
+    list_filter = (
+        'page',
     )

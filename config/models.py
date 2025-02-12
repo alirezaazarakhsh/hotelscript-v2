@@ -417,3 +417,51 @@ class SocialMedia(models.Model):
     def __str__(self):
         return self.link
 
+class Banner(models.Model):
+    order = models.PositiveSmallIntegerField(
+        verbose_name=_('ترتیب'),
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/banners/',
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=512,
+        null=True,
+        blank=True,
+    )
+    page = models.ForeignKey(
+        Page,
+        on_delete=models.CASCADE,
+        verbose_name=_('صفحه'),
+    )
+
+    class Meta:
+        verbose_name = 'بنر'
+        verbose_name_plural = 'بنرها'
+        ordering = ('order',)
+        constraints = (
+            models.UniqueConstraint(
+                fields=('order', 'page'),
+                name='unique_order_page'
+            ),
+        )
+    
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            current_instance = Banner.objects.get(pk=self.pk)
+            if current_instance.order != self.order:
+                if current_instance.order < self.order:
+                    Banner.objects.filter(page=self.page, order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
+                else:
+                    Banner.objects.filter(page=self.page, order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
+
+        super().save(*args, **kwargs)
