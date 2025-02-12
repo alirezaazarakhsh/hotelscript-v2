@@ -6,6 +6,16 @@ from .models import (
     Section,
     SiteConfig,
     Slide,
+    Statistic,
+    ChooseReason,
+    FAQ,
+    Service,
+    ContactInfo,
+    SocialMedia,
+    Banner,
+    EnamadLicense,
+    License,
+    Advantage,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -52,4 +62,75 @@ class SlideSerializer(serializers.ModelSerializer):
         exclude = (
             'id',
             'is_active',
+        )
+
+class StatisticSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Statistic
+        exclude = (
+            'id',
+        )
+
+class ChooseReasonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChooseReason
+        exclude = (
+            'id',
+        )
+
+class FAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQ
+        exclude = (
+            'id',
+        )
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        exclude = (
+            'id',
+        )
+
+class ContactInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactInfo
+        exclude = (
+            'id',
+        )
+
+class SocialMediaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SocialMedia
+        exclude = (
+            'id',
+        )
+
+class BannerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Banner
+        exclude = (
+            'id',
+            'page',
+        )
+
+class EnamadLicenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EnamadLicense
+        exclude = (
+            'id',
+        )
+
+class LicenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = License
+        exclude = (
+            'id',
+        )
+
+class AdvantageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Advantage
+        exclude = (
+            'id',
         )

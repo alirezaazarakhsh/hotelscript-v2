@@ -13,11 +13,17 @@ from .models import (
     Service,
     ContactInfo,
     SocialMedia,
+    Banner,
+    EnamadLicense,
+    License,
+    Advantage,
 )
 from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
+    BannerForm,
+    LicenseForm,
 )
 
 # Register your models here.
@@ -190,4 +196,60 @@ class SocialMediaAdmin(admin.ModelAdmin):
     search_fields = (
         'type',
         'link',
+    )
+
+@admin.register(Banner)
+class BannerAdmin(admin.ModelAdmin):
+    form = BannerForm
+    list_display = (
+        'id',
+        'page',
+        'order',
+        'title',
+        'link',
+    )
+    search_fields = (
+        'title',
+        'link',
+    )
+    list_filter = (
+        'page',
+    )
+
+@admin.register(EnamadLicense)
+class EnamadLicenseAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change and EnamadLicense.objects.exists():
+            messages.error(request, 'تنها یک کد اینماد میتوان ساخت')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return not EnamadLicense.objects.exists()
+
+@admin.register(License)
+class LicenseAdmin(admin.ModelAdmin):
+    form = LicenseForm
+    list_display = (
+        'id',
+        'link',
+    )
+    search_fields = (
+        'link',
+    )
+
+@admin.register(Advantage)
+class AdvantageAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
     )

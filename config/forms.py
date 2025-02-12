@@ -2,7 +2,9 @@ from django import forms
 from .models import (
     SiteConfig,
     Slide,
-    # ChooseReason,
+    ChooseReason,
+    Banner,
+    License,
 )
 
 class SiteConfigAdminForm(forms.ModelForm):
@@ -32,11 +34,33 @@ class SlideAdminForm(forms.ModelForm):
 
 class ChooseReasonForm(forms.ModelForm):
     class Meta:
-        model = Slide
+        model = ChooseReason
         fields = '__all__'
 
     def __init__(self, *args, **kwargs):
         super(ChooseReasonForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""
+
+class BannerForm(forms.ModelForm):
+    class Meta:
+        model = Banner
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(BannerForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""
+
+class LicenseForm(forms.ModelForm):
+    class Meta:
+        model = License
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(LicenseForm, self).__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
             self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""

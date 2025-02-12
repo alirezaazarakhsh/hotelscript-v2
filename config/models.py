@@ -183,10 +183,10 @@ class Section(models.Model):
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
-    page = models.OneToOneField(
+    page = models.ForeignKey(
         Page,
-        verbose_name=_('صفحه'),
         on_delete=models.CASCADE,
+        verbose_name=_('صفحه'),
         related_name='sections'
     )
 
@@ -308,8 +308,9 @@ class ChooseReason(models.Model):
         verbose_name=_('عنوان'),
         max_length=32,
     )
-    description = models.TextField(
-        verbose_name=_('توضیحات')
+    description = models.CharField(
+        verbose_name=_('توضیحات'),
+        max_length=450,
     )
     image = models.ImageField(
         verbose_name=_('عکس'),
@@ -381,6 +382,10 @@ class ContactInfo(models.Model):
         verbose_name=_('آیکن'),
         max_length=64,
     )
+    show_in_footer = models.BooleanField(
+        verbose_name=_('نمایش در فوتر'),
+        default=False,
+    )
 
     class Meta:
         verbose_name = 'راه ارتباطی'
@@ -400,6 +405,10 @@ class SocialMedia(models.Model):
         max_length=1024,
         unique=True,
     )
+    show_in_footer = models.BooleanField(
+        verbose_name=_('نمایش در فوتر'),
+        default=False,
+    )
 
     class Meta:
         verbose_name = 'شبکه اجتماعی'
@@ -407,3 +416,108 @@ class SocialMedia(models.Model):
     
     def __str__(self):
         return self.link
+
+class Banner(models.Model):
+    order = models.PositiveSmallIntegerField(
+        verbose_name=_('ترتیب'),
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/banners/',
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=512,
+        null=True,
+        blank=True,
+    )
+    page = models.ForeignKey(
+        Page,
+        on_delete=models.CASCADE,
+        verbose_name=_('صفحه'),
+        related_name='banners',
+    )
+
+    class Meta:
+        verbose_name = 'بنر'
+        verbose_name_plural = 'بنرها'
+        ordering = ('order',)
+        constraints = (
+            models.UniqueConstraint(
+                fields=('order', 'page'),
+                name='unique_order_page'
+            ),
+        )
+    
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            current_instance = Banner.objects.get(pk=self.pk)
+            if current_instance.order != self.order:
+                if current_instance.order < self.order:
+                    Banner.objects.filter(page=self.page, order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
+                else:
+                    Banner.objects.filter(page=self.page, order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
+
+        super().save(*args, **kwargs)
+
+class EnamadLicense(models.Model):
+    code = models.TextField(
+        verbose_name=_('کد اینماد'),
+    )
+
+    class Meta:
+        verbose_name = 'کد اینماد'
+        verbose_name_plural = 'کد اینماد'
+    
+    def __str__(self):
+        return f'کد اینماد'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and EnamadLicense.objects.exists():
+            raise ValidationError('تنها یک کد اینماد میتوانید بسازید!')
+        return super(EnamadLicense, self).save(*args, **kwargs)
+
+class License(models.Model):
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/licenses/',
+    )
+    link = models.URLField(
+        verbose_name=_('لینک'),
+        max_length=512,
+    )
+
+    class Meta:
+        verbose_name = 'مجوز'
+        verbose_name_plural = 'مجوزها'
+    
+    def __str__(self):
+        return f'{self.link}'
+
+class Advantage(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیر عنوان'),
+        max_length=256,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+    
+    class Meta:
+        verbose_name = 'مزیت'
+        verbose_name_plural = 'مزایا'
+    
+    def __str__(self):
+        return f'{self.title}'
