@@ -15,6 +15,7 @@ from .serializers import (
     SectionSerializer,
     SiteConfigSerializer,
     SlideSerializer,
+    StatisticSerializer,
 )
 from .models import (
     Page,
@@ -23,6 +24,7 @@ from .models import (
     Section,
     SiteConfig,
     Slide,
+    Statistic,
 )
 
 # Create your views here.
@@ -76,4 +78,10 @@ class SlideListView(ListAPIView):
     queryset = Slide.actives.all()
     permission_classes = (AllowAny,)
     serializer_class = SlideSerializer
+    pagination_class = None
+
+class StatisticListView(ListAPIView):
+    queryset = Statistic.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = StatisticSerializer
     pagination_class = None

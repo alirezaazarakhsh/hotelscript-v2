@@ -10,4 +10,5 @@ urlpatterns = [
     path('quick-access/', views.QuickAccessListView.as_view(), name='quick-access'),
     path('sections/', views.SectionListView.as_view(), name='sections'),
     path('slides/', views.SlideListView.as_view(), name='slides'),
+    path('statistics/', views.StatisticListView.as_view(), name='statistics'),
 ]
