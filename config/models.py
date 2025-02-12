@@ -183,10 +183,10 @@ class Section(models.Model):
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
-    page = models.OneToOneField(
+    page = models.ForeignKey(
         Page,
-        verbose_name=_('صفحه'),
         on_delete=models.CASCADE,
+        verbose_name=_('صفحه'),
         related_name='sections'
     )
 
