@@ -466,3 +466,20 @@ class Banner(models.Model):
                     Banner.objects.filter(page=self.page, order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
+class EnamadLicense(models.Model):
+    code = models.TextField(
+        verbose_name=_('کد اینماد'),
+    )
+
+    class Meta:
+        verbose_name = 'کد اینماد'
+        verbose_name_plural = 'کد اینماد'
+    
+    def __str__(self):
+        return f'کد اینماد'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and EnamadLicense.objects.exists():
+            raise ValidationError('تنها یک کد اینماد میتوانید بسازید!')
+        return super(EnamadLicense, self).save(*args, **kwargs)

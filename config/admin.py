@@ -14,6 +14,7 @@ from .models import (
     ContactInfo,
     SocialMedia,
     Banner,
+    EnamadLicense,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -211,3 +212,18 @@ class BannerAdmin(admin.ModelAdmin):
     list_filter = (
         'page',
     )
+
+@admin.register(EnamadLicense)
+class EnamadLicenseAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change and EnamadLicense.objects.exists():
+            messages.error(request, 'تنها یک کد اینماد میتوان ساخت')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return not EnamadLicense.objects.exists()
