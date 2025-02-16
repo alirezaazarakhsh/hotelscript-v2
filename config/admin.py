@@ -19,6 +19,7 @@ from .models import (
     Advantage,
 )
 from .forms import (
+    SectionForm,
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
@@ -90,6 +91,7 @@ class QuickAccessAdmin(admin.ModelAdmin):
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
+    form = SectionForm
     list_display = (
         'id',
         'title',

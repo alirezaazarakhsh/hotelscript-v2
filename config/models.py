@@ -183,6 +183,17 @@ class Section(models.Model):
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/sections/',
+        null=True,
+        blank=True,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        null=True,
+        blank=True,
+    )
     page = models.ForeignKey(
         Page,
         on_delete=models.CASCADE,
