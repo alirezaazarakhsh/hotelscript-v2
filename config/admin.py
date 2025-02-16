@@ -22,6 +22,7 @@ from .forms import (
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
+    ServiceForm,
     BannerForm,
     LicenseForm,
 )
@@ -162,6 +163,7 @@ class FAQAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
+    form = ServiceForm
     list_display = (
         'id',
         'title',

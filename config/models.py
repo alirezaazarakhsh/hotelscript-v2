@@ -351,6 +351,10 @@ class Service(models.Model):
     description = models.TextField(
         verbose_name=_('توضیحات')
     )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/services/'
+    )
 
     class Meta:
         verbose_name = 'خدمت'
