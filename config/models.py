@@ -183,6 +183,17 @@ class Section(models.Model):
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/sections/',
+        null=True,
+        blank=True,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        null=True,
+        blank=True,
+    )
     page = models.ForeignKey(
         Page,
         on_delete=models.CASCADE,
@@ -351,6 +362,10 @@ class Service(models.Model):
     description = models.TextField(
         verbose_name=_('توضیحات')
     )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/services/'
+    )
 
     class Meta:
         verbose_name = 'خدمت'
@@ -404,6 +419,10 @@ class SocialMedia(models.Model):
         verbose_name=_('لینک'),
         max_length=1024,
         unique=True,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
     )
     show_in_footer = models.BooleanField(
         verbose_name=_('نمایش در فوتر'),

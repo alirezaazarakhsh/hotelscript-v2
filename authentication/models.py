@@ -23,6 +23,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(verbose_name=_('ایمیل'), unique=True, null=True, blank=True)
     phone_number = models.CharField(verbose_name=_('موبایل'), max_length=11, validators=(validate_phone_number,), unique=True, null=True, blank=True)
     national_code = models.CharField(verbose_name=_('کد ملی'), max_length=10, validators=(validate_national_code,), unique=True, null=True, blank=True)
+    image = models.ImageField(verbose_name=_('عکس پروفایل'), upload_to='images/profiles/', null=True, blank=True)
     postal_code = models.CharField(verbose_name=_('کد پستی'), max_length=10, validators=(validate_postal_code,), null=True, blank=True)
     address = models.CharField(verbose_name=_('آدرس مسکونی'), max_length=256, null=True, blank=True)
     is_staff = models.BooleanField(verbose_name=_('دسترسی به ادمین جنگو'), default=False)
@@ -35,7 +36,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     class Meta:
-        pass
+        verbose_name = "کاربر"
+        verbose_name_plural = "کاربران"
 
     def clean(self):
         qs = User.objects.exclude(pk=self.pk).filter(phone_number=self.phone_number)
@@ -60,6 +62,8 @@ class OTP(models.Model):
     created = models.DateTimeField(verbose_name=_('created'), auto_now_add=True)
 
     class Meta:
+        verbose_name = "رمز یک بار مصرف"
+        verbose_name_plural = "رمزهای یک بار مصرف"
         ordering = ('-created',)
     
     @property
