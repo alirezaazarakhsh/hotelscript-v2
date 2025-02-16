@@ -1,9 +1,11 @@
 from django.contrib import admin
 from .models import User, OTP
+from .forms import UserForm
 
 # Register your models here.
 @admin.register(User)
-class NotifierAdmin(admin.ModelAdmin):
+class UserAdmin(admin.ModelAdmin):
+    form = UserForm
     list_display = (
         'id',
         'first_name',
@@ -32,18 +34,8 @@ class NotifierAdmin(admin.ModelAdmin):
         '-id',
     )
 
-    def __str__(self):
-        return "کاربران"
-
-    def __repr__(self):
-        return "کاربران"
-
-    class Meta:
-        verbose_name = "کاربر"
-        verbose_name_plural = "کاربران"
-
 @admin.register(OTP)
-class NotifierAdmin(admin.ModelAdmin):
+class OTPAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'user',
@@ -56,13 +48,3 @@ class NotifierAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
-
-    def __str__(self):
-        return "رمزهای یک بار مصرف"
-
-    def __repr__(self):
-        return "رمزهای یک بار مصرف"
-
-    class Meta:
-        verbose_name = "رمز یک بار مصرف"
-        verbose_name_plural = "رمزهای یک بار مصرف"

@@ -68,6 +68,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'last_name',
             'email',
             'national_code',
+            'image',
             'postal_code',
             'address',
         ]
