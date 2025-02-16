@@ -420,6 +420,10 @@ class SocialMedia(models.Model):
         max_length=1024,
         unique=True,
     )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
     show_in_footer = models.BooleanField(
         verbose_name=_('نمایش در فوتر'),
         default=False,
