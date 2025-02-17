@@ -540,3 +540,37 @@ class Advantage(models.Model):
     
     def __str__(self):
         return f'{self.title}'
+
+class FakeComment(models.Model):
+    commenter = models.CharField(
+        verbose_name=_('نام و نام خانوادگی نظردهنده'),
+        max_length=64,
+    )
+    commenter_image = models.ImageField(
+        verbose_name=_('پروفایل نظردهنده'),
+        upload_to='images/comments/profiles',
+    )
+    evaluation = models.CharField(
+        verbose_name=_('ارزیابی'),
+        max_length=32,
+    )
+    text = models.CharField(
+        verbose_name=_('نظر'),
+        max_length=512,
+    )
+    rate = models.DecimalField(
+        verbose_name=_('امتیاز'),
+        max_digits=3,
+        decimal_places=1,
+        validators=(
+            MinValueValidator(0.0),
+            MaxValueValidator(5.0),
+        )
+    )
+    
+    class Meta:
+        verbose_name = 'نظر'
+        verbose_name_plural = 'نظرات'
+    
+    def __str__(self):
+        return f'{self.commenter}'
