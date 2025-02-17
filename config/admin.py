@@ -17,6 +17,7 @@ from .models import (
     EnamadLicense,
     License,
     Advantage,
+    FakeComment,
 )
 from .forms import (
     SectionForm,
@@ -26,6 +27,7 @@ from .forms import (
     ServiceForm,
     BannerForm,
     LicenseForm,
+    FakeCommentForm,
 )
 
 # Register your models here.
@@ -256,4 +258,19 @@ class AdvantageAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
         'subtitle',
+    )
+
+@admin.register(FakeComment)
+class FakeCommentAdmin(admin.ModelAdmin):
+    form = FakeCommentForm
+    list_display = (
+        'id',
+        'commenter',
+        'evaluation',
+        'text',
+        'rate',
+    )
+    search_fields = (
+        'commenter',
+        'text',
     )
