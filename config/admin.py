@@ -18,6 +18,7 @@ from .models import (
     License,
     Advantage,
     FakeComment,
+    Rule,
 )
 from .forms import (
     SectionForm,
@@ -272,5 +273,16 @@ class FakeCommentAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'commenter',
+        'text',
+    )
+
+@admin.register(Rule)
+class RuleAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'tab_title',
+    )
+    search_fields = (
+        'tab_title',
         'text',
     )
