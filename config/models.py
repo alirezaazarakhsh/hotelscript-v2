@@ -14,6 +14,7 @@ AVAILABLE_PAGES = (
     ('contact', 'تماس با ما'),
     ('magazine', 'مجله گردشگری'),
     ('best-hotels', 'بهترین هتل‌ها'),
+    ('rules', 'قوانین'),
 )
 
 AVAILABLE_SECTIONS = (
@@ -574,3 +575,19 @@ class FakeComment(models.Model):
     
     def __str__(self):
         return f'{self.commenter}'
+
+class Rule(models.Model):
+    tab_title = models.CharField(
+        verbose_name=_('عنوان تب'),
+        max_length=32,
+    )
+    text = models.TextField(
+        verbose_name=_('متن'),
+    )
+
+    class Meta:
+        verbose_name = 'قانون'
+        verbose_name_plural = 'قوانین'
+    
+    def __str__(self):
+        return f'{self.tab_title}'
