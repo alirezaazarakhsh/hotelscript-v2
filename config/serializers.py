@@ -17,6 +17,7 @@ from .models import (
     License,
     Advantage,
     FakeComment,
+    Rule,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -139,6 +140,13 @@ class AdvantageSerializer(serializers.ModelSerializer):
 class FakeCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = FakeComment
+        exclude = (
+            'id',
+        )
+
+class RuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Rule
         exclude = (
             'id',
         )
