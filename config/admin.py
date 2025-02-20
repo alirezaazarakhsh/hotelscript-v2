@@ -19,6 +19,7 @@ from .models import (
     Advantage,
     FakeComment,
     Rule,
+    ComingSoon,
 )
 from .forms import (
     SectionForm,
@@ -29,6 +30,7 @@ from .forms import (
     BannerForm,
     LicenseForm,
     FakeCommentForm,
+    ComingSoonAdminForm,
 )
 
 # Register your models here.
@@ -286,3 +288,24 @@ class RuleAdmin(admin.ModelAdmin):
         'tab_title',
         'text',
     )
+
+@admin.register(ComingSoon)
+class ComingSoonAdmin(admin.ModelAdmin):
+    form = ComingSoonAdminForm
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+        'end_date',
+        'copyright_text',
+        'is_active',
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change and ComingSoon.objects.exists():
+            messages.error(request, 'تنها یک کامینگ سون میتوان ساخت')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return not ComingSoon.objects.exists()
