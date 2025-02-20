@@ -16,6 +16,8 @@ from .models import (
     EnamadLicense,
     License,
     Advantage,
+    FakeComment,
+    Rule,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -131,6 +133,20 @@ class LicenseSerializer(serializers.ModelSerializer):
 class AdvantageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Advantage
+        exclude = (
+            'id',
+        )
+
+class FakeCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FakeComment
+        exclude = (
+            'id',
+        )
+
+class RuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Rule
         exclude = (
             'id',
         )

@@ -20,4 +20,6 @@ urlpatterns = [
     path('enamad/', views.EnamadLicenseRetrieveView.as_view(), name='enamad'),
     path('licenses/', views.LicenseListView.as_view(), name='licenses'),
     path('advantages/', views.AdvantageListView.as_view(), name='advantages'),
+    path('comments/', views.FakeCommentListView.as_view(), name='fake-comments'),
+    path('rules/', views.RuleListView.as_view(), name='rules'),
 ]

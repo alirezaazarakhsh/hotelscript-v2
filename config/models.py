@@ -7,6 +7,9 @@ from django.core.validators import (
     RegexValidator,
 )
 from .managers import ActiveManager
+from .validators import (
+    validate_future_datetime,
+)
 
 AVAILABLE_PAGES = (
     ('home', 'صفحه اصلی'),
@@ -14,6 +17,7 @@ AVAILABLE_PAGES = (
     ('contact', 'تماس با ما'),
     ('magazine', 'مجله گردشگری'),
     ('best-hotels', 'بهترین هتل‌ها'),
+    ('rules', 'قوانین'),
 )
 
 AVAILABLE_SECTIONS = (
@@ -540,3 +544,97 @@ class Advantage(models.Model):
     
     def __str__(self):
         return f'{self.title}'
+
+class FakeComment(models.Model):
+    commenter = models.CharField(
+        verbose_name=_('نام و نام خانوادگی نظردهنده'),
+        max_length=64,
+    )
+    commenter_image = models.ImageField(
+        verbose_name=_('پروفایل نظردهنده'),
+        upload_to='images/comments/profiles',
+    )
+    evaluation = models.CharField(
+        verbose_name=_('ارزیابی'),
+        max_length=32,
+    )
+    text = models.CharField(
+        verbose_name=_('نظر'),
+        max_length=512,
+    )
+    rate = models.DecimalField(
+        verbose_name=_('امتیاز'),
+        max_digits=3,
+        decimal_places=1,
+        validators=(
+            MinValueValidator(0.0),
+            MaxValueValidator(5.0),
+        )
+    )
+    
+    class Meta:
+        verbose_name = 'نظر'
+        verbose_name_plural = 'نظرات'
+    
+    def __str__(self):
+        return f'{self.commenter}'
+
+class Rule(models.Model):
+    tab_title = models.CharField(
+        verbose_name=_('عنوان تب'),
+        max_length=32,
+    )
+    text = models.TextField(
+        verbose_name=_('متن'),
+    )
+
+    class Meta:
+        verbose_name = 'قانون'
+        verbose_name_plural = 'قوانین'
+    
+    def __str__(self):
+        return f'{self.tab_title}'
+
+class ComingSoon(models.Model):
+    logo = models.ImageField(
+        verbose_name=_('لوگو'),
+        upload_to='images/coming-soon',
+    )
+    background = models.ImageField(
+        verbose_name=_('پس زمینه'),
+        upload_to='images/coming-soon',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=128,
+    )
+    end_date = models.DateTimeField(
+        verbose_name=_('تاریخ'),
+        validators=(
+            validate_future_datetime,
+        )
+    )
+    copyright_text = models.CharField(
+        verbose_name=_('متن کپی رایت'),
+        max_length=128,
+    )
+    is_active = models.BooleanField(
+        verbose_name=_('فعال'),
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = 'کامینگ سون'
+        verbose_name_plural = 'کامینگ سون'
+    
+    def __str__(self):
+        return f'کامینگ سون'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and ComingSoon.objects.exists():
+            raise ValidationError('تنها یک کامینگ سون برای سایت میتوانید بسازید!')
+        return super(ComingSoon, self).save(*args, **kwargs)

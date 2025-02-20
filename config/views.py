@@ -25,6 +25,8 @@ from .serializers import (
     EnamadLicenseSerializer,
     LicenseSerializer,
     AdvantageSerializer,
+    FakeCommentSerializer,
+    RuleSerializer,
 )
 from .models import (
     Page,
@@ -43,6 +45,8 @@ from .models import (
     EnamadLicense,
     License,
     Advantage,
+    FakeComment,
+    Rule,
 )
 
 # Create your views here.
@@ -172,4 +176,16 @@ class AdvantageListView(ListAPIView):
     queryset = Advantage.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = AdvantageSerializer
+    pagination_class = None
+
+class FakeCommentListView(ListAPIView):
+    queryset = FakeComment.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = FakeCommentSerializer
+    pagination_class = None
+
+class RuleListView(ListAPIView):
+    queryset = Rule.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = RuleSerializer
     pagination_class = None

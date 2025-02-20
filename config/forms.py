@@ -7,6 +7,8 @@ from .models import (
     ChooseReason,
     Banner,
     License,
+    FakeComment,
+    ComingSoon,
 )
 
 class SectionForm(forms.ModelForm):
@@ -88,3 +90,28 @@ class LicenseForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
             self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""
+
+class FakeCommentForm(forms.ModelForm):
+    class Meta:
+        model = FakeComment
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(FakeCommentForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['commenter_image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['commenter_image'].help_text = f'<img src="{self.instance.commenter_image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.commenter_image else ""
+
+class ComingSoonAdminForm(forms.ModelForm):
+    class Meta:
+        model = ComingSoon
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(ComingSoonAdminForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['logo'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['logo'].help_text = f'<img src="{self.instance.logo.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.logo else ""
+
+            self.fields['background'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['background'].help_text = f'<img src="{self.instance.background.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.background else ""
