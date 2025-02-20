@@ -7,6 +7,9 @@ from django.core.validators import (
     RegexValidator,
 )
 from .managers import ActiveManager
+from .validators import (
+    validate_future_datetime,
+)
 
 AVAILABLE_PAGES = (
     ('home', 'صفحه اصلی'),
@@ -591,3 +594,47 @@ class Rule(models.Model):
     
     def __str__(self):
         return f'{self.tab_title}'
+
+class ComingSoon(models.Model):
+    logo = models.ImageField(
+        verbose_name=_('لوگو'),
+        upload_to='images/coming-soon',
+    )
+    background = models.ImageField(
+        verbose_name=_('پس زمینه'),
+        upload_to='images/coming-soon',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان'),
+        max_length=128,
+    )
+    end_date = models.DateTimeField(
+        verbose_name=_('تاریخ'),
+        validators=(
+            validate_future_datetime,
+        )
+    )
+    copyright_text = models.CharField(
+        verbose_name=_('متن کپی رایت'),
+        max_length=128,
+    )
+    is_active = models.BooleanField(
+        verbose_name=_('فعال'),
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = 'کامینگ سون'
+        verbose_name_plural = 'کامینگ سون'
+    
+    def __str__(self):
+        return f'کامینگ سون'
+    
+    def save(self, *args, **kwargs):
+        if not self.pk and ComingSoon.objects.exists():
+            raise ValidationError('تنها یک کامینگ سون برای سایت میتوانید بسازید!')
+        return super(ComingSoon, self).save(*args, **kwargs)
