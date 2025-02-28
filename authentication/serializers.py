@@ -5,10 +5,9 @@ from rest_framework_simplejwt.settings import api_settings
 from django.contrib.auth.models import update_last_login
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
-
 from safarname24.serializers import ErrorMessageSerializerMixin
 from .validators import validate_phone_number
-from django.contrib.auth import get_user_model
+from .models import BaseUser, NaturalProfile
 
 class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSerializerMixin):
     username_field = "phone"
@@ -60,9 +59,20 @@ class AuthSerializer(serializers.Serializer):
                                   validators=(validate_phone_number,))
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    base_user = serializers.PrimaryKeyRelatedField(
+        queryset=BaseUser.objects.all(),
+        write_only=True,
+    )
+    phone_number = serializers.CharField(
+        source='base_user.phone_number',
+        required=False,
+        read_only=True,
+    )
+
     class Meta:
-        model = get_user_model()
+        model = NaturalProfile
         fields = [
+            'base_user',
             'phone_number',
             'first_name',
             'last_name',
@@ -72,7 +82,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'postal_code',
             'address',
         ]
-        read_only_fields = ['phone_number']
         extra_kwargs = {
             'first_name': {
                 'required': True

@@ -1,38 +1,98 @@
 from django.contrib import admin
-from .models import User, OTP
-from .forms import UserForm
+from .models import (
+    BaseUser,
+    Admin,
+    SuperUser,
+    NaturalProfile,
+    OTP,
+)
+from .forms import (
+    AdminForm,
+    NaturalProfileForm,
+)
 
-# Register your models here.
-@admin.register(User)
-class UserAdmin(admin.ModelAdmin):
-    form = UserForm
+# # Register your models here.
+@admin.register(BaseUser)
+class BaseUserAdmin(admin.ModelAdmin):
+    exclude = (
+        'is_superuser',
+    )
     list_display = (
         'id',
-        'first_name',
-        'last_name',
-        'password',
-        'email',
         'phone_number',
-        'national_code',
-        'postal_code',
-        'address',
-        'is_staff',
-        'is_active',
         'date_joined',
-    )
-    list_filter = (
-        'is_active',
-        'is_staff',
     )
     search_fields = (
         'phone_number',
-        'national_code',
+    )
+    ordering = (
+        '-id',
+    )
+
+@admin.register(Admin)
+class AdminAdmin(admin.ModelAdmin):
+    form = AdminForm
+    list_display = (
+        'id',
+        'base_user__phone_number',
+        'first_name',
+        'last_name',
+    )
+    search_fields = (
+        'base_user__phone_number',
         'first_name',
         'last_name',
     )
     ordering = (
         '-id',
     )
+
+    def base_user__phone_number(self, obj):
+        return obj.base_user.phone_number
+    base_user__phone_number.short_description = 'موبایل'
+
+@admin.register(SuperUser)
+class SuperUserAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'base_user__phone_number',
+    )
+    search_fields = (
+        'base_user__phone_number',
+    )
+    ordering = (
+        '-id',
+    )
+
+    def base_user__phone_number(self, obj):
+        return obj.base_user.phone_number
+    base_user__phone_number.short_description = 'موبایل'
+
+@admin.register(NaturalProfile)
+class NaturalProfileAdmin(admin.ModelAdmin):
+    form = NaturalProfileForm
+    list_display = (
+        'id',
+        'base_user__phone_number',
+        'first_name',
+        'last_name',
+        'email',
+        'national_code',
+    )
+    search_fields = (
+        'base_user__phone_number',
+        'first_name',
+        'last_name',
+        'email',
+        'national_code',
+    )
+    ordering = (
+        '-id',
+    )
+
+    def base_user__phone_number(self, obj):
+        return obj.base_user.phone_number
+    base_user__phone_number.short_description = 'موبایل'
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
