@@ -133,7 +133,7 @@ AUTHENTICATION_BACKENDS = (
     'authentication.backends.AdminAuthBackend',
 )
 
-AUTH_USER_MODEL = "authentication.User"
+AUTH_USER_MODEL = "authentication.BaseUser"
 OTP_VALID_TIME = 2
 
 REST_FRAMEWORK = {

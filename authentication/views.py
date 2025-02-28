@@ -13,9 +13,14 @@ from django.utils.translation import gettext_lazy as _
 
 from .serializers import AuthSerializer, UserProfileSerializer
 from .utils import generate_otp_code, send_otp_code
-from .models import User, OTP
+from .models import (
+    BaseUser,
+    OTP,
+    NaturalProfile,
+)
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.mixins import CreateModelMixin
 
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -64,7 +69,7 @@ class AuthView(APIView):
         serializer = AuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         phone = request.data.get('phone')
-        user = User.objects.get_by_phone_or_create(phone)
+        user = BaseUser.objects.get_by_phone_or_create(phone)
 
         try:
             last_user_otp = user.otps.latest('created')
@@ -117,9 +122,24 @@ class TokenRefreshView(JwtTokenRefreshView):
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
-class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView):
+class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
     permission_classes = (IsAuthenticated,)
     serializer_class = UserProfileSerializer
 
     def get_object(self):
-        return self.request.user
+        return self.request.user.natural_profile
+    
+    def get(self, request, *args, **kwargs):
+        try:
+            return self.retrieve(request, *args, **kwargs)
+        except NaturalProfile.DoesNotExist:
+            return Response(
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    
+    def put(self, request, *args, **kwargs):
+        request.data['base_user'] = request.user.pk
+        try:
+            return self.update(request, *args, **kwargs)
+        except NaturalProfile.DoesNotExist:
+            return super().create(request, *args, **kwargs)
