@@ -4,6 +4,7 @@ from .models import (
     Admin,
     SuperUser,
     NaturalProfile,
+    JuridicalProfile,
     OTP,
 )
 from .forms import (
@@ -93,6 +94,50 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
+
+@admin.register(JuridicalProfile)
+class JuridicalProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'base_user__phone_number',
+        'natural_profile__first_name',
+        'natural_profile__last_name',
+        'organization_name',
+        'national_id',
+        'registeration_number',
+        'economical_code',
+        'phone_number',
+        'email',
+        'status',
+    )
+    search_fields = (
+        'base_user__phone_number',
+        'natural_profile__first_name',
+        'natural_profile__last_name',
+        'organization_name',
+        'national_id',
+        'registeration_number',
+        'economical_code',
+        'phone_number',
+    )
+    list_filter = (
+        'status',
+    )
+    ordering = (
+        '-id',
+    )
+
+    def base_user__phone_number(self, obj):
+        return obj.natural_profile.base_user.phone_number
+    base_user__phone_number.short_description = 'موبایل'
+
+    def natural_profile__first_name(self, obj):
+        return obj.natural_profile.first_name
+    base_user__phone_number.short_description = 'نام'
+
+    def natural_profile__last_name(self, obj):
+        return obj.natural_profile.last_name
+    base_user__phone_number.short_description = 'نام خانوادگی'
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
