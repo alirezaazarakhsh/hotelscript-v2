@@ -145,9 +145,9 @@ class Admin(models.Model):
         null=True,
         blank=True,
     )
-    signature = models.ImageField(
+    signature = models.CharField(
         verbose_name=_('امضای ادمین'),
-        upload_to='images/signatures/',
+        max_length=512,
         null=True,
         blank=True,
     )
