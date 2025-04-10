@@ -19,6 +19,9 @@ from .validators import (
     validate_national_code,
     validate_postal_code
 )
+from config.models import (
+    UserLevel,
+)
 
 LEGAL_PROFILE_STATUSES = (
     ('checking','در حال بررسی'),
@@ -215,6 +218,13 @@ class NaturalProfile(models.Model):
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
+    )
+    level = models.ForeignKey(
+        UserLevel,
+        on_delete=models.SET_NULL,
+        verbose_name=_('سطح کاربری'),
+        related_name='natural_profile',
+        null=True,
     )
 
     class Meta:
