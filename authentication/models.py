@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.contrib.auth import password_validation
 from django.utils.crypto import salted_hmac
 from django.contrib.auth.hashers import (
@@ -328,6 +329,11 @@ class JuridicalProfile(models.Model):
         choices=LEGAL_PROFILE_STATUSES,
         default='checking',
     )
+    reject_reason = models.TextField(
+        verbose_name=_('دلیل رد'),
+        blank=True,
+        default='',
+    )
     created = models.DateTimeField(
         verbose_name=_('تاریخ ثبت نام'),
         auto_now_add=True,
@@ -337,5 +343,13 @@ class JuridicalProfile(models.Model):
         verbose_name = 'پروفایل حقوقی'
         verbose_name_plural = 'پروفایل‌های حقوقی'
     
+    def clean(self):
+        super().clean()
+
+        if self.status == 'rejected' and not self.reject_reason.strip():
+            raise ValidationError({
+                'reject_reason': f'فیلد {self._meta.get_field('reject_reason').verbose_name} الزامی است.'
+            })
+
     def __str__(self):
         return f'{self.organization_name}'
