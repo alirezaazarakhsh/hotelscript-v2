@@ -638,3 +638,21 @@ class ComingSoon(models.Model):
         if not self.pk and ComingSoon.objects.exists():
             raise ValidationError('تنها یک کامینگ سون برای سایت میتوانید بسازید!')
         return super(ComingSoon, self).save(*args, **kwargs)
+
+class UserLevel(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        unique=True,
+    )
+    icon = models.CharField(
+        verbose_name=_('آیکن'),
+        max_length=64,
+    )
+    
+    class Meta:
+        verbose_name = 'سطح کاربری'
+        verbose_name_plural = 'سطوح کاربری'
+    
+    def __str__(self):
+        return f'{self.title}'
