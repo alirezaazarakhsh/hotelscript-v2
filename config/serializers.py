@@ -18,6 +18,7 @@ from .models import (
     Advantage,
     FakeComment,
     Rule,
+    UserLevel,
 )
 
 class PageSerializer(serializers.ModelSerializer):
@@ -147,6 +148,13 @@ class FakeCommentSerializer(serializers.ModelSerializer):
 class RuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Rule
+        exclude = (
+            'id',
+        )
+
+class UserLevelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserLevel
         exclude = (
             'id',
         )

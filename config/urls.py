@@ -22,4 +22,5 @@ urlpatterns = [
     path('advantages/', views.AdvantageListView.as_view(), name='advantages'),
     path('comments/', views.FakeCommentListView.as_view(), name='fake-comments'),
     path('rules/', views.RuleListView.as_view(), name='rules'),
+    path('user-levels/', views.UserLevelListView.as_view(), name='user-levels'),
 ]
