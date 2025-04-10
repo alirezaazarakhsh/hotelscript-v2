@@ -18,7 +18,8 @@ from django.core.validators import (
 from .validators import (
     validate_phone_number,
     validate_national_code,
-    validate_postal_code
+    validate_postal_code,
+    validate_file_size,
 )
 from config.models import (
     UserLevel,
@@ -319,10 +320,6 @@ class JuridicalProfile(models.Model):
         null=True,
         blank=True,
     )
-    documents_file = models.FileField(
-        verbose_name=_('فایل مدارک'),
-        upload_to='legal-profiles/documents/',
-    )
     status = models.CharField(
         verbose_name=_('وضعیت'),
         max_length=16,
@@ -353,3 +350,25 @@ class JuridicalProfile(models.Model):
 
     def __str__(self):
         return f'{self.organization_name}'
+
+class JuridicalProfileDocument(models.Model):
+    profile = models.ForeignKey(
+        JuridicalProfile,
+        on_delete=models.CASCADE,
+        verbose_name=_('پروفایل حقوقی'),
+        related_name='documents',
+    )
+    file = models.FileField(
+        verbose_name=_('فایل مدارک'),
+        upload_to='legal-profiles/documents/',
+        validators=[
+            validate_file_size,
+        ]
+    )
+
+    class Meta:
+        verbose_name = 'مدرک پروفایل حقوقی'
+        verbose_name_plural = 'مدارک پروفایل حقوقی'
+
+    def __str__(self):
+        return f'مدرک {self.profile}'
