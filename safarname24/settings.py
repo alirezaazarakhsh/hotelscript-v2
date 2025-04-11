@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'authentication',
     'config',
     'contact',
+    'blog',
     'drf_yasg',
 ]
 
