@@ -5,6 +5,7 @@ from .models import (
     SuperUser,
     NaturalProfile,
     JuridicalProfile,
+    JuridicalProfileDocument,
     OTP,
 )
 from .forms import (
@@ -138,6 +139,13 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     def natural_profile__last_name(self, obj):
         return obj.natural_profile.last_name
     base_user__phone_number.short_description = 'نام خانوادگی'
+
+@admin.register(JuridicalProfileDocument)
+class JuridicalProfileDocumentAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'profile',
+    )
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
