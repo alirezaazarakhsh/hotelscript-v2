@@ -366,6 +366,13 @@ class JuridicalProfile(models.Model):
     def __str__(self):
         return f'{self.organization_name}'
 
+
+def juridical_profile_document_upload_to(instance, filename):
+        try:
+            return f'legal-profiles/documents/{instance.profile.natural_profile.base_user.pk}/{filename}'
+        except:
+            return f'legal-profiles/documents/default/{filename}'
+
 class JuridicalProfileDocument(models.Model):
     profile = models.ForeignKey(
         JuridicalProfile,
@@ -375,7 +382,7 @@ class JuridicalProfileDocument(models.Model):
     )
     file = models.FileField(
         verbose_name=_('فایل مدارک'),
-        upload_to='legal-profiles/documents/',
+        upload_to=juridical_profile_document_upload_to,
         validators=[
             FileSizeValidator(30),
         ],
@@ -387,3 +394,4 @@ class JuridicalProfileDocument(models.Model):
 
     def __str__(self):
         return f'مدرک {self.profile}'
+    
