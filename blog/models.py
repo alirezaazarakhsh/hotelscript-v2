@@ -39,3 +39,34 @@ class StoryCategory(models.Model):
                     self.objects.filter(order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
+class Story(models.Model):
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to='images/stories/',
+    )
+    category = models.ForeignKey(
+        StoryCategory,
+        on_delete=models.CASCADE,
+        verbose_name=_('دسته بندی'),
+        related_name='stories',
+    )
+    # hotel = models.ForeignKey(
+    #     Hotel,
+    #     on_delete=models.CASCADE,
+    #     verbose_name=_('هتل'),
+    #     related_name='stories',
+    #     null=True,
+    # )
+    created = models.DateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+
+    class Meta:
+        verbose_name = 'استوری'
+        verbose_name_plural = 'استوری‌ها'
+        ordering = ('-created',)
+
+    def __str__(self):
+        return f'{self.category}-{self.pk}'
