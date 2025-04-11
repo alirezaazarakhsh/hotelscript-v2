@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
             name='JuridicalProfileDocument',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('file', models.FileField(upload_to='legal-profiles/documents/', validators=[authentication.validators.validate_file_size], verbose_name='فایل مدارک')),
+                ('file', models.FileField(upload_to='legal-profiles/documents/', verbose_name='فایل مدارک')),
                 ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='documents', to='authentication.juridicalprofile', verbose_name='پروفایل حقوقی')),
             ],
             options={

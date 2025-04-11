@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.utils.deconstruct import deconstructible
 import re
 
 def validate_phone_number(value):
@@ -13,7 +14,12 @@ def validate_postal_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد پستی باید 10 رقمی باشد')
 
-def validate_file_size(value):
-    max_file_size = 25 * 1024 * 1024
-    if value.size > max_file_size:
-        raise ValidationError(f"حداکثر حجم فایل آپلودی، {max_file_size / (1024 * 1024)} مگابایت است.")
+@deconstructible
+class FileSizeValidator:
+    def __init__(self, max_file_size_in_MB):
+        self.max_file_size_in_MB = max_file_size_in_MB
+
+    def __call__(self, value):
+        max_size = self.max_file_size_in_MB * 1024 * 1024
+        if value.size > max_size:
+            raise ValidationError(f"حداکثر حجم فایل آپلودی، {self.max_file_size_in_MB} مگابایت است.")

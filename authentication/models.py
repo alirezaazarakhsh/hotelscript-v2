@@ -19,7 +19,7 @@ from .validators import (
     validate_phone_number,
     validate_national_code,
     validate_postal_code,
-    validate_file_size,
+    FileSizeValidator,
 )
 from config.models import (
     UserLevel,
@@ -149,6 +149,9 @@ class Admin(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ],
     )
     signature = models.CharField(
         verbose_name=_('امضای ادمین'),
@@ -201,6 +204,9 @@ class NaturalProfile(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ]
     )
     postal_code = models.CharField(
         verbose_name=_('کد پستی'),
@@ -320,6 +326,15 @@ class JuridicalProfile(models.Model):
         null=True,
         blank=True,
     )
+    image = models.ImageField(
+        verbose_name=_('عکس شرکت'),
+        upload_to='images/juridical-profiles/',
+        null=True,
+        blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ]
+    )
     status = models.CharField(
         verbose_name=_('وضعیت'),
         max_length=16,
@@ -362,8 +377,8 @@ class JuridicalProfileDocument(models.Model):
         verbose_name=_('فایل مدارک'),
         upload_to='legal-profiles/documents/',
         validators=[
-            validate_file_size,
-        ]
+            FileSizeValidator(30),
+        ],
     )
 
     class Meta:
