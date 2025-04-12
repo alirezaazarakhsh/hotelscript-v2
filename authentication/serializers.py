@@ -7,7 +7,12 @@ from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 from safarname24.serializers import ErrorMessageSerializerMixin
 from .validators import validate_phone_number
-from .models import BaseUser, NaturalProfile
+from .models import (
+    BaseUser,
+    NaturalProfile,
+    JuridicalProfile,
+    JuridicalProfileDocument,
+)
 
 class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSerializerMixin):
     username_field = "phone"
@@ -91,5 +96,64 @@ class UserProfileSerializer(serializers.ModelSerializer):
             },
             'national_code': {
                 'required': True
+            },
+        }
+
+class JuridicalProfileSerializer(serializers.ModelSerializer):
+    natural_profile = serializers.PrimaryKeyRelatedField(
+        queryset=NaturalProfile.objects.all(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = JuridicalProfile
+        fields = [
+            'natural_profile',
+            'organization_name',
+            'national_id',
+            'registeration_number',
+            'economical_code',
+            'phone_number',
+            'postal_code',
+            'address',
+            'email',
+            'image',
+            'status',
+            'reject_reason',
+        ]
+        extra_kwargs = {
+            'organization_name': {
+                'required': True
+            },
+            'national_id': {
+                'required': True
+            },
+            'registeration_number': {
+                'required': True
+            },
+            'economical_code': {
+                'required': True,
+            },
+            'phone_number': {
+                'required': True,
+            },
+            'postal_code': {
+                'required': True,
+            },
+            'reject_reason' : {
+                'read_only': True,
+            },
+        }
+
+class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JuridicalProfileDocument
+        fields = [
+            'profile',
+            'file',
+        ]
+        extra_kwargs = {
+            'profile': {
+                'write_only': True
             },
         }

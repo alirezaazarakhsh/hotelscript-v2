@@ -27,6 +27,7 @@ from .serializers import (
     AdvantageSerializer,
     FakeCommentSerializer,
     RuleSerializer,
+    UserLevelSerializer,
 )
 from .models import (
     Page,
@@ -47,6 +48,7 @@ from .models import (
     Advantage,
     FakeComment,
     Rule,
+    UserLevel,
 )
 
 # Create your views here.
@@ -188,4 +190,10 @@ class RuleListView(ListAPIView):
     queryset = Rule.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RuleSerializer
+    pagination_class = None
+
+class UserLevelListView(ListAPIView):
+    queryset = UserLevel.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = UserLevelSerializer
     pagination_class = None

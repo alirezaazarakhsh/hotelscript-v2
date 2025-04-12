@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.contrib.auth import password_validation
 from django.utils.crypto import salted_hmac
 from django.contrib.auth.hashers import (
@@ -17,7 +18,11 @@ from django.core.validators import (
 from .validators import (
     validate_phone_number,
     validate_national_code,
-    validate_postal_code
+    validate_postal_code,
+    FileSizeValidator,
+)
+from config.models import (
+    UserLevel,
 )
 
 LEGAL_PROFILE_STATUSES = (
@@ -144,10 +149,13 @@ class Admin(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ],
     )
-    signature = models.ImageField(
+    signature = models.CharField(
         verbose_name=_('امضای ادمین'),
-        upload_to='images/signatures/',
+        max_length=512,
         null=True,
         blank=True,
     )
@@ -196,6 +204,9 @@ class NaturalProfile(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ]
     )
     postal_code = models.CharField(
         verbose_name=_('کد پستی'),
@@ -215,6 +226,13 @@ class NaturalProfile(models.Model):
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
+    )
+    level = models.ForeignKey(
+        UserLevel,
+        on_delete=models.SET_NULL,
+        verbose_name=_('سطح کاربری'),
+        related_name='natural_profile',
+        null=True,
     )
 
     class Meta:
@@ -308,15 +326,25 @@ class JuridicalProfile(models.Model):
         null=True,
         blank=True,
     )
-    documents_file = models.FileField(
-        verbose_name=_('فایل مدارک'),
-        upload_to='legal-profiles/documents/',
+    image = models.ImageField(
+        verbose_name=_('عکس شرکت'),
+        upload_to='images/juridical-profiles/',
+        null=True,
+        blank=True,
+        validators=[
+            FileSizeValidator(10),
+        ]
     )
     status = models.CharField(
         verbose_name=_('وضعیت'),
         max_length=16,
         choices=LEGAL_PROFILE_STATUSES,
         default='checking',
+    )
+    reject_reason = models.TextField(
+        verbose_name=_('دلیل رد'),
+        blank=True,
+        default='',
     )
     created = models.DateTimeField(
         verbose_name=_('تاریخ ثبت نام'),
@@ -327,5 +355,43 @@ class JuridicalProfile(models.Model):
         verbose_name = 'پروفایل حقوقی'
         verbose_name_plural = 'پروفایل‌های حقوقی'
     
+    def clean(self):
+        super().clean()
+
+        if self.status == 'rejected' and not self.reject_reason.strip():
+            raise ValidationError({
+                'reject_reason': f'فیلد {self._meta.get_field('reject_reason').verbose_name} الزامی است.'
+            })
+
     def __str__(self):
         return f'{self.organization_name}'
+
+
+def juridical_profile_document_upload_to(instance, filename):
+        try:
+            return f'legal-profiles/documents/{instance.profile.natural_profile.base_user.pk}/{filename}'
+        except:
+            return f'legal-profiles/documents/default/{filename}'
+
+class JuridicalProfileDocument(models.Model):
+    profile = models.ForeignKey(
+        JuridicalProfile,
+        on_delete=models.CASCADE,
+        verbose_name=_('پروفایل حقوقی'),
+        related_name='documents',
+    )
+    file = models.FileField(
+        verbose_name=_('فایل مدارک'),
+        upload_to=juridical_profile_document_upload_to,
+        validators=[
+            FileSizeValidator(30),
+        ],
+    )
+
+    class Meta:
+        verbose_name = 'مدرک پروفایل حقوقی'
+        verbose_name_plural = 'مدارک پروفایل حقوقی'
+
+    def __str__(self):
+        return f'مدرک {self.profile}'
+    

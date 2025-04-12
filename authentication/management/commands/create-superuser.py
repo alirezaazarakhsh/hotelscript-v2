@@ -12,6 +12,8 @@ class Command(BaseCommand):
         try:
             with transaction.atomic():
                 base_user, _created = BaseUser.objects.get_or_create(phone_number=phone)
+                base_user.is_superuser = True
+                base_user.save()
                 super_user = SuperUser(base_user=base_user)
                 super_user.set_password(raw_password=password)
                 super_user.save()

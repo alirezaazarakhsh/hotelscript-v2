@@ -20,6 +20,7 @@ from .models import (
     FakeComment,
     Rule,
     ComingSoon,
+    UserLevel,
 )
 from .forms import (
     SectionForm,
@@ -309,3 +310,13 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
+
+@admin.register(UserLevel)
+class UserLevelAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
+    )

@@ -11,16 +11,33 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from .serializers import AuthSerializer, UserProfileSerializer
+from .serializers import (
+    AuthSerializer,
+    UserProfileSerializer,
+    JuridicalProfileSerializer,
+    JuridicalProfileDocumentSerializer,
+)
 from .utils import generate_otp_code, send_otp_code
 from .models import (
     BaseUser,
     OTP,
     NaturalProfile,
+    JuridicalProfile,
+    JuridicalProfileDocument,
 )
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework.generics import RetrieveUpdateAPIView
-from rest_framework.mixins import CreateModelMixin
+from rest_framework.generics import (
+    RetrieveUpdateAPIView,
+    GenericAPIView,
+)
+from rest_framework.mixins import (
+    CreateModelMixin,
+    ListModelMixin,
+    DestroyModelMixin,
+)
+from .permissions import (
+    IsJuridicalProfileDocumentOwner,
+)
 
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
@@ -143,3 +160,67 @@ class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
             return self.update(request, *args, **kwargs)
         except NaturalProfile.DoesNotExist:
             return super().create(request, *args, **kwargs)
+
+class JuridicalProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = JuridicalProfileSerializer
+
+    def get_object(self):
+        return self.request.user.natural_profile.juridical_profile
+    
+    def get(self, request, *args, **kwargs):
+        try:
+            return self.retrieve(request, *args, **kwargs)
+        except JuridicalProfile.DoesNotExist:
+            return Response(
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    
+    def put(self, request, *args, **kwargs):
+        request.data['natural_profile'] = request.user.natural_profile.pk
+        request.data['status'] = 'checking'
+        try:
+            return self.update(request, *args, **kwargs)
+        except NaturalProfile.DoesNotExist:
+            return super().create(request, *args, **kwargs)
+
+class JuridicalProfileDocumentListCreateDestroyView(ListModelMixin,
+                                                    CreateModelMixin,
+                                                    DestroyModelMixin,
+                                                    GenericAPIView):
+    permission_classes = (
+        IsAuthenticated,
+        IsJuridicalProfileDocumentOwner,
+    )
+    serializer_class = JuridicalProfileDocumentSerializer
+
+    def get_juridical_profile_query_set(self):
+        try:
+            return JuridicalProfile.objects.select_related(
+                'natural_profile',
+                'natural_profile__base_user',
+            ).filter(natural_profile__base_user=self.request.user)
+        except:
+            return JuridicalProfile.objects.none()
+
+    def get_queryset(self):
+        try:
+            return JuridicalProfileDocument.objects.select_related(
+                'profile',
+                'profile__natural_profile',
+                'profile__natural_profile__base_user',
+            ).filter(profile__natural_profile__base_user=self.request.user)
+        except:
+            return JuridicalProfileDocument.objects.none()
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        request.data['profile'] = request.user.natural_profile.juridical_profile.pk
+        self.get_juridical_profile_query_set().update(status='checking')
+        return super().create(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        self.get_juridical_profile_query_set().update(status='checking')
+        return self.destroy(request, *args, **kwargs)
