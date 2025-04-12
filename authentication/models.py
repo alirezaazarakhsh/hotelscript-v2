@@ -360,7 +360,7 @@ class JuridicalProfile(models.Model):
 
         if self.status == 'rejected' and not self.reject_reason.strip():
             raise ValidationError({
-                'reject_reason': f'فیلد {self._meta.get_field('reject_reason').verbose_name} الزامی است.'
+                'reject_reason': f'فیلد {self._meta.get_field("reject_reason").verbose_name} الزامی است.'
             })
 
     def __str__(self):
