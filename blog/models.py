@@ -1,5 +1,8 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from .managers import (
+    HasStoryManager,
+)
 
 # Create your models here.
 class StoryCategory(models.Model):
@@ -20,6 +23,9 @@ class StoryCategory(models.Model):
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
     )
+
+    objects = models.Manager()
+    has_story = HasStoryManager()
 
     class Meta:
         verbose_name = 'دسته استوری'
@@ -66,7 +72,7 @@ class Story(models.Model):
     class Meta:
         verbose_name = 'استوری'
         verbose_name_plural = 'استوری‌ها'
-        ordering = ('-created',)
+        ordering = ('created',)
 
     def __str__(self):
         return f'{self.category}-{self.pk}'

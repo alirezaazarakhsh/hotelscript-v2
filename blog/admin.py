@@ -30,3 +30,4 @@ class StoryCategoryAdmin(admin.ModelAdmin):
     list_filter = (
         'category',
     )
+    ordering = ('-created',)
