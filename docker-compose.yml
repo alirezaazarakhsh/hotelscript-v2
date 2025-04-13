@@ -26,6 +26,8 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    env_file:
+      - ./safarname24/.env 
     networks:
       - app_network
 
