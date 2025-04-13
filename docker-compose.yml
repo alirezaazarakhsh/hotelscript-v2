@@ -10,8 +10,17 @@ services:
       - media_storage:/app/media
     ports:
       - "8000:8000"
-    env_file:
-      - ./safarname24/.env
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DB_ENGINE: "django.db.backends.postgresql"
+      DB_NAME: "safarname24"
+      DB_USER: "postgres"
+      DB_PASSWORD: "admin"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,91.107.134.107"
+      CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com"
     depends_on:
       - db
     networks:
@@ -23,11 +32,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    env_file:
-      - ./safarname24/.env 
+      POSTGRES_DB: "safarname24"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "admin"
     networks:
       - app_network
 
