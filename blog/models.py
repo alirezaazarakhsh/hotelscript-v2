@@ -2,13 +2,14 @@ from django.utils import timezone
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import (
+    GenericForeignKey,
+    GenericRelation,
+)
 from authentication.models import Admin
 from .managers import (
     HasStoryManager,
     PublishedManager,
-    PopularManager,
-    EngagingManager,
     PublishingManager,
     ApprovedManager,
 )
@@ -102,6 +103,7 @@ class ArticleCategory(models.Model):
         verbose_name=_('توضیحات'),
         blank=True,
     )
+    articles = GenericRelation('Article')
 
     class Meta:
         verbose_name = 'دسته‌بندی اصلی مقالات'
@@ -131,6 +133,7 @@ class ArticleSubCategory(models.Model):
         verbose_name=_('دسته‌بندی اصلی'),
         related_name='subcategories',
     )
+    articles = GenericRelation('Article')
 
     class Meta:
         verbose_name = 'دسته‌بندی فرعی مقالات'
@@ -170,9 +173,9 @@ class ArticleTag(models.Model):
 
 class Article(models.Model):
     ARTICLE_STATUSES = (
-        ('draft','پیش‌نویس'),
-        ('published','منتشر شده'),
-        ('inactive','غیرفعال'),
+        ('draft', 'پیش‌نویس'),
+        ('published', 'منتشر شده'),
+        ('inactive', 'غیرفعال'),
     )
 
     def article_thumbnail_upload_to(instance, filename):
@@ -212,7 +215,6 @@ class Article(models.Model):
         },
         on_delete=models.CASCADE,
         verbose_name=_('دسته‌بندی'),
-        related_name='articles',
     )
     category_object_id = models.PositiveIntegerField()
     category = GenericForeignKey(
@@ -250,6 +252,10 @@ class Article(models.Model):
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
     )
+    updated = models.DateTimeField(
+        verbose_name=_('تاریخ تغییر'),
+        auto_now=True,
+    )
     published_date = models.DateTimeField(
         verbose_name=_('تاریخ انتشار'),
         default=timezone.now,
@@ -257,14 +263,15 @@ class Article(models.Model):
 
     objects = models.Manager()
     published = PublishedManager()
-    populars = PopularManager()
-    enagings = EngagingManager()
     publishings = PublishingManager()
     
     class Meta:
         verbose_name = 'مقاله'
         verbose_name_plural = 'مقاله‌ها'
         ordering = ['-published_date']
+        indexes = [
+            models.Index(fields=['slug'])
+        ]
 
     def __str__(self):
         return self.title

@@ -22,25 +22,7 @@ class PublishedManager(models.Manager):
     def get_queryset(self):
         return super()\
                 .get_queryset()\
-                .filter(status='published_date')\
-                .filter(published_date__lte=datetime.now())\
-                .order_by('-published_date')
-
-class PopularManager(models.Manager):
-    def get_queryset(self):
-        return super()\
-                .get_queryset()\
-                .filter(status='published_date')\
-                .filter(is_popular=True)\
-                .filter(published_date__lte=datetime.now())\
-                .order_by('-published_date')
-
-class EngagingManager(models.Manager):
-    def get_queryset(self):
-        return super()\
-                .get_queryset()\
-                .filter(status='published_date')\
-                .filter(is_engaging=True)\
+                .filter(status='published')\
                 .filter(published_date__lte=datetime.now())\
                 .order_by('-published_date')
 
@@ -48,7 +30,7 @@ class PublishingManager(models.Manager):
     def get_queryset(self):
         return super()\
                 .get_queryset()\
-                .filter(status='published_date')\
+                .filter(status='published')\
                 .filter(published_date__gt=datetime.now())\
                 .order_by('published_date')
 
