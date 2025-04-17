@@ -2,10 +2,15 @@ from django.contrib import admin
 from .models import (
     StoryCategory,
     Story,
+    ArticleCategory,
+    ArticleSubCategory,
+    ArticleTag,
+    Article,
 )
 from .forms import (
     StoryCategoryAdminForm,
     StoryAdminForm,
+    ArticleAdminForm,
 )
 # Register your models here.
 @admin.register(StoryCategory)
@@ -31,3 +36,73 @@ class StoryCategoryAdmin(admin.ModelAdmin):
         'category',
     )
     ordering = ('-created',)
+
+@admin.register(ArticleCategory)
+class ArticleCategoryAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'slug',
+        'description',
+    )
+    search_fields = (
+        'title',
+        'slug',
+        'description',
+    )
+
+@admin.register(ArticleSubCategory)
+class ArticleSubCategoryAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'slug',
+        'description',
+        'parent',
+    )
+    search_fields = (
+        'title',
+        'slug',
+        'description',
+    )
+
+@admin.register(ArticleTag)
+class ArticleTagAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'slug',
+        'description',
+    )
+    search_fields = (
+        'title',
+        'slug',
+        'description',
+    )
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    form = ArticleAdminForm
+    list_display = (
+        'id',
+        'title',
+        'slug',
+        'author',
+        'category',
+        'view_count',
+        'status',
+        'is_popular',
+        'is_engaging',
+        'created',
+        'published_date',
+    )
+    search_fields = (
+        'title',
+        'slug',
+        'body',
+    )
+    list_filter = (
+        'status',
+        'is_popular',
+        'is_engaging',
+    )

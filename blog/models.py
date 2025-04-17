@@ -1,7 +1,15 @@
+from django.utils import timezone
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+from authentication.models import Admin
 from .managers import (
     HasStoryManager,
+    PublishedManager,
+    PopularManager,
+    EngagingManager,
+    PublishingManager,
 )
 
 # Create your models here.
@@ -76,3 +84,186 @@ class Story(models.Model):
 
     def __str__(self):
         return f'{self.category}-{self.pk}'
+
+class ArticleCategory(models.Model):
+    title = models.CharField(
+        max_length=256,
+        verbose_name=_('عنوان'),
+        unique=True,
+    )
+    slug = models.SlugField(
+        max_length=256,
+        verbose_name=_('اسلاگ'),
+        unique=True,
+        allow_unicode=True,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = 'دسته‌بندی اصلی مقالات'
+        verbose_name_plural = 'دسته‌بندی‌های اصلی مقالات'
+
+    def __str__(self):
+        return self.title
+
+class ArticleSubCategory(models.Model):
+    title = models.CharField(
+        max_length=256,
+        verbose_name=_('عنوان'),
+    )
+    slug = models.SlugField(
+        max_length=256,
+        verbose_name=_('اسلاگ'),
+        unique=True,
+        allow_unicode=True,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        blank=True,
+    )
+    parent = models.ForeignKey(
+        ArticleCategory,
+        on_delete=models.CASCADE,
+        verbose_name=_('دسته‌بندی اصلی'),
+        related_name='subcategories',
+    )
+
+    class Meta:
+        verbose_name = 'دسته‌بندی فرعی مقالات'
+        verbose_name_plural = 'دسته‌بندی‌های فرعی مقالات'
+        unique_together = (
+            'title',
+            'parent',
+        )
+
+    def __str__(self):
+        return self.title
+
+class ArticleTag(models.Model):
+    title = models.CharField(
+        max_length=256,
+        verbose_name=_('عنوان'),
+        unique=True,
+    )
+    slug = models.SlugField(
+        max_length=256,
+        verbose_name=_('اسلاگ'),
+        unique=True,
+        allow_unicode=True,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = 'تگ'
+        verbose_name_plural = 'تگ‌ها'
+
+    def __str__(self):
+        return self.title
+
+
+class Article(models.Model):
+    ARTICLE_STATUSES = (
+        ('draft','پیش‌نویس'),
+        ('published','منتشر شده'),
+        ('inactive','غیرفعال'),
+    )
+
+    def article_thumbnail_upload_to(instance, filename):
+        try:
+            return f'images/articles/{instance.pk}/{filename}'
+        except:
+            return f'images/articles/default/{filename}'
+
+    title = models.CharField(
+        max_length=256,
+        verbose_name=_('عنوان'),
+        unique=True,
+    )
+    slug = models.SlugField(
+        max_length=256,
+        verbose_name=_('اسلاگ'),
+        unique=True,
+        allow_unicode=True,
+    )
+    body = models.TextField(
+        verbose_name=_('متن'),
+    )
+    author = models.ForeignKey(
+        Admin,
+        on_delete=models.CASCADE,
+        verbose_name=_('نویسنده'),
+        related_name='articles',
+    )
+    category_content_type = models.ForeignKey(
+        ContentType,
+        limit_choices_to={
+            'model__in': [
+                'articlecategory',
+                'articlesubcategory',
+            ],
+            'app_label': 'blog',
+        },
+        on_delete=models.CASCADE,
+        verbose_name=_('دسته‌بندی'),
+        related_name='articles',
+    )
+    category_object_id = models.PositiveIntegerField()
+    category = GenericForeignKey(
+        'category_content_type',
+        'category_object_id',
+    )
+    tags = models.ManyToManyField(
+        ArticleTag,
+        verbose_name=_('تگ'),
+        related_name='articles',
+    )
+    thumbnail = models.ImageField(
+        verbose_name=_('تصویر پیش‌نمایش'),
+        upload_to=article_thumbnail_upload_to,
+    )
+    view_count = models.PositiveBigIntegerField(
+        verbose_name=_('تعداد بازدید'),
+        default=0,
+    )
+    status = models.CharField(
+        verbose_name=_('وضعیت'),
+        max_length=16,
+        choices=ARTICLE_STATUSES,
+        default='draft',
+    )
+    is_popular = models.BooleanField(
+        verbose_name=_('محبوب'),
+        default=False,
+    )
+    is_engaging = models.BooleanField(
+        verbose_name=_('جذاب'),
+        default=False,
+    )
+    created = models.DateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+    published_date = models.DateTimeField(
+        verbose_name=_('تاریخ انتشار'),
+        default=timezone.now,
+    )
+
+    objects = models.Manager()
+    published = PublishedManager()
+    populars = PopularManager()
+    enagings = EngagingManager()
+    publishings = PublishingManager()
+    
+    class Meta:
+        verbose_name = 'مقاله'
+        verbose_name_plural = 'مقاله‌ها'
+        ordering = ['-published_date']
+
+    def __str__(self):
+        return self.title
