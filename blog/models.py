@@ -270,7 +270,8 @@ class Article(models.Model):
         verbose_name_plural = 'مقاله‌ها'
         ordering = ['-published_date']
         indexes = [
-            models.Index(fields=['slug'])
+            models.Index(fields=['title']),
+            models.Index(fields=['slug']),
         ]
 
     def __str__(self):

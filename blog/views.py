@@ -1,5 +1,6 @@
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import Q
 from rest_framework.generics import (
     ListAPIView,
@@ -66,7 +67,31 @@ class ArticleListView(ListAPIView):
             queryset = Article.publishings.order_by('published_date')
         else:
             queryset = Article.published.order_by('-published_date', '-created')
-        
+
+        if search_query := self.request.query_params.get('q'):
+            search_query = SearchQuery(search_query)
+            search_vector = (
+                SearchVector('title', weight='A') +
+                SearchVector('slug', weight='A') +
+                SearchVector('body', weight='B')
+            )
+            tags_vector = SearchVector('tags__title', weight='B')
+
+            queryset = queryset.annotate(
+                search=search_vector + tags_vector,
+                rank=SearchRank(
+                    search_vector + tags_vector,
+                    search_query
+                )
+            ).filter(rank__gte=0.3)\
+            .order_by('-rank')
+
+            # queryset = queryset.filter(
+            #     Q(title__icontains=search_query) | 
+            #     Q(slug__icontains=search_query) | 
+            #     Q(body__icontains=search_query)
+            # )
+
         if category_slug := self.request.query_params.get('category'):
             category = get_object_or_404(
                 ArticleCategory.objects.prefetch_related('subcategories'),
@@ -103,6 +128,13 @@ class ArticleListView(ListAPIView):
         return queryset
 
     @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'q',
+            openapi.IN_QUERY,
+            description="search term",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
         openapi.Parameter(
             'category',
             openapi.IN_QUERY,
