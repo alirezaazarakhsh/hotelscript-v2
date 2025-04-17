@@ -3,12 +3,12 @@ from django.db.models import (
     Count,
     Q,
 )
+from django.utils import timezone
 from datetime import (
-    datetime,
     timedelta,
 )
 
-STORY_EXPIRED_AT = datetime.now() - timedelta(days=2)
+STORY_EXPIRED_AT = timezone.now() - timedelta(days=2)
 
 class HasStoryManager(models.Manager):
     def get_queryset(self):
@@ -23,7 +23,7 @@ class PublishedManager(models.Manager):
         return super()\
                 .get_queryset()\
                 .filter(status='published')\
-                .filter(published_date__lte=datetime.now())\
+                .filter(published_date__lte=timezone.now())\
                 .order_by('-published_date')
 
 class PublishingManager(models.Manager):
@@ -31,7 +31,7 @@ class PublishingManager(models.Manager):
         return super()\
                 .get_queryset()\
                 .filter(status='published')\
-                .filter(published_date__gt=datetime.now())\
+                .filter(published_date__gt=timezone.now())\
                 .order_by('published_date')
 
 class ApprovedManager(models.Manager):
