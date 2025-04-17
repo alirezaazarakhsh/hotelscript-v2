@@ -10,6 +10,7 @@ from .managers import (
     PopularManager,
     EngagingManager,
     PublishingManager,
+    ApprovedManager,
 )
 
 # Create your models here.
@@ -267,3 +268,48 @@ class Article(models.Model):
 
     def __str__(self):
         return self.title
+
+class Comment(models.Model):
+    author_name = models.CharField(
+        max_length=256,
+        verbose_name=_('نام'),
+    )
+    author_email = models.CharField(
+        max_length=256,
+        verbose_name=_('ایمیل'),
+    )
+    text = models.TextField(
+        verbose_name=_('متن'),
+    )
+    article = models.ForeignKey(
+        Article,
+        on_delete=models.CASCADE,
+        verbose_name=_('مقاله'),
+        related_name='comments',
+    )
+    is_approved = models.BooleanField(
+        verbose_name=_('تایید شده'),
+        default=False,
+    )
+    reply_to = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        verbose_name=_('پاسخ به'),
+        related_name='replies',
+        null=True,
+    )
+    created = models.DateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+    
+    objects = models.Manager()
+    approved = ApprovedManager()
+    
+    class Meta:
+        verbose_name = 'کامنت'
+        verbose_name_plural = 'کامنت‌ها'
+        ordering = ['-created']
+
+    def __str__(self):
+        return f'{self.author_name} - {self.article}'

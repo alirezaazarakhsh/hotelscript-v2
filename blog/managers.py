@@ -51,3 +51,10 @@ class PublishingManager(models.Manager):
                 .filter(status='published_date')\
                 .filter(published_date__gt=datetime.now())\
                 .order_by('published_date')
+
+class ApprovedManager(models.Manager):
+    def get_queryset(self):
+        return super()\
+                .get_queryset()\
+                .filter(is_approved=True)\
+                .order_by('-created')
