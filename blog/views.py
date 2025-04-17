@@ -183,7 +183,7 @@ class ArticleListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 class ArticleRetrieveView(RetrieveAPIView):
-    queryset = Article.published.all()
+    queryset = Article.published.prefetch_related('tags').select_related('author').all()
     permission_classes = (AllowAny,)
     serializer_class = ArticleRetrieveSerializer
     lookup_field = 'slug'

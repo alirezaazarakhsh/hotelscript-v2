@@ -274,6 +274,13 @@ class Article(models.Model):
             models.Index(fields=['slug']),
         ]
 
+    def get_similar_articles(self):
+        return Article.published.prefetch_related('tags').filter(
+            models.Q(tags__in=self.tags.all()) |
+            models.Q(category_content_type=self.category_content_type,
+                     category_object_id=self.category_object_id)
+        ).exclude(id=self.id).distinct()[:10]
+
     def __str__(self):
         return self.title
 

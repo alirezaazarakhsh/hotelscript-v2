@@ -7,6 +7,9 @@ from .models import (
     Article,
     ArticleTag,
 )
+from authentication.models import (
+    Admin,
+)
 
 class NestedStorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -59,6 +62,13 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'published_date',
         )
 
+class ArticleAuthorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Admin
+        fields = (
+            'first_name',
+            'last_name',
+        )
 class ArticleTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArticleTag
@@ -68,7 +78,10 @@ class ArticleTagSerializer(serializers.ModelSerializer):
         )
 
 class ArticleRetrieveSerializer(serializers.ModelSerializer):
+    author = ArticleAuthorSerializer()
     tags = ArticleTagSerializer(many=True)
+    similar_articles = serializers.SerializerMethodField()
+
     class Meta:
         model = Article
         fields = (
@@ -80,4 +93,20 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
             'thumbnail',
             'view_count',
             'published_date',
+            'similar_articles'
         )
+
+
+    def get_similar_articles(self, obj):
+        def serialize_article(article):
+            author = ArticleAuthorSerializer(article.author).data
+
+            return {
+                'title': article.title,
+                'slug': article.slug,
+                'author': author,
+                'thumbnail': article.thumbnail.url,
+                'published_date': article.published_date,
+            }
+        
+        return map(serialize_article, obj.get_similar_articles())
