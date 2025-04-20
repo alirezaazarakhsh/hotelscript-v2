@@ -2,11 +2,14 @@ from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import Q
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from rest_framework.generics import (
     ListAPIView,
     RetrieveAPIView,
+    ListCreateAPIView,
 )
-from rest_framework.permissions import AllowAny
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
@@ -22,7 +25,7 @@ from .serializers import (
     ArticleCategoryRetrieveSerializer,
     ArticleListSerializer,
     ArticleRetrieveSerializer,
-    CommentListSerializer,
+    CommentSerializer,
 )
 
 # Create your views here.
@@ -194,9 +197,9 @@ class ArticleRetrieveView(RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-class CommentListView(ListAPIView):
+class CommentListCreateView(ListCreateAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = CommentListSerializer
+    serializer_class = CommentSerializer
 
     def get_queryset(self):
         slug = self.kwargs.get('slug')
@@ -209,3 +212,23 @@ class CommentListView(ListAPIView):
 
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        slug = self.kwargs.get('slug')
+
+        article = get_object_or_404(
+            Article,
+            slug=slug,
+        )
+
+        serializer = self.get_serializer(
+            data=request.data,
+            context={
+                'article': article,
+            }
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

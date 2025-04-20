@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import (
@@ -332,3 +333,12 @@ class Comment(models.Model):
 
     def get_replies(self):
         return self.replies.all()
+
+    def clean(self):
+        super().clean()
+        if self.reply_to and self.reply_to.article_id != self.article_id:
+            raise ValidationError("کامنتی که به آن ریپلای میکنید، متعلق به مقاله جاری نیست.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

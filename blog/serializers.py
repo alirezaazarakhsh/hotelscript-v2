@@ -113,7 +113,7 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
         
         return map(serialize_article, obj.get_similar_articles())
 
-class CommentListSerializer(serializers.ModelSerializer):
+class CommentSerializer(serializers.ModelSerializer):
     replies = serializers.SerializerMethodField()
 
     class Meta:
@@ -124,7 +124,41 @@ class CommentListSerializer(serializers.ModelSerializer):
             'text',
             'created',
             'replies',
+            'reply_to',
         )
+        extra_kwargs = {
+            'author_name': {
+                'required': True,
+            },
+            'author_email': {
+                'required': True,
+            },
+            'text': {
+                'required': True,
+            },
+            'created': {
+                'read_only': True,
+            },
+            'replies': {
+                'read_only': True,
+            },
+            'reply_to': {
+                'write_only': True,
+            },
+        }
 
     def get_replies(self, obj):
         return self.__class__(obj.get_replies(), many=True, context=self.context).data
+
+    def create(self, validated_data):
+        article = self.context['article']
+        validated_data['article'] = article
+        return super().create(validated_data)
+
+    def validate_reply_to(self, value):
+        article = self.context.get('article')
+        if value and value.article.slug != article:
+            raise serializers.ValidationError({
+                'reply_to': "کامنتی که به آن ریپلای میکنید، متعلق به مقاله دیگری است."
+            })
+        return value
