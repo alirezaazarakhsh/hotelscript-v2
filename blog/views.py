@@ -14,6 +14,7 @@ from .models import (
     ArticleCategory,
     ArticleSubCategory,
     Article,
+    Comment,
 )
 from .serializers import (
     StoryCategorySerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     ArticleCategoryRetrieveSerializer,
     ArticleListSerializer,
     ArticleRetrieveSerializer,
+    CommentListSerializer,
 )
 
 # Create your views here.
@@ -188,6 +190,22 @@ class ArticleRetrieveView(RetrieveAPIView):
     serializer_class = ArticleRetrieveSerializer
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
+
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class CommentListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CommentListSerializer
+
+    def get_queryset(self):
+        slug = self.kwargs.get('slug')
+
+        return Comment.approved\
+            .select_related('article')\
+            .prefetch_related('replies')\
+            .filter(article__slug=slug)\
+            .filter(reply_to__isnull=True)
 
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)

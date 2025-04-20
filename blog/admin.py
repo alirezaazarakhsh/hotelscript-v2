@@ -6,6 +6,7 @@ from .models import (
     ArticleSubCategory,
     ArticleTag,
     Article,
+    Comment,
 )
 from .forms import (
     StoryCategoryAdminForm,
@@ -105,4 +106,27 @@ class ArticleAdmin(admin.ModelAdmin):
         'status',
         'is_popular',
         'is_engaging',
+    )
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = (
+        'author_name',
+        'author_email',
+        'text',
+        'article',
+        'is_approved',
+        'reply_to',
+        'created',
+    )
+    search_fields = (
+        'author_name',
+        'author_email',
+        'text',
+    )
+    list_filter = (
+        'author_name',
+        'author_email',
+        'article',
+        'is_approved',
     )

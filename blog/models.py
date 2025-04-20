@@ -312,6 +312,7 @@ class Comment(models.Model):
         verbose_name=_('پاسخ به'),
         related_name='replies',
         null=True,
+        blank=True,
     )
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
@@ -328,3 +329,6 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'{self.author_name} - {self.article}'
+
+    def get_replies(self):
+        return self.replies.all()

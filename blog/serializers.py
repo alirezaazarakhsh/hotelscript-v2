@@ -6,6 +6,7 @@ from .models import (
     ArticleSubCategory,
     Article,
     ArticleTag,
+    Comment,
 )
 from authentication.models import (
     Admin,
@@ -69,6 +70,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
         )
+
 class ArticleTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArticleTag
@@ -110,3 +112,19 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
             }
         
         return map(serialize_article, obj.get_similar_articles())
+
+class CommentListSerializer(serializers.ModelSerializer):
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = (
+            'author_name',
+            'author_email',
+            'text',
+            'created',
+            'replies',
+        )
+
+    def get_replies(self, obj):
+        return self.__class__(obj.get_replies(), many=True, context=self.context).data
