@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import (
@@ -274,6 +275,13 @@ class Article(models.Model):
             models.Index(fields=['slug']),
         ]
 
+    def get_similar_articles(self):
+        return Article.published.prefetch_related('tags').filter(
+            models.Q(tags__in=self.tags.all()) |
+            models.Q(category_content_type=self.category_content_type,
+                     category_object_id=self.category_object_id)
+        ).exclude(id=self.id).distinct()[:10]
+
     def __str__(self):
         return self.title
 
@@ -305,6 +313,7 @@ class Comment(models.Model):
         verbose_name=_('پاسخ به'),
         related_name='replies',
         null=True,
+        blank=True,
     )
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
@@ -321,3 +330,15 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'{self.author_name} - {self.article}'
+
+    def get_replies(self):
+        return self.replies.all()
+
+    def clean(self):
+        super().clean()
+        if self.reply_to and self.reply_to.article_id != self.article_id:
+            raise ValidationError("کامنتی که به آن ریپلای میکنید، متعلق به مقاله جاری نیست.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)

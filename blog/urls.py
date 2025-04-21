@@ -34,4 +34,9 @@ urlpatterns = [
         views.ArticleRetrieveView.as_view(),
         name='article-retrieve'
     ),
+    path(
+        'articles/<str:slug>/comments/',
+        views.CommentListCreateView.as_view(),
+        name='article-comment-list-create'
+    ),
 ]
