@@ -3,6 +3,7 @@ from .models import (
     Province,
     City,
     HotelType,
+    HotelTag,
 )
 
 # Register your models here.
@@ -39,4 +40,16 @@ class HotelTypeAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title',
+    )
+
+@admin.register(HotelTag)
+class HotelTagAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'slug',
+    )
+    search_fields = (
+        'title',
+        'slug',
     )

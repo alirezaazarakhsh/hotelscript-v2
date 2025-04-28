@@ -67,3 +67,22 @@ class HotelType(models.Model):
 
     def __str__(self):
         return self.title
+
+class HotelTag(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        unique=True,
+    )
+    slug = models.SlugField(
+        verbose_name=_('اسلاگ'),
+        max_length=64,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'تگ'
+        verbose_name_plural = 'تگ‌ها'
+
+    def __str__(self):
+        return self.title
