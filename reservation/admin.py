@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Province,
     City,
+    HotelType,
 )
 
 # Register your models here.
@@ -28,4 +29,14 @@ class CityAdmin(admin.ModelAdmin):
     search_fields = (
         'name',
         'slug',
+    )
+
+@admin.register(HotelType)
+class HotelTypeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
     )

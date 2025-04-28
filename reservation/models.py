@@ -53,3 +53,17 @@ class City(models.Model):
 
     def __str__(self):
         return self.name
+
+class HotelType(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=32,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'نوع هتل'
+        verbose_name_plural = 'انواع هتل'
+
+    def __str__(self):
+        return self.title
