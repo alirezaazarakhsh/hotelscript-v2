@@ -86,3 +86,31 @@ class HotelTag(models.Model):
 
     def __str__(self):
         return self.title
+
+class Facilities(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'امکانات رفاهی و تفریحی'
+        verbose_name_plural = 'امکانات رفاهی و تفریحی'
+
+    def __str__(self):
+        return self.title
+
+class RoomFacilities(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=64,
+        unique=True,
+    )
+
+    class Meta:
+        verbose_name = 'امکانات داخل اتاق'
+        verbose_name_plural = 'امکانات داخل اتاق'
+
+    def __str__(self):
+        return self.title

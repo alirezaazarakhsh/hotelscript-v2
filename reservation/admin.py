@@ -4,6 +4,8 @@ from .models import (
     City,
     HotelType,
     HotelTag,
+    Facilities,
+    RoomFacilities,
 )
 
 # Register your models here.
@@ -52,4 +54,24 @@ class HotelTagAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
         'slug',
+    )
+
+@admin.register(Facilities)
+class FacilitiesAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
+    )
+
+@admin.register(RoomFacilities)
+class RoomFacilitiesAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
     )
