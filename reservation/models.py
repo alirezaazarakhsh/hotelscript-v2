@@ -353,3 +353,24 @@ class NearbyPlace(models.Model):
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
+
+class HotelFAQ(models.Model):
+    question = models.TextField(
+        verbose_name=_('سوال'),
+    )
+    answer = models.TextField(
+        verbose_name=_('جواب'),
+    )
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='faqs',
+    )
+
+    class Meta:
+        verbose_name = 'سوال متداول هتل'
+        verbose_name_plural = 'سوالات متداول هتل'
+
+    def __str__(self):
+        return f'{self.hotel} - {self.question}'

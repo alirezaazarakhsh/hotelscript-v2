@@ -10,6 +10,7 @@ from .models import (
     HotelGallery,
     HotelGalleryImage,
     NearbyPlace,
+    HotelFAQ,
 )
 
 # Register your models here.
@@ -133,4 +134,15 @@ class NearbyPlaceAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title',
+    )
+
+@admin.register(HotelFAQ)
+class HotelFAQAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'question',
+        'hotel',
+    )
+    search_fields = (
+        'question',
     )
