@@ -422,3 +422,53 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'{self.hotel} - {self.user}'
+
+class CommentPointItem(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+    
+    class Meta:
+        verbose_name = 'معیار امتیازدهی'
+        verbose_name_plural = 'معیارهای امتیازدهی'
+
+    def __str__(self):
+        return self.title
+
+class CommentPoint(models.Model):
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        verbose_name=_('کامنت'),
+        related_name='points',
+    )
+    comment_point_item = models.ForeignKey(
+        CommentPointItem,
+        on_delete=models.CASCADE,
+        verbose_name=_('معیار امتیازدهی'),
+        related_name='points'
+    )
+    point = models.PositiveSmallIntegerField(
+        verbose_name=_('امتیاز'),
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5),
+        ],
+    )
+    
+    class Meta:
+        verbose_name = 'امتیاز کامنت'
+        verbose_name_plural = 'امتیازهای کامنت'
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "comment",
+                    "comment_point_item",
+                ],
+                name="unique_comment_comment_point_item",
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.comment} - {self.comment_point_item}'

@@ -12,6 +12,8 @@ from .models import (
     NearbyPlace,
     HotelFAQ,
     Comment,
+    CommentPoint,
+    CommentPointItem,
 )
 
 # Register your models here.
@@ -167,4 +169,26 @@ class CommentAdmin(admin.ModelAdmin):
     )
     list_filter = (
         'is_approved',
+    )
+
+@admin.register(CommentPointItem)
+class CommentPointItemAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
+    )
+
+@admin.register(CommentPoint)
+class CommentPointAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'comment',
+        'comment_point_item',
+        'point',
+    )
+    search_fields = (
+        'comment',
     )
