@@ -6,6 +6,7 @@ from .models import (
     HotelTag,
     Facilities,
     RoomFacilities,
+    Hotel,
 )
 
 # Register your models here.
@@ -74,4 +75,23 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title',
+    )
+
+@admin.register(Hotel)
+class HotelAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'name',
+        'slug',
+        'city',
+        'address',
+        'stars',
+        'type',
+        'floors_count',
+        'latitude',
+        'longitude',
+    )
+    search_fields = (
+        'name',
+        'address',
     )
