@@ -253,3 +253,49 @@ class Hotel(models.Model):
 
     def __str__(self):
         return self.name
+
+class HotelGallery(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=256,
+    )
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='galleries',
+    )
+
+    class Meta:
+        verbose_name = 'گالری هتل'
+        verbose_name_plural = 'گالری‌های هتل'
+
+    def __str__(self):
+        return f'{self.title} - {self.hotel}'
+
+class HotelGalleryImage(models.Model):
+
+    def image_upload_to(instance, filename):
+        return f'images/hotel-gallery/{instance.gallery.pk}/{filename}'
+
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=256,
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to=image_upload_to,
+    )
+    gallery = models.ForeignKey(
+        HotelGallery,
+        on_delete=models.CASCADE,
+        verbose_name=_('گالری'),
+        related_name='images',
+    )
+
+    class Meta:
+        verbose_name = 'عکس گالری هتل'
+        verbose_name_plural = 'عکس‌های گالری هتل'
+
+    def __str__(self):
+        return self.title

@@ -7,6 +7,8 @@ from .models import (
     Facilities,
     RoomFacilities,
     Hotel,
+    HotelGallery,
+    HotelGalleryImage,
 )
 
 # Register your models here.
@@ -94,4 +96,24 @@ class HotelAdmin(admin.ModelAdmin):
     search_fields = (
         'name',
         'address',
+    )
+
+@admin.register(HotelGallery)
+class HotelGalleryAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
+    )
+
+@admin.register(HotelGalleryImage)
+class HotelGalleryImageAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
     )
