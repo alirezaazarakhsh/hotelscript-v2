@@ -299,3 +299,57 @@ class HotelGalleryImage(models.Model):
 
     def __str__(self):
         return self.title
+
+class NearbyPlace(models.Model):
+
+    def image_upload_to(instance, filename):
+        return f'images/nearby-places/{instance.hotel.pk}/{filename}'
+
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=256,
+    )
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='nearby_places',
+    )
+    distance = models.PositiveIntegerField(
+        verbose_name=_('مسافت (به متر)'),
+    )
+    driving_time = models.PositiveSmallIntegerField(
+        verbose_name=_('زمان با ماشین (به دقیقه)')
+    )
+    walking_time = models.PositiveSmallIntegerField(
+        verbose_name=_('زمان پیاده روی (به دقیقه)')
+    )
+    image = models.ImageField(
+        verbose_name=_('عکس'),
+        upload_to=image_upload_to,
+    )
+    latitude = models.DecimalField(
+        verbose_name=_('عرض جغرافیایی'),
+        max_digits=9,
+        decimal_places=6,
+        validators=[
+            MinValueValidator(-90.000000),
+            MaxValueValidator(90.000000),
+        ],
+    )
+    longitude = models.DecimalField(
+        verbose_name=_('طول جغرافیایی'),
+        max_digits=9,
+        decimal_places=6,
+        validators=[
+            MinValueValidator(-180.000000),
+            MaxValueValidator(180.000000),
+        ],
+    )
+
+    class Meta:
+        verbose_name = 'مکان اطراف هتل'
+        verbose_name_plural = 'اماکن اطراف هتل'
+
+    def __str__(self):
+        return f'{self.title} - {self.hotel}'

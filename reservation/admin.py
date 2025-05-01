@@ -9,6 +9,7 @@ from .models import (
     Hotel,
     HotelGallery,
     HotelGalleryImage,
+    NearbyPlace,
 )
 
 # Register your models here.
@@ -113,6 +114,22 @@ class HotelGalleryImageAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
+    )
+    search_fields = (
+        'title',
+    )
+
+@admin.register(NearbyPlace)
+class NearbyPlaceAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'hotel',
+        'distance',
+        'driving_time',
+        'walking_time',
+        'latitude',
+        'longitude',
     )
     search_fields = (
         'title',
