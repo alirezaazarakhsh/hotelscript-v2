@@ -4,6 +4,10 @@ from django.core.validators import (
     MinValueValidator,
     MaxValueValidator,
 )
+from django.contrib.postgres.fields import ArrayField
+from authentication.models import (
+    BaseUser,
+)
 
 # Create your models here.
 class Province(models.Model):
@@ -374,3 +378,47 @@ class HotelFAQ(models.Model):
 
     def __str__(self):
         return f'{self.hotel} - {self.question}'
+
+class Comment(models.Model):
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('ثبت کننده'),
+        related_name='comments',
+    )
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='comments',
+    )
+    text = models.TextField(
+        verbose_name=_('متن'),
+    )
+    strengths = ArrayField(
+        models.TextField(),
+        verbose_name=_('نقاط قوت'),
+        blank=True,
+        default=list,
+    )
+    weaknesses = ArrayField(
+        models.TextField(),
+        verbose_name=_('نقاط ضعف'),
+        blank=True,
+        default=list,
+    )
+    is_approved = models.BooleanField(
+        verbose_name=_('تایید شده'),
+        default=False,
+    )
+    created = models.DateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+    
+    class Meta:
+        verbose_name = 'نظر'
+        verbose_name_plural = 'نظرات'
+
+    def __str__(self):
+        return f'{self.hotel} - {self.user}'

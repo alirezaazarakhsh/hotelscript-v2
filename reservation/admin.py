@@ -11,6 +11,7 @@ from .models import (
     HotelGalleryImage,
     NearbyPlace,
     HotelFAQ,
+    Comment,
 )
 
 # Register your models here.
@@ -145,4 +146,25 @@ class HotelFAQAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'question',
+    )
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'hotel',
+        'text',
+        'strengths',
+        'weaknesses',
+        'is_approved',
+        'created',
+    )
+    search_fields = (
+        'text',
+        'strengths',
+        'weaknesses',
+    )
+    list_filter = (
+        'is_approved',
     )
