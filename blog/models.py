@@ -181,7 +181,7 @@ class Article(models.Model):
 
     def article_thumbnail_upload_to(instance, filename):
         try:
-            return f'images/articles/{instance.pk}/{filename}'
+            return f'images/articles/{instance.slug}/{filename}'
         except:
             return f'images/articles/default/{filename}'
 

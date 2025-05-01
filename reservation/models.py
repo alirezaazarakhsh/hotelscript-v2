@@ -122,7 +122,7 @@ class RoomFacilities(models.Model):
 class Hotel(models.Model):
     
     def hotel_image_upload_to(instance, filename):
-        return f'images/hotels/{instance.pk}/{filename}'
+        return f'images/hotels/{instance.slug}/{filename}'
 
     name = models.CharField(
         verbose_name=_('نام'),
