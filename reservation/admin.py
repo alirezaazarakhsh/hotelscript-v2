@@ -14,6 +14,8 @@ from .models import (
     Comment,
     CommentPoint,
     CommentPointItem,
+    RoomService,
+    Room,
 )
 
 # Register your models here.
@@ -191,4 +193,31 @@ class CommentPointAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'comment',
+    )
+
+@admin.register(RoomService)
+class RoomServiceAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+    )
+    search_fields = (
+        'title',
+    )
+
+@admin.register(Room)
+class RoomAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'hotel',
+        'title',
+        'capacity',
+        'extra_capacity',
+        'is_preferred',
+        'customer_club_points',
+        'count',
+        'auto_approved_count',
+    )
+    search_fields = (
+        'title',
     )

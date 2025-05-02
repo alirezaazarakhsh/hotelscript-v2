@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import (
     MinValueValidator,
@@ -472,3 +473,69 @@ class CommentPoint(models.Model):
 
     def __str__(self):
         return f'{self.comment} - {self.comment_point_item}'
+
+class RoomService(models.Model):
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+    
+    class Meta:
+        verbose_name = 'خدمات اتاق'
+        verbose_name_plural = 'خدمات اتاق'
+
+    def __str__(self):
+        return self.title
+
+class Room(models.Model):
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='rooms',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=256,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        blank=True,
+        default='',
+    )
+    capacity = models.PositiveSmallIntegerField(
+        verbose_name=_('ظرفیت'),
+    )
+    extra_capacity = models.PositiveSmallIntegerField(
+        verbose_name=_('ظرفیت اضافه'),
+    )
+    is_preferred = models.BooleanField(
+        verbose_name=_('منتخب'),
+    )
+    customer_club_points = models.PositiveIntegerField(
+        verbose_name=_('امتیاز باشگاه مشتریان'),
+    )
+    services = models.ManyToManyField(
+        RoomService,
+        verbose_name=_('خدمات'),
+        related_name='rooms',
+    )
+    count = models.PositiveSmallIntegerField(
+        verbose_name=_('تعداد'),
+    )
+    auto_approved_count = models.PositiveSmallIntegerField(
+        verbose_name=_('تعداد بدون تایید ادمین'),
+    )
+
+    class Meta:
+        verbose_name = 'اتاق'
+        verbose_name_plural = 'اتاق‌ها'
+        constraints = [
+            models.CheckConstraint(
+                check=Q(auto_approved_count__lte=F('count')),
+                name='auto_approved_count_lte_count',
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.title} - {self.hotel}'
