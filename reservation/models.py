@@ -626,6 +626,16 @@ class RoomDate(models.Model):
     )
 
     @cached_property
+    def final_price(self):
+        if self.discount:
+            if self.discount.type == 'percentage':
+                discount_value = min(self.price * self.discount.value / 100, self.discount.maximum_value)
+                return self.price - discount_value
+            if self.discount.type == 'fixed':
+                return self.price - min(self.discount.value, self.discount.maximum_value)
+        return self.price
+
+    @cached_property
     def reserved_count(self):
         # TODO
         pass
