@@ -10,6 +10,10 @@ from authentication.models import (
     BaseUser,
 )
 from functools import cached_property
+from authentication.validators import (
+    validate_phone_number,
+    validate_national_code,
+)
 
 # Create your models here.
 class Province(models.Model):
@@ -640,3 +644,49 @@ class RoomDate(models.Model):
 
     def __str__(self):
         return f'{self.room} - {self.date}'
+
+class Passenger(models.Model):
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='passengers',
+    )
+    first_name = models.CharField(
+        verbose_name=_('نام'),
+        max_length=32,
+    )
+    last_name = models.CharField(
+        verbose_name=_('نام خانوادگی'),
+        max_length=32,
+    )
+    national_code = models.CharField(
+        verbose_name=_('کد ملی'),
+        max_length=10,
+        validators=(
+            validate_national_code,
+        ),
+    )
+    phone_number = models.CharField(
+        verbose_name=_('موبایل'),
+        max_length=11,
+        validators=(
+            validate_phone_number,
+        ),
+    )
+
+    class Meta:
+        verbose_name = 'مسافر'
+        verbose_name_plural = 'مسافران'
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'user',
+                    'national_code'
+                ],
+                name='unique_user_national_code',
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.user} - {self.first_name} {self.last_name}'

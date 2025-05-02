@@ -18,6 +18,7 @@ from .models import (
     Room,
     RoomDateDiscount,
     RoomDate,
+    Passenger,
 )
 
 # Register your models here.
@@ -250,4 +251,21 @@ class RoomDateAdmin(admin.ModelAdmin):
     search_fields = (
         'room',
         'date',
+    )
+
+@admin.register(Passenger)
+class PassengerAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'first_name',
+        'last_name',
+        'national_code',
+        'phone_number',
+    )
+    search_fields = (
+        'first_name',
+        'last_name',
+        'national_code',
+        'phone_number',
     )
