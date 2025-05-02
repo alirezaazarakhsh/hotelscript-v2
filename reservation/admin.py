@@ -16,6 +16,8 @@ from .models import (
     CommentPointItem,
     RoomService,
     Room,
+    RoomDateDiscount,
+    RoomDate,
 )
 
 # Register your models here.
@@ -220,4 +222,32 @@ class RoomAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title',
+    )
+
+@admin.register(RoomDateDiscount)
+class RoomDateDiscountAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'type',
+        'value',
+        'maximum_value',
+        'start_date',
+        'end_date',
+        'count',
+    )
+
+@admin.register(RoomDate)
+class RoomDateAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'room',
+        'date',
+        'price',
+        'extra_passenger_price',
+        'foreign_passenger_price',
+        'discount',
+    )
+    search_fields = (
+        'room',
+        'date',
     )

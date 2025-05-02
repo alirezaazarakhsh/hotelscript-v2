@@ -9,6 +9,7 @@ from django.contrib.postgres.fields import ArrayField
 from authentication.models import (
     BaseUser,
 )
+from functools import cached_property
 
 # Create your models here.
 class Province(models.Model):
@@ -539,3 +540,103 @@ class Room(models.Model):
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
+
+class RoomDateDiscount(models.Model):
+    DISCOUNT_TYPES = (
+        ('percentage', 'درصدی'),
+        ('fixed', 'ثابت'),
+    )
+    type = models.CharField(
+        verbose_name=_('نوع'),
+        max_length=16,
+        choices=DISCOUNT_TYPES,
+        default='percentage',
+    )
+    value = models.PositiveBigIntegerField(
+        verbose_name=_('مقدار تخفیف'),
+    )
+    maximum_value = models.PositiveBigIntegerField(
+        verbose_name=_('سقف تخفیف (به ریال)'),
+    )
+    start_date = models.DateTimeField(
+        verbose_name=_('زمان شروع تخفیف'),
+    )
+    end_date = models.DateTimeField(
+        verbose_name=_('زمان اتمام تخفیف'),
+    )
+    count = models.PositiveSmallIntegerField(
+        verbose_name=_('تعداد'),
+    )
+
+    class Meta:
+        verbose_name = 'تخفیف اتاق'
+        verbose_name_plural = 'تخفیف‌های اتاق'
+        constraints = [
+            models.CheckConstraint(
+                check=Q(start_date__lte=F('end_date')),
+                name='check_start_date_lte_end_date'
+            ),
+            models.CheckConstraint(
+                check=Q(type='percentage', value__lte=100) | ~Q(type='percentage'),
+                name='check_value_lte_100_if_percentage'
+            )
+        ]
+
+    def __str__(self):
+        if self.type == 'percentage':
+            return f'{self.value}% - {self.start_date}'
+        elif self.type == 'fixed':
+            return f'{self.value} ریال - {self.start_date}'
+
+class RoomDate(models.Model):
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.CASCADE,
+        verbose_name=_('اتاق'),
+        related_name='dates',
+    )
+    date = models.DateField(
+        verbose_name=_('تاریخ'),
+    )
+    price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت (به ریال)'),
+    )
+    extra_passenger_price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت نفر اضافه (به ریال)'),
+    )
+    foreign_passenger_price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت مسافر خارجی (به ریال)'),
+    )
+    discount = models.ForeignKey(
+        RoomDateDiscount,
+        on_delete=models.CASCADE,
+        verbose_name=_('تخفیف'),
+        related_name='room_dates',
+        null=True,
+    )
+
+    @cached_property
+    def reserved_count(self):
+        # TODO
+        pass
+
+    @cached_property
+    def pending_count(self):
+        # TODO
+        pass
+
+    class Meta:
+        verbose_name = 'تاریخ اتاق'
+        verbose_name_plural = 'تاریخ‌های اتاق'
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'room',
+                    'date'
+                ],
+                name='unique_room_date',
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.room} - {self.date}'
