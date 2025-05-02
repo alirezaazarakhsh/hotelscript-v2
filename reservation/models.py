@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import Q, F
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 from django.core.validators import (
     MinValueValidator,
     MaxValueValidator,
@@ -714,3 +715,133 @@ class Passenger(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.first_name} {self.last_name}'
+
+class Reservation(models.Model):
+    RESERVATION_STATUSES = (
+        ('payment', 'در انتظار پرداخت'),
+        ('pending_approve', 'در انتظار تایید ادمین'),
+        ('approved', 'تایید شده'),
+        ('rejected', 'رد شده'),
+        ('failed', 'ناموفق'),
+        ('success', 'موفق'),
+        ('expired', 'منقضی شده'),
+    )
+    uuid = models.UUIDField(
+        verbose_name=_('کد رزرو'),
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='reservations',
+    )
+    room_dates = models.ManyToManyField(
+        RoomDate,
+        verbose_name=_('تاریخ اتاق'),
+        related_name='reservations',
+    )
+    passengers = models.ManyToManyField(
+        Passenger,
+        verbose_name=_('مسافران'),
+        related_name='reservations',
+    )
+    extra_passengers = models.ManyToManyField(
+        Passenger,
+        verbose_name=_('مسافران اضافه'),
+    )
+    paid_price = models.PositiveBigIntegerField(
+        verbose_name=_('مبلغ پرداخت شده'),
+    )
+    status = models.CharField(
+        verbose_name=_('وضعیت'),
+        max_length=32,
+        choices=RESERVATION_STATUSES,
+    )
+    fail_reason = models.TextField(
+        verbose_name=_('علت رد / ناموفق'),
+        blank=True,
+        default='',
+    )
+    expired_date = models.DateTimeField(
+        verbose_name=_('تاریخ انقضا'),
+        # TODO: read from approve time config
+        default=timezone.now() + timedelta(minutes=10)
+    )
+    additional_details = models.TextField(
+        verbose_name=_('توضیحات تکمیلی رزرواسیون'),
+        blank=True,
+        default='',
+    )
+    has_check_in_half_day_charge = models.BooleanField(
+        verbose_name=_('نیم شارژ ورود'),
+    )
+    has_check_out_half_day_charge = models.BooleanField(
+        verbose_name=_('نیم شارژ خروج'),
+    )
+    created = models.DateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+    updated = models.DateTimeField(
+        verbose_name=_('تاریخ تغییر'),
+        auto_now=True,
+    )
+
+    @cached_property
+    def first_night_room_dates(self):
+        room_dates = self.room_dates.all()
+        first_night = min(map(lambda room_date: room_date.date, room_dates))
+        return filter(lambda room_date: room_date.date == first_night, room_dates)
+
+    @cached_property
+    def last_night_room_dates(self):
+        room_dates = self.room_dates.all()
+        last_night = max(map(lambda room_date: room_date.date, room_dates))
+        return filter(lambda room_date: room_date.date == last_night, room_dates)
+
+    @cached_property
+    def price(self):
+        total_price = 0
+
+        for room_date in self.room_dates.all():
+            total_price += room_date.final_price
+            if self.passengers.first().is_foreign:
+                total_price += room_date.foreign_passenger_price
+
+        for passenger in self.extra_passengers.all():
+            total_price += room_date.extra_passenger_price
+        
+        if self.has_check_in_half_day_charge:
+            for room_date in self.first_night_room_dates:
+                total_price += room_date.final_price / 2
+        
+        if self.has_check_out_half_day_charge:
+            for room_date in self.last_night_room_dates:
+                total_price += room_date.final_price / 2
+        
+        return total_price
+    
+    def clean(self):
+        passengers = self.passengers.all()
+        
+        if passengers:
+            first_status = passengers[0].is_foreign
+            if any(passenger.is_foreign != first_status for passenger in passengers):
+                raise ValidationError('همه مسافران باید ایرانی یا همه مسافران باید خارجی باشند.')
+
+        for room_date in self.room_dates.all():
+            room = room_date.room
+            if self.passengers.count() > room.capacity:
+                raise ValidationError(f'تعداد مسافران اصلی اتاق {room} نمی‌تواند بیشتر از {room.capacity} باشد.')
+            if self.extra_passengers.count() > room.extra_capacity:
+                raise ValidationError(f'تعداد نفرات اضافه اتاق {room} نمی‌تواند بیشتر از {room.extra_capacity} باشد.')
+
+    class Meta:
+        verbose_name = 'رزرواسیون'
+        verbose_name_plural = 'رزرواسیون‌ها'
+
+    def __str__(self):
+        return f'{self.uuid}'

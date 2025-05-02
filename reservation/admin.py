@@ -19,6 +19,7 @@ from .models import (
     RoomDateDiscount,
     RoomDate,
     Passenger,
+    Reservation,
 )
 
 # Register your models here.
@@ -268,4 +269,20 @@ class PassengerAdmin(admin.ModelAdmin):
         'last_name',
         'national_code',
         'phone_number',
+    )
+
+@admin.register(Reservation)
+class ReservationAdmin(admin.ModelAdmin):
+    list_display = (
+        'uuid',
+        'user',
+        'status',
+        'created',
+        'updated',
+    )
+    search_fields = (
+        'uuid',
+    )
+    list_filter = (
+        'status',
     )
