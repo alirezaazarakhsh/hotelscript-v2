@@ -13,6 +13,12 @@ from functools import cached_property
 from authentication.validators import (
     validate_phone_number,
     validate_national_code,
+    validate_passport_code,
+)
+import uuid
+from django.utils import timezone
+from datetime import (
+    timedelta,
 )
 
 # Create your models here.
@@ -660,12 +666,27 @@ class Passenger(models.Model):
         verbose_name=_('نام خانوادگی'),
         max_length=32,
     )
+    is_foreign = models.BooleanField(
+        verbose_name=_('مسافر خارجی'),
+        default=False,
+    )
     national_code = models.CharField(
         verbose_name=_('کد ملی'),
         max_length=10,
         validators=(
             validate_national_code,
         ),
+        blank=True,
+        default='',
+    )
+    passport_code = models.CharField(
+        verbose_name=_('کد پاسپورت'),
+        max_length=9,
+        validators=(
+            validate_passport_code,
+        ),
+        blank=True,
+        default='',
     )
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
@@ -673,20 +694,13 @@ class Passenger(models.Model):
         validators=(
             validate_phone_number,
         ),
+        blank=True,
+        default='',
     )
 
     class Meta:
         verbose_name = 'مسافر'
         verbose_name_plural = 'مسافران'
-        constraints = [
-            models.UniqueConstraint(
-                fields=[
-                    'user',
-                    'national_code'
-                ],
-                name='unique_user_national_code',
-            )
-        ]
 
     def __str__(self):
         return f'{self.user} - {self.first_name} {self.last_name}'
