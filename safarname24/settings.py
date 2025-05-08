@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     'blog',
     'drf_yasg',
     'corsheaders',
+    
+    'safarname24',
 ]
 
 MIDDLEWARE = [
