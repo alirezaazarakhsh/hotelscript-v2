@@ -22,7 +22,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('DJANGO_SECRET_KEY')
 DEBUG = env('DJANGO_DEBUG')
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "safarnameh24.com",
+    "www.safarnameh24.com",
+    "cps.safarnameh24.com",
+    "www.cps.safarnameh24.com",
+    "91.107.134.107",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://safarnameh24.com",
+    "https://safarnameh24.com",
+    "http://www.safarnameh24.com",
+    "https://www.safarnameh24.com",
+    "http://cps.safarnameh24.com",
+    "https://cps.safarnameh24.com",
+]
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -34,7 +51,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    #  'django_admin_interface',
     'colorfield',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
@@ -43,9 +59,11 @@ INSTALLED_APPS = [
     'contact',
     'blog',
     'drf_yasg',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -55,14 +73,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Add Debug Toolbar only when DEBUG is True and not during tests
 if DEBUG and 'test' not in sys.argv:
-    INSTALLED_APPS += [
-        'debug_toolbar'
-    ]
-    MIDDLEWARE = [
-        "debug_toolbar.middleware.DebugToolbarMiddleware",
-    ] + MIDDLEWARE
+    INSTALLED_APPS += ['debug_toolbar']
+    MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] + MIDDLEWARE
 
 ROOT_URLCONF = 'safarname24.urls'
 
@@ -96,18 +109,10 @@ DATABASES = {
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 LANGUAGE_CODE = 'fa-ir'
@@ -147,7 +152,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
-    'PAGE_SIZE': 10,  
+    'PAGE_SIZE': 10,
 }
 if not DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
@@ -163,8 +168,14 @@ SIMPLE_JWT = {
     "TOKEN_OBTAIN_SERIALIZER": "authentication.serializers.UserTokenObtainPairSerializer",
 }
 
-INTERNAL_IPS = [
-    '127.0.0.1',
-]
+INTERNAL_IPS = ['127.0.0.1']
 
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+# CORS CONFIGURATION
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://safarnameh24.com",
+    "https://www.safarnameh24.com",
+    "https://cps.safarnameh24.com",
+]
+CORS_ALLOW_CREDENTIALS = True
