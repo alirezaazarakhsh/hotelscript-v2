@@ -60,7 +60,6 @@ INSTALLED_APPS = [
     'blog',
     'drf_yasg',
     'corsheaders',
-    
     'safarname24',
 ]
 
@@ -174,10 +173,20 @@ INTERNAL_IPS = ['127.0.0.1']
 
 # CORS CONFIGURATION
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:3000",  
+    "http://127.0.0.1:3000", 
     "https://safarnameh24.com",
     "https://www.safarnameh24.com",
-    "https://cps.safarnameh24.com",
+    "https://cps.safarnameh24.com",  
+    "http://localhost:8000", 
+    "http://127.0.0.1:8000", 
 ]
-CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_CREDENTIALS = True  
+CORS_ORIGIN_ALLOW_ALL = False  
+CORS_ALLOW_HEADERS = [
+    'content-type',
+    'authorization',  
+    'x-requested-with',
+]
+
