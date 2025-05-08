@@ -175,8 +175,11 @@ INTERNAL_IPS = ['127.0.0.1']
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  
     "http://127.0.0.1:3000", 
+    "http://safarnameh24.com",
     "https://safarnameh24.com",
+    "http://www.safarnameh24.com",
     "https://www.safarnameh24.com",
+    "http://cps.safarnameh24.com",  
     "https://cps.safarnameh24.com",  
     "http://localhost:8000", 
     "http://127.0.0.1:8000", 
