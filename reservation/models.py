@@ -1,5 +1,13 @@
 from django.db import models
-from django.db.models import Q, F
+from django.db.models import (
+    Q,
+    F,
+    Count,
+    Case,
+    When,
+    ExpressionWrapper,
+    IntegerField,
+)
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import (
@@ -624,6 +632,7 @@ class RoomDate(models.Model):
         verbose_name=_('تخفیف'),
         related_name='room_dates',
         null=True,
+        blank=True,
     )
 
     @cached_property
@@ -635,6 +644,54 @@ class RoomDate(models.Model):
             if self.discount.type == 'fixed':
                 return self.price - min(self.discount.value, self.discount.maximum_value)
         return self.price
+
+    @staticmethod
+    def get_occupied_statuses_count_expression():
+        occupied_statuses = [
+            'payment',
+            'pending_approve',
+            'approved',
+            'success',
+        ]
+
+        return Count(
+            'reservations',
+            filter=Q(reservations__status__in=occupied_statuses),
+            distinct=True
+        )
+
+    @staticmethod
+    def get_final_price_expression():
+        percentage_discount = ExpressionWrapper(
+            F('price') - Case(
+                When(
+                    discount__maximum_value__lt=F('price') * F('discount__value') / 100,
+                    then=F('discount__maximum_value')
+                ),
+                default=F('price') * F('discount__value') / 100,
+                output_field=IntegerField()
+            ),
+            output_field=IntegerField()
+        )
+
+        fixed_discount = ExpressionWrapper(
+            F('price') - Case(
+                When(
+                    discount__maximum_value__lt=F('discount__value'),
+                    then=F('discount__maximum_value')
+                ),
+                default=F('discount__value'),
+                output_field=IntegerField()
+            ),
+            output_field=IntegerField()
+        )
+
+        return Case(
+            When(discount__type='percentage', then=percentage_discount),
+            When(discount__type='fixed', then=fixed_discount),
+            default=F('price'),
+            output_field=IntegerField()
+        )
 
     @cached_property
     def reserved_count(self):
