@@ -3,6 +3,7 @@ from datetime import datetime
 from rest_framework.permissions import AllowAny
 from rest_framework.generics import (
     ListAPIView,
+    RetrieveAPIView,
 )
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -32,6 +33,7 @@ from .serializers import (
     FacilitiesSerializer,
     RoomFacilitiesSerializer,
     RoomServiceSerializer,
+    HotelRetrieveSerializer,
 )
 
 # Create your views here.
@@ -305,3 +307,14 @@ class RoomServiceListView(ListAPIView):
     serializer_class = RoomServiceSerializer
     queryset = RoomService.objects.all()
     pagination_class = None
+
+class HotelRetrieveView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelRetrieveSerializer
+    queryset = Hotel.objects.select_related('city')\
+            .select_related('city__province')\
+            .select_related('type')\
+            .prefetch_related('tags')\
+            .all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'

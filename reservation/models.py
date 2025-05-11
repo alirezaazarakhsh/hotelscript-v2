@@ -215,6 +215,10 @@ class Hotel(models.Model):
     floors_count = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد طبقات'),
     )
+    rooms_count = models.PositiveSmallIntegerField(
+        verbose_name=_('تعداد اتاق‌ها'),
+        default=1,
+    )
     check_in_time = models.TimeField(
         verbose_name=_('ساعت ورود'),
     )

@@ -7,6 +7,7 @@ from .models import (
     Facilities,
     RoomFacilities,
     RoomService,
+    HotelTag,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -94,3 +95,50 @@ class RoomServiceSerializer(serializers.ModelSerializer):
             'id',
             'title',
         )
+
+
+class HotelTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelTag
+        fields = (
+            'title',
+            'slug',
+        )
+
+class HotelRetrieveSerializer(serializers.ModelSerializer):
+    city = CitySerializer()
+    type = serializers.SerializerMethodField()
+    tags = HotelTagSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name',
+            'slug',
+            'city',
+            'address',
+            'main_image',
+            'image1',
+            'image2',
+            'image3',
+            'image4',
+            'image5',
+            'image6',
+            'stars',
+            'type',
+            'description',
+            'further_description',
+            'floors_count',
+            'rooms_count',
+            'check_in_time',
+            'check_out_time',
+            'latitude',
+            'longitude',
+            'is_special_offer',
+            'rules',
+            'important_notes',
+            'tags',
+        )
+    
+    def get_type(self, obj):
+        return obj.type.title
