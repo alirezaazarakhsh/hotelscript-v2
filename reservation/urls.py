@@ -15,6 +15,16 @@ urlpatterns = [
             views.HotelFAQListView.as_view(),
             name='hotel-faq-list'
         ),
+        path(
+            'facilities/',
+            views.HotelFacilitiesListView.as_view(),
+            name='hotel-facility-list'
+        ),
+        path(
+            'room-facilities/',
+            views.HotelRoomFacilitiesListView.as_view(),
+            name='hotel-room-facility-list'
+        ),
     ])),
     path(
         'search/',

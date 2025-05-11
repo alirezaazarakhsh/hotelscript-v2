@@ -334,3 +334,29 @@ class HotelFAQListView(ListAPIView):
         )
 
         return queryset
+
+class HotelFacilitiesListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = FacilitiesSerializer
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = Facilities.objects.filter(
+            hotels__slug=hotel_slug
+        ).order_by('id')
+
+        return queryset
+
+class HotelRoomFacilitiesListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomFacilitiesSerializer
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = RoomFacilities.objects.filter(
+            hotels__slug=hotel_slug
+        ).order_by('id')
+
+        return queryset
