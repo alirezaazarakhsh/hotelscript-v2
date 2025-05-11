@@ -21,11 +21,17 @@ from .models import (
     RoomDate,
     City,
     HotelType,
+    Facilities,
+    RoomFacilities,
+    RoomService,
 )
 from .serializers import (
     HotelListSerializer,
     CitySerializer,
     HotelTypeSerializer,
+    FacilitiesSerializer,
+    RoomFacilitiesSerializer,
+    RoomServiceSerializer,
 )
 
 # Create your views here.
@@ -280,3 +286,22 @@ class HotelTypeListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelTypeSerializer
     queryset = HotelType.objects.all()
+    pagination_class = None
+
+class FacilitiesListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = FacilitiesSerializer
+    queryset = Facilities.objects.all()
+    pagination_class = None
+
+class RoomFacilitiesListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomFacilitiesSerializer
+    queryset = RoomFacilities.objects.all()
+    pagination_class = None
+
+class RoomServiceListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomServiceSerializer
+    queryset = RoomService.objects.all()
+    pagination_class = None

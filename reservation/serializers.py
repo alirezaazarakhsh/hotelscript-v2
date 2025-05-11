@@ -4,6 +4,9 @@ from .models import (
     City,
     HotelType,
     Hotel,
+    Facilities,
+    RoomFacilities,
+    RoomService,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -67,3 +70,27 @@ class HotelListSerializer(serializers.ModelSerializer):
     
     def get_rating(self, obj):
         return obj.rating if obj.rating else None
+
+class FacilitiesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilities
+        fields = (
+            'id',
+            'title',
+        )
+
+class RoomFacilitiesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoomFacilities
+        fields = (
+            'id',
+            'title',
+        )
+
+class RoomServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoomService
+        fields = (
+            'id',
+            'title',
+        )
