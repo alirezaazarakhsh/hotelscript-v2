@@ -1,9 +1,13 @@
 from collections import defaultdict
 from datetime import datetime
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.generics import (
     ListAPIView,
     RetrieveAPIView,
+    ListCreateAPIView,
 )
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -27,6 +31,9 @@ from .models import (
     RoomService,
     HotelFAQ,
     NearbyPlace,
+    Comment,
+    CommentPoint,
+    CommentPointItem,
 )
 from .serializers import (
     HotelListSerializer,
@@ -38,6 +45,7 @@ from .serializers import (
     HotelRetrieveSerializer,
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
+    CommentListSerializer,
 )
 
 # Create your views here.
@@ -373,5 +381,24 @@ class HotelNearbyPlaceListView(ListAPIView):
         queryset = NearbyPlace.objects.filter(
             hotel__slug=hotel_slug
         ).order_by('id')
+
+        return queryset
+
+class HotelCommentListCreateView(ListCreateAPIView):
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+    serializer_class = CommentListSerializer
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = Comment.objects\
+            .select_related('user__natural_profile')\
+            .prefetch_related('points')\
+            .filter(
+                hotel__slug=hotel_slug,
+                is_approved=True,
+            ).annotate(
+                rating=Round(Avg('points__point'), 1)
+            ).order_by('-created')
 
         return queryset

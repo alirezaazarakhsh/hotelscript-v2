@@ -10,6 +10,7 @@ from .models import (
     HotelTag,
     HotelFAQ,
     NearbyPlace,
+    Comment,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -165,3 +166,25 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
             'latitude',
             'longitude',
         )
+
+class CommentListSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
+    rating = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = (
+            'user',
+            'rating',
+            'text',
+            'strengths',
+            'weaknesses',
+            'created',
+        )
+
+    def get_user(self, obj):
+        return {
+            'first_name': obj.user.natural_profile.first_name,
+            'last_name': obj.user.natural_profile.last_name,
+            'image': obj.user.natural_profile.image if obj.user.natural_profile.image else '',
+        }
