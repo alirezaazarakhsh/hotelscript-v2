@@ -29,6 +29,7 @@ class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelType
         fields = (
+            'id',
             'title',
         )
 

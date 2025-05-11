@@ -20,10 +20,12 @@ from .models import (
     Hotel,
     RoomDate,
     City,
+    HotelType,
 )
 from .serializers import (
     HotelListSerializer,
     CitySerializer,
+    HotelTypeSerializer,
 )
 
 # Create your views here.
@@ -273,3 +275,8 @@ class CityListView(ListAPIView):
     ])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+class HotelTypeListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelTypeSerializer
+    queryset = HotelType.objects.all()

@@ -14,4 +14,9 @@ urlpatterns = [
         views.CityListView.as_view(),
         name='city-list'
     ),
+    path(
+        'types/',
+        views.HotelTypeListView.as_view(),
+        name='hotel-type-list'
+    ),
 ]
