@@ -19,9 +19,11 @@ from drf_yasg import openapi
 from .models import (
     Hotel,
     RoomDate,
+    City,
 )
 from .serializers import (
     HotelListSerializer,
+    CitySerializer,
 )
 
 # Create your views here.
@@ -239,6 +241,33 @@ class HotelListView(ListAPIView):
             openapi.IN_QUERY,
             description="has discount",
             type=openapi.TYPE_BOOLEAN,
+            required=False,
+        ),
+    ])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class CityListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CitySerializer
+
+    def get_queryset(self):
+        queryset = City.objects.select_related('province')
+
+        if q := self.request.query_params.get('q'):
+            queryset = queryset.filter(
+                Q(name__contains=q) | 
+                Q(slug__icontains=q)
+            )
+
+        return queryset
+    
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'q',
+            openapi.IN_QUERY,
+            description="city name/slug",
+            type=openapi.TYPE_STRING,
             required=False,
         ),
     ])
