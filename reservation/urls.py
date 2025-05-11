@@ -25,6 +25,11 @@ urlpatterns = [
             views.HotelRoomFacilitiesListView.as_view(),
             name='hotel-room-facility-list'
         ),
+        path(
+            'nearby-places/',
+            views.HotelNearbyPlaceListView.as_view(),
+            name='nearby-place-list'
+        ),
     ])),
     path(
         'search/',

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.db.models import (
     Q,
@@ -236,8 +237,8 @@ class Hotel(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(-90.000000),
-            MaxValueValidator(90.000000),
+            MinValueValidator(Decimal(-90.000000)),
+            MaxValueValidator(Decimal(90.000000)),
         ],
     )
     longitude = models.DecimalField(
@@ -245,8 +246,8 @@ class Hotel(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(-180.000000),
-            MaxValueValidator(180.000000),
+            MinValueValidator(Decimal(-180.000000)),
+            MaxValueValidator(Decimal(180.000000)),
         ],
     )
     tags = models.ManyToManyField(
@@ -362,8 +363,8 @@ class NearbyPlace(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(-90.000000),
-            MaxValueValidator(90.000000),
+            MinValueValidator(Decimal(-90.000000)),
+            MaxValueValidator(Decimal(90.000000)),
         ],
     )
     longitude = models.DecimalField(
@@ -371,8 +372,8 @@ class NearbyPlace(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(-180.000000),
-            MaxValueValidator(180.000000),
+            MinValueValidator(Decimal(-180.000000)),
+            MaxValueValidator(Decimal(180.000000)),
         ],
     )
 

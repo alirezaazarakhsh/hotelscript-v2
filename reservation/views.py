@@ -26,6 +26,7 @@ from .models import (
     RoomFacilities,
     RoomService,
     HotelFAQ,
+    NearbyPlace,
 )
 from .serializers import (
     HotelListSerializer,
@@ -36,6 +37,7 @@ from .serializers import (
     RoomServiceSerializer,
     HotelRetrieveSerializer,
     HotelFAQListSerializer,
+    NearbyPlaceListSerializer,
 )
 
 # Create your views here.
@@ -357,6 +359,19 @@ class HotelRoomFacilitiesListView(ListAPIView):
 
         queryset = RoomFacilities.objects.filter(
             hotels__slug=hotel_slug
+        ).order_by('id')
+
+        return queryset
+
+class HotelNearbyPlaceListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = NearbyPlaceListSerializer
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = NearbyPlace.objects.filter(
+            hotel__slug=hotel_slug
         ).order_by('id')
 
         return queryset

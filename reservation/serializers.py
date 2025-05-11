@@ -9,6 +9,7 @@ from .models import (
     RoomService,
     HotelTag,
     HotelFAQ,
+    NearbyPlace,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -150,4 +151,17 @@ class HotelFAQListSerializer(serializers.ModelSerializer):
         fields = (
             'question',
             'answer',
+        )
+
+class NearbyPlaceListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NearbyPlace
+        fields = (
+            'title',
+            'distance',
+            'driving_time',
+            'walking_time',
+            'image',
+            'latitude',
+            'longitude',
         )
