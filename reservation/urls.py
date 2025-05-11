@@ -10,6 +10,11 @@ urlpatterns = [
             views.HotelRetrieveView.as_view(),
             name='hotel-detail'
         ),
+        path(
+            'faq/',
+            views.HotelFAQListView.as_view(),
+            name='hotel-faq-list'
+        ),
     ])),
     path(
         'search/',

@@ -8,6 +8,7 @@ from .models import (
     RoomFacilities,
     RoomService,
     HotelTag,
+    HotelFAQ,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -142,3 +143,11 @@ class HotelRetrieveSerializer(serializers.ModelSerializer):
     
     def get_type(self, obj):
         return obj.type.title
+
+class HotelFAQListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelFAQ
+        fields = (
+            'question',
+            'answer',
+        )

@@ -25,6 +25,7 @@ from .models import (
     Facilities,
     RoomFacilities,
     RoomService,
+    HotelFAQ,
 )
 from .serializers import (
     HotelListSerializer,
@@ -34,6 +35,7 @@ from .serializers import (
     RoomFacilitiesSerializer,
     RoomServiceSerializer,
     HotelRetrieveSerializer,
+    HotelFAQListSerializer,
 )
 
 # Create your views here.
@@ -318,3 +320,17 @@ class HotelRetrieveView(RetrieveAPIView):
             .all()
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
+
+class HotelFAQListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelFAQListSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = HotelFAQ.objects.filter(
+            hotel__slug=hotel_slug
+        )
+
+        return queryset
