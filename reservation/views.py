@@ -11,7 +11,9 @@ from django.db.models import (
     F,
     Sum,
     Count,
+    Avg,
 )
+from django.db.models.functions import Round
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
@@ -114,14 +116,20 @@ class HotelListView(ListAPIView):
         queryset = Hotel.objects.prefetch_related('rooms')\
             .select_related('city')\
             .select_related('city__province')\
-            .select_related('type')
-        queryset = queryset.filter(
-            Q(city__name__contains=city_or_hotel) | 
-            Q(city__slug__icontains=city_or_hotel) | 
-            Q(name__contains=city_or_hotel) |
-            Q(slug__icontains=city_or_hotel),
-            rooms__id__in=[item['room_id'] for item in matching_rooms_data],
-        ).distinct()
+            .select_related('type')\
+            .prefetch_related('comments__points')\
+            .annotate(
+                rating=Round(
+                    Avg('comments__points__point', filter=Q(comments__is_approved=True)),
+                    precision=1
+                )
+            ).filter(
+                Q(city__name__contains=city_or_hotel) | 
+                Q(city__slug__icontains=city_or_hotel) | 
+                Q(name__contains=city_or_hotel) |
+                Q(slug__icontains=city_or_hotel),
+                rooms__id__in=[item['room_id'] for item in matching_rooms_data],
+            ).distinct()
 
         if type:
             try:

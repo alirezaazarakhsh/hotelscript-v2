@@ -37,6 +37,7 @@ class HotelListSerializer(serializers.ModelSerializer):
     type = serializers.SerializerMethodField()
     original_total_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
 
     class Meta:
         model = Hotel
@@ -51,6 +52,7 @@ class HotelListSerializer(serializers.ModelSerializer):
             'is_special_offer',
             'original_total_price',
             'total_price',
+            'rating',
         )
     
     def get_type(self, obj):
@@ -61,3 +63,6 @@ class HotelListSerializer(serializers.ModelSerializer):
 
     def get_original_total_price(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price')
+    
+    def get_rating(self, obj):
+        return obj.rating if obj.rating else None
