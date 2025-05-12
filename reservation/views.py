@@ -1,5 +1,10 @@
 from collections import defaultdict
 from datetime import datetime
+from django.shortcuts import get_object_or_404
+from rest_framework import (
+    status,
+)
+from rest_framework.response import Response
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticatedOrReadOnly,
@@ -11,6 +16,9 @@ from rest_framework.generics import (
 )
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
+from django.db import (
+    transaction,
+)
 from django.db.models import (
     Q,
     F,
@@ -402,3 +410,47 @@ class HotelCommentListCreateView(ListCreateAPIView):
             ).order_by('-created')
 
         return queryset
+    
+    @transaction.atomic
+    def perform_create(self, serializer):
+        slug = self.kwargs.get('slug')
+
+        hotel = get_object_or_404(
+            Hotel,
+            slug=slug,
+        )
+
+        comment = serializer.save(user=self.request.user, hotel=hotel)
+
+        ratings_data = self.request.data.get('ratings', [])
+
+        comment_points = []
+        for rating_data in ratings_data:
+            item_id = rating_data.get('item')
+            rating = rating_data.get('rating')
+
+            comment_point_item = CommentPointItem.objects.get(id=item_id)
+
+            comment_points.append({
+                'comment': comment,
+                'comment_point_item': comment_point_item,
+                'point': rating,
+            })
+
+        CommentPoint.objects.bulk_create(
+            [CommentPoint(**rating) for rating in comment_points]
+        )
+
+    def post(self, request, *args, **kwargs):
+        try:
+            serializer = self.get_serializer(data=request.data)
+
+            if serializer.is_valid():
+                self.perform_create(serializer)
+
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

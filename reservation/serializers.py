@@ -11,6 +11,7 @@ from .models import (
     HotelFAQ,
     NearbyPlace,
     Comment,
+    CommentPointItem,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -167,20 +168,51 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
             'longitude',
         )
 
+class RatingInputSerializer(serializers.Serializer):
+    item = serializers.IntegerField()
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+
 class CommentListSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     rating = serializers.FloatField(read_only=True)
+    ratings = serializers.ListField(
+        write_only=True,
+        child=RatingInputSerializer(),
+        help_text="""List of ratings, each item should include 'item' (comment_point_item_id) and 'rating' (1-5). Example format:
+        [
+            {
+                "item": 1,
+                "rating": 4
+            },
+            {
+                "item": 2,
+                "rating": 5
+            }
+        ]"""
+    )
 
     class Meta:
         model = Comment
         fields = (
             'user',
             'rating',
+            'ratings',
             'text',
             'strengths',
             'weaknesses',
             'created',
         )
+        extra_kwargs = {
+            'user': {
+                'read_only': True,
+            },
+            'text': {
+                'required': True,
+            },
+            'created': {
+                'read_only': True,
+            },
+        }
 
     def get_user(self, obj):
         return {
@@ -188,3 +220,26 @@ class CommentListSerializer(serializers.ModelSerializer):
             'last_name': obj.user.natural_profile.last_name,
             'image': obj.user.natural_profile.image if obj.user.natural_profile.image else '',
         }
+
+    def validate(self, data):
+        comment_point_items = CommentPointItem.objects.all()
+        comment_point_items_ids = set(comment_point_items.values_list('id', flat=True))
+        provided_item_ids = set([rating['item'] for rating in data['ratings']])
+
+        missing_items = comment_point_items_ids - provided_item_ids
+        if missing_items:
+            raise serializers.ValidationError({
+                'ratings': f'برای آیتم‌های "{", ".join(map(str, missing_items))}" امتیاز ثبت نشده است.'
+            })
+
+        extra_items = provided_item_ids - comment_point_items_ids
+        if extra_items:
+            raise serializers.ValidationError({
+                'ratings': f'آیتم‌های "{", ".join(map(str, extra_items))}" وجود ندارند!'
+            })
+
+        return data
+
+    def create(self, validated_data):
+        validated_data.pop('ratings', None)
+        return super().create(validated_data)
