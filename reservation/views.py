@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import product
 from datetime import datetime
 from django.shortcuts import get_object_or_404
 from rest_framework import (
@@ -31,6 +32,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
     Hotel,
+    Room,
     RoomDate,
     City,
     HotelType,
@@ -55,6 +57,7 @@ from .serializers import (
     NearbyPlaceListSerializer,
     CommentListSerializer,
     RatingSummarySerializer,
+    RoomListSerializer,
 )
 
 # Create your views here.
@@ -490,3 +493,169 @@ class HotelRatingSummaryListView(ListAPIView):
         ).order_by('id')
 
         return queryset
+
+class RoomListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomListSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        passenger_count = self.request.query_params.get('passenger_count')
+       
+        try:
+            start_date = datetime.strptime(self.request.query_params.get('start_date'), "%Y-%m-%d").date()
+        except:
+            raise ValidationError({
+                'start_date': 'لطفا تاریخ ورود را به درستی وارد نمایید'
+            })
+        try:
+            end_date = datetime.strptime(self.request.query_params.get('end_date'), "%Y-%m-%d").date()
+        except:
+            raise ValidationError({
+                'end_date': 'لطفا تاریخ خروج را به درستی وارد نمایید'
+            })
+
+        if not passenger_count:
+            raise ValidationError({
+                'passenger_count': 'تعداد مسافران الزامی است'
+            })
+        if not start_date:
+            raise ValidationError({
+                'start_date': 'تاریخ ورود الزامی است'
+            })
+        if not end_date:
+            raise ValidationError({
+                'end_date': 'تاریخ خروج الزامی است'
+            })
+        
+        if start_date < timezone.localdate():
+            raise ValidationError({
+                'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'
+            })
+
+        if end_date < start_date:
+            raise ValidationError({
+                'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'
+            })
+        
+        try:
+            passenger_count = [count for count in passenger_count.split(',') if count.strip().isdigit()]
+        except ValueError:
+            raise ValidationError({
+                'type': 'فرمت تعداد مسافران صحیح نیست.'
+            })
+
+        available_room_dates = RoomDate.objects.select_related('room')\
+            .annotate(
+                occupied_count=RoomDate.get_occupied_statuses_count_expression(),
+                discount_count=RoomDate.get_discount_count_expression(),
+                original_price=F('price'),
+                discounted_price=RoomDate.get_discounted_price_expression(),
+                capacity=F('room__capacity'),
+            ).filter(
+                room__hotel__slug=hotel_slug,
+                date__gte=start_date,
+                date__lte=end_date,
+                room__capacity__in=passenger_count,
+                room__count__gt=F('occupied_count'),
+            )
+
+        matching_rooms_data = available_room_dates.values('room_id').annotate(
+            days_count=Count('date', distinct=True),
+            original_total_price=Sum('original_price'),
+            discounted_total_price=Sum('discounted_price'),
+            occupied_count=F('occupied_count'),
+            discount_count=F('discount_count'),
+            capacity=F('capacity'),
+        ).filter(
+            days_count=(end_date - start_date).days + 1,
+        )
+
+        self.room_data_map = defaultdict(dict)
+
+        for room_data in matching_rooms_data:
+            room_id = room_data['room_id']
+
+            self.room_data_map[room_id] = {
+                'discount_count': room_data['discount_count'],
+                'occupied_count': room_data['occupied_count'],
+                'total_price': room_data['discounted_total_price'] if room_data['occupied_count'] < room_data['discount_count'] else room_data['original_total_price'],
+                'original_total_price': room_data['original_total_price'],
+            }
+
+        queryset = Room.objects.prefetch_related('services')\
+            .filter(
+                id__in=[item['room_id'] for item in matching_rooms_data],
+            ).distinct()
+
+        queryset = queryset.order_by('id')
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        passenger_count = request.query_params.get('passenger_count')
+        passenger_counts = [int(count) for count in passenger_count.split(',') if count.strip().isdigit()]
+
+        queryset = self.get_queryset()
+
+        rooms = list(queryset)
+
+        options = [
+            [room for room in rooms if room.capacity == passenger_count and self.room_data_map[room.id]['occupied_count'] + i < room.count]
+            for i, passenger_count in enumerate(passenger_counts)
+        ]
+
+        raw_combos = product(*options)
+
+        unique_combos = set()
+        for combo in raw_combos:
+            ordered_pair = tuple(sorted(combo, key=lambda room: room.id))
+            unique_combos.add(ordered_pair)
+
+        serialized = []
+        for combo in unique_combos:
+            context = self.get_serializer_context()
+            context['room_data_map'] = self.room_data_map.copy()
+
+            rooms = []
+            for room in combo:
+                room_data = self.room_data_map[room.id].copy()
+                current_room_count_in_pack = len(list(filter(lambda r: r['id'] == room.id, rooms)))
+                room_data['total_price'] = room_data['total_price'] if room_data['occupied_count'] + current_room_count_in_pack < room_data['discount_count'] else room_data['original_total_price']
+                context['room_data_map'][room.id] = room_data
+                rooms.append(
+                    RoomListSerializer(room, context=context).data
+                )
+
+            serialized.append(
+                rooms
+            )
+
+        return Response(serialized)
+
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'passenger_count',
+            openapi.IN_QUERY,
+            description="number of passengers, adults and children. For pack separated by comma e.g. 2,2",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            'start_date',
+            openapi.IN_QUERY,
+            description="start date",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            'end_date',
+            openapi.IN_QUERY,
+            description="end date",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)

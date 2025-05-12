@@ -12,6 +12,7 @@ from .models import (
     NearbyPlace,
     Comment,
     CommentPointItem,
+    Room,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -244,7 +245,6 @@ class CommentListSerializer(serializers.ModelSerializer):
         validated_data.pop('ratings', None)
         return super().create(validated_data)
 
-
 class RatingSummarySerializer(serializers.ModelSerializer):
     avg_rating = serializers.FloatField(read_only=True)
 
@@ -254,3 +254,29 @@ class RatingSummarySerializer(serializers.ModelSerializer):
             'title',
             'avg_rating',
         )
+
+class RoomListSerializer(serializers.ModelSerializer):
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    services = RoomServiceSerializer(many=True)
+
+    class Meta:
+        model = Room
+        fields = (
+            'id',
+            'title',
+            'description',
+            'capacity',
+            'extra_capacity',
+            'is_preferred',
+            'customer_club_points',
+            'services',
+            'total_price',
+            'original_total_price',
+        )
+    
+    def get_total_price(self, obj):
+        return self.context.get('room_data_map', {}).get(obj.id, {}).get('total_price')
+    
+    def get_original_total_price(self, obj):
+        return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')

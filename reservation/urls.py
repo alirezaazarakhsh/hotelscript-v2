@@ -40,6 +40,11 @@ urlpatterns = [
             views.HotelRatingSummaryListView.as_view(),
             name='rating-summary-list'
         ),
+        path(
+            'search/',
+            views.RoomListView.as_view(),
+            name='room-list'
+        ),
     ])),
     path(
         'search/',
