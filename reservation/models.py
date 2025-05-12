@@ -822,9 +822,11 @@ class Reservation(models.Model):
     extra_passengers = models.ManyToManyField(
         Passenger,
         verbose_name=_('مسافران اضافه'),
+        blank=True,
     )
     paid_price = models.PositiveBigIntegerField(
         verbose_name=_('مبلغ پرداخت شده'),
+        default=0,
     )
     status = models.CharField(
         verbose_name=_('وضعیت'),
