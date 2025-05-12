@@ -88,16 +88,6 @@ class HotelListView(ListAPIView):
                 'end_date': 'لطفا تاریخ خروج را به درستی وارد نمایید'
             })
 
-        if start_date < timezone.localdate():
-            raise ValidationError({
-                'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'
-            })
-
-        if end_date < start_date:
-            raise ValidationError({
-                'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'
-            })
-
         if not city_or_hotel:
             raise ValidationError({
                 'q': 'نام هتل یا شهر الزامی است'
@@ -114,6 +104,16 @@ class HotelListView(ListAPIView):
             raise ValidationError({
                 'end_date': 'تاریخ خروج الزامی است'
             })
+        
+        if start_date < timezone.localdate():
+            raise ValidationError({
+                'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'
+            })
+
+        if end_date < start_date:
+            raise ValidationError({
+                'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'
+            })
 
         available_room_dates = RoomDate.objects.select_related('room')\
             .annotate(
@@ -122,7 +122,7 @@ class HotelListView(ListAPIView):
                 original_price=F('price'),
                 discounted_price=RoomDate.get_discounted_price_expression(),
             ).filter(
-                date__gte=max(start_date, timezone.localdate()),
+                date__gte=start_date,
                 date__lte=end_date,
                 room__capacity=passenger_count,
                 room__count__gt=F('occupied_count'),
@@ -136,7 +136,7 @@ class HotelListView(ListAPIView):
             occupied_count=F('occupied_count'),
             discount_count=F('discount_count'),
         ).filter(
-            days_count=(end_date - max(start_date, timezone.localdate())).days + 1,
+            days_count=(end_date - start_date).days + 1,
         )
 
         if has_discount:
