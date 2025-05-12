@@ -243,3 +243,14 @@ class CommentListSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('ratings', None)
         return super().create(validated_data)
+
+
+class RatingSummarySerializer(serializers.ModelSerializer):
+    avg_rating = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = CommentPointItem
+        fields = (
+            'title',
+            'avg_rating',
+        )

@@ -54,6 +54,7 @@ from .serializers import (
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
     CommentListSerializer,
+    RatingSummarySerializer,
 )
 
 # Create your views here.
@@ -454,3 +455,20 @@ class HotelCommentListCreateView(ListCreateAPIView):
 
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class HotelRatingSummaryListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RatingSummarySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+
+        queryset = CommentPointItem.objects.annotate(
+            avg_rating=Round(Avg(
+                'points__point',
+                filter=Q(points__comment__hotel__slug=hotel_slug, points__comment__is_approved=True)
+            ), 1)
+        ).order_by('id')
+
+        return queryset

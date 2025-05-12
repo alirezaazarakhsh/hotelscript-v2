@@ -35,6 +35,11 @@ urlpatterns = [
             views.HotelCommentListCreateView.as_view(),
             name='comment-list'
         ),
+        path(
+            'rating-summary/',
+            views.HotelRatingSummaryListView.as_view(),
+            name='rating-summary-list'
+        ),
     ])),
     path(
         'search/',
