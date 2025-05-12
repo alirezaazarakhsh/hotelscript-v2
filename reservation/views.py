@@ -84,6 +84,17 @@ class HotelListView(ListAPIView):
             raise ValidationError({
                 'end_date': 'لطفا تاریخ خروج را به درستی وارد نمایید'
             })
+
+        if start_date < timezone.localdate():
+            raise ValidationError({
+                'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'
+            })
+
+        if end_date < start_date:
+            raise ValidationError({
+                'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'
+            })
+
         if not city_or_hotel:
             raise ValidationError({
                 'q': 'نام هتل یا شهر الزامی است'
@@ -101,22 +112,26 @@ class HotelListView(ListAPIView):
                 'end_date': 'تاریخ خروج الزامی است'
             })
 
-        available_room_dates = RoomDate.objects.select_related('room').annotate(
-            occupied_count=RoomDate.get_occupied_statuses_count_expression(),
-            original_price=F('price'),
-            final_price=RoomDate.get_final_price_expression(),
-        ).filter(
-            date__gte=max(start_date, timezone.localdate()),
-            date__lte=end_date,
-            room__capacity=passenger_count,
-            room__count__gt=F('occupied_count'),
-        )
+        available_room_dates = RoomDate.objects.select_related('room')\
+            .annotate(
+                occupied_count=RoomDate.get_occupied_statuses_count_expression(),
+                discount_count=RoomDate.get_discount_count_expression(),
+                original_price=F('price'),
+                discounted_price=RoomDate.get_discounted_price_expression(),
+            ).filter(
+                date__gte=max(start_date, timezone.localdate()),
+                date__lte=end_date,
+                room__capacity=passenger_count,
+                room__count__gt=F('occupied_count'),
+            )
 
         matching_rooms_data = available_room_dates.values('room_id').annotate(
             hotel_id=F('room__hotel_id'),
             days_count=Count('date', distinct=True),
             original_total_price=Sum('original_price'),
-            total_price=Sum('final_price'),
+            discounted_total_price=Sum('discounted_price'),
+            occupied_count=F('occupied_count'),
+            discount_count=F('discount_count'),
         ).filter(
             days_count=(end_date - max(start_date, timezone.localdate())).days + 1,
         )
@@ -139,8 +154,9 @@ class HotelListView(ListAPIView):
 
         for room_data in matching_rooms_data:
             hotel_id = room_data['hotel_id']
+
             self.hotel_price_map[hotel_id].append({
-                'total_price': room_data['total_price'],
+                'total_price': room_data['discounted_total_price'] if room_data['occupied_count'] < room_data['discount_count'] else room_data['original_total_price'],
                 'original_total_price': room_data['original_total_price'],
             })
 
@@ -192,6 +208,8 @@ class HotelListView(ListAPIView):
             )
 
         # TODO: filter by facilities
+        # TODO: order by
+        queryset = queryset.order_by('id')
         return queryset
 
     def get_serializer_context(self):

@@ -666,7 +666,16 @@ class RoomDate(models.Model):
         )
 
     @staticmethod
-    def get_final_price_expression():
+    def get_discount_count_expression():
+        now = timezone.localtime()
+        return Count(
+            'discount',
+            filter=Q(discount__start_date__lte=now) & Q(discount__end_date__gte=now),
+            distinct=True
+        )
+
+    @staticmethod
+    def get_discounted_price_expression():
         percentage_discount = ExpressionWrapper(
             F('price') - Case(
                 When(
