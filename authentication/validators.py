@@ -10,6 +10,16 @@ def validate_national_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
 
+    check_digits = int(value[9])
+    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+
+    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+        raise ValidationError('کد ملی معتبر نیست')
+
+def validate_passport_code(value):
+    if not re.match(r"^[A-Za-z0-9]{6,9}$", value):
+        raise ValidationError('کد پاسپورت معتبر نیست')
+
 def validate_postal_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد پستی باید 10 رقمی باشد')

@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'config',
     'contact',
     'blog',
+    'reservation',
     'drf_yasg',
     'corsheaders',
     'safarname24',

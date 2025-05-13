@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -567,8 +568,8 @@ class FakeComment(models.Model):
         max_digits=3,
         decimal_places=1,
         validators=(
-            MinValueValidator(0.0),
-            MaxValueValidator(5.0),
+            MinValueValidator(Decimal(0.0)),
+            MaxValueValidator(Decimal(5.0)),
         )
     )
     
