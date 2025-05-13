@@ -7,7 +7,7 @@ from django.db.models import (
     Case,
     When,
     ExpressionWrapper,
-    IntegerField,
+    PositiveBigIntegerField,
 )
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -687,9 +687,9 @@ class RoomDate(models.Model):
                     then=F('discount__maximum_value')
                 ),
                 default=F('price') * F('discount__value') / 100,
-                output_field=IntegerField()
+                output_field=PositiveBigIntegerField()
             ),
-            output_field=IntegerField()
+            output_field=PositiveBigIntegerField()
         )
 
         fixed_discount = ExpressionWrapper(
@@ -699,16 +699,16 @@ class RoomDate(models.Model):
                     then=F('discount__maximum_value')
                 ),
                 default=F('discount__value'),
-                output_field=IntegerField()
+                output_field=PositiveBigIntegerField()
             ),
-            output_field=IntegerField()
+            output_field=PositiveBigIntegerField()
         )
 
         return Case(
             When(discount__type='percentage', then=percentage_discount),
             When(discount__type='fixed', then=fixed_discount),
             default=F('price'),
-            output_field=IntegerField()
+            output_field=PositiveBigIntegerField()
         )
 
     @cached_property
