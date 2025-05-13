@@ -13,6 +13,7 @@ from .models import (
     Comment,
     CommentPointItem,
     Room,
+    RoomDate,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -280,3 +281,16 @@ class RoomListSerializer(serializers.ModelSerializer):
     
     def get_original_total_price(self, obj):
         return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')
+
+class RoomDateListSerializer(serializers.ModelSerializer):
+    original_price = serializers.IntegerField(read_only=True)
+    discounted_price = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = RoomDate
+        fields = (
+            'date',
+            'original_price',
+            'discounted_price',
+        )
+    

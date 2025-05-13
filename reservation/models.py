@@ -641,8 +641,12 @@ class RoomDate(models.Model):
     )
 
     @cached_property
+    def occupied_statuses_count(self):
+        return len(self.reservations)
+
+    @cached_property
     def final_price(self):
-        if self.discount:
+        if self.discount and self.occupied_statuses_count < self.discount.count:
             if self.discount.type == 'percentage':
                 discount_value = min(self.price * self.discount.value / 100, self.discount.maximum_value)
                 return self.price - discount_value

@@ -76,4 +76,9 @@ urlpatterns = [
         views.RoomServiceListView.as_view(),
         name='room-service-list'
     ),
+    path(
+        'room-dates/<int:room_id>/',
+        views.RoomDateListView.as_view(),
+        name='room-date-list'
+    ),
 ]

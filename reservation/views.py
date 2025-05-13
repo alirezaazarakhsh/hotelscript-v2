@@ -26,6 +26,9 @@ from django.db.models import (
     Sum,
     Count,
     Avg,
+    Case,
+    When,
+    PositiveBigIntegerField,
 )
 from django.db.models.functions import Round
 from drf_yasg.utils import swagger_auto_schema
@@ -58,6 +61,7 @@ from .serializers import (
     CommentListSerializer,
     RatingSummarySerializer,
     RoomListSerializer,
+    RoomDateListSerializer,
 )
 
 # Create your views here.
@@ -659,3 +663,32 @@ class RoomListView(ListAPIView):
     ])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+class RoomDateListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomDateListSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        room_id = self.kwargs.get('room_id')
+        today = timezone.localdate()
+
+        queryset = RoomDate.objects.annotate(
+            occupied_count=RoomDate.get_occupied_statuses_count_expression(),
+            discount_count=RoomDate.get_discount_count_expression(),
+            original_price=F('price'),
+            discounted_price=Case(
+                When(
+                    discount_count__gt=F('occupied_count'),
+                    then=RoomDate.get_discounted_price_expression()
+                ),
+                default=F('price'),
+                output_field=PositiveBigIntegerField(),
+            ),
+        ).filter(
+            room__id=room_id,
+            room__count__gt=F('occupied_count'),
+            date__gte=today,
+        ).order_by('date')
+
+        return queryset
