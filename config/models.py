@@ -351,6 +351,12 @@ class FAQ(models.Model):
         verbose_name=_('آیکن'),
         max_length=64,
     )
+    page = models.ForeignKey(
+        Page,
+        on_delete=models.CASCADE,
+        verbose_name=_('صفحه'),
+        related_name='faqs',
+    )
 
     class Meta:
         verbose_name = 'سوال متداول'
