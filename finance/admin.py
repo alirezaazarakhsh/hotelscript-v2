@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     Wallet,
+    BankCard,
 )
 
 # Register your models here.
@@ -10,4 +11,13 @@ class WalletAdmin(admin.ModelAdmin):
         'id',
         'user',
         'balance',
+    )
+
+@admin.register(BankCard)
+class BankCardAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'profile',
+        'card_number',
+        'sheba_number',
     )
