@@ -4,6 +4,10 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import (
     GenericForeignKey,
 )
+from django.core.validators import (
+    MinLengthValidator,
+    MaxLengthValidator,
+)
 from authentication.models import (
     BaseUser,
 )
@@ -47,10 +51,18 @@ class BankCard(models.Model):
     card_number = models.CharField(
         verbose_name=_('شماره کارت'),
         max_length=16,
+        validators=(
+            MinLengthValidator(16),
+            MaxLengthValidator(16),
+        ),
     )
     sheba_number = models.CharField(
         verbose_name=_('شماره شبا'),
         max_length=24,
+        validators=(
+            MinLengthValidator(24),
+            MaxLengthValidator(24),
+        ),
     )
 
     class Meta:
