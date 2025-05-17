@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'blog',
     'reservation',
     'finance',
+    'user_profile',
     'drf_yasg',
     'corsheaders',
     'safarname24',
