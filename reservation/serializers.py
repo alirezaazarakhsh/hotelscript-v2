@@ -14,6 +14,7 @@ from .models import (
     CommentPointItem,
     Room,
     RoomDate,
+    Passenger,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -293,4 +294,15 @@ class RoomDateListSerializer(serializers.ModelSerializer):
             'original_price',
             'discounted_price',
         )
-    
+
+class PassengerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Passenger
+        fields = (
+            'first_name',
+            'last_name',
+            'is_foreign',
+            'national_code',
+            'passport_code',
+            'phone_number',
+        )

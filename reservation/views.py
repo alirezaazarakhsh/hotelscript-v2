@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticatedOrReadOnly,
+    IsAuthenticated,
 )
 from rest_framework.generics import (
     ListAPIView,
@@ -47,6 +48,7 @@ from .models import (
     Comment,
     CommentPoint,
     CommentPointItem,
+    Passenger,
 )
 from .serializers import (
     HotelListSerializer,
@@ -62,6 +64,7 @@ from .serializers import (
     RatingSummarySerializer,
     RoomListSerializer,
     RoomDateListSerializer,
+    PassengerSerializer,
 )
 
 # Create your views here.
@@ -692,3 +695,18 @@ class RoomDateListView(ListAPIView):
         ).order_by('date')
 
         return queryset
+
+class PassengerListCreateView(ListCreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = PassengerSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Passenger.objects.filter(
+            user=user
+        )
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
