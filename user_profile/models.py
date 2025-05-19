@@ -9,7 +9,7 @@ from django.contrib.contenttypes.fields import (
 )
 
 # Create your models here.
-class FavoriteList(models.Model):
+class FavoriteCollection(models.Model):
     user = models.ForeignKey(
         BaseUser,
         on_delete=models.CASCADE,
@@ -36,10 +36,10 @@ class Favorite(models.Model):
         related_name='favorites',
     )
     list = models.ForeignKey(
-        FavoriteList,
+        FavoriteCollection,
         on_delete=models.CASCADE,
-        verbose_name=_('کاربر'),
-        related_name='items',
+        verbose_name=_('لیست'),
+        related_name='favorites',
     )
     item_content_type = models.ForeignKey(
         ContentType,
