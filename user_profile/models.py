@@ -9,12 +9,37 @@ from django.contrib.contenttypes.fields import (
 )
 
 # Create your models here.
+class FavoriteList(models.Model):
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='favorite_lists',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+
+    class Meta:
+        verbose_name = 'لیست علاقمندی'
+        verbose_name_plural = 'لیست‌های علاقمندی'
+
+    def __str__(self):
+        return f'{self.title}'
+
 class Favorite(models.Model):
     user = models.ForeignKey(
         BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
         related_name='favorites',
+    )
+    list = models.ForeignKey(
+        FavoriteList,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='items',
     )
     item_content_type = models.ForeignKey(
         ContentType,
@@ -40,3 +65,10 @@ class Favorite(models.Model):
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
     )
+
+    class Meta:
+        verbose_name = 'علاقمندی'
+        verbose_name_plural = 'علاقمندی‌ها'
+
+    def __str__(self):
+        return f'{self.item} - {self.user}'
