@@ -5,17 +5,8 @@ from .models import (
 )
 
 # Register your models here.
-@admin.register(Favorite)
-class FavoriteAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'user',
-        'item',
-        'created',
-    )
-
 @admin.register(FavoriteCollection)
-class FavoriteAdmin(admin.ModelAdmin):
+class FavoriteCollectionAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'user',
@@ -24,4 +15,12 @@ class FavoriteAdmin(admin.ModelAdmin):
 
     search_fields = (
         'title',
+    )
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'item',
+        'created',
     )

@@ -29,12 +29,6 @@ class FavoriteCollection(models.Model):
         return f'{self.title}'
 
 class Favorite(models.Model):
-    user = models.ForeignKey(
-        BaseUser,
-        on_delete=models.CASCADE,
-        verbose_name=_('کاربر'),
-        related_name='favorites',
-    )
     list = models.ForeignKey(
         FavoriteCollection,
         on_delete=models.CASCADE,
@@ -71,4 +65,4 @@ class Favorite(models.Model):
         verbose_name_plural = 'علاقمندی‌ها'
 
     def __str__(self):
-        return f'{self.item} - {self.user}'
+        return f'{self.item} - {self.list}'
