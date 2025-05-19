@@ -1,0 +1,17 @@
+from django.urls import path
+from . import views
+
+app_name = 'profile'
+
+urlpatterns = [
+    path(
+        'favorite-collections/',
+        views.FavoriteCollectionListCreateView.as_view(),
+        name='favorite-collection-list-create'
+    ),
+    path(
+        'favorite-collections/<int:pk>/',
+        views.FavoriteCollectionDestroyView.as_view(),
+        name='favorite-collection-destroy'
+    ),
+]
