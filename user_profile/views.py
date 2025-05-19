@@ -52,7 +52,7 @@ class FavoriteCreateView(CreateAPIView):
 
     def get_queryset(self):
         queryset = Favorite.objects.select_related('list')\
-            .filter(list__user__id=self.request.user)
+            .filter(list__user__id=self.request.user.pk)
 
         return queryset
     
@@ -80,3 +80,12 @@ class FavoriteCreateView(CreateAPIView):
         serializer.validated_data['item_content_type'] = content_type
 
         return super().perform_create(serializer)
+
+class FavoriteDestroyView(DestroyAPIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        queryset = Favorite.objects.select_related('list')\
+            .filter(list__user__id=self.request.user.pk)
+
+        return queryset

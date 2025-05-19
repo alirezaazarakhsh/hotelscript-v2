@@ -19,4 +19,9 @@ urlpatterns = [
         views.FavoriteCreateView.as_view(),
         name='favorite-create'
     ),
+    path(
+        'favorites/<int:pk>/',
+        views.FavoriteDestroyView.as_view(),
+        name='favorite-destroy'
+    ),
 ]
