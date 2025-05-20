@@ -11,8 +11,8 @@ urlpatterns = [
     ),
     path(
         'favorite-collections/<int:pk>/',
-        views.FavoriteCollectionDestroyView.as_view(),
-        name='favorite-collection-destroy'
+        views.FavoriteCollectionRetrieveDestroyView.as_view(),
+        name='favorite-collection-retrieve-destroy'
     ),
     path(
         'favorites/',

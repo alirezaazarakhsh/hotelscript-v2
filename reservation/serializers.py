@@ -79,6 +79,31 @@ class HotelListSerializer(serializers.ModelSerializer):
     def get_rating(self, obj):
         return obj.rating if obj.rating else None
 
+class FavoriteHotelSerializer(serializers.ModelSerializer):
+    city = CitySerializer()
+    min_price = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name',
+            'slug',
+            'city',
+            'address',
+            'main_image',
+            'stars',
+            'is_special_offer',
+            'min_price',
+            'rating',
+        )
+
+    def get_min_price(self, obj):
+        return obj.min_price if obj.min_price else None
+    
+    def get_rating(self, obj):
+        return obj.rating if obj.rating else None
+
 class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
