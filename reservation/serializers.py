@@ -14,6 +14,7 @@ from .models import (
     CommentPointItem,
     Room,
     RoomDate,
+    Passenger,
 )
 
 class ProvinceSerializer(serializers.ModelSerializer):
@@ -74,6 +75,31 @@ class HotelListSerializer(serializers.ModelSerializer):
 
     def get_original_total_price(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price')
+    
+    def get_rating(self, obj):
+        return obj.rating if obj.rating else None
+
+class FavoriteHotelSerializer(serializers.ModelSerializer):
+    city = CitySerializer()
+    min_price = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name',
+            'slug',
+            'city',
+            'address',
+            'main_image',
+            'stars',
+            'is_special_offer',
+            'min_price',
+            'rating',
+        )
+
+    def get_min_price(self, obj):
+        return obj.min_price if obj.min_price else None
     
     def get_rating(self, obj):
         return obj.rating if obj.rating else None
@@ -293,4 +319,15 @@ class RoomDateListSerializer(serializers.ModelSerializer):
             'original_price',
             'discounted_price',
         )
-    
+
+class PassengerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Passenger
+        fields = (
+            'first_name',
+            'last_name',
+            'is_foreign',
+            'national_code',
+            'passport_code',
+            'phone_number',
+        )

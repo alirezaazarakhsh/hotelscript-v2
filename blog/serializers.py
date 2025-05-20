@@ -63,6 +63,17 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'published_date',
         )
 
+class FavoriteArticleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Article
+        fields = (
+            'title',
+            'slug',
+            'body', # TODO: maybe should change with summary (currently summary is not in model)
+            'thumbnail',
+            'published_date',
+        )
+
 class ArticleAuthorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Admin

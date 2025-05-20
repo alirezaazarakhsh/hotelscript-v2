@@ -801,6 +801,9 @@ class Reservation(models.Model):
         ('success', 'موفق'),
         ('expired', 'منقضی شده'),
     )
+    def ten_minutes_from_now():
+        return timezone.now() + timedelta(minutes=10)
+
     uuid = models.UUIDField(
         verbose_name=_('کد رزرو'),
         primary_key=True,
@@ -845,7 +848,7 @@ class Reservation(models.Model):
     expired_date = models.DateTimeField(
         verbose_name=_('تاریخ انقضا'),
         # TODO: read from approve time config
-        default=timezone.now() + timedelta(minutes=10)
+        default=ten_minutes_from_now,
     )
     additional_details = models.TextField(
         verbose_name=_('توضیحات تکمیلی رزرواسیون'),

@@ -73,6 +73,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
         required=False,
         read_only=True,
     )
+    wallet_balance = serializers.CharField(
+        source='base_user.wallet.balance',
+        read_only=True,
+    )
 
     class Meta:
         model = NaturalProfile
@@ -86,6 +90,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'image',
             'postal_code',
             'address',
+            'wallet_balance',
         ]
         extra_kwargs = {
             'first_name': {
