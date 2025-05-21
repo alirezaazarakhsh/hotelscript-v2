@@ -4,6 +4,7 @@ from .models import (
     Favorite,
     CustomerClub,
     CustomerClubPrize,
+    CustomerReceivedPrize,
 )
 
 # Register your models here.
@@ -48,4 +49,13 @@ class CustomerClubPrizeAdmin(admin.ModelAdmin):
 
     search_fields = (
         'title',
+    )
+
+@admin.register(CustomerReceivedPrize)
+class CustomerReceivedPrizeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'customer',
+        'prize',
+        'created',
     )
