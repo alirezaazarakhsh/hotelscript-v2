@@ -3,6 +3,7 @@ from .models import (
     FavoriteCollection,
     Favorite,
     CustomerClub,
+    CustomerClubPrize,
 )
 
 # Register your models here.
@@ -32,4 +33,19 @@ class CustomerClubAdmin(admin.ModelAdmin):
         'id',
         'user',
         'points',
+    )
+
+@admin.register(CustomerClubPrize)
+class CustomerClubPrizeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'type',
+        'required_points',
+        'expired_date',
+        'discount_code',
+    )
+
+    search_fields = (
+        'title',
     )

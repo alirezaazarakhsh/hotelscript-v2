@@ -84,3 +84,41 @@ class CustomerClub(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.points}'
+
+class CustomerClubPrize(models.Model):
+    PRIZE_TYPES = (
+        ('hotel', 'هتل'),
+        ('shopping-center', 'مرکز خرید'),
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان'),
+        max_length=128,
+    )
+    type = models.CharField(
+        verbose_name=_('نوع'),
+        max_length=32,
+        choices=PRIZE_TYPES,
+    )
+    required_points = models.PositiveIntegerField(
+        verbose_name=_('امتیاز مورد نیاز'),
+    )
+    expired_date = models.DateTimeField(
+        verbose_name=_('تاریخ اعتبار کد تخفیف'),
+    )
+    discount_price = models.PositiveBigIntegerField(
+        verbose_name=_('مبلغ تخفیف'),
+    )
+    discount_code = models.CharField(
+        verbose_name=_('کد تخفیف'),
+        max_length=64,
+    )
+    rules = models.TextField(
+        verbose_name=_('قوانین دریافت جایزه'),
+    )
+
+    class Meta:
+        verbose_name = 'جایزه باشگاه مشتریان'
+        verbose_name_plural = 'جوایز باشگاه مشتریان'
+
+    def __str__(self):
+        return f'{self.title}'
