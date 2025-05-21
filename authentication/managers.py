@@ -1,6 +1,5 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.core.exceptions import ObjectDoesNotExist
-from django.apps import apps
 from django.db import transaction
 
 class UserManager(BaseUserManager):
@@ -21,6 +20,7 @@ class UserManager(BaseUserManager):
     
     def get_by_phone_or_create(self, phone):
         from finance.models import Wallet
+        from user_profile.models import CustomerClub
         try:
             return self.get_by_phone(phone)
         except ObjectDoesNotExist:
@@ -32,5 +32,9 @@ class UserManager(BaseUserManager):
                 Wallet.objects.create(
                     user=user,
                     balance=0,
+                )
+                CustomerClub.objects.create(
+                    user=user,
+                    points=0,
                 )
                 return user

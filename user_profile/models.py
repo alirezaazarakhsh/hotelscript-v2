@@ -66,3 +66,21 @@ class Favorite(models.Model):
 
     def __str__(self):
         return f'{self.item} - {self.list}'
+
+class CustomerClub(models.Model):
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='club',
+    )
+    points = models.PositiveIntegerField(
+        verbose_name=_('امتیاز'),
+    )
+
+    class Meta:
+        verbose_name = 'باشگاه مشتری'
+        verbose_name_plural = 'باشگاه مشتریان'
+
+    def __str__(self):
+        return f'{self.user} - {self.points}'
