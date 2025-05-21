@@ -29,4 +29,9 @@ urlpatterns = [
         views.CustomerClubPrizeListView.as_view(),
         name='customer-club-prize-list'
     ),
+    path(
+        'customer-club/my-prizes/',
+        views.CustomerReceivedPrizeListCreateView.as_view(),
+        name='customer-received-prize-list-create'
+    ),
 ]

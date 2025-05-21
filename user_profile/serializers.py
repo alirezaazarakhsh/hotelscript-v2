@@ -3,6 +3,7 @@ from .models import (
     FavoriteCollection,
     Favorite,
     CustomerClubPrize,
+    CustomerReceivedPrize,
 )
 from blog.serializers import (
     FavoriteArticleSerializer,
@@ -97,4 +98,26 @@ class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
             'expired_date',
             'discount_price',
             'rules',
+        )
+
+
+class CustomerClubPrizeRetrieveSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CustomerClubPrize
+        fields = (
+            'title',
+            'expired_date',
+            'discount_price',
+            'discount_code',
+        )
+
+class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
+    prize = CustomerClubPrizeRetrieveSerializer()
+
+    class Meta:
+        model = CustomerReceivedPrize
+        fields = (
+            'prize',
+            'created',
         )
