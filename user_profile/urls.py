@@ -24,4 +24,9 @@ urlpatterns = [
         views.FavoriteDestroyView.as_view(),
         name='favorite-destroy'
     ),
+    path(
+        'customer-club/prizes/',
+        views.CustomerClubPrizeListView.as_view(),
+        name='customer-club-prize-list'
+    ),
 ]

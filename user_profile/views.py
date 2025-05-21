@@ -24,15 +24,19 @@ from rest_framework.generics import (
 from .models import (
     FavoriteCollection,
     Favorite,
+    CustomerClubPrize,
 )
 from .serializers import (
     FavoriteCollectionListSerializer,
     FavoriteCollectionRetrieveSerializer,
     FavoriteCreateSerializer,
     FavoriteSerializer,
+    CustomerClubPrizeListSerializer,
 )
 from blog.models import Article
 from reservation.models import Hotel
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 # Create your views here.
 class FavoriteCollectionListCreateView(ListCreateAPIView):
@@ -186,3 +190,27 @@ class FavoriteDestroyView(DestroyAPIView):
             .filter(list__user__id=self.request.user.pk)
 
         return queryset
+
+class CustomerClubPrizeListView(ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = CustomerClubPrizeListSerializer
+
+    def get_queryset(self):
+        type = self.request.query_params.get('type')
+        queryset = CustomerClubPrize.objects.filter(
+            type=type
+        )
+
+        return queryset
+
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'type',
+            openapi.IN_QUERY,
+            description="type of prize (hotel or shopping-center)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
