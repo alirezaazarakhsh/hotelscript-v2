@@ -5,6 +5,10 @@ from django.db.models import (
     Avg,
     Prefetch,
 )
+from django.db import (
+    transaction,
+    IntegrityError,
+)
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import (
@@ -24,15 +28,21 @@ from rest_framework.generics import (
 from .models import (
     FavoriteCollection,
     Favorite,
+    CustomerClubPrize,
+    CustomerClub,
+    CustomerReceivedPrize,
 )
 from .serializers import (
     FavoriteCollectionListSerializer,
     FavoriteCollectionRetrieveSerializer,
     FavoriteCreateSerializer,
     FavoriteSerializer,
+    CustomerClubPrizeListSerializer,
 )
 from blog.models import Article
 from reservation.models import Hotel
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 # Create your views here.
 class FavoriteCollectionListCreateView(ListCreateAPIView):
@@ -186,3 +196,64 @@ class FavoriteDestroyView(DestroyAPIView):
             .filter(list__user__id=self.request.user.pk)
 
         return queryset
+
+class CustomerClubPrizeListView(ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = CustomerClubPrizeListSerializer
+
+    def get_queryset(self):
+        type = self.request.query_params.get('type')
+        queryset = CustomerClubPrize.objects.filter(
+            type=type
+        )
+
+        return queryset
+
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'type',
+            openapi.IN_QUERY,
+            description="type of prize (hotel or shopping-center)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+    ])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+class CustomerReceivedPrizeListCreateView(ListCreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = CustomerClubPrizeListSerializer
+
+    def get_queryset(self):
+        queryset = CustomerReceivedPrize.objects.filter(
+            customer_id=self.request.user
+        ).select_related(
+            'customer'
+        )
+
+        return queryset
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        user = self.request.user
+        customer_club = CustomerClub.objects.get(
+            user=user
+        )
+
+        prize = CustomerClubPrize.objects.get(
+            id=self.request.data.get('prize')
+        )
+
+        if customer_club.points < prize.required_points:
+            raise ValidationError('شما امتیاز کافی برای دریافت جایزه را ندارید!')
+        
+        try:
+            CustomerReceivedPrize.objects.create(
+                customer=user,
+                prize=prize,
+            )
+            customer_club.points -= prize.required_points
+            customer_club.save()
+        except IntegrityError:
+            raise ValidationError('شما قبلا این جایزه را دریافت کردید!')

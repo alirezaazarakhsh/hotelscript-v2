@@ -2,6 +2,8 @@ from rest_framework import serializers
 from .models import (
     FavoriteCollection,
     Favorite,
+    CustomerClubPrize,
+    CustomerReceivedPrize,
 )
 from blog.serializers import (
     FavoriteArticleSerializer,
@@ -84,3 +86,38 @@ class FavoriteSerializer(serializers.ModelSerializer):
         if serializer_class:
             return serializer_class(obj.item, context=self.context).data
         return None
+
+class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CustomerClubPrize
+        fields = (
+            'id',
+            'title',
+            'required_points',
+            'expired_date',
+            'discount_price',
+            'rules',
+        )
+
+
+class CustomerClubPrizeRetrieveSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CustomerClubPrize
+        fields = (
+            'title',
+            'expired_date',
+            'discount_price',
+            'discount_code',
+        )
+
+class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
+    prize = CustomerClubPrizeRetrieveSerializer()
+
+    class Meta:
+        model = CustomerReceivedPrize
+        fields = (
+            'prize',
+            'created',
+        )

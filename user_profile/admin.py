@@ -2,6 +2,9 @@ from django.contrib import admin
 from .models import (
     FavoriteCollection,
     Favorite,
+    CustomerClub,
+    CustomerClubPrize,
+    CustomerReceivedPrize,
 )
 
 # Register your models here.
@@ -22,5 +25,37 @@ class FavoriteAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'item',
+        'created',
+    )
+
+@admin.register(CustomerClub)
+class CustomerClubAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'points',
+    )
+
+@admin.register(CustomerClubPrize)
+class CustomerClubPrizeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'type',
+        'required_points',
+        'expired_date',
+        'discount_code',
+    )
+
+    search_fields = (
+        'title',
+    )
+
+@admin.register(CustomerReceivedPrize)
+class CustomerReceivedPrizeAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'customer',
+        'prize',
         'created',
     )
