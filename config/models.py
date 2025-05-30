@@ -420,11 +420,19 @@ class ContactInfo(models.Model):
     def __str__(self):
         return self.title
 
+
+
 class SocialMedia(models.Model):
     type = models.CharField(
         verbose_name=_('عنوان'),
         max_length=64,
         choices=SOCIAL_MEDIA_OPTIONS
+    )
+    type_fa = models.CharField(
+        verbose_name=_('عنوان فارسی'),
+        max_length=64,
+        blank=True,
+        null=True,
     )
     link = models.URLField(
         verbose_name=_('لینک'),
@@ -446,6 +454,9 @@ class SocialMedia(models.Model):
     
     def __str__(self):
         return self.link
+
+    
+
 
 class Banner(models.Model):
     order = models.PositiveSmallIntegerField(

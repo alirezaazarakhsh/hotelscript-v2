@@ -41,8 +41,12 @@ CSRF_TRUSTED_ORIGINS = [
     "https://cps.safarnameh24.com",
 ]
 
+# 🔧 مسیر درست برای مدیا
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path('/var/hotelscript-v2/media')
+
+STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -124,9 +128,6 @@ TIME_ZONE = 'Asia/Tehran'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SWAGGER_SETTINGS = {
@@ -195,4 +196,3 @@ CORS_ALLOW_HEADERS = [
     'authorization',  
     'x-requested-with',
 ]
-
