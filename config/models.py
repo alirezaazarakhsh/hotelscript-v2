@@ -604,8 +604,8 @@ class License(models.Model):
     link = models.URLField(
         verbose_name=_('لینک'),
         max_length=512,
-        blank=True,
-        null=True,  
+        blank=False,
+        null=False,
     )
 
     class Meta:
