@@ -122,7 +122,6 @@ class StatisticAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
 
-
 # ثبت مدل ChooseReason در ادمین با فرم سفارشی
 @admin.register(ChooseReason)
 class ChooseReasonAdmin(admin.ModelAdmin):
