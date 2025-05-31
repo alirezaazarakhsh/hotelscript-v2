@@ -92,6 +92,12 @@ class LicenseForm(forms.ModelForm):
             self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
             self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""
 
+    def clean_link(self):
+        link = self.cleaned_data.get('link')
+        if not link:
+            return None  # تبدیل به None برای هماهنگی با null=True
+        return link
+
 class FakeCommentForm(forms.ModelForm):
     class Meta:
         model = FakeComment
