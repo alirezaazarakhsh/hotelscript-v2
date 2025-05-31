@@ -173,7 +173,7 @@ class StatisticListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت تنظیمات سکشن اول در باره ما",
+        operation_summary="دریافت تنظیمات سکشن اول درباره ما",
         operation_description="این API تمامی بخش های مربوط به سکشن اول صفحه درباره ما را باز میگرداند ",
         tags=['about']
     )
