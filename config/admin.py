@@ -119,6 +119,7 @@ class StatisticItemInline(admin.TabularInline):
 
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
+    form = StatisticAdminForm
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
 
