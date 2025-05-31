@@ -139,9 +139,22 @@ class SlideAdmin(admin.ModelAdmin):
         'is_active',
     )
 
+
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
     extra = 1
+
+class StatisticItemInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        if len([form for form in self.forms if not form.cleaned_data.get('DELETE', False)]) > 4:
+            raise ValidationError("حداکثر ۴ آیتم مجاز است.")
+
+class StatisticItemInline(admin.TabularInline):
+    model = StatisticItem
+    formset = StatisticItemInlineFormSet
+    extra = 1
+    max_num = 4
 
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
@@ -153,6 +166,8 @@ class StatisticAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not Statistic.objects.exists()
+    
+    
 
 @admin.register(ChooseReason)
 class ChooseReasonAdmin(admin.ModelAdmin):
