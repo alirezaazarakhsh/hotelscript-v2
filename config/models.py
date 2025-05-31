@@ -629,7 +629,7 @@ class FakeComment(models.Model):
     
     class Meta:
         verbose_name = 'نظر'
-        verbose_name_plural = 'نظرات'
+        verbose_name_plural = '"نظرات مشتریان صفحه اصلی '
     
     def __str__(self):
         return f'{self.commenter}'

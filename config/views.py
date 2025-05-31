@@ -216,8 +216,8 @@ class ServiceListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست خدمات",
-        operation_description="این API لیست خدمات ارائه شده توسط سایت را بازمی‌گرداند.",
+        operation_summary="دریافت لیست خدمات درباره ما",
+        operation_description="این api خدمات مربوط به درباره ما را بر میگرداند",
         tags=['about']
     )
     def get(self, request, *args, **kwargs):
@@ -231,8 +231,8 @@ class ContactInfoListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت اطلاعات تماس",
-        operation_description="این API اطلاعات تماس سایت را بازمی‌گرداند.",
+        operation_summary="دریافت اطلاعات تماس برای صفحه تماس با ما و بخشی از فوتر ",
+        operation_description="این API اطلاعات مربوط به بخش اول صفحه تماس با ما می باشد و توی فوتر هم اون بخش مربوط به شماره تماس و ایمیل و آدرس را شامل می شود ",
         tags=['contact']
     )
     def get(self, request, *args, **kwargs):
