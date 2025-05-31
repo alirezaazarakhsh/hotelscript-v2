@@ -243,10 +243,17 @@ class SiteConfig(models.Model):
     footer_description = models.TextField(
         verbose_name=_('توضیحات فوتر'),
     )
+    footer_copyright = models.CharField(
+        verbose_name=_('کپی‌رایت فوتر'),
+        max_length=128,
+        help_text=_('متن کپی‌رایت که در پایین فوتر نمایش داده می‌شود'),
+        blank=True,
+    )
 
     class Meta:
         verbose_name = 'کانفیگ سایت'
         verbose_name_plural = 'کانفیگ سایت'
+
     
     def __str__(self):
         return f'کانفیگ سایت {self.header_title}'
