@@ -604,6 +604,8 @@ class License(models.Model):
     link = models.URLField(
         verbose_name=_('لینک'),
         max_length=512,
+        blank=True,
+        null=True,  
     )
 
     class Meta:
@@ -612,6 +614,9 @@ class License(models.Model):
     
     def __str__(self):
         return f'{self.link}'
+
+
+
 
 class Advantage(models.Model):
     title = models.CharField(
@@ -633,6 +638,9 @@ class Advantage(models.Model):
     
     def __str__(self):
         return f'{self.title}'
+
+
+
 
 class FakeComment(models.Model):
     commenter = models.CharField(
