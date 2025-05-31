@@ -118,11 +118,15 @@ class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
     extra = 1
 
+    def get_max_num(self, request, obj=None, **kwargs):
+        return 1
+
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
     form = StatisticAdminForm
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
+
 
 # ثبت مدل ChooseReason در ادمین با فرم سفارشی
 @admin.register(ChooseReason)
