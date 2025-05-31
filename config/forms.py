@@ -1,3 +1,4 @@
+from tracemalloc import Statistic
 from django import forms
 from .models import (
     Section,
@@ -115,3 +116,19 @@ class ComingSoonAdminForm(forms.ModelForm):
 
             self.fields['background'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
             self.fields['background'].help_text = f'<img src="{self.instance.background.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.background else ""
+
+
+
+class StatisticAdminForm(forms.ModelForm):
+    class Meta:
+        model = Statistic
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(StatisticAdminForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
+            self.fields['image'].help_text = (
+                f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' 
+                if self.instance.image else ""
+            )
