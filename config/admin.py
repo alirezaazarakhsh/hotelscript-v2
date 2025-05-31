@@ -135,8 +135,6 @@ class SlideAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'order',
-        'title',
-        'link',
         'is_active',
     )
 

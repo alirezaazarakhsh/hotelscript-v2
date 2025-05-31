@@ -82,6 +82,7 @@ class HeaderMenuListView(ListAPIView):
 
 
 
+
 #ای پی ای درسترسی های سریع
 class QuickAccessListView(ListAPIView):
     queryset = QuickAccess.objects.all()
@@ -90,8 +91,8 @@ class QuickAccessListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست دسترسی‌های سریع",
-        operation_description="این API لیستی از دسترسی‌های سریع سایت را بدون صفحه‌بندی بازمی‌گرداند.",
+        operation_summary="دریافت دسترسی های سریع در فوتر",
+        operation_description="این API لیست دسترسی ها را در فوتر باز می گرداند",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
@@ -145,7 +146,7 @@ class SiteConfigRetrieveView(RetrieveAPIView):
 
 
 
-
+#ای پی ای اسلاید ها در صفحه اصلی 
 class SlideListView(ListAPIView):
     queryset = Slide.actives.all()
     permission_classes = (AllowAny,)

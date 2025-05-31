@@ -280,20 +280,12 @@ class Slide(models.Model):
         verbose_name=_('ترتیب'),
         unique=True,
     )
-    title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=64,
-    )
+    
     image = models.ImageField(
         verbose_name=_('عکس'),
         upload_to='images/slides/',
     )
-    link = models.URLField(
-        verbose_name=_('لینک'),
-        max_length=512,
-        null=True,
-        blank=True,
-    )
+    
     is_active = models.BooleanField(
         verbose_name=_('فعال'),
         default=True,
@@ -363,7 +355,7 @@ class ChooseReason(models.Model):
 
     class Meta:
         verbose_name = 'دلیل انتخاب'
-        verbose_name_plural = 'دلایل انتخاب'
+        verbose_name_plural = 'دلایل انتخاب درباره ما'
     
     def __str__(self):
         return self.title
@@ -392,7 +384,7 @@ class FAQ(models.Model):
 
     class Meta:
         verbose_name = 'سوال متداول'
-        verbose_name_plural = 'سوالات متداول'
+        verbose_name_plural = 'سوالات متداول صفحات'
     
     def __str__(self):
         return self.question
