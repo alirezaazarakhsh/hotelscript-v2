@@ -5,22 +5,22 @@ from datetime import timedelta
 import sys
 
 env = environ.Env(
-    DJANGO_DEBUG=(bool, False),
-    DJANGO_SECRET_KEY=(str, ''),
     DB_ENGINE=(str, 'django.db.backends.postgresql'),
     DB_NAME=(str, 'safarname24'),
     DB_USER=(str, 'postgres'),
     DB_PASSWORD=(str, ''),
-    DB_HOST=(str, 'db'),
+    DB_HOST=(str, 'localhost'),  # چون در .env شما localhost است
     DB_PORT=(str, '5432'),
 )
 
+# فقط این خط env را برای دیتابیس می‌خواند
 environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = env('DJANGO_SECRET_KEY')
-DEBUG = env('DJANGO_DEBUG')
+# مقدار دهی مستقیم برای این دو
+SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+DEBUG = False
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -41,7 +41,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://cps.safarnameh24.com",
 ]
 
-# 🔧 مسیر درست برای مدیا
 MEDIA_URL = '/media/'
 MEDIA_ROOT = Path('/var/hotelscript-v2/media')
 
@@ -159,6 +158,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
     'PAGE_SIZE': 10,
 }
+
 if not DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
         'safarname24.renderers.ResponseRenderer',
