@@ -115,14 +115,12 @@ class SlideAdmin(admin.ModelAdmin):
 # تعریف Inline برای مدل StatisticItem (آیتم‌های آماری) جهت نمایش تو در تو در بخش ادمین
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
-    extra = 1  # تعداد فرم‌های خالی اضافی جهت افزودن آیتم جدید
+    extra = 1
 
-
-# ثبت مدل Statistic در ادمین به همراه آیتم‌های آن (Inline)
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'description')
-    inlines = [StatisticItemInline]  # نمایش آیتم‌ها به صورت تو در تو
+    inlines = [StatisticItemInline]
 
 
 # ثبت مدل ChooseReason در ادمین با فرم سفارشی
