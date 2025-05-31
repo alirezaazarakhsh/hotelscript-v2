@@ -272,6 +272,8 @@ class SiteConfig(models.Model):
         return super(SiteConfig, self).save(*args, **kwargs)
 
 
+
+
 #مدل بنر های وب سایت 
 class Slide(models.Model):
     order = models.PositiveSmallIntegerField(
@@ -321,6 +323,8 @@ class Slide(models.Model):
 
 
 
+
+
 #مدل بخش آمار و ارقام درباره ما
 class Statistic(models.Model):
     title = models.CharField(
@@ -338,6 +342,8 @@ class Statistic(models.Model):
     
     def __str__(self):
         return self.title
+
+
 
 
 # مدل دلایل انتخاب 
@@ -361,6 +367,8 @@ class ChooseReason(models.Model):
     
     def __str__(self):
         return self.title
+
+
 
 
 #مدل سوالات متداول بر اساس هر پیج 
@@ -390,6 +398,8 @@ class FAQ(models.Model):
         return self.question
 
 
+
+
 # مدل خدمات درباره ما
 class Service(models.Model):
     title = models.CharField(
@@ -410,6 +420,8 @@ class Service(models.Model):
     
     def __str__(self):
         return self.title
+
+
 
 
 # مدل راه های ارتباطی برای صفحه تماس با ما و بخشی از فوتر 
@@ -634,6 +646,8 @@ class FakeComment(models.Model):
     def __str__(self):
         return f'{self.commenter}'
 
+
+
 class Rule(models.Model):
     tab_title = models.CharField(
         verbose_name=_('عنوان تب'),
@@ -681,7 +695,6 @@ class ComingSoon(models.Model):
         verbose_name=_('فعال'),
         default=True,
     )
-
     class Meta:
         verbose_name = 'کامینگ سون'
         verbose_name_plural = 'کامینگ سون'
@@ -693,6 +706,9 @@ class ComingSoon(models.Model):
         if not self.pk and ComingSoon.objects.exists():
             raise ValidationError('تنها یک کامینگ سون برای سایت میتوانید بسازید!')
         return super(ComingSoon, self).save(*args, **kwargs)
+
+
+
 
 class UserLevel(models.Model):
     title = models.CharField(

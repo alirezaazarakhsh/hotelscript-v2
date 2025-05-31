@@ -224,6 +224,8 @@ class ServiceListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+#ای پی ای اطلاعات تماس با ما و فوتر 
 class ContactInfoListView(ListAPIView):
     queryset = ContactInfo.objects.all()
     permission_classes = (AllowAny,)
@@ -239,6 +241,8 @@ class ContactInfoListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+#ای پی ای شبکه اجتماعی تماس با ما + فوتر
 class SocialMediaListView(ListAPIView):
     queryset = SocialMedia.objects.all()
     permission_classes = (AllowAny,)
@@ -246,12 +250,14 @@ class SocialMediaListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست شبکه‌های اجتماعی",
-        operation_description="این API لیست شبکه‌های اجتماعی سایت را بازمی‌گرداند.",
+        operation_summary="دریافت لیست شبکه‌های اجتماعی برای تماس با ما و فوتر",
+        operation_description="این API لیست شبکه های اجتماعی مربوط به صفحه تماس با ما و بخش مربوط به شبکه احتماعی فوتر را شامل می شود ",
         tags=['contact']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
 
 
 class BannerListView(ListAPIView):
@@ -279,6 +285,8 @@ class BannerListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
 class EnamadLicenseRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = EnamadLicenseSerializer
@@ -295,6 +303,8 @@ class EnamadLicenseRetrieveView(RetrieveAPIView):
         return EnamadLicense.objects.first()
 
 
+
+
 class LicenseListView(ListAPIView):
     queryset = License.objects.all()
     permission_classes = (AllowAny,)
@@ -308,6 +318,8 @@ class LicenseListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
 
 
 class AdvantageListView(ListAPIView):
