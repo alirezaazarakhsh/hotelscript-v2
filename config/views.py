@@ -6,6 +6,7 @@ from drf_yasg import openapi
 from .filters import PageFilter
 from .serializers import (
     ComingSoonSerializer,
+    LocationSerializer,
     PageSerializer,
     HeaderMenuSerializer,
     QuickAccessSerializer,
@@ -28,6 +29,7 @@ from .serializers import (
 )
 from .models import (
     ComingSoon,
+    Location,
     Page,
     HeaderMenu,
     QuickAccess,
@@ -438,6 +440,24 @@ class ComingSoonView(ListAPIView):
         operation_summary="دریافت اطلاعات صفحه کامینگ سون",
         operation_description="این API اطلاعات مربوط به صفحه‌ی کامینگ سون شامل لوگو، پس‌زمینه، عنوان و... را برای نمایش در صفحه‌ی اصلی باز می‌گرداند.",
         tags=['commingsoon']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
+
+# ای پی ای کانفیگ تماس با ما
+class LocationView(ListAPIView):
+    queryset = Location.objects.all()
+    permission_classes = (AllowAny,)
+    serializer_class = LocationSerializer
+    pagination_class = None  # چون تعداد کمی رکورد داریم
+
+    @swagger_auto_schema(
+        operation_summary="دریافت کانفیگ تماس با ما",
+        operation_description="این API موقعیت جغرافیایی (عرض و طول) مربوط به تماس با ما را برمی‌گرداند.",
+        tags=['contact']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)

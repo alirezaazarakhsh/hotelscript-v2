@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from .models import (
+    Location,
     Page,
     HeaderMenu,
     QuickAccess,
@@ -243,3 +244,10 @@ class ComingSoonAdmin(admin.ModelAdmin):
 class UserLevelAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
     search_fields = ('title',)
+
+
+#ادمین کانفیگ تماس با ما 
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'latitude', 'longitude')
+    search_fields = ('latitude', 'longitude')

@@ -24,5 +24,7 @@ urlpatterns = [
     path('rules/', views.RuleListView.as_view(), name='rules'),
     path('user-levels/', views.UserLevelListView.as_view(), name='user-levels'),
     path('coming-soon/', views.ComingSoonView.as_view(), name='coming-soon'),
+    path('location/', views.LocationView.as_view(), name='location'),
+
 
 ]

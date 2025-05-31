@@ -749,3 +749,18 @@ class UserLevel(models.Model):
     
     def __str__(self):
         return f'{self.title}'
+
+
+
+
+#مدل کانفیگ تماس با ما 
+class Location(models.Model):
+    latitude = models.DecimalField("عرض جغرافیایی", max_digits=9, decimal_places=6)
+    longitude = models.DecimalField("طول جغرافیایی", max_digits=9, decimal_places=6)
+
+    class Meta:
+        verbose_name = 'کانفیگ'
+        verbose_name_plural = 'کانفیگ تماس با ما '
+
+    def __str__(self):
+        return f"{self.latitude}, {self.longitude}"

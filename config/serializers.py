@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import (
     ComingSoon,
+    Location,
     Page,
     HeaderMenu,
     QuickAccess,
@@ -185,4 +186,7 @@ class ComingSoonSerializer(serializers.ModelSerializer):
         ) 
 
 
-
+class LocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Location
+        exclude = ('id',)
