@@ -647,7 +647,7 @@ class FakeComment(models.Model):
         verbose_name=_('ارزیابی'),
         max_length=32,
     )
-    text = models.CharField(
+    text = models. TextField(
         verbose_name=_('نظر'),
         max_length=512,
     )
