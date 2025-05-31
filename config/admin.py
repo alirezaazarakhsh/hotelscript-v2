@@ -154,11 +154,6 @@ class StatisticAdmin(admin.ModelAdmin):
         # فقط یک نمونه از Statistic مجاز است
         return not Statistic.objects.exists()
 
-    class Meta:
-        verbose_name = _('کانفیگ درباره ما')
-        verbose_name_plural = _('کانفیگ درباره ما')
-
-
 @admin.register(StatisticItem)
 class StatisticItemAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'subtitle', 'statistic')
