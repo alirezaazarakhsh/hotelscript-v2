@@ -143,19 +143,30 @@ class SlideAdmin(admin.ModelAdmin):
 
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
-    extra = 1
+    extra = 1  # تعداد فرم‌های اضافی در نمایش ادمین
 
-class StatisticItemInlineFormSet(BaseInlineFormSet):
-    def clean(self):
-        super().clean()
-        if len([form for form in self.forms if not form.cleaned_data.get('DELETE', False)]) > 4:
-            raise ValidationError("حداکثر ۴ آیتم مجاز است.")
+@admin.register(Statistic)
+class StatisticAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title')
+    inlines = [StatisticItemInline]
 
-class StatisticItemInline(admin.TabularInline):
-    model = StatisticItem
-    formset = StatisticItemInlineFormSet
-    extra = 1
-    max_num = 4
+    def has_add_permission(self, request):
+        # فقط یک نمونه از Statistic مجاز است
+        return not Statistic.objects.exists()
+
+    class Meta:
+        verbose_name = _('کانفیگ درباره ما')
+        verbose_name_plural = _('کانفیگ درباره ما')
+
+
+@admin.register(StatisticItem)
+class StatisticItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'subtitle', 'statistic')
+
+    def get_model_perms(self, request):
+        # مخفی کردن آیتم‌ها از منوی اصلی، چون داخل inline هستند
+        return {}
+
 
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
