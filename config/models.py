@@ -249,7 +249,6 @@ class SiteConfig(models.Model):
         help_text=_('متن کپی‌رایت که در پایین فوتر نمایش داده می‌شود'),
         blank=True,
     )
-
     class Meta:
         verbose_name = 'کانفیگ سایت'
         verbose_name_plural = 'کانفیگ سایت'
