@@ -81,16 +81,16 @@ class ArticleListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = ArticleListSerializer
 
-    @swagger_auto_schema(manual_parameters=[
-        openapi.Parameter('q', openapi.IN_QUERY, description="عبارت جستجو", type=openapi.TYPE_STRING, required=False),
-        openapi.Parameter('category', openapi.IN_QUERY, description="فیلتر بر اساس دسته‌بندی مقاله", type=openapi.TYPE_STRING, required=False),
-        openapi.Parameter('subcategory', openapi.IN_QUERY, description="فیلتر بر اساس زیرشاخه مقاله", type=openapi.TYPE_STRING, required=False),
-        openapi.Parameter('sort', openapi.IN_QUERY, description="مرتب‌سازی بر اساس", type=openapi.TYPE_STRING, enum=['view', 'updated'], required=False),
-        openapi.Parameter('popular', openapi.IN_QUERY, description="فیلتر مقالات محبوب", type=openapi.TYPE_BOOLEAN, required=False),
-        openapi.Parameter('engaging', openapi.IN_QUERY, description="فیلتر مقالات جذاب", type=openapi.TYPE_BOOLEAN, required=False),
-        openapi.Parameter('publishing', openapi.IN_QUERY, description="فیلتر مقالات در حال انتشار", type=openapi.TYPE_BOOLEAN, required=False),
-    ])
     @swagger_auto_schema(
+        manual_parameters=[
+            openapi.Parameter('q', openapi.IN_QUERY, description="عبارت جستجو", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('category', openapi.IN_QUERY, description="فیلتر بر اساس دسته‌بندی مقاله", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('subcategory', openapi.IN_QUERY, description="فیلتر بر اساس زیرشاخه مقاله", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('sort', openapi.IN_QUERY, description="مرتب‌سازی بر اساس", type=openapi.TYPE_STRING, enum=['view', 'updated'], required=False),
+            openapi.Parameter('popular', openapi.IN_QUERY, description="فیلتر مقالات محبوب", type=openapi.TYPE_BOOLEAN, required=False),
+            openapi.Parameter('engaging', openapi.IN_QUERY, description="فیلتر مقالات جذاب", type=openapi.TYPE_BOOLEAN, required=False),
+            openapi.Parameter('publishing', openapi.IN_QUERY, description="فیلتر مقالات در حال انتشار", type=openapi.TYPE_BOOLEAN, required=False),
+        ],
         operation_summary="دریافت لیست مقالات",
         operation_description="این API لیستی از مقالات را با امکان فیلتر، جستجو، مرتب‌سازی و انتخاب بر اساس دسته‌بندی و زیرشاخه برمی‌گرداند.",
         tags=['article']
@@ -98,6 +98,7 @@ class ArticleListView(ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+    # بقیه متدها بدون تغییر بمانند
     def get_queryset(self):
         publishing_param = self.request.query_params.get('publishing')
         if publishing_param and publishing_param.lower() == 'true':
@@ -159,7 +160,6 @@ class ArticleListView(ListAPIView):
             queryset = queryset.order_by('-updated', '-published_date', '-created')
 
         return queryset
-
 
 class ArticleRetrieveView(RetrieveAPIView):
     queryset = Article.published.prefetch_related('tags').select_related('author').all()
