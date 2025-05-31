@@ -5,20 +5,10 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.generics import (
-    ListAPIView,
-    RetrieveAPIView,
-    ListCreateAPIView,
-)
+from rest_framework.generics import ListAPIView, RetrieveAPIView, ListCreateAPIView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from .models import (
-    StoryCategory,
-    ArticleCategory,
-    ArticleSubCategory,
-    Article,
-    Comment,
-)
+from .models import StoryCategory, ArticleCategory, ArticleSubCategory, Article, Comment
 from .serializers import (
     StoryCategorySerializer,
     ArticleCategoryListSerializer,
@@ -28,7 +18,6 @@ from .serializers import (
     CommentSerializer,
 )
 
-# Create your views here.
 
 class StoryCategoryListView(ListAPIView):
     queryset = StoryCategory.has_story.prefetch_related('stories').all()
@@ -93,56 +82,13 @@ class ArticleListView(ListAPIView):
     serializer_class = ArticleListSerializer
 
     @swagger_auto_schema(manual_parameters=[
-        openapi.Parameter(
-            'q',
-            openapi.IN_QUERY,
-            description="عبارت جستجو",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'category',
-            openapi.IN_QUERY,
-            description="فیلتر بر اساس دسته‌بندی مقاله",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'subcategory',
-            openapi.IN_QUERY,
-            description="فیلتر بر اساس زیرشاخه مقاله",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'sort',
-            openapi.IN_QUERY,
-            description="مرتب‌سازی بر اساس",
-            type=openapi.TYPE_STRING,
-            enum=['view', 'updated'],
-            required=False,
-        ),
-        openapi.Parameter(
-            'popular',
-            openapi.IN_QUERY,
-            description="فیلتر مقالات محبوب",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-        openapi.Parameter(
-            'engaging',
-            openapi.IN_QUERY,
-            description="فیلتر مقالات جذاب",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-        openapi.Parameter(
-            'publishing',
-            openapi.IN_QUERY,
-            description="فیلتر مقالات در حال انتشار",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
+        openapi.Parameter('q', openapi.IN_QUERY, description="عبارت جستجو", type=openapi.TYPE_STRING, required=False),
+        openapi.Parameter('category', openapi.IN_QUERY, description="فیلتر بر اساس دسته‌بندی مقاله", type=openapi.TYPE_STRING, required=False),
+        openapi.Parameter('subcategory', openapi.IN_QUERY, description="فیلتر بر اساس زیرشاخه مقاله", type=openapi.TYPE_STRING, required=False),
+        openapi.Parameter('sort', openapi.IN_QUERY, description="مرتب‌سازی بر اساس", type=openapi.TYPE_STRING, enum=['view', 'updated'], required=False),
+        openapi.Parameter('popular', openapi.IN_QUERY, description="فیلتر مقالات محبوب", type=openapi.TYPE_BOOLEAN, required=False),
+        openapi.Parameter('engaging', openapi.IN_QUERY, description="فیلتر مقالات جذاب", type=openapi.TYPE_BOOLEAN, required=False),
+        openapi.Parameter('publishing', openapi.IN_QUERY, description="فیلتر مقالات در حال انتشار", type=openapi.TYPE_BOOLEAN, required=False),
     ])
     @swagger_auto_schema(
         operation_summary="دریافت لیست مقالات",
@@ -153,12 +99,14 @@ class ArticleListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        if is_publishing := self.request.query_params.get('publishing'):
+        publishing_param = self.request.query_params.get('publishing')
+        if publishing_param and publishing_param.lower() == 'true':
             queryset = Article.publishings.order_by('published_date')
         else:
             queryset = Article.published.order_by('-published_date', '-created')
 
-        if search_query := self.request.query_params.get('q'):
+        search_query = self.request.query_params.get('q')
+        if search_query:
             search_query_obj = SearchQuery(search_query)
             search_vector = (
                 SearchVector('title', weight='A') +
@@ -169,45 +117,46 @@ class ArticleListView(ListAPIView):
 
             queryset = queryset.annotate(
                 search=search_vector + tags_vector,
-                rank=SearchRank(
-                    search_vector + tags_vector,
-                    search_query_obj
-                )
-            ).filter(rank__gte=0.3)\
-            .order_by('-rank')
+                rank=SearchRank(search_vector + tags_vector, search_query_obj)
+            ).filter(rank__gte=0.3).order_by('-rank')
 
-        if category_slug := self.request.query_params.get('category'):
+        category_slug = self.request.query_params.get('category')
+        subcategory_slug = self.request.query_params.get('subcategory')
+
+        if category_slug:
             category = get_object_or_404(
                 ArticleCategory.objects.prefetch_related('subcategories'),
                 slug=category_slug
             )
+            content_type_category = ContentType.objects.get_for_model(ArticleCategory)
+            content_type_subcategory = ContentType.objects.get_for_model(ArticleSubCategory)
 
             queryset = queryset.filter(
-                Q(category_content_type__model=category.__class__.__name__.lower(), category_object_id=category.id) |
-                Q(category_content_type__model=ArticleSubCategory.__name__.lower(), category_object_id__in=category.subcategories.values('id'))
+                Q(category_content_type=content_type_category, category_object_id=category.id) |
+                Q(category_content_type=content_type_subcategory, category_object_id__in=category.subcategories.values_list('id', flat=True))
             )
+        elif subcategory_slug:
+            subcategory = get_object_or_404(ArticleSubCategory, slug=subcategory_slug)
+            content_type_subcategory = ContentType.objects.get_for_model(ArticleSubCategory)
 
-        elif subcategory_slug := self.request.query_params.get('subcategory'):
-            subcategory_content_type = ContentType.objects.get_for_model(ArticleSubCategory)
-            category = get_object_or_404(
-                ArticleSubCategory,
-                slug=subcategory_slug
-            )
             queryset = queryset.filter(
-                category_content_type=subcategory_content_type,
-                category_object_id=category.id
+                category_content_type=content_type_subcategory,
+                category_object_id=subcategory.id
             )
 
-        if is_popular := self.request.query_params.get('popular'):
+        popular_param = self.request.query_params.get('popular')
+        if popular_param and popular_param.lower() == 'true':
             queryset = queryset.filter(is_popular=True)
-        elif is_engaging := self.request.query_params.get('engaging'):
+
+        engaging_param = self.request.query_params.get('engaging')
+        if engaging_param and engaging_param.lower() == 'true':
             queryset = queryset.filter(is_engaging=True)
 
-        if sort_by := self.request.query_params.get('sort'):
-            if sort_by == 'view':
-                queryset = queryset.order_by('-view_count', '-published_date', '-created')
-            elif sort_by == 'updated':
-                queryset = queryset.order_by('-updated', '-published_date', '-created')
+        sort_by = self.request.query_params.get('sort')
+        if sort_by == 'view':
+            queryset = queryset.order_by('-view_count', '-published_date', '-created')
+        elif sort_by == 'updated':
+            queryset = queryset.order_by('-updated', '-published_date', '-created')
 
         return queryset
 
@@ -242,28 +191,13 @@ class CommentListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         slug = self.kwargs.get('slug')
-
-        return Comment.approved\
-            .select_related('article')\
-            .prefetch_related('replies')\
-            .filter(article__slug=slug)\
-            .filter(reply_to__isnull=True)
+        return Comment.approved.select_related('article').prefetch_related('replies').filter(article__slug=slug, reply_to__isnull=True)
 
     def post(self, request, *args, **kwargs):
         slug = self.kwargs.get('slug')
+        article = get_object_or_404(Article, slug=slug)
 
-        article = get_object_or_404(
-            Article,
-            slug=slug,
-        )
-
-        serializer = self.get_serializer(
-            data=request.data,
-            context={
-                'article': article,
-            }
-        )
-
+        serializer = self.get_serializer(data=request.data, context={'article': article})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
