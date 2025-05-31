@@ -29,13 +29,20 @@ from .serializers import (
 )
 
 # Create your views here.
+
 class StoryCategoryListView(ListAPIView):
     queryset = StoryCategory.has_story.prefetch_related('stories').all()
     permission_classes = (AllowAny,)
     serializer_class = StoryCategorySerializer
 
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست دسته‌بندی‌های داستان‌ها",
+        operation_description="این API تمامی دسته‌بندی‌های داستان‌هایی که داستان دارند را همراه با لیست داستان‌هایشان برمی‌گرداند.",
+        tags=['story-blog']
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 class StoryCategoryRetrieveView(RetrieveAPIView):
     queryset = StoryCategory.has_story.prefetch_related('stories').all()
@@ -43,16 +50,28 @@ class StoryCategoryRetrieveView(RetrieveAPIView):
     serializer_class = StoryCategorySerializer
     lookup_field = 'pk'
 
+    @swagger_auto_schema(
+        operation_summary="دریافت جزئیات یک دسته‌بندی داستان",
+        operation_description="این API جزئیات یک دسته‌بندی داستان مشخص به همراه داستان‌های مرتبط را برمی‌گرداند.",
+        tags=['story-blog']
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 class ArticleCategoryListView(ListAPIView):
     queryset = ArticleCategory.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = ArticleCategoryListSerializer
 
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست دسته‌بندی‌های مقالات",
+        operation_description="این API تمامی دسته‌بندی‌های مقالات را برمی‌گرداند.",
+        tags=['article']
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 class ArticleCategoryRetrieveView(RetrieveAPIView):
     queryset = ArticleCategory.objects.prefetch_related('subcategories').all()
@@ -60,12 +79,78 @@ class ArticleCategoryRetrieveView(RetrieveAPIView):
     serializer_class = ArticleCategoryRetrieveSerializer
     lookup_field = 'pk'
 
+    @swagger_auto_schema(
+        operation_summary="دریافت جزئیات یک دسته‌بندی مقاله",
+        operation_description="این API جزئیات یک دسته‌بندی مقاله به همراه زیرشاخه‌های آن را برمی‌گرداند.",
+        tags=['article']
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 class ArticleListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = ArticleListSerializer
+
+    @swagger_auto_schema(manual_parameters=[
+        openapi.Parameter(
+            'q',
+            openapi.IN_QUERY,
+            description="عبارت جستجو",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            'category',
+            openapi.IN_QUERY,
+            description="فیلتر بر اساس دسته‌بندی مقاله",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            'subcategory',
+            openapi.IN_QUERY,
+            description="فیلتر بر اساس زیرشاخه مقاله",
+            type=openapi.TYPE_STRING,
+            required=False,
+        ),
+        openapi.Parameter(
+            'sort',
+            openapi.IN_QUERY,
+            description="مرتب‌سازی بر اساس",
+            type=openapi.TYPE_STRING,
+            enum=['view', 'updated'],
+            required=False,
+        ),
+        openapi.Parameter(
+            'popular',
+            openapi.IN_QUERY,
+            description="فیلتر مقالات محبوب",
+            type=openapi.TYPE_BOOLEAN,
+            required=False,
+        ),
+        openapi.Parameter(
+            'engaging',
+            openapi.IN_QUERY,
+            description="فیلتر مقالات جذاب",
+            type=openapi.TYPE_BOOLEAN,
+            required=False,
+        ),
+        openapi.Parameter(
+            'publishing',
+            openapi.IN_QUERY,
+            description="فیلتر مقالات در حال انتشار",
+            type=openapi.TYPE_BOOLEAN,
+            required=False,
+        ),
+    ])
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست مقالات",
+        operation_description="این API لیستی از مقالات را با امکان فیلتر، جستجو، مرتب‌سازی و انتخاب بر اساس دسته‌بندی و زیرشاخه برمی‌گرداند.",
+        tags=['article']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         if is_publishing := self.request.query_params.get('publishing'):
@@ -74,7 +159,7 @@ class ArticleListView(ListAPIView):
             queryset = Article.published.order_by('-published_date', '-created')
 
         if search_query := self.request.query_params.get('q'):
-            search_query = SearchQuery(search_query)
+            search_query_obj = SearchQuery(search_query)
             search_vector = (
                 SearchVector('title', weight='A') +
                 SearchVector('slug', weight='A') +
@@ -86,16 +171,10 @@ class ArticleListView(ListAPIView):
                 search=search_vector + tags_vector,
                 rank=SearchRank(
                     search_vector + tags_vector,
-                    search_query
+                    search_query_obj
                 )
             ).filter(rank__gte=0.3)\
             .order_by('-rank')
-
-            # queryset = queryset.filter(
-            #     Q(title__icontains=search_query) | 
-            #     Q(slug__icontains=search_query) | 
-            #     Q(body__icontains=search_query)
-            # )
 
         if category_slug := self.request.query_params.get('category'):
             category = get_object_or_404(
@@ -132,60 +211,6 @@ class ArticleListView(ListAPIView):
 
         return queryset
 
-    @swagger_auto_schema(manual_parameters=[
-        openapi.Parameter(
-            'q',
-            openapi.IN_QUERY,
-            description="search term",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'category',
-            openapi.IN_QUERY,
-            description="Filter by category",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'subcategory',
-            openapi.IN_QUERY,
-            description="Filter by subcategory",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'sort',
-            openapi.IN_QUERY,
-            description="Sort by",
-            type=openapi.TYPE_STRING,
-            enum=['view', 'updated'],
-            required=False,
-        ),
-        openapi.Parameter(
-            'popular',
-            openapi.IN_QUERY,
-            description="Filter popular blogs",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-        openapi.Parameter(
-            'engaging',
-            openapi.IN_QUERY,
-            description="Filter engaging blogs",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-        openapi.Parameter(
-            'publishing',
-            openapi.IN_QUERY,
-            description="Filter publishing blogs",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-    ])
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
 
 class ArticleRetrieveView(RetrieveAPIView):
     queryset = Article.published.prefetch_related('tags').select_related('author').all()
@@ -194,12 +219,26 @@ class ArticleRetrieveView(RetrieveAPIView):
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
 
+    @swagger_auto_schema(
+        operation_summary="دریافت جزئیات یک مقاله",
+        operation_description="این API جزئیات کامل یک مقاله منتشر شده بر اساس slug را برمی‌گرداند.",
+        tags=['article']
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 class CommentListCreateView(ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = CommentSerializer
+
+    @swagger_auto_schema(
+        operation_summary="دریافت و ثبت کامنت‌ها",
+        operation_description="این API کامنت‌های تایید شده مربوط به یک مقاله را برمی‌گرداند و امکان ثبت کامنت جدید را نیز فراهم می‌کند.",
+        tags=['comment-blog']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         slug = self.kwargs.get('slug')
@@ -209,9 +248,6 @@ class CommentListCreateView(ListCreateAPIView):
             .prefetch_related('replies')\
             .filter(article__slug=slug)\
             .filter(reply_to__isnull=True)
-
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         slug = self.kwargs.get('slug')
