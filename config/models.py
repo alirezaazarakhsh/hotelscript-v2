@@ -304,7 +304,7 @@ class Slide(models.Model):
 
     class Meta:
         verbose_name = 'اسلاید'
-        verbose_name_plural = 'اسلایدها'
+        verbose_name_plural = 'اسلایدهای صفحه اصلی'
         ordering = ('order',)
     
     def __str__(self):
@@ -641,7 +641,7 @@ class FakeComment(models.Model):
     
     class Meta:
         verbose_name = 'نظر'
-        verbose_name_plural = '"نظرات مشتریان صفحه اصلی '
+        verbose_name_plural = 'نظرات مشتریان صفحه اصلی '
     
     def __str__(self):
         return f'{self.commenter}'
@@ -697,7 +697,7 @@ class ComingSoon(models.Model):
     )
     class Meta:
         verbose_name = 'کامینگ سون'
-        verbose_name_plural = 'کامینگ سون'
+        verbose_name_plural = 'کامینگ سون '
     
     def __str__(self):
         return f'کامینگ سون'

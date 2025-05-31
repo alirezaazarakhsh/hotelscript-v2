@@ -127,13 +127,14 @@ class SectionListView(ListAPIView):
 
 
 
+# ای پی ای بخش تنظیمات و کانفیگ وب سایت برای هدر و فوتر
 class SiteConfigRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = SiteConfigSerializer
 
     @swagger_auto_schema(
-        operation_summary="دریافت تنظیمات سایت",
-        operation_description="این API تنظیمات کلی سایت را بازمی‌گرداند.",
+        operation_summary="دریافت تنظیمات بخش کانفیگ وب سایت",
+        operation_description="این API تنظیمات کلی سایت را بازمی‌گرداند که شامل تنظیمات هدر و فوتر می باشد ",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
@@ -152,8 +153,8 @@ class SlideListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست اسلایدهای فعال",
-        operation_description="این API اسلایدهای فعال در سایت را بدون صفحه‌بندی بازمی‌گرداند.",
+        operation_summary="دریافت اسلایدر های صفحه اصلی ",
+        operation_description="این API اسلایدهای فعال در صفحه اصلی را بر می گرداند",
         tags=['home']
     )
     def get(self, request, *args, **kwargs):
@@ -179,6 +180,7 @@ class StatisticListView(ListAPIView):
 
 
 
+
 class ChooseReasonListView(ListAPIView):
     queryset = ChooseReason.objects.all()
     permission_classes = (AllowAny,)
@@ -192,6 +194,8 @@ class ChooseReasonListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
     
     
     
