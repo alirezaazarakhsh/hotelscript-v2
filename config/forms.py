@@ -1,4 +1,3 @@
-from tracemalloc import Statistic
 from django import forms
 from .models import (
     Section,
@@ -10,6 +9,7 @@ from .models import (
     License,
     FakeComment,
     ComingSoon,
+    Statistic,
 )
 
 class SectionForm(forms.ModelForm):
