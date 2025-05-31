@@ -98,6 +98,8 @@ class QuickAccessListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
 class SectionListView(ListAPIView):
     queryset = Section.objects.all()
     permission_classes = (AllowAny,)
@@ -123,6 +125,8 @@ class SectionListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
 class SiteConfigRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = SiteConfigSerializer
@@ -137,6 +141,8 @@ class SiteConfigRetrieveView(RetrieveAPIView):
 
     def get_object(self):
         return SiteConfig.objects.first()
+
+
 
 
 class SlideListView(ListAPIView):
@@ -154,6 +160,8 @@ class SlideListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
 class StatisticListView(ListAPIView):
     queryset = Statistic.objects.all()
     permission_classes = (AllowAny,)
@@ -169,6 +177,8 @@ class StatisticListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
 class ChooseReasonListView(ListAPIView):
     queryset = ChooseReason.objects.all()
     permission_classes = (AllowAny,)
@@ -182,8 +192,11 @@ class ChooseReasonListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
 
-
+# ای پی ای سوالات متداول وب سایت برای صفحات 
 class FAQListView(ListAPIView):
     queryset = FAQ.objects.all()
     permission_classes = (AllowAny,)
@@ -209,6 +222,10 @@ class FAQListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
+
+# ای پی ای خدمات وب سایت در صفحه در باره ما
 class ServiceListView(ListAPIView):
     queryset = Service.objects.all()
     permission_classes = (AllowAny,)
@@ -222,6 +239,8 @@ class ServiceListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
 
 
 
@@ -239,6 +258,8 @@ class ContactInfoListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
 
 
 
@@ -260,6 +281,8 @@ class SocialMediaListView(ListAPIView):
 
 
 
+
+# ای پی ای لیست بنر های وب سایت 
 class BannerListView(ListAPIView):
     queryset = Banner.objects.all()
     permission_classes = (AllowAny,)
@@ -287,12 +310,14 @@ class BannerListView(ListAPIView):
 
 
 
+
+#ای پی ای دریافت اینماد درفوتر وب سایت
 class EnamadLicenseRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = EnamadLicenseSerializer
 
     @swagger_auto_schema(
-        operation_summary="دریافت نماد اعتماد",
+        operation_summary="دریافت نماد اعتماد در فوتر سایت",
         operation_description="این API اطلاعات نماد اعتماد الکترونیکی سایت را بازمی‌گرداند.",
         tags=['static']
     )
@@ -305,6 +330,8 @@ class EnamadLicenseRetrieveView(RetrieveAPIView):
 
 
 
+
+#ای پی ای لیست مجوز های فوتر 
 class LicenseListView(ListAPIView):
     queryset = License.objects.all()
     permission_classes = (AllowAny,)
@@ -312,8 +339,8 @@ class LicenseListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست مجوزها",
-        operation_description="این API لیست مجوزهای سایت را بازمی‌گرداند.",
+        operation_summary="دریافت لیست مجوزها در فوتر ",
+        operation_description="این API لیست مجوزهای سایت را در فوتر وب سایت باز میگرداند",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
@@ -337,6 +364,7 @@ class AdvantageListView(ListAPIView):
         return super().get(request, *args, **kwargs)
     
     
+    
 
 # api اضافه کردن کامنت کاربر در صفحه اصلی 
 class FakeCommentListView(ListAPIView):
@@ -356,7 +384,7 @@ class FakeCommentListView(ListAPIView):
     
     
 
-
+#ای پی ای صفحه قوانین و مقررات 
 class RuleListView(ListAPIView):
     queryset = Rule.objects.all()
     permission_classes = (AllowAny,)
@@ -364,14 +392,17 @@ class RuleListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت قوانین سایت",
+        operation_summary="دریافت قوانین و مقررات وب سایت ",
         operation_description="این API قوانین و مقررات سایت را بازمی‌گرداند.",
         tags=['rule']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
 
-
+# ای پی ای مربوط به ساخت دسترسی برای کاربران سایت 
 class UserLevelListView(ListAPIView):
     queryset = UserLevel.objects.all()
     permission_classes = (AllowAny,)
