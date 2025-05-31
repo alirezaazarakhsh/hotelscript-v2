@@ -33,6 +33,7 @@ from .forms import (
     LicenseForm,
     FakeCommentForm,
     ComingSoonAdminForm,
+    StatisticAdminForm,
 )
 
 

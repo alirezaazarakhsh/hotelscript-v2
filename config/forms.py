@@ -132,3 +132,10 @@ class StatisticAdminForm(forms.ModelForm):
                 f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' 
                 if self.instance.image else ""
             )
+            
+
+
+class StatisticAdminForm(forms.ModelForm):
+    class Meta:
+        model = Statistic
+        fields = '__all__'
