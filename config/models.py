@@ -628,8 +628,8 @@ class Advantage(models.Model):
     )
     
     class Meta:
-        verbose_name = 'مزیت'
-        verbose_name_plural = 'مزایا'
+        verbose_name = 'آپشن'
+        verbose_name_plural = 'آپشن های صفحه اصلی'
     
     def __str__(self):
         return f'{self.title}'

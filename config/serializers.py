@@ -67,11 +67,24 @@ class SlideSerializer(serializers.ModelSerializer):
             'is_active',
         )
 
+class StatisticItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StatisticItem
+        fields = (
+            'title',
+            'subtitle',
+        )
+
 class StatisticSerializer(serializers.ModelSerializer):
+    items = StatisticItemSerializer(many=True, read_only=True)
+
     class Meta:
         model = Statistic
-        exclude = (
-            'id',
+        fields = (
+            'title',
+            'description',
+            'image',
+            'items',
         )
 
 class ChooseReasonSerializer(serializers.ModelSerializer):
@@ -158,3 +171,16 @@ class UserLevelSerializer(serializers.ModelSerializer):
         exclude = (
             'id',
         )
+        
+       
+       
+       
+class ComingSoonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComingSoon
+        exclude = (
+            'id',
+        ) 
+
+
+

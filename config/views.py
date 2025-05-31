@@ -5,6 +5,7 @@ from drf_yasg import openapi
 
 from .filters import PageFilter
 from .serializers import (
+    ComingSoonSerializer,
     PageSerializer,
     HeaderMenuSerializer,
     QuickAccessSerializer,
@@ -26,6 +27,7 @@ from .serializers import (
     UserLevelSerializer,
 )
 from .models import (
+    ComingSoon,
     Page,
     HeaderMenu,
     QuickAccess,
@@ -171,8 +173,8 @@ class StatisticListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت آمار سایت",
-        operation_description="این API آمارهای کلی درباره سایت را بازمی‌گرداند.",
+        operation_summary="دریافت تنظیمات سکشن اول در باره ما",
+        operation_description="این API تمامی بخش های مربوط به سکشن اول صفحه درباره ما را باز میگرداند ",
         tags=['about']
     )
     def get(self, request, *args, **kwargs):
@@ -361,8 +363,8 @@ class AdvantageListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت مزایا",
-        operation_description="این API مزایای سایت را برای صفحه اصلی بازمی‌گرداند.",
+        operation_summary="دریافت آپشن های صفحه اصلی ",
+        operation_description="این API برای سکشن آپشن های صفحه اصلی می باشد ",
         tags=['home']
     )
     def get(self, request, *args, **kwargs):
@@ -418,6 +420,24 @@ class UserLevelListView(ListAPIView):
         operation_summary="دریافت سطح‌های کاربری",
         operation_description="این API سطوح مختلف کاربری را بازمی‌گرداند.",
         tags=['user']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+
+#ای پی ای کامینگ سون 
+class ComingSoonView(ListAPIView):
+    queryset = ComingSoon.objects.filter(is_active=True)
+    permission_classes = (AllowAny,)
+    serializer_class = ComingSoonSerializer
+    pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت اطلاعات صفحه کامینگ سون",
+        operation_description="این API اطلاعات مربوط به صفحه‌ی کامینگ سون شامل لوگو، پس‌زمینه، عنوان و... را برای نمایش در صفحه‌ی اصلی باز می‌گرداند.",
+        tags=['commingsoon']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
