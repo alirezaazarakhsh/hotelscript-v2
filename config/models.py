@@ -330,7 +330,7 @@ class Statistic(models.Model):
     )
     image = models.ImageField(
         verbose_name=_('تصویر'),
-        upload_to='about_us/',
+        upload_to='/image/about_us/',
         blank=True,
         null=True,
     )
