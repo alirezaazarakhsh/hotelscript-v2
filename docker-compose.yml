@@ -7,7 +7,6 @@ services:
     command: bash /app/start.sh && python /app/manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
-      - ./media:/app/media
       - /var/hotelscript-v2/media:/app/media  
     ports:
       - "8000:8000"
@@ -56,7 +55,7 @@ services:
 
 volumes:
   postgres_data:
-  media_storage:
+    driver: local
 
 networks:
   app_network:
