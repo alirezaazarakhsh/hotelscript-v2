@@ -8,6 +8,7 @@ services:
     volumes:
       - .:/app
       - ./media:/app/media
+      - /var/hotelscript-v2/media:/app/media  
     ports:
       - "8000:8000"
     environment:
