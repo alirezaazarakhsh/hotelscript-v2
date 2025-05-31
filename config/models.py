@@ -317,24 +317,54 @@ class Slide(models.Model):
 
 
 
-#مدل بخش آمار و ارقام درباره ما
+# مدل کانفیگ درباره ما
 class Statistic(models.Model):
     title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=32,
-    )
-    subtitle = models.CharField(
-        verbose_name=_('زیرعنوان'),
+        verbose_name=_('عنوان اصلی'),
         max_length=64,
+    )
+    description = models.TextField(
+        verbose_name=_('توضیحات'),
+        blank=True,
+        null=True,
+    )
+    image = models.ImageField(
+        verbose_name=_('تصویر'),
+        upload_to='about_us/',
+        blank=True,
+        null=True,
     )
 
     class Meta:
-        verbose_name = 'آمار و ارقام'
-        verbose_name_plural = 'آمار و ارقام'
-    
+        verbose_name = 'کانفیگ درباره ما'
+        verbose_name_plural = 'کانفیگ درباره ما'
+
     def __str__(self):
         return self.title
 
+
+class StatisticItem(models.Model):
+    statistic = models.ForeignKey(
+        Statistic,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='مربوط به',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان آیتم'),
+        max_length=64,
+    )
+    subtitle = models.CharField(
+        verbose_name=_('زیرعنوان آیتم'),
+        max_length=128,
+    )
+
+    class Meta:
+        verbose_name = 'آیتم آماری'
+        verbose_name_plural = 'آیتم‌های آماری'
+
+    def __str__(self):
+        return self.title
 
 
 

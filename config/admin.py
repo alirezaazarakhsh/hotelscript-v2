@@ -20,6 +20,7 @@ from .models import (
     FakeComment,
     Rule,
     ComingSoon,
+    StatisticItem,
     UserLevel,
 )
 from .forms import (
@@ -138,13 +139,20 @@ class SlideAdmin(admin.ModelAdmin):
         'is_active',
     )
 
+class StatisticItemInline(admin.TabularInline):
+    model = StatisticItem
+    extra = 1
+
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
-        'subtitle',
     )
+    inlines = [StatisticItemInline]
+
+    def has_add_permission(self, request):
+        return not Statistic.objects.exists()
 
 @admin.register(ChooseReason)
 class ChooseReasonAdmin(admin.ModelAdmin):
