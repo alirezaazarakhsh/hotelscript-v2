@@ -9,7 +9,7 @@ class ContactMessageCreateView(CreateAPIView):
     serializer_class = ContactMessageSerializer
 
     @swagger_auto_schema(
-        operation_summary="رسال پیام در تماس با ما",
+        operation_summary="ارسال پیام در تماس با ما",
         operation_description="این API برای ارسال پیام در صفحه تماس با ما می باشد ",
         tags=['contact']
     )
