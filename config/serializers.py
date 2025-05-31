@@ -18,6 +18,7 @@ from .models import (
     Advantage,
     FakeComment,
     Rule,
+    StatisticItem,
     UserLevel,
 )
 
