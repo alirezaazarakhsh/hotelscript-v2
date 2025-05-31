@@ -47,6 +47,8 @@ from .models import (
     UserLevel,
 )
 
+
+# ای پی ای لیست صفحات 
 class PageListView(ListAPIView):
     queryset = Page.objects.all()
     permission_classes = (AllowAny,)
@@ -54,14 +56,16 @@ class PageListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست صفحات",
+        operation_summary="دریافت لیست صفحات ایجاد شده ",
         operation_description="این API تمامی صفحات موجود در سایت را بدون صفحه‌بندی بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
 
-
+# ای پی ای منو های هدر 
 class HeaderMenuListView(ListAPIView):
     queryset = HeaderMenu.objects.all()
     permission_classes = (AllowAny,)
@@ -77,6 +81,8 @@ class HeaderMenuListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+#ای پی ای درسترسی های سریع
 class QuickAccessListView(ListAPIView):
     queryset = QuickAccess.objects.all()
     permission_classes = (AllowAny,)
@@ -317,8 +323,10 @@ class AdvantageListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
 
-
+# api اضافه کردن کامنت کاربر در صفحه اصلی 
 class FakeCommentListView(ListAPIView):
     queryset = FakeComment.objects.all()
     permission_classes = (AllowAny,)
@@ -326,12 +334,15 @@ class FakeCommentListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت دیدگاه‌های جعلی",
-        operation_description="این API دیدگاه‌های جعلی برای صفحه اصلی سایت را بازمی‌گرداند.",
+        operation_summary="دریافت دیدگاه‌های مشتریان در صفحه اصلی",
+        operation_description="این api کامنت هایی که خودمان تنظیم میکنیم را در صفحه اصلی نشان میدهد",
         tags=['home']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
 
 
 class RuleListView(ListAPIView):

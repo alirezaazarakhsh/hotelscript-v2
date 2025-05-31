@@ -48,7 +48,7 @@ SOCIAL_MEDIA_OPTIONS = (
     ('x', 'X'),
 )
 
-# Create your models here.
+# مدل اضافه کردن صفحه جدید در پروژه 
 class Page(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -75,7 +75,7 @@ class Page(models.Model):
     class Meta:
         verbose_name = 'صفحه'
         verbose_name_plural = 'صفحات'
-
+        
     def __str__(self):
         return self.title
     
@@ -84,6 +84,10 @@ class Page(models.Model):
             self.path = '/' + self.path
         super(Page, self).save(*args, **kwargs)
     
+    
+    
+    
+# مدل منوی هدر 
 class HeaderMenu(models.Model):
     MAX_ALLOWED_INSTANCES = 5
 
@@ -174,6 +178,8 @@ class QuickAccess(models.Model):
 
         super().save(*args, **kwargs)
 
+
+
 class Section(models.Model):
     section = models.CharField(
         verbose_name=_('بخش'),
@@ -219,6 +225,9 @@ class Section(models.Model):
     def __str__(self):
         return f'{self.title} - {self.page}'
 
+
+
+# مدل کانفیگ سایت 
 class SiteConfig(models.Model):
     header_logo = models.ImageField(
         verbose_name=_('لوگوی هدر'),
@@ -262,6 +271,8 @@ class SiteConfig(models.Model):
             raise ValidationError('تنها یک کانفیگ برای سایت میتوانید بسازید!')
         return super(SiteConfig, self).save(*args, **kwargs)
 
+
+#مدل بنر های وب سایت 
 class Slide(models.Model):
     order = models.PositiveSmallIntegerField(
         verbose_name=_('ترتیب'),
@@ -308,6 +319,9 @@ class Slide(models.Model):
 
         super().save(*args, **kwargs)
 
+
+
+#مدل بخش آمار و ارقام درباره ما
 class Statistic(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -325,6 +339,8 @@ class Statistic(models.Model):
     def __str__(self):
         return self.title
 
+
+# مدل دلایل انتخاب 
 class ChooseReason(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -346,6 +362,8 @@ class ChooseReason(models.Model):
     def __str__(self):
         return self.title
 
+
+#مدل سوالات متداول بر اساس هر پیج 
 class FAQ(models.Model):
     question = models.TextField(
         verbose_name=_('سوال'),
@@ -371,6 +389,8 @@ class FAQ(models.Model):
     def __str__(self):
         return self.question
 
+
+# مدل خدمات درباره ما
 class Service(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -386,11 +406,13 @@ class Service(models.Model):
 
     class Meta:
         verbose_name = 'خدمت'
-        verbose_name_plural = 'خدمات'
+        verbose_name_plural = 'خدمات درباره ما'
     
     def __str__(self):
         return self.title
 
+
+# مدل راه های ارتباطی برای صفحه تماس با ما و بخشی از فوتر 
 class ContactInfo(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -428,6 +450,7 @@ class ContactInfo(models.Model):
 
 
 
+# مدل شبکه های احتماعی در تماس با ما و فوتر 
 class SocialMedia(models.Model):
     type = models.CharField(
         verbose_name=_('عنوان'),
@@ -462,8 +485,9 @@ class SocialMedia(models.Model):
         return self.link
 
     
+    
 
-
+# مدل اضافه کردن بنر در صفحات 
 class Banner(models.Model):
     order = models.PositiveSmallIntegerField(
         verbose_name=_('ترتیب'),
@@ -514,6 +538,10 @@ class Banner(models.Model):
 
         super().save(*args, **kwargs)
 
+
+
+
+# مدل کد اینماد در فوتر 
 class EnamadLicense(models.Model):
     code = models.TextField(
         verbose_name=_('کد اینماد'),
@@ -531,6 +559,9 @@ class EnamadLicense(models.Model):
             raise ValidationError('تنها یک کد اینماد میتوانید بسازید!')
         return super(EnamadLicense, self).save(*args, **kwargs)
 
+
+
+# مدل اضافه کردن مجوز در فوتر 
 class License(models.Model):
     image = models.ImageField(
         verbose_name=_('عکس'),
