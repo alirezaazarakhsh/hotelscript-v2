@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'corsheaders',
     'safarname24',
+    'ckeditor',
 ]
 
 MIDDLEWARE = [

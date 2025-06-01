@@ -1,4 +1,5 @@
 from django.utils import timezone
+from ckeditor.fields import RichTextField
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -204,7 +205,7 @@ class Article(models.Model):
         unique=True,
         allow_unicode=True,
     )
-    body = models.TextField(
+    body = RichTextField(
         verbose_name=_('متن'),
     )
     author = models.ForeignKey(
