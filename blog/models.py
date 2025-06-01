@@ -8,6 +8,7 @@ from django.contrib.contenttypes.fields import (
     GenericRelation,
 )
 from authentication.models import Admin
+from reservation.models import Hotel
 from .managers import (
     HasStoryManager,
     PublishedManager,
@@ -73,13 +74,13 @@ class Story(models.Model):
         related_name='stories',
     )
     
-    # hotel = models.ForeignKey(
-    #     Hotel,
-    #     on_delete=models.CASCADE,
-    #     verbose_name=_('هتل'),
-    #     related_name='stories',
-    #     null=True,
-    # )
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='stories',
+        null=True,
+    )
     
 
     created = models.DateTimeField(
