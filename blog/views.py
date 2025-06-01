@@ -202,3 +202,46 @@ class CommentListCreateView(ListCreateAPIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class CommentListCreateView(ListCreateAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CommentSerializer
+
+    @swagger_auto_schema(
+        operation_summary="دریافت و ثبت کامنت‌ها",
+        operation_description="این API کامنت‌های تایید شده مربوط به یک مقاله را برمی‌گرداند و امکان ثبت کامنت جدید را نیز فراهم می‌کند.",
+        tags=['comment-blog']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        slug = self.kwargs.get('slug')
+        return Comment.approved.select_related('article').prefetch_related('replies').filter(article__slug=slug, reply_to__isnull=True)
+
+    @swagger_auto_schema(
+        request_body=CommentSerializer,
+        responses={
+            201: openapi.Response(description="کامنت با موفقیت ثبت شد.", schema=CommentSerializer),
+            400: "خطا در داده‌های ورودی",
+            404: "مقاله با slug مشخص شده یافت نشد."
+        },
+        operation_summary="ثبت کامنت جدید",
+        operation_description=(
+            "این API امکان ارسال کامنت جدید برای مقاله‌ای با slug مشخص شده را فراهم می‌کند. "
+            "داده‌های ورودی باید شامل متن کامنت و در صورت وجود، شناسه کامنت والد باشد. "
+            "کامنت پس از تایید مدیر منتشر خواهد شد."
+        ),
+        tags=['comment-blog']
+    )
+    def post(self, request, *args, **kwargs):
+        slug = self.kwargs.get('slug')
+        article = get_object_or_404(Article, slug=slug)
+
+        serializer = self.get_serializer(data=request.data, context={'article': article})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

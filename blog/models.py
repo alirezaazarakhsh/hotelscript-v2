@@ -23,7 +23,7 @@ class StoryCategory(models.Model):
         unique=True,
     )
     thumbnail = models.ImageField(
-        verbose_name=_('عکس'),
+        verbose_name=_('عکس کاور دسته بندی'),
         upload_to='images/story-categories/',
     )
     order = models.PositiveSmallIntegerField(
@@ -42,6 +42,10 @@ class StoryCategory(models.Model):
         verbose_name = 'دسته استوری'
         verbose_name_plural = 'دسته‌های استوری'
         ordering = ('order',)
+        
+        
+
+
 
     def __str__(self):
         return self.title
@@ -68,6 +72,7 @@ class Story(models.Model):
         verbose_name=_('دسته بندی'),
         related_name='stories',
     )
+    
     # hotel = models.ForeignKey(
     #     Hotel,
     #     on_delete=models.CASCADE,
@@ -75,6 +80,8 @@ class Story(models.Model):
     #     related_name='stories',
     #     null=True,
     # )
+    
+
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
