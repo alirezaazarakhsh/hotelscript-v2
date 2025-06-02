@@ -5,7 +5,7 @@ from .models import (
     Page,
     HeaderMenu,
     QuickAccess,
-    Section,
+    # Section,
     SiteConfig,
     Slide,
     Statistic,
@@ -25,7 +25,6 @@ from .models import (
     UserLevel,
 )
 from .forms import (
-    SectionForm,
     SiteConfigAdminForm,
     SlideAdminForm,
     ChooseReasonForm,
@@ -80,13 +79,6 @@ class QuickAccessAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return QuickAccess.objects.count() < QuickAccess.MAX_ALLOWED_INSTANCES
 
-
-# ثبت مدل Section در ادمین همراه با فرم سفارشی
-@admin.register(Section)
-class SectionAdmin(admin.ModelAdmin):
-    form = SectionForm
-    list_display = ('id', 'title', 'sub_title', 'page')
-    search_fields = ('title', 'sub_title', 'page')
 
 
 # ثبت مدل SiteConfig در ادمین با محدودیت ایجاد تنها یک نمونه

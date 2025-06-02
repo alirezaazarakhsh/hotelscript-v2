@@ -181,50 +181,50 @@ class QuickAccess(models.Model):
 
 
 
-class Section(models.Model):
-    section = models.CharField(
-        verbose_name=_('بخش'),
-        choices=AVAILABLE_SECTIONS,
-        max_length=64,
-    )
-    title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=64,
-    )
-    sub_title = models.CharField(
-        verbose_name=_('زیر عنوان'),
-        max_length=256,
-    )
-    image = models.ImageField(
-        verbose_name=_('عکس'),
-        upload_to='images/sections/',
-        null=True,
-        blank=True,
-    )
-    description = models.TextField(
-        verbose_name=_('توضیحات'),
-        null=True,
-        blank=True,
-    )
-    page = models.ForeignKey(
-        Page,
-        on_delete=models.CASCADE,
-        verbose_name=_('صفحه'),
-        related_name='sections'
-    )
+# class Section(models.Model):
+#     section = models.CharField(
+#         verbose_name=_('بخش'),
+#         choices=AVAILABLE_SECTIONS,
+#         max_length=64,
+#     )
+#     title = models.CharField(
+#         verbose_name=_('عنوان'),
+#         max_length=64,
+#     )
+#     sub_title = models.CharField(
+#         verbose_name=_('زیر عنوان'),
+#         max_length=256,
+#     )
+#     image = models.ImageField(
+#         verbose_name=_('عکس'),
+#         upload_to='images/sections/',
+#         null=True,
+#         blank=True,
+#     )
+#     description = models.TextField(
+#         verbose_name=_('توضیحات'),
+#         null=True,
+#         blank=True,
+#     )
+#     page = models.ForeignKey(
+#         Page,
+#         on_delete=models.CASCADE,
+#         verbose_name=_('صفحه'),
+#         related_name='sections'
+#     )
 
-    class Meta:
-        verbose_name = 'بخش'
-        verbose_name_plural = 'بخش‌ها'
-        constraints = (
-            models.UniqueConstraint(
-                fields=('section', 'page'),
-                name='unique_section_page'
-            ),
-        )
+#     class Meta:
+#         verbose_name = 'بخش'
+#         verbose_name_plural = 'بخش‌ها'
+#         constraints = (
+#             models.UniqueConstraint(
+#                 fields=('section', 'page'),
+#                 name='unique_section_page'
+#             ),
+#         )
     
-    def __str__(self):
-        return f'{self.title} - {self.page}'
+#     def __str__(self):
+#         return f'{self.title} - {self.page}'
 
 
 

@@ -12,7 +12,7 @@ from .serializers import (
     PageSerializer,
     HeaderMenuSerializer,
     QuickAccessSerializer,
-    SectionSerializer,
+    # SectionSerializer,
     SiteConfigSerializer,
     SlideSerializer,
     StatisticSerializer,
@@ -35,7 +35,6 @@ from .models import (
     Page,
     HeaderMenu,
     QuickAccess,
-    Section,
     SiteConfig,
     Slide,
     Statistic,
@@ -99,33 +98,6 @@ class QuickAccessListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت دسترسی های سریع در فوتر",
         operation_description="این API لیست دسترسی ها را در فوتر باز می گرداند",
-        tags=['static']
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-
-
-
-class SectionListView(ListAPIView):
-    queryset = Section.objects.all()
-    permission_classes = (AllowAny,)
-    serializer_class = SectionSerializer
-    pagination_class = None
-    filter_backends = (PageFilter,)
-
-    @swagger_auto_schema(
-        manual_parameters=[
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="فیلتر براساس صفحه",
-                type=openapi.TYPE_STRING,
-                required=True,
-            )
-        ],
-        operation_summary="دریافت لیست بخش‌ها با فیلتر صفحه",
-        operation_description="این API لیست بخش‌ها را بر اساس پارامتر page فیلتر و بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
