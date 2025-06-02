@@ -458,5 +458,8 @@ class LocationView(APIView):
     )
     def get(self, request, *args, **kwargs):
         location = Location.objects.first()
+        if not location:
+            return Response({"detail": "موقعیت تعریف نشده است."}, status=404)
+        
         serializer = LocationSerializer(location)
         return Response(serializer.data)
