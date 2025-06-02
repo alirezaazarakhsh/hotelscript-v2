@@ -105,7 +105,12 @@ class FAQSerializer(serializers.ModelSerializer):
         exclude = ('id',)
 
     def get_page_title(self, obj):
-        return obj.page.title if obj.page else None
+        try:
+            return obj.page.title
+        except Exception:
+            return None
+
+    
     
 class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
