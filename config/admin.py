@@ -262,13 +262,11 @@ class LocationAdmin(admin.ModelAdmin):
     list_display = ('id', 'latitude', 'longitude')
     search_fields = ('latitude', 'longitude')
 
-    # جلوگیری از ساخت بیش از یک موقعیت مکانی
     def save_model(self, request, obj, form, change):
         if not change and Location.objects.exists():
             messages.error(request, 'تنها یک کانفیگ تماس با ما می‌توان ساخت.')
-        else:
-            super().save_model(request, obj, form, change)
+            return
+        super().save_model(request, obj, form, change)
 
-    # اجازه افزودن فقط زمانی که رکوردی وجود ندارد
     def has_add_permission(self, request):
         return not Location.objects.exists()
