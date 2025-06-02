@@ -1,4 +1,5 @@
 from decimal import Decimal
+from ckeditor.fields import RichTextField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -684,7 +685,7 @@ class Rule(models.Model):
         verbose_name=_('عنوان تب'),
         max_length=32,
     )
-    text = models.TextField(
+    text = RichTextField(
         verbose_name=_('متن'),
     )
 
