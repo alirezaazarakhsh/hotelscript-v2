@@ -153,7 +153,7 @@ class SiteConfigRetrieveView(RetrieveAPIView):
 
 #ای پی ای اسلاید ها در صفحه اصلی 
 class SlideListView(ListAPIView):
-    queryset = Slide.objects.all()  # چون actives نداریم
+    queryset = Slide.objects.all().order_by('order')
     permission_classes = (AllowAny,)
     serializer_class = SlideSerializer
     pagination_class = None
@@ -165,7 +165,6 @@ class SlideListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 
 
 
