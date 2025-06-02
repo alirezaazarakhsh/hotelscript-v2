@@ -113,6 +113,8 @@ class HotelAdmin(admin.ModelAdmin):
         'address',
     )
 
+    autocomplete_fields = ['tags', 'recreational_facilities', 'room_facilities']
+
 
 @admin.register(HotelGallery)
 class HotelGalleryAdmin(admin.ModelAdmin):
