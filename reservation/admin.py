@@ -41,12 +41,14 @@ class CityAdmin(admin.ModelAdmin):
         'id',
         'name',
         'slug',
+        'image'
         'province',
     )
     search_fields = (
         'name',
         'slug',
     )
+
 
 @admin.register(HotelType)
 class HotelTypeAdmin(admin.ModelAdmin):

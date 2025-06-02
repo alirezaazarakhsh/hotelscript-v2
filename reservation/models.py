@@ -31,7 +31,7 @@ from datetime import (
     timedelta,
 )
 
-# Create your models here.
+# مدل اضافه کردن استان ها
 class Province(models.Model):
     name = models.CharField(
         verbose_name=_('نام'),
@@ -52,6 +52,12 @@ class Province(models.Model):
         return self.name
 
 
+
+
+# مدل اضافه کردن شهر ها 
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
 class City(models.Model):
     name = models.CharField(
         verbose_name=_('نام'),
@@ -61,6 +67,13 @@ class City(models.Model):
         verbose_name=_('اسلاگ'),
         max_length=32,
         unique=True,
+    )
+    
+    image = models.ImageField(
+        verbose_name=_('عکس شهر'),
+        upload_to='cities/',  
+        null=True,
+        blank=True,
     )
     province = models.ForeignKey(
         Province,
@@ -84,6 +97,9 @@ class City(models.Model):
 
     def __str__(self):
         return self.name
+
+
+
 
 class HotelType(models.Model):
     title = models.CharField(
