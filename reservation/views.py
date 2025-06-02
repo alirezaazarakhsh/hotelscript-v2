@@ -996,7 +996,7 @@ class PassengerListCreateView(ListCreateAPIView):
 
 
 class BestHotelsListCreateView(ListCreateAPIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
     serializer_class = BestHotelsSerializer
 
     def get_queryset(self):
@@ -1006,14 +1006,12 @@ class BestHotelsListCreateView(ListCreateAPIView):
         return BestHotels.objects.all().order_by('order')
 
     @swagger_auto_schema(
-        operation_summary="لیست و ثبت بهترین هتل‌ها",
+        operation_summary="لیست برترین هتل های صفحه اصلی ",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
         - لیست بهترین هتل‌ها را مشاهده کند
         - یک هتل جدید به لیست اضافه کند
-        
-        این عملیات فقط برای کاربران لاگین‌کرده در دسترس است.
-        """,
+                """,
         responses={
             200: BestHotelsSerializer(many=True),
             201: BestHotelsSerializer(),
