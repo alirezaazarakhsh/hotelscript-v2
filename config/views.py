@@ -321,7 +321,7 @@ class BannerListView(ListAPIView):
     def get(self, request, *args, **kwargs):
         page_id = request.query_params.get('page')
 
-        # اگر page_id موجود بود، صفحه را بگیریم، و اگر نبود ارور دهیم یا null
+        # گرفتن عنوان صفحه بر اساس page_id
         page_title = None
         if page_id:
             try:
@@ -330,7 +330,7 @@ class BannerListView(ListAPIView):
             except Page.DoesNotExist:
                 return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
 
-        # سپس queryset را فیلتر کنیم
+        # فیلتر کردن بنرها براساس صفحه
         queryset = Banner.objects.filter(page_id=page_id).order_by('order') if page_id else Banner.objects.none()
         serializer = self.get_serializer(queryset, many=True)
 
@@ -338,7 +338,6 @@ class BannerListView(ListAPIView):
             'page_title': page_title,
             'banners': serializer.data,
         })
-
 
 
 

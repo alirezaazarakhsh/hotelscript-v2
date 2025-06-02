@@ -125,12 +125,12 @@ class SocialMediaSerializer(serializers.ModelSerializer):
         )
 
 class BannerSerializer(serializers.ModelSerializer):
+    page_title = serializers.SerializerMethodField()
     class Meta:
         model = Banner
-        exclude = (
-            'id',
-            'page',
-        )
+        exclude = ('id', 'page',)
+    def get_page_title(self, obj):
+        return obj.page.title if obj.page else None
 
 class EnamadLicenseSerializer(serializers.ModelSerializer):
     class Meta:
