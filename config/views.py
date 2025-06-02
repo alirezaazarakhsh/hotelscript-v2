@@ -213,19 +213,18 @@ class ChooseReasonListView(ListAPIView):
 
 # ای پی ای سوالات متداول وب سایت برای صفحات 
 class FAQListView(ListAPIView):
-    queryset = FAQ.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = FAQSerializer
     pagination_class = None
-    filter_backends = (PageFilter,)
+    filter_backends = (PageFilter,)  # فرض می‌کنیم PageFilter صفحه را فیلتر می‌کند
 
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
                 'page',
                 openapi.IN_QUERY,
-                description="فیلتر براساس صفحه",
-                type=openapi.TYPE_STRING,
+                description="فیلتر براساس صفحه (آی‌دی صفحه)",
+                type=openapi.TYPE_INTEGER,
                 required=True,
             )
         ],
@@ -234,8 +233,23 @@ class FAQListView(ListAPIView):
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        page_id = request.query_params.get('page')
 
+        if not page_id:
+            return Response({"detail": "پارامتر page لازم است."}, status=400)
+
+        try:
+            page_obj = Page.objects.get(id=page_id)
+        except Page.DoesNotExist:
+            return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
+
+        queryset = FAQ.objects.filter(page_id=page_id).order_by('order')  # فرض می‌کنیم FAQ ها هم ترتیب دارند
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response({
+            'page_title': page_obj.title,
+            'faqs': serializer.data,
+        })
 
 
 

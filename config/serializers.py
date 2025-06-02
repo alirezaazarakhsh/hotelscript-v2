@@ -96,13 +96,17 @@ class ChooseReasonSerializer(serializers.ModelSerializer):
             'id',
         )
 
+
 class FAQSerializer(serializers.ModelSerializer):
+    page_title = serializers.SerializerMethodField()
+
     class Meta:
         model = FAQ
-        exclude = (
-            'id',
-        )
+        exclude = ('id',)
 
+    def get_page_title(self, obj):
+        return obj.page.title if obj.page else None
+    
 class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Service
