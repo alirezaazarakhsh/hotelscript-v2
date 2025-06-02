@@ -276,13 +276,6 @@ class SiteConfig(models.Model):
 
 #مدل بنر های وب سایت 
 class Slide(models.Model):
-    title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=255,
-        blank=True,
-        null=True,
-    )
-
     order = models.PositiveSmallIntegerField(
         verbose_name=_('ترتیب'),
         unique=True,
@@ -293,13 +286,7 @@ class Slide(models.Model):
         upload_to='images/slides/',
     )
 
-    is_active = models.BooleanField(
-        verbose_name=_('فعال'),
-        default=True,
-    )
-
     objects = models.Manager()
-    actives = ActiveManager()
 
     class Meta:
         verbose_name = _('اسلاید')
@@ -307,7 +294,7 @@ class Slide(models.Model):
         ordering = ('order',)
 
     def __str__(self):
-        return self.title or f"اسلاید #{self.order}"
+        return f"اسلاید #{self.order}"
 
     def save(self, *args, **kwargs):
         if self.pk:
@@ -325,6 +312,7 @@ class Slide(models.Model):
                     ).update(order=models.F('order') + 1)
 
         super().save(*args, **kwargs)
+
 
 
 

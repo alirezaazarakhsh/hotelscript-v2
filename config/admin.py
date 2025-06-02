@@ -111,7 +111,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
 @admin.register(Slide)
 class SlideAdmin(admin.ModelAdmin):
     form = SlideAdminForm
-    list_display = ('id', 'order', 'is_active')
+    list_display = ('id', 'order')
 
 
 # تعریف Inline برای مدل StatisticItem (آیتم‌های آماری) جهت نمایش تو در تو در بخش ادمین

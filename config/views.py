@@ -153,14 +153,14 @@ class SiteConfigRetrieveView(RetrieveAPIView):
 
 #ای پی ای اسلاید ها در صفحه اصلی 
 class SlideListView(ListAPIView):
-    queryset = Slide.actives.all()
+    queryset = Slide.objects.all()  # چون actives نداریم
     permission_classes = (AllowAny,)
     serializer_class = SlideSerializer
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت اسلایدر های صفحه اصلی ",
-        operation_description="این API اسلایدهای فعال در صفحه اصلی را بر می گرداند",
+        operation_summary="دریافت اسلایدر های صفحه اصلی",
+        operation_description="این API اسلایدهای صفحه اصلی را بر می‌گرداند",
         tags=['home']
     )
     def get(self, request, *args, **kwargs):

@@ -67,7 +67,6 @@ class SlideSerializer(serializers.ModelSerializer):
         model = Slide
         exclude = (
             'id',
-            'is_active',
         )
 
 class StatisticItemSerializer(serializers.ModelSerializer):
