@@ -100,7 +100,7 @@ class City(models.Model):
 
 
 
-
+#مدل نوع اقامتگاه
 class HotelType(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -115,14 +115,12 @@ class HotelType(models.Model):
     def __str__(self):
         return self.title
 
+
+
+
 class HotelTag(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
-        max_length=64,
-        unique=True,
-    )
-    slug = models.SlugField(
-        verbose_name=_('اسلاگ'),
         max_length=64,
         unique=True,
     )
@@ -133,6 +131,9 @@ class HotelTag(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
 
 class Facilities(models.Model):
     title = models.CharField(

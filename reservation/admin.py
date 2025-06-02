@@ -65,11 +65,9 @@ class HotelTagAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
-        'slug',
     )
     search_fields = (
         'title',
-        'slug',
     )
 
 @admin.register(Facilities)

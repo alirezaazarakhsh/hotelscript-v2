@@ -24,6 +24,8 @@ class ProvinceSerializer(serializers.ModelSerializer):
             'name',
         )
 
+
+
 class CitySerializer(serializers.ModelSerializer):
     province = serializers.SerializerMethodField()
     class Meta:
@@ -36,6 +38,8 @@ class CitySerializer(serializers.ModelSerializer):
     
     def get_province(self, obj):
         return obj.province.name
+
+
 
 class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -51,7 +55,6 @@ class HotelListSerializer(serializers.ModelSerializer):
     original_total_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
-
     class Meta:
         model = Hotel
         fields = (
