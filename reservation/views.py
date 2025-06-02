@@ -650,7 +650,7 @@ class HotelRatingSummaryListView(ListAPIView):
             "این API میانگین امتیاز هر آیتم (مانند تمیزی، موقعیت مکانی و...) را برای یک هتل مشخص شده با استفاده از slug بازمی‌گرداند. "
             "فقط نظرات تأیید شده در محاسبه لحاظ می‌شوند."
         ),
-        tags=['hotel ratings'],
+        tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
                 name='slug',
@@ -886,7 +886,7 @@ class RoomDateListView(ListAPIView):
 
 
 
-# ای پی ای دریافت تاریخ های قابل درزرو برای یه اتاق خاص 
+# ای پی ای دریافت تاریخ های قابل رزرو برای یه اتاق خاص 
 class RoomDateListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomDateListSerializer
