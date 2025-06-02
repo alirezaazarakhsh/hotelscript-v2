@@ -94,7 +94,39 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
-    form = HotelAdminForm 
+    form = HotelAdminForm
+
+    fields = (
+        'name',
+        'slug',
+        'city',
+        'address',
+        'latitude',       # اینجا بعد از آدرس میاد
+        'longitude',      # اینجا بعد از آدرس میاد
+        'stars',
+        'type',
+        'floors_count',
+        'rooms_count',
+        'check_in_time',
+        'check_out_time',
+        'has_check_in_half_day_charge',
+        'has_check_out_half_day_charge',
+        'tags',
+        'facilities',
+        'room_facilities',
+        'is_special_offer',
+        'rules',
+        'important_notes',
+        'main_image',
+        'image1',
+        'image2',
+        'image3',
+        'image4',
+        'image5',
+        'image6',
+        'description',
+        'further_description',
+    )
 
     list_display = (
         'id',
@@ -112,7 +144,6 @@ class HotelAdmin(admin.ModelAdmin):
         'name',
         'address',
     )
-
     autocomplete_fields = ['tags', 'facilities', 'room_facilities']
     
 
