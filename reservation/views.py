@@ -246,8 +246,14 @@ class HotelListView(ListAPIView):
     
     
         
-
+#ای پی ای لیست شهر ها 
 class CityListView(ListAPIView):
+    """
+    API برای دریافت لیست شهرها
+
+    این API لیست تمام شهرها را باز می‌گرداند.
+    امکان فیلتر کردن شهرها بر اساس نام یا slug با استفاده از پارامتر q فراهم شده است.
+    """
     permission_classes = (AllowAny,)
     serializer_class = CitySerializer
 
@@ -256,29 +262,58 @@ class CityListView(ListAPIView):
 
         if q := self.request.query_params.get('q'):
             queryset = queryset.filter(
-                Q(name__contains=q) | 
+                Q(name__icontains=q) | 
                 Q(slug__icontains=q)
             )
 
         return queryset
     
-    @swagger_auto_schema(manual_parameters=[
-        openapi.Parameter(
-            'q',
-            openapi.IN_QUERY,
-            description="city name/slug",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-    ])
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست شهرها",
+        operation_description="این API لیستی از شهرها را باز می‌گرداند و امکان جستجو بر اساس نام یا slug شهر وجود دارد.",
+        manual_parameters=[
+            openapi.Parameter(
+                'q',
+                openapi.IN_QUERY,
+                description="نام یا slug شهر برای جستجو (فیلتر بر اساس q)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
+        tags=['city']
+    )
     def get(self, request, *args, **kwargs):
+        """
+        متد GET برای دریافت لیست شهرها با امکان فیلتر
+        """
         return super().get(request, *args, **kwargs)
-
+    
+    
+    
+#ای پی ای نوع اقامتگاه
 class HotelTypeListView(ListAPIView):
+    """
+    API دریافت لیست نوع هتل‌ها
+
+    این API لیستی از انواع هتل‌ها را بدون صفحه‌بندی باز می‌گرداند.
+    """
     permission_classes = (AllowAny,)
     serializer_class = HotelTypeSerializer
     queryset = HotelType.objects.all()
     pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست نوع هتل‌ها",
+        operation_description="این API لیستی از انواع هتل‌ها را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel']
+    )
+    def get(self, request, *args, **kwargs):
+        """
+        متد GET برای دریافت لیست انواع هتل‌ها
+        """
+        return super().get(request, *args, **kwargs)
+    
+    
 
 class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
