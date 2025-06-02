@@ -299,11 +299,10 @@ class SocialMediaListView(ListAPIView):
 
 # ای پی ای لیست بنر های وب سایت 
 class BannerListView(ListAPIView):
-    queryset = Banner.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = BannerSerializer
     pagination_class = None
-    filter_backends = (PageFilter,)
+    filter_backends = (PageFilter,)  # فرض می‌کنیم PageFilter صفحه را فیلتر می‌کند
 
     @swagger_auto_schema(
         manual_parameters=[
@@ -320,21 +319,26 @@ class BannerListView(ListAPIView):
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        response = super().get(request, *args, **kwargs)
-
         page_id = request.query_params.get('page')
+
+        # اگر page_id موجود بود، صفحه را بگیریم، و اگر نبود ارور دهیم یا null
         page_title = None
         if page_id:
             try:
                 page_obj = Page.objects.get(id=page_id)
                 page_title = page_obj.title
             except Page.DoesNotExist:
-                page_title = None
+                return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
+
+        # سپس queryset را فیلتر کنیم
+        queryset = Banner.objects.filter(page_id=page_id).order_by('order') if page_id else Banner.objects.none()
+        serializer = self.get_serializer(queryset, many=True)
 
         return Response({
             'page_title': page_title,
-            'banners': response.data,
+            'banners': serializer.data,
         })
+
 
 
 
