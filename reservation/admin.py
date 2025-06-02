@@ -1,4 +1,6 @@
 from django.contrib import admin
+
+from reservation.forms import HotelAdminForm
 from .models import (
     Province,
     City,
@@ -92,6 +94,8 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
+    form = HotelAdminForm 
+
     list_display = (
         'id',
         'name',
@@ -108,6 +112,7 @@ class HotelAdmin(admin.ModelAdmin):
         'name',
         'address',
     )
+
 
 @admin.register(HotelGallery)
 class HotelGalleryAdmin(admin.ModelAdmin):
