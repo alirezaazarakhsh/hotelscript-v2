@@ -430,7 +430,7 @@ class HotelFacilitiesListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت امکانات هتل",
         operation_description="این API لیستی از امکانات هتل با slug مشخص شده را باز می‌گرداند.",
-        tags=['hotel facilities'],
+        tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
                 name='slug',
@@ -464,7 +464,7 @@ class HotelRoomFacilitiesListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت امکانات اتاق‌های هتل",
         operation_description="این API لیستی از امکانات اتاق‌های هتل با slug مشخص شده را باز می‌گرداند.",
-        tags=['hotel room facilities'],
+        tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
                 name='slug',
@@ -486,18 +486,40 @@ class HotelRoomFacilitiesListView(ListAPIView):
     
     
 
+# ای پی ای مکان های اطراف هتل 
 class HotelNearbyPlaceListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = NearbyPlaceListSerializer
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
-
-        queryset = NearbyPlace.objects.filter(
-            hotel__slug=hotel_slug
-        ).order_by('id')
-
+        queryset = NearbyPlace.objects.filter(hotel__slug=hotel_slug).order_by('id')
         return queryset
+
+    @swagger_auto_schema(
+        operation_summary="دریافت مکان‌های نزدیک به هتل",
+        operation_description="این API لیستی از مکان‌های نزدیک به هتل با slug مشخص شده را باز می‌گرداند.",
+        tags=['hotel nearby places'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل برای دریافت مکان‌های نزدیک',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: NearbyPlaceListSerializer(many=True),
+            404: 'هتل یا مکان‌های نزدیک پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
+
 
 class HotelCommentListCreateView(ListCreateAPIView):
     permission_classes = (IsAuthenticatedOrReadOnly,)
