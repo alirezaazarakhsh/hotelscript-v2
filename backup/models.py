@@ -1,12 +1,7 @@
-# backup/models.py
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 class AppModule(models.Model):
-    """
-    مدل اپلیکیشن‌های پروژه
-    هر اپلیکیشنی که در پروژه وجود دارد اینجا ذخیره می‌شود.
-    """
     name = models.CharField(
         verbose_name=_("نام اپلیکیشن"),
         max_length=100,
@@ -30,10 +25,40 @@ class AppModule(models.Model):
         return self.verbose_name or self.name
 
 
+class AppModel(models.Model):
+    """
+    مدل‌های مربوط به هر اپلیکیشن
+    """
+    app = models.ForeignKey(
+        AppModule,
+        verbose_name=_("اپلیکیشن"),
+        on_delete=models.CASCADE,
+        related_name='models'
+    )
+    name = models.CharField(
+        verbose_name=_("نام مدل"),
+        max_length=150,
+        help_text=_("نام مدل Django (مثلا Post, Comment, UserProfile)")
+    )
+    verbose_name = models.CharField(
+        verbose_name=_("نام نمایشی مدل"),
+        max_length=150,
+        blank=True,
+        null=True
+    )
+
+    class Meta:
+        verbose_name = _("مدل اپلیکیشن")
+        verbose_name_plural = _("مدل‌های اپلیکیشن")
+        ordering = ['app', 'name']
+
+    def __str__(self):
+        return self.verbose_name or self.name
+
+
 class Backup(models.Model):
     """
     مدل بکاپ‌ها
-    اطلاعات بکاپ‌هایی که گرفته شده شامل فایل بکاپ، اپلیکیشن مرتبط، تاریخ و وضعیت ری‌استور.
     """
     app = models.ForeignKey(
         AppModule,
@@ -42,6 +67,14 @@ class Backup(models.Model):
         null=True,
         blank=True,
         help_text=_("اپلیکیشنی که بکاپ آن گرفته شده؛ اگر خالی باشد بکاپ کل دیتابیس است")
+    )
+    app_model = models.ForeignKey(
+        AppModel,
+        verbose_name=_("مدل اپ"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text=_("اگر این فیلد مقدار داشته باشد، بکاپ مربوط به آن مدل است")
     )
     file = models.FileField(
         verbose_name=_("فایل بکاپ"),
@@ -70,5 +103,9 @@ class Backup(models.Model):
     def __str__(self):
         if self.is_full_backup:
             return f"{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - بکاپ کل دیتابیس"
-        else:
+        elif self.app_model:
+            return f"{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - بکاپ مدل {self.app_model} از اپ {self.app}"
+        elif self.app:
             return f"{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - بکاپ اپ {self.app}"
+        else:
+            return f"{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - بکاپ نامشخص"
