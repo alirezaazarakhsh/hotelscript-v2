@@ -1,5 +1,7 @@
 from django import forms
 from .models import BestHotels, Hotel
+from django.utils.safestring import mark_safe
+
 
 class HotelAdminForm(forms.ModelForm):
     class Meta:
