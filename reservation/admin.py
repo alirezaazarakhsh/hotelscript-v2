@@ -101,8 +101,17 @@ class HotelAdmin(admin.ModelAdmin):
         'slug',
         'city',
         'address',
-        'latitude',       # اینجا بعد از آدرس میاد
-        'longitude',      # اینجا بعد از آدرس میاد
+        'latitude',     
+        'longitude', 
+        'description',
+        'further_description',    
+        'main_image',
+        'image1',
+        'image2',
+        'image3',
+        'image4',
+        'image5',
+        'image6',
         'stars',
         'type',
         'floors_count',
@@ -117,15 +126,6 @@ class HotelAdmin(admin.ModelAdmin):
         'is_special_offer',
         'rules',
         'important_notes',
-        'main_image',
-        'image1',
-        'image2',
-        'image3',
-        'image4',
-        'image5',
-        'image6',
-        'description',
-        'further_description',
     )
 
     list_display = (
