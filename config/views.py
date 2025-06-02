@@ -310,8 +310,8 @@ class BannerListView(ListAPIView):
             openapi.Parameter(
                 'page',
                 openapi.IN_QUERY,
-                description="فیلتر براساس صفحه",
-                type=openapi.TYPE_STRING,
+                description="فیلتر براساس صفحه (آی‌دی صفحه)",
+                type=openapi.TYPE_INTEGER,
                 required=True,
             )
         ],
@@ -321,18 +321,16 @@ class BannerListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         response = super().get(request, *args, **kwargs)
-        
+
         page_id = request.query_params.get('page')
         page_title = None
         if page_id:
-            from yourapp.models import Page
             try:
                 page_obj = Page.objects.get(id=page_id)
                 page_title = page_obj.title
             except Page.DoesNotExist:
                 page_title = None
-        
-        # فرض می‌کنیم داده‌های اصلی در response.data هستند
+
         return Response({
             'page_title': page_title,
             'banners': response.data,
