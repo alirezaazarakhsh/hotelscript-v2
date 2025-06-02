@@ -216,7 +216,7 @@ class FAQListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FAQSerializer
     pagination_class = None
-    filter_backends = (PageFilter,)  # فرض می‌کنیم PageFilter صفحه را فیلتر می‌کند
+    filter_backends = (PageFilter,)  # اگر PageFilter خودش order_by نمی‌زنه
 
     @swagger_auto_schema(
         manual_parameters=[
@@ -243,13 +243,14 @@ class FAQListView(ListAPIView):
         except Page.DoesNotExist:
             return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
 
-        queryset = FAQ.objects.filter(page_id=page_id).order_by('order')  # فرض می‌کنیم FAQ ها هم ترتیب دارند
+        queryset = FAQ.objects.filter(page_id=page_id)
         serializer = self.get_serializer(queryset, many=True)
 
         return Response({
             'page_title': page_obj.title,
             'faqs': serializer.data,
         })
+
 
 
 
