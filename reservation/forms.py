@@ -1,5 +1,5 @@
 from django import forms
-from .models import BestHotels, Hotel
+from .models import BestHotels, City, Hotel
 from django.utils.safestring import mark_safe
 
 
