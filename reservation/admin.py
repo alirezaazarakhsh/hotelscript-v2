@@ -41,7 +41,7 @@ class CityAdmin(admin.ModelAdmin):
         'id',
         'name',
         'slug',
-        'image'
+        'image',
         'province',
     )
     search_fields = (
