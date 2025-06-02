@@ -36,6 +36,7 @@ from django.db.models.functions import Round
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
+    BestHotels,
     Hotel,
     Room,
     RoomDate,
@@ -52,6 +53,7 @@ from .models import (
     Passenger,
 )
 from .serializers import (
+    BestHotelsSerializer,
     HotelListSerializer,
     CitySerializer,
     HotelTypeSerializer,
@@ -985,6 +987,49 @@ class PassengerListCreateView(ListCreateAPIView):
         """,
         request_body=PassengerSerializer,
         responses={201: PassengerSerializer()}
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+
+
+
+class BestHotelsListCreateView(ListCreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = BestHotelsSerializer
+
+    def get_queryset(self):
+        """
+        بازگرداندن لیست بهترین هتل‌ها به ترتیب.
+        """
+        return BestHotels.objects.all().order_by('order')
+
+    @swagger_auto_schema(
+        operation_summary="لیست و ثبت بهترین هتل‌ها",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد تا:
+        - لیست بهترین هتل‌ها را مشاهده کند
+        - یک هتل جدید به لیست اضافه کند
+        
+        این عملیات فقط برای کاربران لاگین‌کرده در دسترس است.
+        """,
+        responses={
+            200: BestHotelsSerializer(many=True),
+            201: BestHotelsSerializer(),
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="ثبت بهترین هتل جدید",
+        operation_description="""
+        با استفاده از این متد می‌توان یک هتل جدید را به لیست بهترین‌ها اضافه کرد.  
+        اطلاعات شامل ترتیب نمایش، عنوان و تصویر لوگوی هتل است.
+        """,
+        request_body=BestHotelsSerializer,
+        responses={201: BestHotelsSerializer()}
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)

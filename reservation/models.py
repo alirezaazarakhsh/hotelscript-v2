@@ -1006,3 +1006,28 @@ class Reservation(models.Model):
 
     def __str__(self):
         return f'{self.uuid}'
+
+
+
+# مدل لوگو های هتل در صفحه اصلی 
+class BestHotels(models.Model):
+    order = models.PositiveIntegerField(
+        verbose_name=_("ترتیب"),
+        unique=True
+    )
+    title_logo = models.CharField(
+        verbose_name=_("عنوان لوگو"),
+        max_length=128
+    )
+    image_logo_hotel = models.ImageField(
+        verbose_name=_("عکس لوگو هتل"),
+        upload_to="images/best_hotels/"
+    )
+
+    class Meta:
+        verbose_name = _("لوگو هتل")
+        verbose_name_plural = _("لوگو هتل")
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.order} - {self.title_logo}"

@@ -1,7 +1,8 @@
 from django.contrib import admin
 
-from reservation.forms import HotelAdminForm
+from reservation.forms import BestHotelsAdminForm, HotelAdminForm
 from .models import (
+    BestHotels,
     Province,
     City,
     HotelType,
@@ -324,4 +325,21 @@ class ReservationAdmin(admin.ModelAdmin):
     )
     list_filter = (
         'status',
+    )
+    
+    
+    
+@admin.register(BestHotels)
+class BestHotelsAdmin(admin.ModelAdmin):
+    form = BestHotelsAdminForm
+    list_display = (
+        'order',
+        'title_logo',
+        'image_logo_hotel',
+    )
+    search_fields = (
+        'title_logo',
+    )
+    list_filter = (
+        'order',
     )

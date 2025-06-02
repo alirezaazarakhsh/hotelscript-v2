@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import (
+    BestHotels,
     Province,
     City,
     HotelType,
@@ -334,4 +335,15 @@ class PassengerSerializer(serializers.ModelSerializer):
             'national_code',
             'passport_code',
             'phone_number',
+        )
+
+
+
+class BestHotelsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BestHotels
+        fields = (
+            'order',
+            'title_logo',
+            'image_logo_hotel',
         )
