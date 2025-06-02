@@ -994,7 +994,7 @@ class PassengerListCreateView(ListCreateAPIView):
 
 
 
-
+# ای پی ای اضافه کردن لوگوی برترین هتل های صفجه اصلی 
 class BestHotelsListCreateView(ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = BestHotelsSerializer

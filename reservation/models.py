@@ -1026,7 +1026,7 @@ class BestHotels(models.Model):
 
     class Meta:
         verbose_name = _("لوگو هتل")
-        verbose_name_plural = _("لوگو هتل")
+        verbose_name_plural = _("لوگو هتل ها")
         ordering = ['order']
 
     def __str__(self):
