@@ -372,11 +372,11 @@ class StatisticItem(models.Model):
 
 # مدل دلایل انتخاب 
 class ChooseReason(models.Model):
-    title = models.TextField(
+    title = models.CharField(
         verbose_name=_('عنوان'),
         max_length=32,
     )
-    description = models.CharField(
+    description = models.TextField(
         verbose_name=_('توضیحات'),
         max_length=450,
     )
