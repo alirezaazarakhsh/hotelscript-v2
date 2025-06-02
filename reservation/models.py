@@ -47,9 +47,10 @@ class Province(models.Model):
     class Meta:
         verbose_name = 'استان'
         verbose_name_plural = 'استان‌ها'
-
+        
     def __str__(self):
         return self.name
+
 
 class City(models.Model):
     name = models.CharField(

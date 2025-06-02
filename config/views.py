@@ -448,11 +448,8 @@ class ComingSoonView(ListAPIView):
     
 
 # ای پی ای کانفیگ تماس با ما
-class LocationView(ListAPIView):
-    queryset = Location.objects.all()
+class LocationView(APIView):
     permission_classes = (AllowAny,)
-    serializer_class = LocationSerializer
-    pagination_class = None  # چون تعداد کمی رکورد داریم
 
     @swagger_auto_schema(
         operation_summary="دریافت کانفیگ تماس با ما",
@@ -460,4 +457,6 @@ class LocationView(ListAPIView):
         tags=['contact']
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        location = Location.objects.first()
+        serializer = LocationSerializer(location)
+        return Response(serializer.data)
