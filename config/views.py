@@ -177,11 +177,16 @@ class StatisticListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت تنظیمات سکشن اول درباره ما",
-        operation_description="این API تمامی بخش های مربوط به سکشن اول صفحه درباره ما را باز میگرداند ",
+        operation_description="این API تنظیمات سکشن اول صفحه درباره ما را باز میگرداند",
         tags=['about']
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        # به جای برگشت لیست، فقط اولین رکورد رو برگردون
+        instance = self.get_queryset().first()
+        if not instance:
+            return Response({"detail": "تنظیمات پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
 
 
