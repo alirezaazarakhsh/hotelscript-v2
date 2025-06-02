@@ -227,7 +227,7 @@ class HotelListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="لیست هتل‌ها",
         operation_description="این API لیستی از هتل‌ها را بر اساس فیلترهای مختلف مانند شهر یا نام هتل، تعداد مسافر، تاریخ ورود و خروج، نوع هتل، تعداد ستاره، بازه قیمتی، تخفیف‌دار بودن و ویژه بودن باز می‌گرداند.",
-        tags=['hotels'],
+        tags=['hotel'],
         manual_parameters=[
             openapi.Parameter('q', openapi.IN_QUERY, description="نام یا اسلاگ هتل یا شهر", type=openapi.TYPE_STRING, required=True),
             openapi.Parameter('passenger_count', openapi.IN_QUERY, description="تعداد مسافران", type=openapi.TYPE_INTEGER, required=True),
@@ -417,32 +417,74 @@ class HotelFAQListView(ListAPIView):
     
     
     
-
+#ای پی ای امکانات هتل 
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
-
-        queryset = Facilities.objects.filter(
-            hotels__slug=hotel_slug
-        ).order_by('id')
-
+        queryset = Facilities.objects.filter(hotels__slug=hotel_slug).order_by('id')
         return queryset
 
+    @swagger_auto_schema(
+        operation_summary="دریافت امکانات هتل",
+        operation_description="این API لیستی از امکانات هتل با slug مشخص شده را باز می‌گرداند.",
+        tags=['hotel facilities'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل برای دریافت امکانات',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: FacilitiesSerializer(many=True),
+            404: 'هتل یا امکانات مرتبط پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
+
+# ای پی ای دریافت امکانات اتاق های هتل
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
-
-        queryset = RoomFacilities.objects.filter(
-            hotels__slug=hotel_slug
-        ).order_by('id')
-
+        queryset = RoomFacilities.objects.filter(hotels__slug=hotel_slug).order_by('id')
         return queryset
+
+    @swagger_auto_schema(
+        operation_summary="دریافت امکانات اتاق‌های هتل",
+        operation_description="این API لیستی از امکانات اتاق‌های هتل با slug مشخص شده را باز می‌گرداند.",
+        tags=['hotel room facilities'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل برای دریافت امکانات اتاق‌ها',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: RoomFacilitiesSerializer(many=True),
+            404: 'هتل یا امکانات اتاق مربوطه پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
+    
 
 class HotelNearbyPlaceListView(ListAPIView):
     permission_classes = (AllowAny,)
