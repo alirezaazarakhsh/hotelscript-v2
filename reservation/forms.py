@@ -39,3 +39,23 @@ class BestHotelsAdminForm(forms.ModelForm):
                 self.fields[image_field].help_text = mark_safe(
                     f'<img src="{field_value.url}" style="max-height: 200px; max-width: 200px; margin-top: 10px;" />'
                 )
+                
+                
+
+
+
+class CityAdminForm(forms.ModelForm):
+    class Meta:
+        model = City
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super(CityAdminForm, self).__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            image_field = 'image'
+            field_value = getattr(self.instance, image_field, None)
+            if field_value:
+                self.fields[image_field].widget = forms.FileInput(attrs={'accept': 'image/*'})
+                self.fields[image_field].help_text = mark_safe(
+                    f'<img src="{field_value.url}" style="max-height: 200px; max-width: 200px; margin-top: 10px;" />'
+                )
