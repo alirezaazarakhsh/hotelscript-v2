@@ -274,7 +274,7 @@ class CityListView(ListAPIView):
                 required=False,
             ),
         ],
-        tags=['city']
+        tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -348,17 +348,42 @@ class RoomServiceListView(ListAPIView):
 
 
 
+# ای پی ای یک هتل بر اساس اسلاگ
 class HotelRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelRetrieveSerializer
     queryset = Hotel.objects.select_related('city')\
-            .select_related('city__province')\
-            .select_related('type')\
-            .prefetch_related('tags')\
-            .all()
+                           .select_related('city__province')\
+                           .select_related('type')\
+                           .prefetch_related('tags')\
+                           .all()
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
 
+    @swagger_auto_schema(
+        operation_summary="دریافت جزئیات هتل",
+        operation_description="این API جزئیات کامل یک هتل را با توجه به slug آن باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelRetrieveSerializer,
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
+# ای پی ای سوالات متداول هتل 
 class HotelFAQListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelFAQListSerializer
@@ -366,12 +391,32 @@ class HotelFAQListView(ListAPIView):
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
-
-        queryset = HotelFAQ.objects.filter(
-            hotel__slug=hotel_slug
-        )
-
+        queryset = HotelFAQ.objects.filter(hotel__slug=hotel_slug)
         return queryset
+
+    @swagger_auto_schema(
+        operation_summary="دریافت سوالات متداول هتل",
+        operation_description="این API لیستی از سوالات متداول مربوط به هتل با slug مشخص شده را باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل برای دریافت سوالات متداول',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelFAQListSerializer(many=True),
+            404: 'هتل یا سوالات متداول پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+    
 
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
