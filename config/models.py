@@ -579,7 +579,7 @@ class Advantage(models.Model):
         verbose_name=_('عنوان'),
         max_length=64,
     )
-    subtitle = models.CharField(
+    subtitle = models.TextField(
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
