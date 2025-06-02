@@ -1023,10 +1023,9 @@ class BestHotelsListCreateView(ListCreateAPIView):
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_summary="ثبت بهترین هتل جدید",
+        operation_summary="ثبت لوگوی برترین هتل",
         operation_description="""
-        با استفاده از این متد می‌توان یک هتل جدید را به لیست بهترین‌ها اضافه کرد.  
-        اطلاعات شامل ترتیب نمایش، عنوان و تصویر لوگوی هتل است.
+        با استفاده از این api می توانید لوگوی جدیدی از هتل را برترین هتل های صفحه اصلی اضافه کنید 
         """,
         request_body=BestHotelsSerializer,
         responses={201: BestHotelsSerializer()}
