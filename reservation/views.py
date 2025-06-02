@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime
+from .utils import Round
 from django.shortcuts import get_object_or_404
 from rest_framework import (
     status,
@@ -67,8 +68,24 @@ from .serializers import (
     PassengerSerializer,
 )
 
-# Create your views here.
+# ای پی ای لیست هتل ها 
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Q, Avg, F, Sum, Count
+from collections import defaultdict
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from .models import Hotel, RoomDate
+from .serializers import HotelListSerializer
+from .utils import Round  # فرض بر این است که Round در utils تعریف شده
+from datetime import datetime
 
+
+
+#ای پی ای لیست هتل ها 
 class HotelListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelListSerializer
@@ -82,45 +99,25 @@ class HotelListView(ListAPIView):
         has_discount = self.request.query_params.get('discount')
         min_price = self.request.query_params.get('min_price')
         max_price = self.request.query_params.get('max_price')
+
         try:
             start_date = datetime.strptime(self.request.query_params.get('start_date'), "%Y-%m-%d").date()
         except:
-            raise ValidationError({
-                'start_date': 'لطفا تاریخ ورود را به درستی وارد نمایید'
-            })
+            raise ValidationError({'start_date': 'لطفا تاریخ ورود را به درستی وارد نمایید'})
+
         try:
             end_date = datetime.strptime(self.request.query_params.get('end_date'), "%Y-%m-%d").date()
         except:
-            raise ValidationError({
-                'end_date': 'لطفا تاریخ خروج را به درستی وارد نمایید'
-            })
+            raise ValidationError({'end_date': 'لطفا تاریخ خروج را به درستی وارد نمایید'})
 
         if not city_or_hotel:
-            raise ValidationError({
-                'q': 'نام هتل یا شهر الزامی است'
-            })
+            raise ValidationError({'q': 'نام هتل یا شهر الزامی است'})
         if not passenger_count:
-            raise ValidationError({
-                'passenger_count': 'تعداد مسافران الزامی است'
-            })
-        if not start_date:
-            raise ValidationError({
-                'start_date': 'تاریخ ورود الزامی است'
-            })
-        if not end_date:
-            raise ValidationError({
-                'end_date': 'تاریخ خروج الزامی است'
-            })
-        
+            raise ValidationError({'passenger_count': 'تعداد مسافران الزامی است'})
         if start_date < timezone.localdate():
-            raise ValidationError({
-                'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'
-            })
-
+            raise ValidationError({'start_date': 'تاریخ ورود نمی‌تواند قبل از امروز باشد.'})
         if end_date < start_date:
-            raise ValidationError({
-                'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'
-            })
+            raise ValidationError({'end_date': 'تاریخ خروج نمی‌تواند از تاریخ ورود کمتر باشد.'})
 
         available_room_dates = RoomDate.objects.select_related('room')\
             .annotate(
@@ -148,34 +145,35 @@ class HotelListView(ListAPIView):
 
         if has_discount:
             matching_rooms_data = matching_rooms_data.filter(
-                total_price__lt=F('original_total_price')
+                discounted_total_price__lt=F('original_total_price')
             )
 
         if min_price:
             matching_rooms_data = matching_rooms_data.filter(
-                total_price__gte=min_price,
+                discounted_total_price__gte=min_price,
             )
         if max_price:
             matching_rooms_data = matching_rooms_data.filter(
-                total_price__lte=max_price,
+                discounted_total_price__lte=max_price,
             )
 
         self.hotel_price_map = defaultdict(list)
 
         for room_data in matching_rooms_data:
             hotel_id = room_data['hotel_id']
+            total_price = room_data['discounted_total_price'] \
+                if room_data['occupied_count'] < room_data['discount_count'] \
+                else room_data['original_total_price']
 
             self.hotel_price_map[hotel_id].append({
-                'total_price': room_data['discounted_total_price'] if room_data['occupied_count'] < room_data['discount_count'] else room_data['original_total_price'],
+                'total_price': total_price,
                 'original_total_price': room_data['original_total_price'],
             })
 
         self.hotel_price_map = dict(self.hotel_price_map)
 
         queryset = Hotel.objects.prefetch_related('rooms')\
-            .select_related('city')\
-            .select_related('city__province')\
-            .select_related('type')\
+            .select_related('city', 'city__province', 'type')\
             .prefetch_related('comments__points')\
             .annotate(
                 rating=Round(
@@ -192,119 +190,62 @@ class HotelListView(ListAPIView):
 
         if type:
             try:
-                type_ids = [id for id in type.split(',') if id.strip().isdigit()]
-                queryset = queryset.filter(
-                    type__id__in=type_ids,
-                )
+                type_ids = [int(id) for id in type.split(',') if id.strip().isdigit()]
+                queryset = queryset.filter(type__id__in=type_ids)
             except ValueError:
-                raise ValidationError({
-                    'type': 'فرمت نوع هتل صحیح نیست.'
-                })
+                raise ValidationError({'type': 'فرمت نوع هتل صحیح نیست.'})
 
         if stars:
             try:
-                stars = [star for star in stars.split(',') if star.strip().isdigit()]
-                queryset = queryset.filter(
-                    stars__in=stars,
-                )
+                star_values = [int(star) for star in stars.split(',') if star.strip().isdigit()]
+                queryset = queryset.filter(stars__in=star_values)
             except ValueError:
-                raise ValidationError({
-                    'type': 'فرمت تعداد ستاره هتل صحیح نیست.'
-                })
+                raise ValidationError({'stars': 'فرمت تعداد ستاره هتل صحیح نیست.'})
 
-        if is_special_offer:
-            queryset = queryset.filter(
-                is_special_offer=is_special_offer,
-            )
+        if is_special_offer in ['true', 'True', '1']:
+            queryset = queryset.filter(is_special_offer=True)
+        elif is_special_offer in ['false', 'False', '0']:
+            queryset = queryset.filter(is_special_offer=False)
 
-        # TODO: filter by facilities
-        # TODO: order by
         queryset = queryset.order_by('id')
         return queryset
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
+        hotel_price_map = getattr(self, 'hotel_price_map', {})
 
-        context['hotel_min_price_map'] = {
-            hotel_id: min(items, key=lambda x: x['total_price'])
-            for hotel_id, items in self.hotel_price_map.items()
-        }
+        if self.request.user.is_authenticated:
+            context['hotel_min_price_map'] = {
+                hotel_id: min(items, key=lambda x: x['total_price'])
+                for hotel_id, items in hotel_price_map.items()
+            }
+        else:
+            context['hotel_min_price_map'] = {}
+
         return context
 
-    @swagger_auto_schema(manual_parameters=[
-        openapi.Parameter(
-            'q',
-            openapi.IN_QUERY,
-            description="city or hotel name/slug",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-        openapi.Parameter(
-            'passenger_count',
-            openapi.IN_QUERY,
-            description="number of passengers, adults and children",
-            type=openapi.TYPE_INTEGER,
-            required=True,
-        ),
-        openapi.Parameter(
-            'start_date',
-            openapi.IN_QUERY,
-            description="start date",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-        openapi.Parameter(
-            'end_date',
-            openapi.IN_QUERY,
-            description="end date",
-            type=openapi.TYPE_STRING,
-            required=True,
-        ),
-        openapi.Parameter(
-            'type',
-            openapi.IN_QUERY,
-            description="hotel types separated by commas. (e.g. 1,2,3)",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'stars',
-            openapi.IN_QUERY,
-            description="hotel stars separated by commas. (e.g. 1,2,3)",
-            type=openapi.TYPE_STRING,
-            required=False,
-        ),
-        openapi.Parameter(
-            'min_price',
-            openapi.IN_QUERY,
-            description="minimum price",
-            type=openapi.TYPE_INTEGER,
-            required=False,
-        ),
-        openapi.Parameter(
-            'max_price',
-            openapi.IN_QUERY,
-            description="maximum price",
-            type=openapi.TYPE_INTEGER,
-            required=False,
-        ),
-        openapi.Parameter(
-            'special_offer',
-            openapi.IN_QUERY,
-            description="is special offer",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-        openapi.Parameter(
-            'discount',
-            openapi.IN_QUERY,
-            description="has discount",
-            type=openapi.TYPE_BOOLEAN,
-            required=False,
-        ),
-    ])
+    @swagger_auto_schema(
+        operation_summary="لیست هتل‌ها",
+        operation_description="این API لیستی از هتل‌ها را بر اساس فیلترهای مختلف مانند شهر یا نام هتل، تعداد مسافر، تاریخ ورود و خروج، نوع هتل، تعداد ستاره، بازه قیمتی، تخفیف‌دار بودن و ویژه بودن باز می‌گرداند.",
+        tags=['hotels'],
+        manual_parameters=[
+            openapi.Parameter('q', openapi.IN_QUERY, description="نام یا اسلاگ هتل یا شهر", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('passenger_count', openapi.IN_QUERY, description="تعداد مسافران", type=openapi.TYPE_INTEGER, required=True),
+            openapi.Parameter('start_date', openapi.IN_QUERY, description="تاریخ ورود (YYYY-MM-DD)", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('end_date', openapi.IN_QUERY, description="تاریخ خروج (YYYY-MM-DD)", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('type', openapi.IN_QUERY, description="شناسه نوع هتل‌ها به صورت کاما جدا (مثلاً 1,2)", type=openapi.TYPE_STRING),
+            openapi.Parameter('stars', openapi.IN_QUERY, description="تعداد ستاره هتل‌ها به صورت کاما جدا (مثلاً 3,4,5)", type=openapi.TYPE_STRING),
+            openapi.Parameter('min_price', openapi.IN_QUERY, description="کمترین قیمت کل", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('max_price', openapi.IN_QUERY, description="بیشترین قیمت کل", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('special_offer', openapi.IN_QUERY, description="آیا ویژه باشد؟", type=openapi.TYPE_BOOLEAN),
+            openapi.Parameter('discount', openapi.IN_QUERY, description="آیا شامل تخفیف باشد؟", type=openapi.TYPE_BOOLEAN),
+        ]
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+        
 
 class CityListView(ListAPIView):
     permission_classes = (AllowAny,)

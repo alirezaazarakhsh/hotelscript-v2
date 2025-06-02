@@ -814,7 +814,7 @@ class RoomDate(models.Model):
     
     
     
-
+#مدل مسافران اشخاص در هتل 
 class Passenger(models.Model):
     user = models.ForeignKey(
         BaseUser,
@@ -869,6 +869,9 @@ class Passenger(models.Model):
     def __str__(self):
         return f'{self.user} - {self.first_name} {self.last_name}'
 
+
+
+#مدل رزرواسیون در هتل 
 class Reservation(models.Model):
     RESERVATION_STATUSES = (
         ('payment', 'در انتظار پرداخت'),

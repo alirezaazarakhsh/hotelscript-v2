@@ -138,7 +138,6 @@ class HotelTagSerializer(serializers.ModelSerializer):
         model = HotelTag
         fields = (
             'title',
-            'slug',
         )
 
 class HotelRetrieveSerializer(serializers.ModelSerializer):
