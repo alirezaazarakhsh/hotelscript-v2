@@ -134,7 +134,7 @@ class HotelTag(models.Model):
 
 
 
-
+#مدل لمکانات رفاهی و تفریحی هتل 
 class Facilities(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -149,6 +149,9 @@ class Facilities(models.Model):
     def __str__(self):
         return self.title
 
+
+
+# مدل امکانات داخلی اتاق 
 class RoomFacilities(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -163,6 +166,8 @@ class RoomFacilities(models.Model):
     def __str__(self):
         return self.title
 
+
+#مدل اضافه کردن هتل 
 class Hotel(models.Model):
     
     def hotel_image_upload_to(instance, filename):
@@ -302,6 +307,10 @@ class Hotel(models.Model):
     def __str__(self):
         return self.name
 
+
+
+
+#مدل گالری های هتل 
 class HotelGallery(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -321,6 +330,11 @@ class HotelGallery(models.Model):
     def __str__(self):
         return f'{self.title} - {self.hotel}'
 
+
+
+
+
+#مدل عکس گالری های هتل
 class HotelGalleryImage(models.Model):
 
     def image_upload_to(instance, filename):
@@ -348,6 +362,9 @@ class HotelGalleryImage(models.Model):
     def __str__(self):
         return self.title
 
+
+
+#مدل اماکن اطراف هتل 
 class NearbyPlace(models.Model):
 
     def image_upload_to(instance, filename):
@@ -402,6 +419,12 @@ class NearbyPlace(models.Model):
     def __str__(self):
         return f'{self.title} - {self.hotel}'
 
+
+
+
+
+
+# مدل سوالات متداول برای هر هتل
 class HotelFAQ(models.Model):
     question = models.TextField(
         verbose_name=_('سوال'),
@@ -423,6 +446,10 @@ class HotelFAQ(models.Model):
     def __str__(self):
         return f'{self.hotel} - {self.question}'
 
+
+
+
+#مدل نظرات هتل ها 
 class Comment(models.Model):
     user = models.ForeignKey(
         BaseUser,
@@ -466,7 +493,10 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'{self.hotel} - {self.user}'
-
+    
+    
+    
+#مدل معیار امتیاز دهی
 class CommentPointItem(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -480,6 +510,11 @@ class CommentPointItem(models.Model):
     def __str__(self):
         return self.title
 
+
+
+
+
+#مدل امتیاز کامنت ها 
 class CommentPoint(models.Model):
     comment = models.ForeignKey(
         Comment,
@@ -517,6 +552,10 @@ class CommentPoint(models.Model):
     def __str__(self):
         return f'{self.comment} - {self.comment_point_item}'
 
+
+
+
+#مدل خدمات اتاق ها
 class RoomService(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -529,7 +568,12 @@ class RoomService(models.Model):
 
     def __str__(self):
         return self.title
+    
+    
 
+
+
+#مدل اتاق ها 
 class Room(models.Model):
     hotel = models.ForeignKey(
         Hotel,
@@ -582,7 +626,12 @@ class Room(models.Model):
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
+    
+    
+    
+    
 
+# مدل تخفیف اتاق ها 
 class RoomDateDiscount(models.Model):
     DISCOUNT_TYPES = (
         ('percentage', 'درصدی'),
@@ -629,7 +678,11 @@ class RoomDateDiscount(models.Model):
             return f'{self.value}% - {self.start_date}'
         elif self.type == 'fixed':
             return f'{self.value} ریال - {self.start_date}'
-
+        
+        
+        
+    
+#مدل بازه های زمانی اتاق ها
 class RoomDate(models.Model):
     room = models.ForeignKey(
         Room,
@@ -638,7 +691,10 @@ class RoomDate(models.Model):
         related_name='dates',
     )
     date = models.DateField(
-        verbose_name=_('تاریخ'),
+        verbose_name=_('تاریخ شروع'),
+    )
+    dateend = models.DateField(
+        verbose_name=_('تاریخ پایان'),
     )
     price = models.PositiveBigIntegerField(
         verbose_name=_('قیمت (به ریال)'),
@@ -754,6 +810,10 @@ class RoomDate(models.Model):
 
     def __str__(self):
         return f'{self.room} - {self.date}'
+    
+    
+    
+    
 
 class Passenger(models.Model):
     user = models.ForeignKey(

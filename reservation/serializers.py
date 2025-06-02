@@ -320,6 +320,7 @@ class RoomDateListSerializer(serializers.ModelSerializer):
         model = RoomDate
         fields = (
             'date',
+            'dateend',
             'original_price',
             'discounted_price',
         )

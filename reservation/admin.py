@@ -244,6 +244,7 @@ class RoomDateAdmin(admin.ModelAdmin):
         'id',
         'room',
         'date',
+        'dateend',
         'price',
         'extra_passenger_price',
         'foreign_passenger_price',
