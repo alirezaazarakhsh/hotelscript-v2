@@ -102,11 +102,11 @@ class HotelAdmin(admin.ModelAdmin):
         'slug',
         'city',
         'address',
+        'latitude',
+        'longitude',
         'stars',
         'type',
         'floors_count',
-        'latitude',
-        'longitude',
     )
     search_fields = (
         'name',
