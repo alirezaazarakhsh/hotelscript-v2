@@ -307,7 +307,7 @@ class FacilitiesListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات",
         operation_description="این API لیستی از امکانات هتل‌ها یا خدمات را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['facilities']
+        tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -324,19 +324,29 @@ class RoomFacilitiesListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات اتاق‌ها",
         operation_description="این API لیستی از امکانات موجود در اتاق‌ها را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['room facilities']
+        tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
 
 
-
+# ای پی ای لیست خدمات اتاق ها 
 class RoomServiceListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomServiceSerializer
     queryset = RoomService.objects.all()
     pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست خدمات اتاق‌ها",
+        operation_description="این API لیستی از خدمات ارائه شده در اتاق‌ها را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
 
 class HotelRetrieveView(RetrieveAPIView):
     permission_classes = (AllowAny,)
