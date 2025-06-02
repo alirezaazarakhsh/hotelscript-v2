@@ -248,12 +248,6 @@ class HotelListView(ListAPIView):
         
 #ای پی ای لیست شهر ها 
 class CityListView(ListAPIView):
-    """
-    API برای دریافت لیست شهرها
-
-    این API لیست تمام شهرها را باز می‌گرداند.
-    امکان فیلتر کردن شهرها بر اساس نام یا slug با استفاده از پارامتر q فراهم شده است.
-    """
     permission_classes = (AllowAny,)
     serializer_class = CitySerializer
 
@@ -283,20 +277,12 @@ class CityListView(ListAPIView):
         tags=['city']
     )
     def get(self, request, *args, **kwargs):
-        """
-        متد GET برای دریافت لیست شهرها با امکان فیلتر
-        """
         return super().get(request, *args, **kwargs)
     
     
     
 #ای پی ای نوع اقامتگاه
 class HotelTypeListView(ListAPIView):
-    """
-    API دریافت لیست نوع هتل‌ها
-
-    این API لیستی از انواع هتل‌ها را بدون صفحه‌بندی باز می‌گرداند.
-    """
     permission_classes = (AllowAny,)
     serializer_class = HotelTypeSerializer
     queryset = HotelType.objects.all()
@@ -308,24 +294,43 @@ class HotelTypeListView(ListAPIView):
         tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
-        """
-        متد GET برای دریافت لیست انواع هتل‌ها
-        """
         return super().get(request, *args, **kwargs)
     
     
-
+# ای پی ای دریافت لیست امکانات 
 class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
     queryset = Facilities.objects.all()
     pagination_class = None
 
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست امکانات",
+        operation_description="این API لیستی از امکانات هتل‌ها یا خدمات را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['facilities']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    
+
+# ای پی ای لیست امکانات اتاق ها
 class RoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
     queryset = RoomFacilities.objects.all()
     pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست امکانات اتاق‌ها",
+        operation_description="این API لیستی از امکانات موجود در اتاق‌ها را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['room facilities']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
 
 class RoomServiceListView(ListAPIView):
     permission_classes = (AllowAny,)
