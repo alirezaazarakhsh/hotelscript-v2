@@ -2,7 +2,7 @@ from django.contrib import admin
 import os
 from django.conf import settings
 from .models import BackupLog, BackupRestoreRequest
-from .forms import BackupLogAdminForm
+from .forms import BackupLogAdminForm, BackupRestoreRequestForm
 
 
 
@@ -13,12 +13,13 @@ class BackupLogAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at']
     fieldsets = (
         (None, {
-            'fields': ('backup_type', 'app_name', 'model_name', 'file_path', 'created_at')
+            'fields': ('backup_type', 'app_name', 'model_name', 'created_at')
         }),
     )
 
 
 @admin.register(BackupRestoreRequest)
 class BackupRestoreRequestAdmin(admin.ModelAdmin):
+    form = BackupRestoreRequestForm 
     list_display = ['backup_file', 'restore_type', 'app_name', 'model_name', 'requested_at', 'restored']
     readonly_fields = ['requested_at', 'restored']
