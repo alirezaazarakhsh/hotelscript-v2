@@ -25,12 +25,12 @@ from reservation import views as reservation_views
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="My API",
+        title="API",
         default_version='v1',
-        description="My API description",
-        terms_of_service="https://www.example.com/terms/",
-        contact=openapi.Contact(email="contact@example.com"),
-        license=openapi.License(name="Awesome License"),
+        description="API SAFARNAMEH",
+        terms_of_service="https://www.sevinhost.com/",
+        contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
+        license=openapi.License(name="checked✅"),
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
