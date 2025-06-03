@@ -113,7 +113,7 @@ class StatisticItemInline(admin.TabularInline):
     extra = 4
 
     def get_max_num(self, request, obj=None, **kwargs):
-        return 1
+        return 4
 
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):
