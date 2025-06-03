@@ -16,7 +16,6 @@ class BackupLogAdminForm(forms.ModelForm):
         label="انتخاب مدل",
         required=False
     )
-    # این فیلد در مدل وجود نداره، فقط در فرم برای انتخاب فایل
     file_path = forms.ChoiceField(
         choices=[],
         label="فایل بکاپ",
@@ -25,12 +24,11 @@ class BackupLogAdminForm(forms.ModelForm):
 
     class Meta:
         model = BackupLog
-        fields = ['backup_type', 'app_name', 'model_name']  # file_path حذف شده از اینجا چون در مدل نیست
+        fields = ['backup_type', 'app_name', 'model_name']  # file_path در مدل نیست
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # تنظیم گزینه‌های مدل‌ها بر اساس اپلیکیشن انتخاب‌شده
         selected_app = None
         if 'app_name' in self.data:
             selected_app = self.data.get('app_name')
@@ -45,7 +43,6 @@ class BackupLogAdminForm(forms.ModelForm):
             self.fields['model_name'].choices = []
             self.fields['model_name'].widget.attrs['disabled'] = True
 
-        # بارگذاری فایل‌های موجود در فولدر بکاپ برای فیلد file_path
         backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
         file_choices = []
         if os.path.exists(backup_folder) and os.path.isdir(backup_folder):
@@ -63,48 +60,37 @@ class BackupLogAdminForm(forms.ModelForm):
             self.fields['file_path'].widget.attrs['disabled'] = True
             self.fields['file_path'].help_text = "پوشه بکاپ پیدا نشد یا فایل موجود نیست."
 
-        # اگر بخواهی مقدار اولیه برای فایل بذاری، باید این قسمت رو حذف یا تغییر بدی
-        # چون فایل در مدل ذخیره نمی‌شه (مدل file_path ندارد)
-
     def clean_file_path(self):
         file_name = self.cleaned_data.get('file_path')
         backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
         full_path = os.path.join(backup_folder, file_name)
         if not os.path.exists(full_path):
             raise forms.ValidationError("فایل انتخاب شده در پوشه بکاپ وجود ندارد.")
-        # فقط نام فایل را برگردانیم نه مسیر کامل
         return file_name
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        file_name = self.cleaned_data.get('file_path')
+        if file_name:
+            backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
+            full_path = os.path.join(backup_folder, file_name)
+            # باز کردن فایل بکاپ و قرار دادن در فیلد backup_file مدل
+            with open(full_path, 'rb') as f:
+                from django.core.files.base import File
+                django_file = File(f)
+                instance.backup_file.save(file_name, django_file, save=False)
+
+        if commit:
+            instance.save()
+        return instance
 
 
 class BackupRestoreRequestForm(forms.ModelForm):
-    app_name = forms.ChoiceField(
-        choices=[(app, app.capitalize()) for app in APPS_MODELS.keys()],
-        label="انتخاب اپلیکیشن",
+    backup_file = forms.FileField(
+        label="فایل بکاپ برای ریستور",
         required=True
-    )
-    model_name = forms.ChoiceField(
-        choices=[],
-        label="انتخاب مدل",
-        required=False
     )
 
     class Meta:
         model = BackupRestoreRequest
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        selected_app = None
-        if 'app_name' in self.data:
-            selected_app = self.data.get('app_name')
-        elif self.instance and self.instance.app_name:
-            selected_app = self.instance.app_name
-
-        if selected_app in APPS_MODELS:
-            model_choices = [(m, m) for m in APPS_MODELS[selected_app]]
-            self.fields['model_name'].choices = model_choices
-            self.fields['model_name'].widget.attrs.pop('disabled', None)
-        else:
-            self.fields['model_name'].choices = []
-            self.fields['model_name'].widget.attrs['disabled'] = True
+        fields = ['backup_file']
