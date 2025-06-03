@@ -15,11 +15,12 @@ class BackupLog(models.Model):
     # این مسیر باید حتما وجود داشته باشه و دسترسی خواندن داشته باشه.
     # 'file_path' فقط مسیر فایل‌های موجود در آن فولدر را انتخاب می‌کند.
     file_path = models.FilePathField(
-        path='/path/to/backups',  # اینجا مسیر واقعی بکاپ ها رو باید بزنی
-        recursive=True,           # می‌گردد داخل فولدرها هم بگردد
-        allow_files=True,
-        allow_folders=False,
-    )
+    path='/var/lib/backsafarname/alirezaazarakhsh20_gmail.com',
+    recursive=True,
+    allow_files=True,
+    allow_folders=False,
+    default='/var/lib/backsafarname/alirezaazarakhsh20_gmail.com'
+)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
