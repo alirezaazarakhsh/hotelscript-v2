@@ -11,7 +11,9 @@ from django.core.validators import (
 from authentication.models import (
     BaseUser,
 )
-# Create your models here.
+
+
+#  مدل کیف پول کاربر برای موجودی 
 class Wallet(models.Model):
     user = models.OneToOneField(
         BaseUser,
@@ -29,7 +31,11 @@ class Wallet(models.Model):
 
     def __str__(self):
         return f'{self.user.natural_profile.first_name} {self.user.natural_profile.last_name}'
+    
+    
 
+
+#مدل کارت های بانکی کاربر
 class BankCard(models.Model):
     profile_content_type = models.ForeignKey(
         ContentType,
