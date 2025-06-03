@@ -1,24 +1,11 @@
-import os
 from django import forms
-from django.core.files import File
+
 from safarname24 import settings
 from .models import BackupLog, BackupRestoreRequest
 from .apps_models_list import APPS_MODELS
 
 
-class DynamicAppModelMixin:
-    def set_model_name_choices(self, field_key='model_name'):
-        selected_app = self.data.get('app_name') or getattr(self.instance, 'app_name', None)
-
-        if selected_app in APPS_MODELS:
-            self.fields[field_key].choices = [(m, m) for m in APPS_MODELS[selected_app]]
-            self.fields[field_key].widget.attrs.pop('disabled', None)
-        else:
-            self.fields[field_key].choices = []
-            self.fields[field_key].widget.attrs['disabled'] = True
-
-
-class BackupLogAdminForm(forms.ModelForm, DynamicAppModelMixin):
+class BackupLogAdminForm(forms.ModelForm):
     app_name = forms.ChoiceField(
         choices=[(app, app.capitalize()) for app in APPS_MODELS.keys()],
         label="انتخاب اپلیکیشن",
@@ -29,57 +16,69 @@ class BackupLogAdminForm(forms.ModelForm, DynamicAppModelMixin):
         label="انتخاب مدل",
         required=False
     )
-    file_choice = forms.ChoiceField(
+    file_path = forms.ChoiceField(
         choices=[],
-        label="انتخاب فایل بکاپ از مسیر محلی",
-        required=False,
-        help_text="در صورت انتخاب فایل، در فیلد backup_file آپلود می‌شود."
+        label="فایل بکاپ",
+        required=True
     )
 
     class Meta:
         model = BackupLog
-        fields = ['backup_type', 'app_name', 'model_name', 'backup_file']
+        fields = '__all__'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.set_model_name_choices()
+        # تنظیم گزینه‌های مدل‌ها بر اساس اپلیکیشن انتخاب‌شده
+        selected_app = None
+        if 'app_name' in self.data:
+            selected_app = self.data.get('app_name')
+        elif self.instance and self.instance.app_name:
+            selected_app = self.instance.app_name
 
-        # بارگذاری فایل‌ها از پوشه local
+        if selected_app in APPS_MODELS:
+            model_choices = [(m, m) for m in APPS_MODELS[selected_app]]
+            self.fields['model_name'].choices = model_choices
+            self.fields['model_name'].widget.attrs.pop('disabled', None)
+        else:
+            self.fields['model_name'].choices = []
+            self.fields['model_name'].widget.attrs['disabled'] = True
+
+        # بارگذاری فایل‌های موجود در فولدر بکاپ برای فیلد file_path
         backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
         file_choices = []
-
         if os.path.exists(backup_folder) and os.path.isdir(backup_folder):
             file_choices = [
                 (f, f)
                 for f in os.listdir(backup_folder)
                 if os.path.isfile(os.path.join(backup_folder, f))
             ]
+
         if file_choices:
-            self.fields['file_choice'].choices = file_choices
+            self.fields['file_path'].choices = file_choices
+            self.fields['file_path'].widget.attrs.pop('disabled', None)
         else:
-            self.fields['file_choice'].choices = []
-            self.fields['file_choice'].widget.attrs['disabled'] = True
-            self.fields['file_choice'].help_text = "فایلی در پوشه بکاپ پیدا نشد."
+            self.fields['file_path'].choices = []
+            self.fields['file_path'].widget.attrs['disabled'] = True
+            self.fields['file_path'].help_text = "پوشه بکاپ پیدا نشد یا فایل موجود نیست."
 
-    def clean(self):
-        cleaned_data = super().clean()
-        file_choice = cleaned_data.get('file_choice')
+        # مقدار اولیه file_path از instance اگر وجود داشته باشد
+        if self.instance and self.instance.file_path:
+            self.fields['file_path'].initial = os.path.basename(self.instance.file_path)
 
-        if file_choice:
-            backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
-            full_path = os.path.join(backup_folder, file_choice)
-
-            if not os.path.exists(full_path):
-                raise forms.ValidationError("فایل انتخاب‌شده در مسیر بکاپ وجود ندارد.")
-
-            with open(full_path, 'rb') as f:
-                self.cleaned_data['backup_file'] = File(f, name=file_choice)
-
-        return cleaned_data
+    def clean_file_path(self):
+        file_name = self.cleaned_data.get('file_path')
+        backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
+        full_path = os.path.join(backup_folder, file_name)
+        if not os.path.exists(full_path):
+            raise forms.ValidationError("فایل انتخاب شده در پوشه بکاپ وجود ندارد.")
+        # فقط نام فایل را برگردانیم نه مسیر کامل
+        return file_name
 
 
-class BackupRestoreRequestForm(forms.ModelForm, DynamicAppModelMixin):
+
+
+class BackupRestoreRequestForm(forms.ModelForm):
     app_name = forms.ChoiceField(
         choices=[(app, app.capitalize()) for app in APPS_MODELS.keys()],
         label="انتخاب اپلیکیشن",
@@ -97,4 +96,17 @@ class BackupRestoreRequestForm(forms.ModelForm, DynamicAppModelMixin):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.set_model_name_choices()
+
+        selected_app = None
+        if 'app_name' in self.data:
+            selected_app = self.data.get('app_name')
+        elif self.instance and self.instance.app_name:
+            selected_app = self.instance.app_name
+
+        if selected_app in APPS_MODELS:
+            model_choices = [(m, m) for m in APPS_MODELS[selected_app]]
+            self.fields['model_name'].choices = model_choices
+            self.fields['model_name'].widget.attrs.pop('disabled', None)
+        else:
+            self.fields['model_name'].choices = []
+            self.fields['model_name'].widget.attrs['disabled'] = True
