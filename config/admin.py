@@ -110,7 +110,7 @@ class SlideAdmin(admin.ModelAdmin):
 # تعریف Inline برای مدل StatisticItem (آیتم‌های آماری) جهت نمایش تو در تو در بخش ادمین
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
-    extra = 1
+    extra = 4
 
     def get_max_num(self, request, obj=None, **kwargs):
         return 1
@@ -121,7 +121,7 @@ class StatisticAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
 
-    # جلوگیری از ثبت بیش از یک آمار
+    # جلوگیری از ثبت بیش از 4آمار
     def save_model(self, request, obj, form, change):
         if not change and Statistic.objects.exists():
             messages.error(request, 'تنها یک کانفیگ درباره ما می‌توان ساخت.')
