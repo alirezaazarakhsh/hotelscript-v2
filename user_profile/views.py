@@ -86,7 +86,7 @@ class FavoriteCollectionListCreateView(ListCreateAPIView):
     @swagger_auto_schema(
         operation_summary="لیست و ایجاد مجموعه‌های علاقه‌مندی",
         operation_description="این API برای دریافت لیست مجموعه‌های علاقه‌مندی کاربر و ایجاد مجموعه جدید استفاده می‌شود.",
-        tags=['favorite']
+        tags=['profile']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -96,7 +96,7 @@ class FavoriteCollectionListCreateView(ListCreateAPIView):
         operation_description="با استفاده از این API می‌توانید یک مجموعه علاقه‌مندی جدید برای کاربر جاری ایجاد کنید.",
         request_body=FavoriteCollectionListSerializer,
         responses={201: FavoriteCollectionListSerializer()},
-        tags=['favorite']
+        tags=['profile']
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
@@ -115,7 +115,7 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت جزئیات مجموعه علاقه‌مندی",
         operation_description="این API اطلاعات مجموعه علاقه‌مندی را به همراه آیتم‌های داخل آن باز می‌گرداند.",
-        tags=['favorite']
+        tags=['profile']
     )
     def get(self, request, *args, **kwargs):
         return self.retrieve(request, *args, **kwargs)
@@ -123,7 +123,7 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
     @swagger_auto_schema(
         operation_summary="حذف مجموعه علاقه‌مندی",
         operation_description="این API برای حذف یک مجموعه علاقه‌مندی مشخص استفاده می‌شود.",
-        tags=['favorite']
+        tags=['profile']
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
@@ -175,7 +175,7 @@ class FavoriteCreateView(CreateAPIView):
         operation_description="با استفاده از این API می‌توانید یک آیتم (هتل یا مقاله) را به علاقه‌مندی‌ها اضافه کنید.",
         request_body=FavoriteCreateSerializer,
         responses={201: FavoriteSerializer()},
-        tags=['favorite']
+        tags=['profile']
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
@@ -206,7 +206,7 @@ class FavoriteDestroyView(DestroyAPIView):
     @swagger_auto_schema(
         operation_summary="حذف آیتم علاقه‌مندی",
         operation_description="با استفاده از این API می‌توانید یک آیتم را از علاقه‌مندی‌ها حذف کنید.",
-        tags=['favorite']
+        tags=['profile']
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
@@ -227,7 +227,7 @@ class CustomerClubPrizeListView(ListAPIView):
                 'type', openapi.IN_QUERY, description="نوع جایزه (hotel یا shopping-center)", type=openapi.TYPE_STRING, required=True
             )
         ],
-        tags=['customer-club']
+        tags=['profile']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -243,7 +243,7 @@ class CustomerReceivedPrizeListCreateView(ListCreateAPIView):
     @swagger_auto_schema(
         operation_summary="لیست جوایز دریافتی",
         operation_description="لیست جوایز دریافتی کاربر را باز می‌گرداند یا جایزه‌ای جدید برای وی ثبت می‌کند.",
-        tags=['customer-club']
+        tags=['profile']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -255,7 +255,7 @@ class CustomerReceivedPrizeListCreateView(ListCreateAPIView):
             'prize': openapi.Schema(type=openapi.TYPE_INTEGER, description='ID جایزه')
         }),
         responses={201: 'جایزه با موفقیت دریافت شد.'},
-        tags=['customer-club']
+        tags=['profile']
     )
     @transaction.atomic
     def post(self, request, *args, **kwargs):
