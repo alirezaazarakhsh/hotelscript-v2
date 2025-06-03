@@ -167,11 +167,35 @@ class ContactInfoSerializer(serializers.ModelSerializer):
 
 
 class SocialMediaSerializer(serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+
     class Meta:
         model = SocialMedia
-        exclude = (
-            'id',
-        )
+        exclude = ('id',)
+
+    def get_icon(self, obj):
+        icon = getattr(obj, 'icon', None)
+        if not icon:
+            return None
+
+        request = self.context.get('request', None)
+        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+
+        svg_code = ""
+        if icon.svg_icon and icon.svg_icon.path:
+            try:
+                with open(icon.svg_icon.path, mode='rb') as f:
+                    svg_code = f.read().decode('utf-8')
+            except Exception:
+                svg_code = ""
+
+        return {
+            "title": icon.title_icon or "",
+             "url": url,
+            "svg_code": svg_code,
+        }
+
+
 
 class BannerSerializer(serializers.ModelSerializer):
     page_title = serializers.SerializerMethodField()
@@ -244,12 +268,38 @@ class RuleSerializer(serializers.ModelSerializer):
             'id',
         )
 
+
+
+
 class UserLevelSerializer(serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+
     class Meta:
         model = UserLevel
-        exclude = (
-            'id',
-        )
+        exclude = ('id',)
+
+    def get_icon(self, obj):
+        icon = getattr(obj, 'icon', None)
+        if not icon:
+            return None
+
+        request = self.context.get('request', None)
+        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+
+        svg_code = ""
+        if icon.svg_icon and icon.svg_icon.path:
+            try:
+                with open(icon.svg_icon.path, mode='rb') as f:
+                    svg_code = f.read().decode('utf-8')
+            except Exception:
+                svg_code = ""
+
+        return {
+            "title": icon.title_icon or "",
+            "svg_code": svg_code,
+            "url": url
+        }
+
         
        
        
