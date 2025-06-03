@@ -194,15 +194,98 @@ class ServiceAdmin(admin.ModelAdmin):
 # ثبت مدل ContactInfo در ادمین با جستجو
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'subtitle', 'value')
-    search_fields = ('title', 'subtitle', 'value')
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+        'value',
+        'link',
+        'show_in_footer',
+        'icon_preview',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
+        'value',
+        'icon__title_icon',
+    )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'title',
+                'subtitle',
+                'value',
+                'link',
+                'icon',
+                'icon_preview',  # نمایش آیکن در فرم
+                'show_in_footer',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده" 
 
 
 # ثبت مدل SocialMedia در ادمین با قابلیت جستجو
 @admin.register(SocialMedia)
 class SocialMediaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'type', 'link')
-    search_fields = ('type', 'link')
+    list_display = (
+        'id',
+        'type',
+        'type_fa',
+        'link',
+        'show_in_footer',
+        'icon_preview',
+    )
+    search_fields = (
+        'type',
+        'type_fa',
+        'link',
+        'icon__title_icon',   # مشابه AdvantageAdmin
+    )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'type',
+                'type_fa',
+                'link',
+                'icon',
+                'icon_preview',  # نمایش آیکن در فرم اضافه/ویرایش
+                'show_in_footer',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
+
 
 
 # ثبت مدل Banner در ادمین با فرم سفارشی، فیلتر و جستجو
@@ -316,8 +399,40 @@ class ComingSoonAdmin(admin.ModelAdmin):
 # ثبت مدل UserLevel در ادمین با قابلیت جستجو
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title')
-    search_fields = ('title',)
+    list_display = (
+        'id',
+        'title',
+        'icon_preview',
+    )
+    search_fields = (
+        'title',
+        'icon__title_icon',  # فیلد مرتبط در مدل IconShortcut
+    )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'title',
+                'icon',
+                'icon_preview',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
 #ادمین کانفیگ تماس با ما 

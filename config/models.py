@@ -422,9 +422,11 @@ class ContactInfo(models.Model):
         blank=True,
         null=True,
     )
-    icon = models.CharField(
+    icon = models.ForeignKey(
+        IconShortcut,  
+        on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        max_length=64,
+        related_name='contact_infos',  
     )
     show_in_footer = models.BooleanField(
         verbose_name=_('نمایش در فوتر'),
@@ -437,6 +439,7 @@ class ContactInfo(models.Model):
     
     def __str__(self):
         return self.title
+
 
 
 
@@ -458,9 +461,11 @@ class SocialMedia(models.Model):
         max_length=1024,
         unique=True,
     )
-    icon = models.CharField(
+    icon = models.ForeignKey(
+        'icons.IconShortcut',
+        on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        max_length=64,
+        related_name='social_medias'
     )
     show_in_footer = models.BooleanField(
         verbose_name=_('نمایش در فوتر'),
@@ -704,9 +709,11 @@ class UserLevel(models.Model):
         max_length=64,
         unique=True,
     )
-    icon = models.CharField(
+    icon = models.ForeignKey(
+        IconShortcut,  
+        on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        max_length=64,
+        related_name='user_levels',  # به صورت جمع و با آندرلاین
     )
     
     class Meta:
@@ -714,7 +721,8 @@ class UserLevel(models.Model):
         verbose_name_plural = 'سطوح کاربری'
     
     def __str__(self):
-        return f'{self.title}'
+        return self.titl
+
 
 
 
