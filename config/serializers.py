@@ -155,28 +155,33 @@ class AdvantageSerializer(serializers.ModelSerializer):
         exclude = ('id',)
 
     def get_icon(self, obj):
-        icon = getattr(obj, 'icon', None)
+        icon = obj.icon
         if not icon:
-            return None  # یا می‌تونی return {} بزاری اگه بخوای ساختار خالی بدی
+            return None
 
         request = self.context.get('request', None)
 
-        url = None
-        if request and hasattr(icon, 'icon_file') and icon.icon_file:
+        # آدرس کامل فایل SVG
+        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+
+        # خواندن محتوای فایل SVG به‌صورت متنی
+        svg_code = ""
+        if icon.svg_icon:
             try:
-                url = request.build_absolute_uri(icon.icon_file.url)
+                with icon.svg_icon.open(mode='r', encoding='utf-8') as f:
+                    svg_code = f.read()
             except Exception:
-                url = None
+                svg_code = ""
 
         return {
-            "title": getattr(icon, 'title', ''),
-            "svg_code": getattr(icon, 'svg_code', ''),
-            "url": url
+            "title": icon.title_icon or "",
+            "url": url,
+            "svg_code": svg_code,
         }
 
 
 
-    
+
 
 class FakeCommentSerializer(serializers.ModelSerializer):
     class Meta:
