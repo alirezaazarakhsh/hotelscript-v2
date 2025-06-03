@@ -451,11 +451,10 @@ class ComingSoonView(APIView):
         tags=['commingsoon']
     )
     def get(self, request, *args, **kwargs):
-        instance = ComingSoon.objects.filter(is_active=True).first()
+        instance = ComingSoon.objects.first()
         if not instance:
             return Response({"detail": "موردی یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         
-        # ارسال request در context برای تولید لینک کامل
         serializer = ComingSoonSerializer(instance, context={'request': request})
         return Response({"data": serializer.data}, status=status.HTTP_200_OK)
     
