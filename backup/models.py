@@ -1,3 +1,5 @@
+import os
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -11,20 +13,18 @@ class BackupLog(models.Model):
     backup_type = models.CharField(max_length=10, choices=BACKUP_TYPE_CHOICES)
     app_name = models.CharField(max_length=100, blank=True, null=True)
     model_name = models.CharField(max_length=100, blank=True, null=True)
-    # مسیر فایل بکاپ (مثلا فولدر روی سرور که بکاپ ها ذخیره میشن)
-    # این مسیر باید حتما وجود داشته باشه و دسترسی خواندن داشته باشه.
-    # 'file_path' فقط مسیر فایل‌های موجود در آن فولدر را انتخاب می‌کند.
+
     file_path = models.FilePathField(
-    path='/var/lib/backsafarname/alirezaazarakhsh20_gmail.com',
-    recursive=True,
-    allow_files=True,
-    allow_folders=False,
-    default='/var/lib/backsafarname/alirezaazarakhsh20_gmail.com'
-)
+        path=os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup'),
+        recursive=True,
+        allow_files=True,
+        allow_folders=False,
+    )
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"{self.backup_type.upper()} - {self.app_name or 'ALL'} - {self.model_name or 'ALL'} - {self.created_at.date()}"
+
 
 
 class BackupRestoreRequest(models.Model):
