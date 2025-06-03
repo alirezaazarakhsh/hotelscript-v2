@@ -146,6 +146,7 @@ class LicenseSerializer(serializers.ModelSerializer):
             'id',
         )
 
+
 class AdvantageSerializer(serializers.ModelSerializer):
     icon = serializers.SerializerMethodField()
 
@@ -154,24 +155,25 @@ class AdvantageSerializer(serializers.ModelSerializer):
         exclude = ('id',)
 
     def get_icon(self, obj):
-        icon = obj.icon
+        icon = getattr(obj, 'icon', None)
         if not icon:
-            return None  # یا {} یا هر مقدار پیش‌فرض که بخواهی
+            return None  # یا می‌تونی return {} بزاری اگه بخوای ساختار خالی بدی
 
         request = self.context.get('request', None)
 
         url = None
-        if request and icon.icon_file:
+        if request and hasattr(icon, 'icon_file') and icon.icon_file:
             try:
                 url = request.build_absolute_uri(icon.icon_file.url)
             except Exception:
                 url = None
 
         return {
-            "title": icon.title,
-            "svg_code": icon.svg_code,
+            "title": getattr(icon, 'title', ''),
+            "svg_code": getattr(icon, 'svg_code', ''),
             "url": url
         }
+
 
 
     
