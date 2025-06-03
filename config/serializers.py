@@ -155,18 +155,24 @@ class AdvantageSerializer(serializers.ModelSerializer):
 
     def get_icon(self, obj):
         icon = obj.icon
+        if not icon:
+            return None  # یا {} یا هر مقدار پیش‌فرض که بخواهی
+
         request = self.context.get('request', None)
 
-        try:
-            url = request.build_absolute_uri(icon.icon_file.url) if icon.icon_file and request else None
-        except Exception:
-            url = None
+        url = None
+        if request and icon.icon_file:
+            try:
+                url = request.build_absolute_uri(icon.icon_file.url)
+            except Exception:
+                url = None
 
         return {
             "title": icon.title,
             "svg_code": icon.svg_code,
             "url": url
         }
+
 
     
 
