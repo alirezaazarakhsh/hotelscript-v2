@@ -455,10 +455,9 @@ class ComingSoonView(APIView):
         if not instance:
             return Response({"detail": "موردی یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         
-        serializer = ComingSoonSerializer(instance)
-        return Response({
-            "data": serializer.data
-        }, status=status.HTTP_200_OK)
+        # ارسال request در context برای تولید لینک کامل
+        serializer = ComingSoonSerializer(instance, context={'request': request})
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
     
     
     
