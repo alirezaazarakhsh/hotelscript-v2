@@ -21,11 +21,10 @@ class BackupLogAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # ─────── model_name choices handling ───────
         selected_app = None
-        # اگر فرم داده ارسال شده
         if 'app_name' in self.data:
             selected_app = self.data.get('app_name')
-        # اگر شی مدل داریم (مثلاً ویرایش)
         elif self.instance and self.instance.app_name:
             selected_app = self.instance.app_name
 
@@ -36,6 +35,26 @@ class BackupLogAdminForm(forms.ModelForm):
         else:
             self.fields['model_name'].choices = []
             self.fields['model_name'].widget.attrs['disabled'] = True
+
+        # ─────── file_path dropdown handling ───────
+        backup_folder = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
+        if os.path.exists(backup_folder):
+            file_choices = [
+                (os.path.join(backup_folder, f), f)
+                for f in os.listdir(backup_folder)
+                if os.path.isfile(os.path.join(backup_folder, f))
+            ]
+            self.fields['file_path'] = forms.ChoiceField(
+                choices=file_choices,
+                required=False,
+                label="فایل بکاپ"
+            )
+        else:
+            self.fields['file_path'] = forms.ChoiceField(
+                choices=[],
+                required=False,
+                label="فایل بکاپ (پوشه پیدا نشد)"
+            )
 
 
 

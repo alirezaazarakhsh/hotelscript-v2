@@ -14,17 +14,12 @@ class BackupLog(models.Model):
     app_name = models.CharField(max_length=100, blank=True, null=True)
     model_name = models.CharField(max_length=100, blank=True, null=True)
 
-    BACKUP_FOLDER = os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup')
-
     file_path = models.FilePathField(
-        path=BACKUP_FOLDER,
+        path=os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup'),
         recursive=True,
         allow_files=True,
         allow_folders=False,
-        blank=True,
-        default=None
     )
-
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
