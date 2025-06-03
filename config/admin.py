@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib import messages
+from django.utils.html import format_html
 from .models import (
     Location,
     Page,
@@ -141,8 +142,45 @@ class ChooseReasonAdmin(admin.ModelAdmin):
 # ثبت مدل FAQ در ادمین با قابلیت جستجو
 @admin.register(FAQ)
 class FAQAdmin(admin.ModelAdmin):
-    list_display = ('id', 'question', 'answer')
-    search_fields = ('question', 'answer')
+    list_display = (
+        'id',
+        'question',
+        'answer',
+        'icon_preview',
+        'page',
+    )
+    search_fields = (
+        'question',
+        'answer',
+        'icon__title_icon',
+    )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'question',
+                'answer',
+                'icon',
+                'icon_preview',  # نمایش آیکون در فرم
+                'page',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
 # ثبت مدل Service در ادمین با فرم سفارشی و جستجو
@@ -204,9 +242,43 @@ class LicenseAdmin(admin.ModelAdmin):
 # ثبت مدل Advantage در ادمین با قابلیت جستجو
 @admin.register(Advantage)
 class AdvantageAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'subtitle')
-    search_fields = ('title', 'subtitle',)
+    list_display = (
+        'id',
+        'title',
+        'subtitle',
+        'icon_preview',
+    )
+    search_fields = (
+        'title',
+        'subtitle',
+        'icon__title_icon',
+    )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
 
+    fieldsets = (
+        (None, {
+            'fields': (
+                'title',
+                'subtitle',
+                'icon',
+                'icon_preview',  # نمایش آیکن در فرم اضافه/ویرایش
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 # ثبت مدل FakeComment در ادمین با فرم سفارشی و جستجو
 @admin.register(FakeComment)

@@ -8,6 +8,8 @@ from django.core.validators import (
     MaxValueValidator,
     RegexValidator,
 )
+
+from icons.models import IconShortcut
 from .managers import ActiveManager
 from .validators import (
     validate_future_datetime,
@@ -351,15 +353,13 @@ class ChooseReason(models.Model):
 
 #مدل سوالات متداول بر اساس هر پیج 
 class FAQ(models.Model):
-    question = models.TextField(
-        verbose_name=_('سوال'),
-    )
-    answer = models.TextField(
-        verbose_name=_('جواب')
-    )
-    icon = models.CharField(
+    question = models.TextField(verbose_name=_('سوال'))
+    answer = models.TextField(verbose_name=_('جواب'))
+    icon = models.ForeignKey(
+        IconShortcut,
+        on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        max_length=64,
+        related_name='faqs',
     )
     page = models.ForeignKey(
         Page,
@@ -371,7 +371,7 @@ class FAQ(models.Model):
     class Meta:
         verbose_name = 'سوال متداول'
         verbose_name_plural = 'سوالات متداول صفحات'
-    
+
     def __str__(self):
         return self.question
 
@@ -583,17 +583,19 @@ class Advantage(models.Model):
         verbose_name=_('زیر عنوان'),
         max_length=256,
     )
-    icon = models.CharField(
+    icon = models.ForeignKey(
+        'icons.IconShortcut', 
+        on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        max_length=64,
+        related_name='advantages'
     )
-    
+
     class Meta:
         verbose_name = 'آپشن'
         verbose_name_plural = 'آپشن های صفحه اصلی'
-    
+
     def __str__(self):
-        return f'{self.title}'
+        return self.title
 
 
 

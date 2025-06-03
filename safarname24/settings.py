@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'safarname24',
     'ckeditor',
+    'icons',
   
 ]
 
