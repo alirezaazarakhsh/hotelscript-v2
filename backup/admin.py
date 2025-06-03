@@ -1,9 +1,6 @@
 from django.contrib import admin
-import os
-from django.conf import settings
 from .models import BackupLog, BackupRestoreRequest
 from .forms import BackupLogAdminForm
-
 
 
 @admin.register(BackupLog)
@@ -11,9 +8,17 @@ class BackupLogAdmin(admin.ModelAdmin):
     form = BackupLogAdminForm
     list_display = ['backup_type', 'app_name', 'model_name', 'created_at']
     readonly_fields = ['created_at']
+    
     fieldsets = (
         (None, {
-            'fields': ('backup_type', 'app_name', 'model_name', 'file_path', 'created_at')
+            'fields': (
+                'backup_type',
+                'app_name',
+                'model_name',
+                'file_choice',   # نمایش فایل‌های موجود در پوشه بکاپ
+                'backup_file',   # فیلد واقعی فایل که در مدل ذخیره می‌شود
+                'created_at',
+            )
         }),
     )
 
