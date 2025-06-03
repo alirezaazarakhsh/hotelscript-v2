@@ -1,6 +1,6 @@
 from django import forms
 import os
-from safarname24 import settings
+from django.conf import settings
 from .models import BackupLog, BackupRestoreRequest
 from .apps_models_list import APPS_MODELS
 
@@ -16,6 +16,7 @@ class BackupLogAdminForm(forms.ModelForm):
         label="انتخاب مدل",
         required=False
     )
+    # این فیلد در مدل وجود نداره، فقط در فرم برای انتخاب فایل
     file_path = forms.ChoiceField(
         choices=[],
         label="فایل بکاپ",
@@ -24,7 +25,7 @@ class BackupLogAdminForm(forms.ModelForm):
 
     class Meta:
         model = BackupLog
-        fields = '__all__'
+        fields = ['backup_type', 'app_name', 'model_name']  # file_path حذف شده از اینجا چون در مدل نیست
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -62,9 +63,8 @@ class BackupLogAdminForm(forms.ModelForm):
             self.fields['file_path'].widget.attrs['disabled'] = True
             self.fields['file_path'].help_text = "پوشه بکاپ پیدا نشد یا فایل موجود نیست."
 
-        # مقدار اولیه file_path از instance اگر وجود داشته باشد
-        if self.instance and self.instance.file_path:
-            self.fields['file_path'].initial = os.path.basename(self.instance.file_path)
+        # اگر بخواهی مقدار اولیه برای فایل بذاری، باید این قسمت رو حذف یا تغییر بدی
+        # چون فایل در مدل ذخیره نمی‌شه (مدل file_path ندارد)
 
     def clean_file_path(self):
         file_name = self.cleaned_data.get('file_path')
@@ -74,8 +74,6 @@ class BackupLogAdminForm(forms.ModelForm):
             raise forms.ValidationError("فایل انتخاب شده در پوشه بکاپ وجود ندارد.")
         # فقط نام فایل را برگردانیم نه مسیر کامل
         return file_name
-
-
 
 
 class BackupRestoreRequestForm(forms.ModelForm):
