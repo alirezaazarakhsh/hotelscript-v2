@@ -44,8 +44,13 @@ from reservation.models import Hotel
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-# Create your views here.
+
 class FavoriteCollectionListCreateView(ListCreateAPIView):
+    """
+    مدیریت لیست‌های علاقه‌مندی کاربر:
+    - دریافت لیست تمامی کالکشن‌های علاقه‌مندی کاربر با تصاویر مرتبط
+    - ایجاد کالکشن علاقه‌مندی جدید برای کاربر
+    """
     permission_classes = (IsAuthenticated,)
     serializer_class = FavoriteCollectionListSerializer
 
@@ -96,10 +101,30 @@ class FavoriteCollectionListCreateView(ListCreateAPIView):
 
         return queryset
 
+    @swagger_auto_schema(
+        operation_summary="لیست و ایجاد کالکشن‌های علاقه‌مندی",
+        operation_description="""
+        - دریافت لیست کالکشن‌های علاقه‌مندی کاربر
+        - ایجاد کالکشن جدید برای کاربر
+        """,
+        responses={
+            200: FavoriteCollectionListSerializer(many=True),
+            201: FavoriteCollectionListSerializer(),
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+
 class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
+    """
+    مشاهده جزئیات یک کالکشن علاقه‌مندی و حذف آن:
+    - دریافت جزئیات کالکشن به همراه لیست علاقه‌مندی‌های آن با صفحه‌بندی
+    - حذف کالکشن علاقه‌مندی
+    """
     permission_classes = (IsAuthenticated,)
     serializer_class = FavoriteCollectionRetrieveSerializer
 
@@ -107,7 +132,6 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
         queryset = FavoriteCollection.objects.filter(
             user=self.request.user,
         )
-
         return queryset
     
     def retrieve(self, request, *args, **kwargs):
@@ -153,14 +177,20 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
         collection_data['favorites'] = favorites_data
         return paginator.get_paginated_response(collection_data)
 
+
 class FavoriteCreateView(CreateAPIView):
+    """
+    ایجاد یک علاقه‌مندی جدید:
+    - اضافه کردن آیتم جدید به یکی از لیست‌های علاقه‌مندی کاربر
+    - بررسی تکراری نبودن آیتم
+    - اعتبارسنجی وجود آیتم
+    """
     permission_classes = (IsAuthenticated,)
     serializer_class = FavoriteCreateSerializer
 
     def get_queryset(self):
         queryset = Favorite.objects.select_related('list')\
             .filter(list__user__id=self.request.user.pk)
-
         return queryset
     
     def perform_create(self, serializer):
@@ -188,16 +218,25 @@ class FavoriteCreateView(CreateAPIView):
 
         return super().perform_create(serializer)
 
+
 class FavoriteDestroyView(DestroyAPIView):
+    """
+    حذف یک علاقه‌مندی:
+    - حذف یک آیتم از لیست علاقه‌مندی‌های کاربر
+    """
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
         queryset = Favorite.objects.select_related('list')\
             .filter(list__user__id=self.request.user.pk)
-
         return queryset
 
+
 class CustomerClubPrizeListView(ListAPIView):
+    """
+    دریافت لیست جوایز باشگاه مشتریان براساس نوع جایزه:
+    - هتل یا مرکز خرید
+    """
     permission_classes = (IsAuthenticated,)
     serializer_class = CustomerClubPrizeListSerializer
 
@@ -206,14 +245,13 @@ class CustomerClubPrizeListView(ListAPIView):
         queryset = CustomerClubPrize.objects.filter(
             type=type
         )
-
         return queryset
 
     @swagger_auto_schema(manual_parameters=[
         openapi.Parameter(
             'type',
             openapi.IN_QUERY,
-            description="type of prize (hotel or shopping-center)",
+            description="نوع جایزه (hotel یا shopping-center)",
             type=openapi.TYPE_STRING,
             required=True,
         ),
@@ -221,7 +259,13 @@ class CustomerClubPrizeListView(ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+
 class CustomerReceivedPrizeListCreateView(ListCreateAPIView):
+    """
+    مشاهده و ثبت جوایز دریافتی مشتری:
+    - دریافت لیست جوایز دریافتی توسط کاربر
+    - ثبت دریافت جایزه جدید در صورت داشتن امتیاز کافی
+    """
     permission_classes = (IsAuthenticated,)
     serializer_class = CustomerClubPrizeListSerializer
 
@@ -231,7 +275,6 @@ class CustomerReceivedPrizeListCreateView(ListCreateAPIView):
         ).select_related(
             'customer'
         )
-
         return queryset
 
     @transaction.atomic
