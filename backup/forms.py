@@ -72,7 +72,8 @@ class BackupLogAdminForm(forms.ModelForm):
         full_path = os.path.join(backup_folder, file_name)
         if not os.path.exists(full_path):
             raise forms.ValidationError("فایل انتخاب شده در پوشه بکاپ وجود ندارد.")
-        return full_path
+        # فقط نام فایل را برگردانیم نه مسیر کامل
+        return file_name
 
 
 
