@@ -47,7 +47,7 @@ SOCIAL_MEDIA_OPTIONS = (
     ('linkedin', 'LinkedIn'),
     ('youtube', 'YouTube'),
     ('facebook', 'Facebook'),
-    ('discord', 'whatsapp'),
+    ('whatsapp', 'whatsapp'),
     ('x', 'X'),
 )
 
