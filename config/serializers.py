@@ -90,6 +90,7 @@ class ChooseReasonSerializer(serializers.ModelSerializer):
 
 class FAQSerializer(serializers.ModelSerializer):
     page_title = serializers.SerializerMethodField()
+    icon = serializers.SerializerMethodField()
 
     class Meta:
         model = FAQ
@@ -100,6 +101,28 @@ class FAQSerializer(serializers.ModelSerializer):
             return obj.page.title
         except Exception:
             return None
+
+    def get_icon(self, obj):
+        icon = getattr(obj, 'icon', None)
+        if not icon:
+            return None
+
+        request = self.context.get('request', None)
+        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+
+        svg_code = ""
+        if icon.svg_icon and icon.svg_icon.path:
+            try:
+                with open(icon.svg_icon.path, mode='rb') as f:
+                    svg_code = f.read().decode('utf-8')
+            except Exception:
+                svg_code = ""
+
+        return {
+            "title": icon.title_icon or "",
+            "link": url,
+            "svg_code": svg_code,
+        }
 
     
     
@@ -136,8 +159,9 @@ class ContactInfoSerializer(serializers.ModelSerializer):
 
         return {
             "title": icon.title_icon or "",
+            "link": url,
             "svg_code": svg_code,
-            "link": url
+        
         }
 
 
