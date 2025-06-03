@@ -442,11 +442,8 @@ class UserLevelListView(ListAPIView):
 
 
 #ای پی ای کامینگ سون 
-class ComingSoonView(ListAPIView):
-    queryset = ComingSoon.objects.filter(is_active=True)
+class ComingSoonView(APIView):
     permission_classes = (AllowAny,)
-    serializer_class = ComingSoonSerializer
-    pagination_class = None
 
     @swagger_auto_schema(
         operation_summary="دریافت اطلاعات صفحه کامینگ سون",
@@ -454,11 +451,11 @@ class ComingSoonView(ListAPIView):
         tags=['commingsoon']
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+        instance = ComingSoon.objects.filter(is_active=True).first()
+        if not instance:
+            return Response({"detail": "موردی یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ComingSoonSerializer(instance)
         return Response({
             "data": serializer.data
         }, status=status.HTTP_200_OK)
