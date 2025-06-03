@@ -15,7 +15,7 @@ class IconShortcutListCreateView(ListCreateAPIView):
         return IconShortcut.objects.all().order_by('order')
 
     @swagger_auto_schema(
-        operation_summary="لیست آیکون‌های سایت ",
+        operation_summary="لیست آیکون‌های سایت",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
         - لیست آیکون‌ها را مشاهده کند

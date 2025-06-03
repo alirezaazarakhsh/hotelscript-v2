@@ -147,11 +147,15 @@ class LicenseSerializer(serializers.ModelSerializer):
         )
 
 class AdvantageSerializer(serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+
     class Meta:
         model = Advantage
-        exclude = (
-            'id',
-        )
+        exclude = ('id',)
+
+    def get_icon(self, obj):
+        return obj.icon.svg_code 
+    
 
 class FakeCommentSerializer(serializers.ModelSerializer):
     class Meta:
