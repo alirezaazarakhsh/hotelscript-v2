@@ -1,6 +1,4 @@
-# models.py در اپلیکیشن backup
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 from django.utils import timezone
 
 class BackupLog(models.Model):
@@ -13,7 +11,15 @@ class BackupLog(models.Model):
     backup_type = models.CharField(max_length=10, choices=BACKUP_TYPE_CHOICES)
     app_name = models.CharField(max_length=100, blank=True, null=True)
     model_name = models.CharField(max_length=100, blank=True, null=True)
-    file_path = models.FilePathField(path='/path/to/backups', recursive=True, allow_files=True, allow_folders=False)
+    # مسیر فایل بکاپ (مثلا فولدر روی سرور که بکاپ ها ذخیره میشن)
+    # این مسیر باید حتما وجود داشته باشه و دسترسی خواندن داشته باشه.
+    # 'file_path' فقط مسیر فایل‌های موجود در آن فولدر را انتخاب می‌کند.
+    file_path = models.FilePathField(
+        path='/path/to/backups',  # اینجا مسیر واقعی بکاپ ها رو باید بزنی
+        recursive=True,           # می‌گردد داخل فولدرها هم بگردد
+        allow_files=True,
+        allow_folders=False,
+    )
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):

@@ -1,10 +1,10 @@
-# admin.py
 from django.contrib import admin
 from .models import BackupLog, BackupRestoreRequest
-from .forms import BackupCreationForm
+from .forms import BackupLogAdminForm
 
 @admin.register(BackupLog)
 class BackupLogAdmin(admin.ModelAdmin):
+    form = BackupLogAdminForm
     list_display = ['backup_type', 'app_name', 'model_name', 'created_at']
     readonly_fields = ['created_at']
 
