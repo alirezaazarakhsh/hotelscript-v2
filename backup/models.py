@@ -14,16 +14,15 @@ class BackupLog(models.Model):
     app_name = models.CharField(max_length=100, blank=True, null=True)
     model_name = models.CharField(max_length=100, blank=True, null=True)
 
-    file_path = models.FilePathField(
-        path=os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup'),
-        recursive=True,
-        allow_files=True,
-        allow_folders=False,
-    )
+    file_path = models.CharField(max_length=255)  # تغییر FilePathField به CharField
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"{self.backup_type.upper()} - {self.app_name or 'ALL'} - {self.model_name or 'ALL'} - {self.created_at.date()}"
+
+    def get_full_path(self):
+        """برگرداندن مسیر کامل فایل از روی نام فایل ذخیره‌شده"""
+        return os.path.join(settings.BASE_DIR, 'backup', 'folder-save-backup', self.file_path)
 
 
 
