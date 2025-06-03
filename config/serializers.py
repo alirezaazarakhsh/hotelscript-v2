@@ -177,12 +177,26 @@ class UserLevelSerializer(serializers.ModelSerializer):
        
        
        
+
 class ComingSoonSerializer(serializers.ModelSerializer):
+    logo = serializers.SerializerMethodField()
+    background = serializers.SerializerMethodField()
+
     class Meta:
         model = ComingSoon
-        exclude = (
-            'id',
-        ) 
+        exclude = ('id',)
+
+    def get_logo(self, obj):
+        request = self.context.get('request')
+        if obj.logo and hasattr(obj.logo, 'url'):
+            return request.build_absolute_uri(obj.logo.url)
+        return None
+
+    def get_background(self, obj):
+        request = self.context.get('request')
+        if obj.background and hasattr(obj.background, 'url'):
+            return request.build_absolute_uri(obj.background.url)
+        return None
 
 
 class LocationSerializer(serializers.ModelSerializer):
