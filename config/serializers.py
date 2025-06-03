@@ -160,17 +160,15 @@ class AdvantageSerializer(serializers.ModelSerializer):
             return None
 
         request = self.context.get('request', None)
-
-        # آدرس کامل فایل SVG
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        # خواندن محتوای فایل SVG به‌صورت متنی
         svg_code = ""
-        if icon.svg_icon:
+        if icon.svg_icon and icon.svg_icon.path:
             try:
-                with icon.svg_icon.open(mode='r', encoding='utf-8') as f:
-                    svg_code = f.read()
-            except Exception:
+                with open(icon.svg_icon.path, mode='rb') as f:
+                    svg_code = f.read().decode('utf-8')
+            except Exception as e:
+                print("❌ SVG READ ERROR:", e)  # برای لاگ گرفتن در محیط تست یا لاگ سرور
                 svg_code = ""
 
         return {
