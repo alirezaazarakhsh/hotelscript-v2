@@ -605,6 +605,7 @@ class Advantage(models.Model):
 
 
 
+
 class FakeComment(models.Model):
     commenter = models.CharField(
         verbose_name=_('نام و نام خانوادگی نظردهنده'),
