@@ -376,6 +376,12 @@ class AdvantageListView(ListAPIView):
     serializer_class = AdvantageSerializer
     pagination_class = None
 
+    def get_serializer_context(self):
+       
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
     @swagger_auto_schema(
         operation_summary="دریافت آپشن های صفحه اصلی ",
         operation_description="این API برای سکشن آپشن های صفحه اصلی می باشد ",
@@ -383,6 +389,7 @@ class AdvantageListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
     
     
     

@@ -154,7 +154,12 @@ class AdvantageSerializer(serializers.ModelSerializer):
         exclude = ('id',)
 
     def get_icon(self, obj):
-        return obj.icon.svg_code 
+        icon = obj.icon
+        return {
+            "title": icon.title,
+            "svg_code": icon.svg_code,
+            "url": self.context['request'].build_absolute_uri(icon.icon_file.url) if icon.icon_file else None
+        }
     
 
 class FakeCommentSerializer(serializers.ModelSerializer):
