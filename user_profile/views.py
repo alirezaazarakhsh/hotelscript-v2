@@ -1,22 +1,10 @@
 from django.db.models.functions import Round
-from django.db.models import (
-    Q,
-    Min,
-    Avg,
-    Prefetch,
-)
-from django.db import (
-    transaction,
-    IntegrityError,
-)
+from django.db.models import Q, Min, Avg, Prefetch
+from django.db import transaction, IntegrityError
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.exceptions import (
-    ValidationError,
-)
-from rest_framework.permissions import (
-    IsAuthenticated,
-)
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.settings import api_settings
 from rest_framework.generics import (
     ListCreateAPIView,
