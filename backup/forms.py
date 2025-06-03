@@ -48,7 +48,7 @@ class BackupLogAdminForm(forms.ModelForm):
             ]
             self.fields['file_path'] = forms.ChoiceField(
                 choices=file_choices,
-                required=True,
+                required=False,
                 label="فایل بکاپ"
             )
         else:
