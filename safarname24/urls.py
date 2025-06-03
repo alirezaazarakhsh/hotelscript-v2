@@ -46,6 +46,7 @@ urlpatterns = [
         path('hotel/', include('reservation.urls', namespace='reservation')),
         path('finance/', include('finance.urls', namespace='finance')),
         path('profile/', include('user_profile.urls', namespace='profile')),
+        path('icons/', include('icons.urls', namespace='icons')),
         path('profile/', include([
             path(
                 'passengers/',
