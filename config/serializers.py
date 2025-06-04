@@ -110,19 +110,11 @@ class FAQSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        svg_code = ""
-        if icon.svg_icon and icon.svg_icon.path:
-            try:
-                with open(icon.svg_icon.path, mode='rb') as f:
-                    svg_code = f.read().decode('utf-8')
-            except Exception:
-                svg_code = ""
-
         return {
             "title": icon.title_icon or "",
             "link": url,
-            "svg_code": svg_code,
         }
+
 
     
     
@@ -149,20 +141,11 @@ class ContactInfoSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        svg_code = ""
-        if icon.svg_icon and icon.svg_icon.path:
-            try:
-                with open(icon.svg_icon.path, mode='rb') as f:
-                    svg_code = f.read().decode('utf-8')
-            except Exception:
-                svg_code = ""
-
         return {
             "title": icon.title_icon or "",
             "link": url,
-            "svg_code": svg_code,
-        
         }
+
 
 
 
@@ -181,18 +164,9 @@ class SocialMediaSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        svg_code = ""
-        if icon.svg_icon and icon.svg_icon.path:
-            try:
-                with open(icon.svg_icon.path, mode='rb') as f:
-                    svg_code = f.read().decode('utf-8')
-            except Exception:
-                svg_code = ""
-
         return {
             "title": icon.title_icon or "",
-             "url": url,
-            "svg_code": svg_code,
+            "url": url,
         }
 
 
@@ -235,20 +209,11 @@ class AdvantageSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        svg_code = ""
-        if icon.svg_icon and icon.svg_icon.path:
-            try:
-                with open(icon.svg_icon.path, mode='rb') as f:
-                    svg_code = f.read().decode('utf-8')
-            except Exception as e:
-                print("❌ SVG READ ERROR:", e)  # برای لاگ گرفتن در محیط تست یا لاگ سرور
-                svg_code = ""
-
         return {
             "title": icon.title_icon or "",
             "url": url,
-            "svg_code": svg_code,
         }
+
 
 
 
@@ -286,17 +251,8 @@ class UserLevelSerializer(serializers.ModelSerializer):
         request = self.context.get('request', None)
         url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
 
-        svg_code = ""
-        if icon.svg_icon and icon.svg_icon.path:
-            try:
-                with open(icon.svg_icon.path, mode='rb') as f:
-                    svg_code = f.read().decode('utf-8')
-            except Exception:
-                svg_code = ""
-
         return {
             "title": icon.title_icon or "",
-            "svg_code": svg_code,
             "url": url
         }
 
