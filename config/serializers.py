@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils.html import strip_tags
 from .models import (
     ComingSoon,
     Location,
@@ -226,13 +227,16 @@ class FakeCommentSerializer(serializers.ModelSerializer):
             'id',
         )
 
+
 class RuleSerializer(serializers.ModelSerializer):
+    plain_text = serializers.SerializerMethodField()
+
     class Meta:
         model = Rule
-        exclude = (
-            'id',
-        )
+        fields = ('tab_title', 'plain_text')
 
+    def get_plain_text(self, obj):
+        return strip_tags(obj.text)
 
 
 

@@ -657,6 +657,9 @@ class Rule(models.Model):
     
     def __str__(self):
         return f'{self.tab_title}'
+    
+    
+    
 
 class ComingSoon(models.Model):
     logo = models.ImageField(
