@@ -30,7 +30,7 @@ schema_view = get_schema_view(
         description="API SAFARNAMEH",
         terms_of_service="https://www.sevinhost.com/",
         contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
-        license=openapi.License(name="checked✅"),
+        license=openapi.License(name="checked ✅"),
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
