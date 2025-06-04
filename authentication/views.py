@@ -4,11 +4,13 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from .utils import generate_otp_code
+from .sms.sms import send_otp_sms
 from rest_framework_simplejwt.views import (
     TokenObtainPairView as JwtTokenObtainPairView,
     TokenRefreshView as JwtTokenRefreshView,
 )
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import TokenError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -18,7 +20,6 @@ from .serializers import (
     JuridicalProfileSerializer,
     JuridicalProfileDocumentSerializer,
 )
-from .utils import generate_otp_code, send_otp_code
 from .models import (
     BaseUser,
     OTP,
@@ -56,15 +57,15 @@ class APILogoutView(APIView):
     )
     def post(self, request, *args, **kwargs):
         try:
-            if refresh_token := self.request.data.get('refresh_token'):
-                outstanding_token = RefreshToken(token=refresh_token)
-                outstanding_token.blacklist()
-                return Response()
-            else:
+            refresh_token = self.request.data.get('refresh_token')
+            if not refresh_token:
                 return Response(
                     {"detail": "refresh_token is required"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            token = RefreshToken(token=refresh_token)
+            token.blacklist()
+            return Response({"detail": _("با موفقیت خارج شدید.")})
         except Exception as e:
             return Response(
                 {"detail": str(e)},
@@ -82,27 +83,34 @@ class AuthView(APIView):
         اگر کدی از قبل ارسال شده و هنوز منقضی نشده باشد، از ارسال مجدد جلوگیری می‌شود.
         """,
         request_body=AuthSerializer,
-        responses={200: 'کد ارسال شد', 429: 'باید صبر کنید'}
+        responses={
+            200: 'کد تایید ارسال شد',
+            429: 'لطفاً چند دقیقه صبر کنید و مجدداً تلاش کنید'
+        }
     )
     def post(self, request):
         if request.user.is_authenticated:
             return Response(
-                {"detail": _("you are already logged in")},
+                {"detail": _("شما قبلاً وارد شده‌اید.")},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         serializer = AuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        phone = request.data.get('phone')
+        phone = serializer.validated_data.get('phone')
+
         user = BaseUser.objects.get_by_phone_or_create(phone)
 
+        # جلوگیری از ارسال بیش از حد OTP در بازه زمانی منقضی نشده
         try:
-            last_user_otp = user.otps.latest('created')
-            wait_time_seconds = -(timezone.now() - last_user_otp.expired).total_seconds()
-            if wait_time_seconds >= 0:
+            last_otp = user.otps.latest('created')
+            remaining_time = (last_otp.expired - timezone.now()).total_seconds()
+            if remaining_time > 0:
                 return Response(
                     {
-                        "detail": _("wait up to %(minute)d minute to receive the verfication code again") % {'minute': wait_time_seconds // 60 + 1}
+                        "detail": _(
+                            "لطفاً %(minute)d دقیقه صبر کنید تا کد جدید دریافت کنید."
+                        ) % {"minute": int(remaining_time // 60) + 1}
                     },
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
@@ -113,21 +121,32 @@ class AuthView(APIView):
         otp = OTP(user=user)
         otp.set_code(code)
         otp.save()
-        send_otp_code(code, phone)
 
-        return Response()
+        # ارسال کد OTP به شماره موبایل
+        sent = send_otp_sms(phone, code)
+        if not sent:
+            return Response(
+                {"detail": _("ارسال کد با خطا مواجه شد، لطفاً دوباره تلاش کنید.")},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({"detail": _("کد تایید با موفقیت ارسال شد.")}, status=status.HTTP_200_OK)
 
 
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
         operation_summary="ورود با کد تایید OTP",
         operation_description="گرفتن توکن JWT با استفاده از کد تأیید ارسال شده",
-        responses={200: 'دریافت موفق توکن', 403: 'قبلاً وارد شده‌اید'}
+        responses={
+            200: 'دریافت موفق توکن',
+            403: 'قبلاً وارد شده‌اید',
+            401: 'کد نامعتبر است'
+        }
     )
     def post(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             return Response(
-                {"detail": _("you are already logged in")},
+                {"detail": _("شما قبلاً وارد شده‌اید.")},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -135,23 +154,29 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            raise InvalidToken(e.args[0])
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
-        return Response(serializer.validated_data)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class TokenRefreshView(JwtTokenRefreshView):
     @swagger_auto_schema(
         operation_summary="تازه‌سازی توکن JWT",
         operation_description="دریافت توکن جدید با استفاده از refresh token",
-        responses={200: 'موفق'}
+        responses={200: 'توکن جدید با موفقیت صادر شد'}
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            raise InvalidToken(e.args[0])
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
@@ -204,10 +229,8 @@ class JuridicalProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin
         request.data['status'] = 'checking'
         try:
             return self.update(request, *args, **kwargs)
-        except NaturalProfile.DoesNotExist:
+        except JuridicalProfile.DoesNotExist:
             return super().create(request, *args, **kwargs)
-
-
 
 
 class JuridicalProfileDocumentListCreateDestroyView(ListModelMixin,
@@ -256,5 +279,6 @@ class JuridicalProfileDocumentListCreateDestroyView(ListModelMixin,
         return super().create(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
+        request.data['profile'] = request.user.natural_profile.juridical_profile.pk
         self.get_juridical_profile_query_set().update(status='checking')
-        return self.destroy(request, *args, **kwargs)
+        return super().destroy(request, *args, **kwargs)
