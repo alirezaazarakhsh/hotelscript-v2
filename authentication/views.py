@@ -101,21 +101,21 @@ class AuthView(APIView):
 
         user = BaseUser.objects.get_by_phone_or_create(phone)
 
-        # جلوگیری از ارسال بیش از حد OTP در بازه زمانی منقضی نشده
-        try:
-            last_otp = user.otps.latest('created')
-            remaining_time = (last_otp.expired - timezone.now()).total_seconds()
-            if remaining_time > 0:
-                return Response(
-                    {
-                        "detail": _(
-                            "لطفاً %(minute)d دقیقه صبر کنید تا کد جدید دریافت کنید."
-                        ) % {"minute": int(remaining_time // 60) + 1}
-                    },
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-        except OTP.DoesNotExist:
-            pass
+        # # جلوگیری از ارسال بیش از حد OTP در بازه زمانی منقضی نشده
+        # try:
+        #     last_otp = user.otps.latest('created')
+        #     remaining_time = (last_otp.expired - timezone.now()).total_seconds()
+        #     if remaining_time > 0:
+        #         return Response(
+        #             {
+        #                 "detail": _(
+        #                     "لطفاً %(minute)d دقیقه صبر کنید تا کد جدید دریافت کنید."
+        #                 ) % {"minute": int(remaining_time // 60) + 1}
+        #             },
+        #             status=status.HTTP_429_TOO_MANY_REQUESTS,
+        #         )
+        # except OTP.DoesNotExist:
+        #     pass
 
         code = generate_otp_code()
         otp = OTP(user=user)
