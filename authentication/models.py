@@ -69,6 +69,23 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.phone_number
 
+    @property
+    def first_name(self):
+        if hasattr(self, 'admin'):
+            return self.admin.first_name
+        elif hasattr(self, 'natural_profile'):
+            return self.natural_profile.first_name
+        return None
+
+    @property
+    def last_name(self):
+        if hasattr(self, 'admin'):
+            return self.admin.last_name
+        elif hasattr(self, 'natural_profile'):
+            return self.natural_profile.last_name
+        return None
+
+
 
 
 #مدل ادمین ها 
@@ -132,7 +149,7 @@ class SuperUser(models.Model):
         ).hexdigest()
     
     
-    #مدل پروفایل ادمین ها 
+ #مدل پروفایل ادمین ها 
 class Admin(models.Model):
     base_user = models.OneToOneField(
         BaseUser,

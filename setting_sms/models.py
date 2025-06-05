@@ -3,18 +3,19 @@ from django.db import models
 # Choices برای بخش‌هایی که پترن دارند
 PATTERN_SECTIONS = [
     ('otp', 'ارسال کد تایید (OTP) به کاربران'),
+    ('welcome', 'خوش‌آمدگویی به کاربران پس از لاگین'),
     
-    # مقادیر دیگر قابل افزودن هستند
+    
 ]
 
 # مدل تنظیمات سامانه پیامکی کاوه نگار 
 class KavenegarSMSSetting(models.Model):
     name = models.CharField(max_length=100, verbose_name="نام سامانه")
-    api_token = models.CharField(max_length=255, verbose_name="API Token")
+    api_token = models.TextField(max_length=500, verbose_name="API Token")
 
     class Meta:
-        verbose_name = "تنظیمات سامانه پیامکی کاوه‌نگار"
-        verbose_name_plural = "تنظیمات سامانه پیامکی کاوه‌نگار"
+        verbose_name = "تنظیمات سامانه پیامکی کاوه‌ نگار"
+        verbose_name_plural = "تنظیمات سامانه پیامکی کاوه‌ نگار"
 
     def __str__(self):
         return self.name

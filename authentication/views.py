@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from .utils import generate_otp_code
-from .sms.sms import send_otp_sms
+from .sms.sms import send_otp_sms, send_welcome_sms
 from rest_framework_simplejwt.views import (
     TokenObtainPairView as JwtTokenObtainPairView,
     TokenRefreshView as JwtTokenRefreshView,
@@ -139,7 +139,6 @@ class AuthView(APIView):
 
 
 
-# ای پی ای ورود با کد تایید otp
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
         operation_summary="ورود با کد تایید OTP",
@@ -165,6 +164,14 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 {"detail": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+
+        # گرفتن شماره تلفن و نام کامل کاربر (فرض بر این است که در serializer این داده‌ها هست)
+        user = serializer.user  # فرض می‌کنیم serializer بعد از اعتبارسنجی، user رو داره
+        phone_number = user.phone_number
+        full_name = f"{user.first_name}{user.last_name}".strip()
+
+        # ارسال پیام خوش آمدگویی
+        send_welcome_sms(phone_number, full_name)
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 

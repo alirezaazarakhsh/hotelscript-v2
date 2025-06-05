@@ -725,7 +725,7 @@ class UserLevel(models.Model):
         verbose_name_plural = 'سطوح کاربری'
     
     def __str__(self):
-        return self.titl
+        return self.title   
 
 
 
