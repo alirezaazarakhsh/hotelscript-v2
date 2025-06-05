@@ -18,8 +18,6 @@ class SMSPatternInline(admin.TabularInline):
     fields = ['name_fa', 'pattern_code']
 
 
-
-
 @admin.register(KavenegarSMSSetting)
 class KavenegarSMSSettingAdmin(admin.ModelAdmin):
     list_display = ['name', 'api_token']
@@ -29,6 +27,12 @@ class KavenegarSMSSettingAdmin(admin.ModelAdmin):
             'fields': ('name', 'api_token'),
         }),
     )
+
+    def has_add_permission(self, request):
+        # فقط اجازه اضافه کردن بده اگر هیچ تنظیماتی وجود نداشته باشد
+        if KavenegarSMSSetting.objects.exists():
+            return False
+        return super().has_add_permission(request)
 
 
 @admin.register(SMSPattern)
