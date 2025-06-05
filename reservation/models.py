@@ -211,14 +211,6 @@ class Hotel(models.Model):
         verbose_name=_('تصویر 4'),
         upload_to=hotel_image_upload_to,
     )
-    image5 = models.ImageField(
-        verbose_name=_('تصویر 5'),
-        upload_to=hotel_image_upload_to,
-    )
-    image6 = models.ImageField(
-        verbose_name=_('تصویر 6'),
-        upload_to=hotel_image_upload_to,
-    )
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد ستاره'),
     )

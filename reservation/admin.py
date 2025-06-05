@@ -111,8 +111,6 @@ class HotelAdmin(admin.ModelAdmin):
         'image2',
         'image3',
         'image4',
-        'image5',
-        'image6',
         'stars',
         'type',
         'floors_count',
