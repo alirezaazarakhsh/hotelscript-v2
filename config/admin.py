@@ -255,7 +255,7 @@ class SocialMediaAdmin(admin.ModelAdmin):
         'type',
         'type_fa',
         'link',
-        'icon__title_icon',   # مشابه AdvantageAdmin
+        'icon__title_icon',   
     )
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
@@ -345,7 +345,7 @@ class AdvantageAdmin(admin.ModelAdmin):
                 'title',
                 'subtitle',
                 'icon',
-                'icon_preview',  # نمایش آیکن در فرم اضافه/ویرایش
+                'icon_preview',
             )
         }),
     )
@@ -362,6 +362,15 @@ class AdvantageAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
+
+    def has_add_permission(self, request):
+        # جلوگیری از افزودن بیشتر از ۴ آیتم
+        if Advantage.objects.count() >= 4:
+            return False
+        return super().has_add_permission(request)
+    
+    
+    
 
 # ثبت مدل FakeComment در ادمین با فرم سفارشی و جستجو
 @admin.register(FakeComment)

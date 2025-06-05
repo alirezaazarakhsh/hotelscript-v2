@@ -71,7 +71,7 @@ class APILogoutView(APIView):
 
             # ارسال پیامک خروج
             user = request.user
-            phone = user.phone_number  # اطمینان حاصل کن فیلد شماره تلفن این‌طوریه
+            phone = user.phone_number  
             full_name = f"{user.first_name}{user.last_name}".strip()
             send_logout_sms(phone, full_name)
 
