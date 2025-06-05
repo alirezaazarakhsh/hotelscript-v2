@@ -151,26 +151,17 @@ class HotelGalleryAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
-        'gallery_images',
     )
-    search_fields = ('title',)
+    search_fields = (
+        'title',
+    )
 
-    def gallery_images(self, obj):
-        images = obj.images.all()  # اینجا تصاویر مربوط به گالری را می‌گیریم
-        if images.exists():
-            # مثلا اولین عکس را به صورت بندانگشتی نمایش می‌دهیم
-            first_image = images.first()
-            return format_html('<img src="{}" style="width: 50px; height: auto;" />', first_image.image.url)
-        return "-"
-    gallery_images.short_description = 'تصویر گالری'
-    
-    
-    
 @admin.register(HotelGalleryImage)
 class HotelGalleryImageAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
+        'gallery',
     )
     search_fields = (
         'title',
