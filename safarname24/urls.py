@@ -47,6 +47,7 @@ urlpatterns = [
         path('finance/', include('finance.urls', namespace='finance')),
         path('profile/', include('user_profile.urls', namespace='profile')),
         path('icons/', include('icons.urls', namespace='icons')),
+        path('setting_sms/', include('setting_sms.urls', namespace='setting_sms')),
         path('profile/', include([
             path(
                 'passengers/',

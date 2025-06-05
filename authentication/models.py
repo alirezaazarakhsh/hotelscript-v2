@@ -31,6 +31,8 @@ LEGAL_PROFILE_STATUSES = (
     ('rejected','رد شده'),
 )
 
+
+#مدل کاربران وب سایت 
 class BaseUser(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
@@ -67,6 +69,9 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.phone_number
 
+
+
+#مدل ادمین ها 
 class SuperUser(models.Model):
     base_user = models.OneToOneField(
         BaseUser,
@@ -126,6 +131,8 @@ class SuperUser(models.Model):
             algorithm="sha256",
         ).hexdigest()
     
+    
+    #مدل پروفایل ادمین ها 
 class Admin(models.Model):
     base_user = models.OneToOneField(
         BaseUser,
@@ -167,6 +174,9 @@ class Admin(models.Model):
     def __str__(self):
         return f'{self.base_user}'
 
+
+
+#پروفایل حقیقی کاربران
 class NaturalProfile(models.Model):
     base_user = models.OneToOneField(
         BaseUser,
@@ -242,6 +252,10 @@ class NaturalProfile(models.Model):
     def __str__(self):
         return f'{self.base_user}'
     
+    
+    
+
+#مدل ارسال رمز یکبار مصرف otp        
 class OTP(models.Model):
     user = models.ForeignKey(
         BaseUser,
@@ -276,6 +290,11 @@ class OTP(models.Model):
     def __str__(self):
         return f'OTP for {self.user}'
 
+
+
+
+
+#مدل پروفایل حقوقی 
 class JuridicalProfile(models.Model):
     natural_profile = models.OneToOneField(
         NaturalProfile,
@@ -373,6 +392,10 @@ def juridical_profile_document_upload_to(instance, filename):
         except:
             return f'legal-profiles/documents/default/{filename}'
 
+
+
+
+#مدل مدارک حقوقی کاربران 
 class JuridicalProfileDocument(models.Model):
     profile = models.ForeignKey(
         JuridicalProfile,

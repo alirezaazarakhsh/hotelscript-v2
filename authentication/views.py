@@ -40,6 +40,8 @@ from rest_framework.mixins import (
 from .permissions import IsJuridicalProfileDocumentOwner
 
 
+
+# ای پی ای خروج از اکانت کاربران 
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -73,6 +75,8 @@ class APILogoutView(APIView):
             )
 
 
+
+#ای پی ای ارسال otp برای کاربران 
 class AuthView(APIView):
     permission_classes = (AllowAny,)
 
@@ -133,6 +137,9 @@ class AuthView(APIView):
         return Response({"detail": _("کد تایید با موفقیت ارسال شد.")}, status=status.HTTP_200_OK)
 
 
+
+
+# ای پی ای ورود با کد تایید otp
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
         operation_summary="ورود با کد تایید OTP",
@@ -162,6 +169,9 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
+
+
+# ای پی ای آپدیت توکن کاربر 
 class TokenRefreshView(JwtTokenRefreshView):
     @swagger_auto_schema(
         operation_summary="تازه‌سازی توکن JWT",
@@ -180,6 +190,8 @@ class TokenRefreshView(JwtTokenRefreshView):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
+
+# ای پی ای بروز رسانی پروفایل حقیقی 
 class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
     permission_classes = (IsAuthenticated,)
     serializer_class = UserProfileSerializer
@@ -206,6 +218,9 @@ class UserProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
             return super().create(request, *args, **kwargs)
 
 
+
+
+#ای پی ای بروزرسانی پروفایل حقوقی 
 class JuridicalProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin):
     permission_classes = (IsAuthenticated,)
     serializer_class = JuridicalProfileSerializer
@@ -233,6 +248,10 @@ class JuridicalProfileRetrieveUpdateView(RetrieveUpdateAPIView, CreateModelMixin
             return super().create(request, *args, **kwargs)
 
 
+
+
+
+#ای پی ای ایجاد و حذف مدارک کاربران حقوقی
 class JuridicalProfileDocumentListCreateDestroyView(ListModelMixin,
                                                     CreateModelMixin,
                                                     DestroyModelMixin,
@@ -282,3 +301,6 @@ class JuridicalProfileDocumentListCreateDestroyView(ListModelMixin,
         request.data['profile'] = request.user.natural_profile.juridical_profile.pk
         self.get_juridical_profile_query_set().update(status='checking')
         return super().destroy(request, *args, **kwargs)
+
+
+

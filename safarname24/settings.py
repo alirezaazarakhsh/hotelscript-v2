@@ -20,7 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # مقدار دهی مستقیم برای این دو
 SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
-KAVENEGAR_API_KEY = os.getenv("KAVENEGAR_API_KEY")
 DEBUG = True
 
 ALLOWED_HOSTS = [
@@ -71,6 +70,7 @@ INSTALLED_APPS = [
     'safarname24',
     'ckeditor',
     'icons',
+    'setting_sms',
   
 ]
 
