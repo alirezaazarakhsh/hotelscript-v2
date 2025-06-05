@@ -4,7 +4,7 @@ from django.db import models
 PATTERN_SECTIONS = [
     ('otp', 'ارسال کد تایید (OTP) به کاربران'),
     ('welcome', 'خوش‌آمدگویی به کاربران پس از لاگین'),
-    
+    ('logout', 'خروج کاربر از حساب کاربری'),
     
 ]
 

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from .utils import generate_otp_code
-from .sms.sms import send_otp_sms, send_welcome_sms
+from .sms.sms import send_logout_sms, send_otp_sms, send_welcome_sms
 from rest_framework_simplejwt.views import (
     TokenObtainPairView as JwtTokenObtainPairView,
     TokenRefreshView as JwtTokenRefreshView,
@@ -65,14 +65,24 @@ class APILogoutView(APIView):
                     {"detail": "refresh_token is required"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
             token = RefreshToken(token=refresh_token)
             token.blacklist()
+
+            # ارسال پیامک خروج
+            user = request.user
+            phone = user.phone_number  # اطمینان حاصل کن فیلد شماره تلفن این‌طوریه
+            full_name = f"{user.first_name}{user.last_name}".strip()
+            send_logout_sms(phone, full_name)
+
             return Response({"detail": _("با موفقیت خارج شدید.")})
+
         except Exception as e:
             return Response(
                 {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 
 
