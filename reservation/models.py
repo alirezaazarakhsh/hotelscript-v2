@@ -167,6 +167,8 @@ class RoomFacilities(models.Model):
         return self.title
 
 
+
+
 #مدل اضافه کردن هتل 
 class Hotel(models.Model):
     
@@ -298,6 +300,8 @@ class Hotel(models.Model):
 
     def __str__(self):
         return self.name
+
+
 
 
 
