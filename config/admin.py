@@ -383,8 +383,11 @@ class FakeCommentAdmin(admin.ModelAdmin):
 # ثبت مدل Rule در ادمین با قابلیت جستجو
 @admin.register(Rule)
 class RuleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'tab_title')
+    list_display = ('id', 'tab_title', 'order')
+    list_editable = ('order',)
     search_fields = ('tab_title', 'text')
+    ordering = ('order',)
+
 
 
 # ثبت مدل ComingSoon در ادمین با فرم سفارشی و محدودیت ایجاد تنها یک نمونه

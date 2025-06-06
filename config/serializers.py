@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from html.parser import HTMLParser
+
 from .models import (
     ComingSoon,
     Location,
@@ -226,12 +228,32 @@ class FakeCommentSerializer(serializers.ModelSerializer):
             'id',
         )
 
+
+class MLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)
+
+def strip_tags(html):
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data()
+
 class RuleSerializer(serializers.ModelSerializer):
+    text = serializers.SerializerMethodField()
+
     class Meta:
         model = Rule
-        exclude = (
-            'id',
-        )
+        fields = ('tab_title', 'text', 'order')
+
+    def get_text(self, obj):
+        return strip_tags(obj.text)
+
 
 
 

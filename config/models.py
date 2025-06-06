@@ -650,13 +650,19 @@ class Rule(models.Model):
     text = RichTextField(
         verbose_name=_('متن'),
     )
+    order = models.PositiveIntegerField(
+        verbose_name=_('ترتیب نمایش'),
+        default=0,
+    )
 
     class Meta:
         verbose_name = 'قانون'
         verbose_name_plural = 'قوانین'
-    
+        ordering = ['order']  
+
     def __str__(self):
         return f'{self.tab_title}'
+
     
     
     
