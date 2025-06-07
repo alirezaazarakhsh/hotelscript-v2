@@ -12,18 +12,19 @@ from .models import BaseUser, NaturalProfile, JuridicalProfile, JuridicalProfile
 
 
 # -----------------------------
-# Custom Token Serializer
+# Custom Token Serializer (Using phone and OTP)
 # -----------------------------
 class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSerializerMixin):
-    username_field = "phone"
+    username_field = "phone"  # فیلدی که به جای username استفاده می‌شود
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # تغییر رمز به OTP
         self.password_field = "otp"
-        self.fields[self.password_field] = PasswordField()
-        del self.fields["password"]
+        self.fields[self.password_field] = PasswordField(write_only=True)
+        if "password" in self.fields:
+            del self.fields["password"]
 
         self.fields[self.username_field].label = _('phone')
         self.fields[self.password_field].label = _('otp')
@@ -32,8 +33,8 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
 
     def validate(self, attrs):
         authenticate_kwargs = {
-            self.username_field: attrs[self.username_field],
-            self.password_field: attrs[self.password_field],
+            self.username_field: attrs.get(self.username_field),
+            self.password_field: attrs.get(self.password_field),
         }
 
         if "request" in self.context:
@@ -70,22 +71,27 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
 
         # افزودن اطلاعات کاربر به پاسخ
         data["user_id"] = self.user.id
-        data["phone_number"] = self.user.phone_number
+        data["phone_number"] = getattr(self.user, "phone_number", "")
         data["first_name"] = first_name
         data["last_name"] = last_name
 
         return data
 
+
 # -----------------------------
-# Authentication Request Serializer
+# Authentication Request Serializer (برای درخواست ارسال OTP)
 # -----------------------------
 class AuthSerializer(serializers.Serializer):
     phone = serializers.CharField(
         required=True,
         validators=[validate_phone_number],
+        max_length=15,
     )
 
 
+# -----------------------------
+# NaturalProfile Serializer
+# -----------------------------
 class NaturalProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = NaturalProfile
@@ -108,18 +114,26 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level': {'required': False, 'allow_null': True},
         }
 
+
+# -----------------------------
+# JuridicalProfileDocument Serializer
+# -----------------------------
 class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     id = serializers.ReadOnlyField()
     file = serializers.FileField(label='فایل مدارک')
-    profile = serializers.PrimaryKeyRelatedField(queryset=JuridicalProfile.objects.all(), label='پروفایل حقوقی')
+    profile = serializers.PrimaryKeyRelatedField(
+        queryset=JuridicalProfile.objects.all(),
+        label='پروفایل حقوقی'
+    )
 
     class Meta:
         model = JuridicalProfileDocument
         fields = ['id', 'file', 'profile']
 
-        
-        
 
+# -----------------------------
+# JuridicalProfile Serializer
+# -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = JuridicalProfileDocumentSerializer(many=True, read_only=True)
 
@@ -147,9 +161,9 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
-        # اعتبارسنجی وضعیت رد شده و دلیل رد
+        # اگر وضعیت رد شده است، دلیل رد باید وجود داشته باشد
         if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
             raise serializers.ValidationError({
-                'reject_reason': 'فیلد دلیل رد برای وضعیت رد شده الزامی است.'
+                'reject_reason': _('فیلد دلیل رد برای وضعیت رد شده الزامی است.')
             })
         return data
