@@ -36,6 +36,7 @@ class CitySerializer(serializers.ModelSerializer):
             'name',
             'image',
             'province',
+            'show_in_homepage',
         )
     
     def get_province(self, obj):
@@ -68,6 +69,8 @@ class HotelListSerializer(serializers.ModelSerializer):
             'stars',
             'type',
             'is_special_offer',
+            'is_flash_sale',
+            'is_best_seller',
             'original_total_price',
             'total_price',
             'rating',
@@ -100,6 +103,8 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
             'main_image',
             'stars',
             'is_special_offer',
+            'is_flash_sale',
+            'is_best_seller',
             'min_price',
             'rating',
         )
@@ -170,6 +175,8 @@ class HotelRetrieveSerializer(serializers.ModelSerializer):
             'latitude',
             'longitude',
             'is_special_offer',
+            'is_flash_sale',
+            'is_best_seller',
             'rules',
             'important_notes',
             'tags',

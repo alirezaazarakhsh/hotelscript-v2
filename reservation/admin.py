@@ -47,6 +47,7 @@ class CityAdmin(admin.ModelAdmin):
         'slug',
         'image',
         'province',
+        'show_in_homepage',
     )
     search_fields = (
         'name',
@@ -123,6 +124,8 @@ class HotelAdmin(admin.ModelAdmin):
         'facilities',
         'room_facilities',
         'is_special_offer',
+        'is_flash_sale',
+        'is_best_seller',
         'rules',
         'important_notes',
     )

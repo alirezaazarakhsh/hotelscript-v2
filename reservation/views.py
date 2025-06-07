@@ -52,6 +52,7 @@ from .models import (
     CommentPoint,
     CommentPointItem,
     Passenger,
+    
 )
 from .serializers import (
     BestHotelsSerializer,
@@ -70,6 +71,7 @@ from .serializers import (
     RoomListSerializer,
     RoomDateListSerializer,
     PassengerSerializer,
+    
 )
 
 # ای پی ای لیست هتل ها 
@@ -250,10 +252,10 @@ class HotelListView(ListAPIView):
     
     
         
-#ای پی ای لیست شهر ها 
 class CityListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = CitySerializer
+    pagination_class = None  # اگر پجینیشن نمی‌خواهی
 
     def get_queryset(self):
         queryset = City.objects.select_related('province')
@@ -278,10 +280,32 @@ class CityListView(ListAPIView):
                 required=False,
             ),
         ],
+        responses={},  # ✅ حذف Response samples
         tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+
+
+# ای پی ای لیست شهر های مربوط یه صفحه اصلی 
+class HomePageCityListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CitySerializer
+    pagination_class = None  # اگر پجینیشن نمی‌خوای
+
+    def get_queryset(self):
+        return City.objects.filter(show_in_homepage=True).select_related('province')
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست شهرهای مخصوص صفحه اصلی",
+        operation_description="این API فقط شهرهایی را باز می‌گرداند که گزینه 'نمایش در صفحه اصلی' آن‌ها فعال است.",
+        responses={},  # حذف Response samples
+        tags=["hotel-home"]
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
     
     
     
@@ -293,12 +317,13 @@ class HotelTypeListView(ListAPIView):
     pagination_class = None
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست نوع هتل‌ها",
-        operation_description="این API لیستی از انواع هتل‌ها را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['hotel']
+        operation_summary="دریافت لیست نوع اقامتگاه",
+        operation_description="این API لیستی از انواع اقامتگاه را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel-filter']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
     
     
 # ای پی ای دریافت لیست امکانات 
@@ -315,6 +340,7 @@ class FacilitiesListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
     
     
 
@@ -335,6 +361,7 @@ class RoomFacilitiesListView(ListAPIView):
 
 
 
+
 # ای پی ای لیست خدمات اتاق ها 
 class RoomServiceListView(ListAPIView):
     permission_classes = (AllowAny,)
@@ -349,6 +376,7 @@ class RoomServiceListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 
 
@@ -384,6 +412,7 @@ class HotelRetrieveView(RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
     
     
     
@@ -1040,3 +1069,49 @@ class ClosedDateListCreateView(ListCreateAPIView):
         
         
         
+        
+
+
+class SpecialOfferHotelListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelListSerializer
+    queryset = Hotel.objects.filter(is_special_offer=True)
+    pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست هتل‌های پیشنهاد ویژه",
+        operation_description="این API لیستی از هتل‌هایی که در حالت پیشنهاد ویژه هستند را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel-home']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class FlashSaleHotelListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelListSerializer
+    queryset = Hotel.objects.filter(is_flash_sale=True)
+    pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست هتل‌های شگفت‌انگیز",
+        operation_description="این API لیستی از هتل‌هایی که در حالت شگفت‌انگیز هستند را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel-home']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class BestSellerHotelListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelListSerializer
+    queryset = Hotel.objects.filter(is_best_seller=True)
+    pagination_class = None
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست هتل‌های پرفروش",
+        operation_description="این API لیستی از هتل‌هایی که در حالت پرفروش هستند را بدون صفحه‌بندی باز می‌گرداند.",
+        tags=['hotel-home']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)

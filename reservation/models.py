@@ -63,9 +63,6 @@ class Province(models.Model):
 
 
 # مدل اضافه کردن شهر ها 
-from django.db import models
-from django.utils.translation import gettext_lazy as _
-
 class City(models.Model):
     name = models.CharField(
         verbose_name=_('نام'),
@@ -76,7 +73,6 @@ class City(models.Model):
         max_length=32,
         unique=True,
     )
-    
     image = models.ImageField(
         verbose_name=_('عکس شهر'),
         upload_to='cities/',  
@@ -84,10 +80,15 @@ class City(models.Model):
         blank=True,
     )
     province = models.ForeignKey(
-        Province,
+        'Province',  # 
         on_delete=models.CASCADE,
         verbose_name=_('استان'),
         related_name='cities',
+    )
+
+    show_in_homepage = models.BooleanField(
+        verbose_name=_('نمایش در صفحه اصلی'),
+        default=False,
     )
 
     class Meta:
@@ -105,7 +106,6 @@ class City(models.Model):
 
     def __str__(self):
         return self.name
-
 
 
 #مدل نوع اقامتگاه
@@ -193,7 +193,7 @@ class Hotel(models.Model):
         unique=True,
     )
     city = models.ForeignKey(
-        City,
+        'City',
         on_delete=models.CASCADE,
         verbose_name=_('شهر'),
         related_name='hotels',
@@ -225,7 +225,7 @@ class Hotel(models.Model):
         verbose_name=_('تعداد ستاره'),
     )
     type = models.ForeignKey(
-        HotelType,
+        'HotelType',
         on_delete=models.CASCADE,
         verbose_name=_('نوع هتل'),
         related_name='hotels',
@@ -262,8 +262,8 @@ class Hotel(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(Decimal(-90.000000)),
-            MaxValueValidator(Decimal(90.000000)),
+            MinValueValidator(Decimal('-90.000000')),
+            MaxValueValidator(Decimal('90.000000')),
         ],
     )
     longitude = models.DecimalField(
@@ -271,27 +271,36 @@ class Hotel(models.Model):
         max_digits=9,
         decimal_places=6,
         validators=[
-            MinValueValidator(Decimal(-180.000000)),
-            MaxValueValidator(Decimal(180.000000)),
+            MinValueValidator(Decimal('-180.000000')),
+            MaxValueValidator(Decimal('180.000000')),
         ],
     )
     tags = models.ManyToManyField(
-        HotelTag,
+        'HotelTag',
         verbose_name=_('تگ'),
         related_name='hotels',
     )
     facilities = models.ManyToManyField(
-        Facilities,
+        'Facilities',
         verbose_name=_('امکانات رفاهی و تفریحی'),
         related_name='hotels',
     )
     room_facilities = models.ManyToManyField(
-        RoomFacilities,
+        'RoomFacilities',
         verbose_name=_('امکانات داخل اتاق'),
         related_name='hotels',
     )
     is_special_offer = models.BooleanField(
         verbose_name=_('پیشنهاد ویژه'),
+        default=False,
+    )
+    is_flash_sale = models.BooleanField(
+        verbose_name=_('شگفت‌انگیز'),
+        default=False,
+    )
+    is_best_seller = models.BooleanField(
+        verbose_name=_('پرفروش'),
+        default=False,
     )
     rules = models.TextField(
         verbose_name=_('قوانین'),

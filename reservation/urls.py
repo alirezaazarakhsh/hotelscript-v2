@@ -56,6 +56,13 @@ urlpatterns = [
         views.CityListView.as_view(),
         name='city-list'
     ),
+    
+    path(
+    'cities/homepage/',
+    views.HomePageCityListView.as_view(),
+    name='homepage-city-list'
+    ),
+    
     path(
         'types/',
         views.HotelTypeListView.as_view(),
@@ -86,13 +93,26 @@ urlpatterns = [
         views.BestHotelsListCreateView.as_view(),
         name='best-hotels-list-create'
     ),
-    
     path(
         'closed-dates/',
-        views.ClosedDateListCreateView.as_view(), 
+        views.ClosedDateListCreateView.as_view(),
         name='closed-date-list-create'
-        
     ),
-
-
+    
+    
+    path(
+        'special-offer-hotels/',
+        views.SpecialOfferHotelListView.as_view(),
+        name='special-offer-hotel-list'
+    ),
+    path(
+        'flash-sale-hotels/',
+        views.FlashSaleHotelListView.as_view(),
+        name='flash-sale-hotel-list'
+    ),
+    path(
+        'best-seller-hotels/',
+        views.BestSellerHotelListView.as_view(),
+        name='best-seller-hotel-list'
+    ),
 ]
