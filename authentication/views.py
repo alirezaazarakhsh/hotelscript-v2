@@ -31,72 +31,112 @@ from .utils import generate_otp_code
 from .sms.sms import send_logout_sms, send_otp_sms, send_welcome_sms
 
 
+# ای پی ای خروج از اکانت کاربران 
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @swagger_auto_schema(
         operation_summary="خروج از حساب کاربری",
+        operation_description="این API برای خروج کاربر از سیستم با باطل کردن توکن refresh استفاده می‌شود.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            properties={'refresh_token': openapi.Schema(type=openapi.TYPE_STRING)},
+            properties={
+                'refresh_token': openapi.Schema(type=openapi.TYPE_STRING, description='توکن refresh کاربر')
+            },
             required=['refresh_token']
         ),
         responses={200: 'OK', 400: 'Bad Request'}
     )
-    def post(self, request):
-        refresh_token = request.data.get('refresh_token')
-        if not refresh_token:
-            return Response({"detail": "refresh_token is required"}, status=400)
+    def post(self, request, *args, **kwargs):
         try:
-            token = RefreshToken(refresh_token)
+            refresh_token = self.request.data.get('refresh_token')
+            if not refresh_token:
+                return Response(
+                    {"detail": "refresh_token is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            token = RefreshToken(token=refresh_token)
             token.blacklist()
 
+            # ارسال پیامک خروج
             user = request.user
-            phone = user.phone_number
-            full_name = f"{user.first_name} {user.last_name}".strip()
+            phone = user.phone_number  
+            full_name = f"{user.first_name}{user.last_name}".strip()
             send_logout_sms(phone, full_name)
 
             return Response({"detail": _("با موفقیت خارج شدید.")})
+
         except Exception as e:
-            return Response({"detail": str(e)}, status=400)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
+
+
+#ای پی ای ارسال otp برای کاربران 
 class AuthView(APIView):
     permission_classes = (AllowAny,)
 
     @swagger_auto_schema(
         operation_summary="درخواست کد تایید OTP",
+        operation_description="""
+        این API برای ارسال کد تایید به شماره موبایل کاربر استفاده می‌شود. 
+        اگر کدی از قبل ارسال شده و هنوز منقضی نشده باشد، از ارسال مجدد جلوگیری می‌شود.
+        """,
         request_body=AuthSerializer,
-        responses={200: 'کد تایید ارسال شد', 429: 'بیش از حد درخواست داده‌اید'}
+        responses={
+            200: 'کد تایید ارسال شد',
+            429: 'لطفاً چند دقیقه صبر کنید و مجدداً تلاش کنید'
+        }
     )
     def post(self, request):
         if request.user.is_authenticated:
-            return Response({"detail": _("شما قبلاً وارد شده‌اید.")}, status=403)
+            return Response(
+                {"detail": _("شما قبلاً وارد شده‌اید.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         serializer = AuthSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data['phone']
+        phone = serializer.validated_data.get('phone')
 
         user = BaseUser.objects.get_by_phone_or_create(phone)
 
+        # جلوگیری از ارسال بیش از حد OTP در بازه زمانی منقضی نشده
         try:
             last_otp = user.otps.latest('created')
-            remaining = (last_otp.expired - timezone.now()).total_seconds()
-            if remaining > 0:
+            remaining_time = (last_otp.expired - timezone.now()).total_seconds()
+            if remaining_time > 0:
                 return Response(
-                    {"detail": _("لطفاً %(minute)d دقیقه صبر کنید.") % {"minute": int(remaining // 60) + 1}},
-                    status=429
+                    {
+                        "detail": _(
+                            "لطفاً %(minute)d دقیقه صبر کنید تا کد جدید دریافت کنید."
+                        ) % {"minute": int(remaining_time // 60) + 1}
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
         except OTP.DoesNotExist:
             pass
 
         code = generate_otp_code()
-        OTP.objects.create(user=user, code=code)
+        otp = OTP(user=user)
+        otp.set_code(code)
+        otp.save()
 
-        if not send_otp_sms(phone, code):
-            return Response({"detail": _("ارسال کد با خطا مواجه شد.")}, status=500)
+        # ارسال کد OTP به شماره موبایل
+        sent = send_otp_sms(phone, code)
+        if not sent:
+            return Response(
+                {"detail": _("ارسال کد با خطا مواجه شد، لطفاً دوباره تلاش کنید.")},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        return Response({"detail": _("کد تایید ارسال شد.")})
+        return Response({"detail": _("کد تایید با موفقیت ارسال شد.")}, status=status.HTTP_200_OK)
+
+
 
 
 class TokenObtainPairView(JwtTokenObtainPairView):
@@ -111,35 +151,50 @@ class TokenObtainPairView(JwtTokenObtainPairView):
     )
     def post(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            return Response({"detail": _("شما قبلاً وارد شده‌اید.")}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": _("شما قبلاً وارد شده‌اید.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
-        user = serializer.user
+        # گرفتن شماره تلفن و نام کامل کاربر (فرض بر این است که در serializer این داده‌ها هست)
+        user = serializer.user  # فرض می‌کنیم serializer بعد از اعتبارسنجی، user رو داره
         phone_number = user.phone_number
-        full_name = f"{user.first_name} {user.last_name}".strip()
+        full_name = f"{user.first_name}{user.last_name}".strip()
 
+        # ارسال پیام خوش آمدگویی
         send_welcome_sms(phone_number, full_name)
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
+
+
+# ای پی ای آپدیت توکن کاربر 
 class TokenRefreshView(JwtTokenRefreshView):
     @swagger_auto_schema(
-        operation_summary="تازه‌سازی توکن",
-        responses={200: 'توکن جدید صادر شد'}
+        operation_summary="تازه‌سازی توکن JWT",
+        operation_description="دریافت توکن جدید با استفاده از refresh token",
+        responses={200: 'توکن جدید با موفقیت صادر شد'}
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            return Response({"detail": str(e)}, status=401)
-        return Response(serializer.validated_data)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class JuridicalProfileListCreateAPIView(APIView):
