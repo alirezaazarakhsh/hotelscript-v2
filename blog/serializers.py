@@ -69,6 +69,7 @@ class FavoriteArticleSerializer(serializers.ModelSerializer):
         fields = (
             'title',
             'slug',
+            'summary'
             'body', # TODO: maybe should change with summary (currently summary is not in model)
             'thumbnail',
             'published_date',
@@ -99,6 +100,7 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
         fields = (
             'title',
             'slug',
+            'summary',
             'body',
             'author',
             'tags',
@@ -172,3 +174,15 @@ class CommentSerializer(serializers.ModelSerializer):
                 'reply_to': "کامنتی که به آن ریپلای میکنید، متعلق به مقاله دیگری است."
             })
         return value
+
+
+class EngagingArticleListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Article
+        fields = (
+            'title',
+            'thumbnail',
+            'summary',     
+            'body',
+            'published_date',
+        )

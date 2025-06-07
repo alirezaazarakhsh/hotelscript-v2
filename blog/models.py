@@ -194,6 +194,12 @@ class Article(models.Model):
         unique=True,
         allow_unicode=True,
     )
+    summary = models.TextField(
+    verbose_name=_('خلاصه مقاله'),
+    max_length=512,
+    blank=True,
+    null=True,
+    )
     body = RichTextField(
         verbose_name=_('متن'),
     )

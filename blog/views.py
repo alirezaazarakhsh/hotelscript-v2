@@ -161,6 +161,27 @@ class ArticleListView(ListAPIView):
 
         return queryset
 
+
+
+class EngagingArticleListView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = ArticleListSerializer
+    pagination_class = None  # غیرفعال کردن صفحه‌بندی
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست مقالات جذاب بدون صفحه‌بندی صفحه اصلی",
+        operation_description="این API فقط مقالاتی که پرچم جذاب بودن دارند را بدون صفحه‌بندی برمی‌گرداند.",
+        tags=['article']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        # فقط مقالات جذاب که منتشر شده‌اند
+        return Article.published.filter(is_engaging=True).order_by('-published_date', '-created')
+    
+    
+    
 class ArticleRetrieveView(RetrieveAPIView):
     queryset = Article.published.prefetch_related('tags').select_related('author').all()
     permission_classes = (AllowAny,)

@@ -84,6 +84,7 @@ class ArticleAdmin(admin.ModelAdmin):
         'id',
         'title',
         'slug',
+        'summary',
         'author',
         'category',
         'view_count',

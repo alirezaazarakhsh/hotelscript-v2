@@ -39,4 +39,11 @@ urlpatterns = [
         views.CommentListCreateView.as_view(),
         name='article-comment-list-create'
     ),
+
+    # این خط رو اضافه کن:
+    path(
+        'articles/engaging-no-pagination/',
+        views.EngagingArticleListView.as_view(),
+        name='engaging-article-list-no-pagination'
+    ),
 ]
