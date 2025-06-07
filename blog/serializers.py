@@ -8,9 +8,9 @@ from .models import (
     ArticleTag,
     Comment,
 )
-from authentication.models import (
-    Admin,
-)
+from authentication.models import Admin
+from django.urls import reverse
+
 
 class NestedStorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,21 +20,20 @@ class NestedStorySerializer(serializers.ModelSerializer):
             'created',
         )
 
+
 class StoryCategorySerializer(serializers.ModelSerializer):
     stories = NestedStorySerializer(many=True)
 
     class Meta:
         model = StoryCategory
-        exclude = (
-            'created',
-        )
+        exclude = ('created',)
+
 
 class ArticleCategoryListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArticleCategory
-        exclude = (
-            'description',
-        )
+        exclude = ('description',)
+
 
 class NestedArticleSubCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,12 +44,14 @@ class NestedArticleSubCategorySerializer(serializers.ModelSerializer):
             'description',
         )
 
+
 class ArticleCategoryRetrieveSerializer(serializers.ModelSerializer):
     subcategories = NestedArticleSubCategorySerializer(many=True)
 
     class Meta:
         model = ArticleCategory
         fields = '__all__'
+
 
 class ArticleListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,17 +65,20 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'is_popular',
             'is_engaging',
         )
+
+
 class FavoriteArticleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = (
             'title',
             'slug',
-            'summary'
-            'body', # TODO: maybe should change with summary (currently summary is not in model)
+            'summary',
+            'body',
             'thumbnail',
             'published_date',
         )
+
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -84,12 +88,12 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
             'last_name',
         )
 
+
 class ArticleTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArticleTag
-        fields = (
-            'title',
-        )
+        fields = ('title',)
+
 
 class ArticleRetrieveSerializer(serializers.ModelSerializer):
     author = ArticleAuthorSerializer()
@@ -108,23 +112,22 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
             'thumbnail',
             'view_count',
             'published_date',
-            'similar_articles'
+            'similar_articles',
         )
-
 
     def get_similar_articles(self, obj):
         def serialize_article(article):
             author = ArticleAuthorSerializer(article.author).data
-
             return {
                 'title': article.title,
                 'slug': article.slug,
                 'author': author,
-                'thumbnail': article.thumbnail.url,
+                'thumbnail': article.thumbnail.url if article.thumbnail else '',
                 'published_date': article.published_date,
             }
-        
-        return map(serialize_article, obj.get_similar_articles())
+
+        return list(map(serialize_article, obj.get_similar_articles()))
+
 
 class CommentSerializer(serializers.ModelSerializer):
     replies = serializers.SerializerMethodField()
@@ -140,24 +143,12 @@ class CommentSerializer(serializers.ModelSerializer):
             'reply_to',
         )
         extra_kwargs = {
-            'author_name': {
-                'required': True,
-            },
-            'author_email': {
-                'required': True,
-            },
-            'text': {
-                'required': True,
-            },
-            'created': {
-                'read_only': True,
-            },
-            'replies': {
-                'read_only': True,
-            },
-            'reply_to': {
-                'write_only': True,
-            },
+            'author_name': {'required': True},
+            'author_email': {'required': True},
+            'text': {'required': True},
+            'created': {'read_only': True},
+            'replies': {'read_only': True},
+            'reply_to': {'write_only': True},
         }
 
     def get_replies(self, obj):
@@ -202,6 +193,6 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
 
     def get_post_url(self, obj):
         return reverse('article-detail', kwargs={'slug': obj.slug})
-        # یا اگر URL جلوی کاربر می‌خوای بدی:
+        # برای لینک کامل:
         # request = self.context.get('request')
         # return request.build_absolute_uri(reverse('article-detail', kwargs={'slug': obj.slug}))
