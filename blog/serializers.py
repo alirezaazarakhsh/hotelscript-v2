@@ -54,6 +54,8 @@ class ArticleCategoryRetrieveSerializer(serializers.ModelSerializer):
 
 
 class ArticleListSerializer(serializers.ModelSerializer):
+    author = ArticleAuthorSerializer()
+
     class Meta:
         model = Article
         fields = (
@@ -65,6 +67,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'is_popular',
             'is_engaging',
         )
+
 
 
 class FavoriteArticleSerializer(serializers.ModelSerializer):
