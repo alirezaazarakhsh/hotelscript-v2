@@ -162,17 +162,6 @@ class ArticleTag(models.Model):
         verbose_name=_('عنوان'),
         unique=True,
     )
-    slug = models.SlugField(
-        max_length=256,
-        verbose_name=_('اسلاگ'),
-        unique=True,
-        allow_unicode=True,
-    )
-    description = models.TextField(
-        verbose_name=_('توضیحات'),
-        blank=True,
-    )
-
     class Meta:
         verbose_name = 'تگ'
         verbose_name_plural = 'تگ‌ها'

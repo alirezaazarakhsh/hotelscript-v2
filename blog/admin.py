@@ -72,13 +72,9 @@ class ArticleTagAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
-        'slug',
-        'description',
     )
     search_fields = (
         'title',
-        'slug',
-        'description',
     )
 
 @admin.register(Article)

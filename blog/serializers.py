@@ -87,7 +87,6 @@ class ArticleTagSerializer(serializers.ModelSerializer):
         model = ArticleTag
         fields = (
             'title',
-            'slug',
         )
 
 class ArticleRetrieveSerializer(serializers.ModelSerializer):
