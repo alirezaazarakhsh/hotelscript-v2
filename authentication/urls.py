@@ -19,4 +19,6 @@ urlpatterns = [
     # پروفایل‌های حقوقی
     path('juridical-profiles/', views.JuridicalProfileListCreateAPIView.as_view(), name='juridical_profile_list_create'),
     path('juridical-profiles/<int:pk>/', views.JuridicalProfileDetailAPIView.as_view(), name='juridical_profile_update_delete'),
+    path('juridical-profile-documents/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document'),
+
 ]

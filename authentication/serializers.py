@@ -109,9 +109,16 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         }
 
 class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
+    id = serializers.ReadOnlyField()
+    file = serializers.FileField(label='فایل مدارک')
+    profile = serializers.PrimaryKeyRelatedField(queryset=JuridicalProfile.objects.all(), label='پروفایل حقوقی')
+
     class Meta:
         model = JuridicalProfileDocument
-        fields = ['id', 'file']
+        fields = ['id', 'file', 'profile']
+
+        
+        
 
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = JuridicalProfileDocumentSerializer(many=True, read_only=True)
