@@ -12,6 +12,17 @@ from authentication.models import Admin
 from django.urls import reverse
 
 
+# --- Author Serializer ---
+class ArticleAuthorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Admin
+        fields = (
+            'first_name',
+            'last_name',
+        )
+
+
+# --- Story Serializers ---
 class NestedStorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Story
@@ -29,6 +40,7 @@ class StoryCategorySerializer(serializers.ModelSerializer):
         exclude = ('created',)
 
 
+# --- Article Category Serializers ---
 class ArticleCategoryListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ArticleCategory
@@ -53,6 +65,7 @@ class ArticleCategoryRetrieveSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+# --- Article Serializers ---
 class ArticleListSerializer(serializers.ModelSerializer):
     author = ArticleAuthorSerializer()
 
@@ -69,7 +82,6 @@ class ArticleListSerializer(serializers.ModelSerializer):
         )
 
 
-
 class FavoriteArticleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
@@ -80,15 +92,6 @@ class FavoriteArticleSerializer(serializers.ModelSerializer):
             'body',
             'thumbnail',
             'published_date',
-        )
-
-
-class ArticleAuthorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Admin
-        fields = (
-            'first_name',
-            'last_name',
         )
 
 
@@ -132,6 +135,38 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
         return list(map(serialize_article, obj.get_similar_articles()))
 
 
+class EngagingArticleListSerializer(serializers.ModelSerializer):
+    published_date_jalali = serializers.SerializerMethodField()
+    summary = serializers.CharField()
+    post_url = serializers.SerializerMethodField()
+    author = ArticleAuthorSerializer()
+
+    class Meta:
+        model = Article
+        fields = (
+            'title',
+            'slug',
+            'author',
+            'thumbnail',
+            'summary',
+            'published_date_jalali',
+            'is_popular',
+            'is_engaging',
+            'post_url',
+        )
+
+    def get_published_date_jalali(self, obj):
+        from jalali_date import datetime2jalali
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
+
+    def get_post_url(self, obj):
+        return reverse('article-detail', kwargs={'slug': obj.slug})
+        # اگر می‌خواهید لینک کامل برگردد:
+        # request = self.context.get('request')
+        # return request.build_absolute_uri(reverse('article-detail', kwargs={'slug': obj.slug}))
+
+
+# --- Comment Serializer ---
 class CommentSerializer(serializers.ModelSerializer):
     replies = serializers.SerializerMethodField()
 
@@ -166,36 +201,6 @@ class CommentSerializer(serializers.ModelSerializer):
         article = self.context.get('article')
         if value and value.article.slug != article:
             raise serializers.ValidationError({
-                'reply_to': "کامنتی که به آن ریپلای میکنید، متعلق به مقاله دیگری است."
+                'reply_to': "کامنتی که به آن ریپلای می‌کنید، متعلق به مقاله دیگری است."
             })
         return value
-
-
-class EngagingArticleListSerializer(serializers.ModelSerializer):
-    published_date_jalali = serializers.SerializerMethodField()
-    summary = serializers.CharField()
-    post_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Article
-        fields = (
-            'title',
-            'slug',
-            'author',
-            'thumbnail',
-            'summary',
-            'published_date_jalali',
-            'is_popular',
-            'is_engaging',
-            'post_url',
-        )
-
-    def get_published_date_jalali(self, obj):
-        from jalali_date import datetime2jalali
-        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
-
-    def get_post_url(self, obj):
-        return reverse('article-detail', kwargs={'slug': obj.slug})
-        # برای لینک کامل:
-        # request = self.context.get('request')
-        # return request.build_absolute_uri(reverse('article-detail', kwargs={'slug': obj.slug}))
