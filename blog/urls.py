@@ -40,10 +40,15 @@ urlpatterns = [
         name='article-comment-list-create'
     ),
 
-    # این خط رو اضافه کن:
+    
     path(
         'articles/engaging-no-pagination/',
         views.EngagingArticleListView.as_view(),
         name='engaging-article-list-no-pagination'
+    ),
+    path(
+        'articles/<str:slug>/',
+        views.ArticleRetrieveView.as_view(),
+        name='article-retrieve'
     ),
 ]

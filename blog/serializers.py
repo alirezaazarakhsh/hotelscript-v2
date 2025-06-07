@@ -61,8 +61,9 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'author',
             'thumbnail',
             'published_date',
+            'is_popular',
+            'is_engaging',
         )
-
 class FavoriteArticleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
@@ -177,12 +178,30 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
 class EngagingArticleListSerializer(serializers.ModelSerializer):
+    published_date_jalali = serializers.SerializerMethodField()
+    summary = serializers.CharField()
+    post_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Article
         fields = (
             'title',
+            'slug',
+            'author',
             'thumbnail',
-            'summary',     
-            'body',
-            'published_date',
+            'summary',
+            'published_date_jalali',
+            'is_popular',
+            'is_engaging',
+            'post_url',
         )
+
+    def get_published_date_jalali(self, obj):
+        from jalali_date import datetime2jalali
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
+
+    def get_post_url(self, obj):
+        return reverse('article-detail', kwargs={'slug': obj.slug})
+        # یا اگر URL جلوی کاربر می‌خوای بدی:
+        # request = self.context.get('request')
+        # return request.build_absolute_uri(reverse('article-detail', kwargs={'slug': obj.slug}))
