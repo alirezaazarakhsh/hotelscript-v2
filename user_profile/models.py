@@ -1,14 +1,10 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from authentication.models import (
-    BaseUser,
-)
+from authentication.models import BaseUser
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import (
-    GenericForeignKey,
-)
+from django.contrib.contenttypes.fields import GenericForeignKey
 
-# Create your models here.
+
 class FavoriteCollection(models.Model):
     user = models.ForeignKey(
         BaseUser,
@@ -26,7 +22,8 @@ class FavoriteCollection(models.Model):
         verbose_name_plural = 'لیست‌های علاقمندی'
 
     def __str__(self):
-        return f'{self.title}'
+        return self.title
+
 
 class Favorite(models.Model):
     list = models.ForeignKey(
@@ -38,23 +35,14 @@ class Favorite(models.Model):
     item_content_type = models.ForeignKey(
         ContentType,
         limit_choices_to={
-            'model__in': [
-                'article',
-                'hotel',
-            ], 
-            'app_label__in': [
-                'blog',
-                'reservation',
-            ]
+            'model__in': ['article', 'hotel'],
+            'app_label__in': ['blog', 'reservation']
         },
         on_delete=models.CASCADE,
         verbose_name=_('آیتم'),
     )
     item_object_id = models.PositiveIntegerField()
-    item = GenericForeignKey(
-        'item_content_type',
-        'item_object_id',
-    )
+    item = GenericForeignKey('item_content_type', 'item_object_id')
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
@@ -67,6 +55,7 @@ class Favorite(models.Model):
     def __str__(self):
         return f'{self.item} - {self.list}'
 
+
 class CustomerClub(models.Model):
     user = models.ForeignKey(
         BaseUser,
@@ -76,6 +65,7 @@ class CustomerClub(models.Model):
     )
     points = models.PositiveIntegerField(
         verbose_name=_('امتیاز'),
+        default=0,
     )
 
     class Meta:
@@ -85,43 +75,6 @@ class CustomerClub(models.Model):
     def __str__(self):
         return f'{self.user} - {self.points}'
 
-class CustomerClubPrize(models.Model):
-    PRIZE_TYPES = (
-        ('hotel', 'هتل'),
-        ('shopping-center', 'مرکز خرید'),
-    )
-    title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=128,
-    )
-    type = models.CharField(
-        verbose_name=_('نوع'),
-        max_length=32,
-        choices=PRIZE_TYPES,
-    )
-    required_points = models.PositiveIntegerField(
-        verbose_name=_('امتیاز مورد نیاز'),
-    )
-    expired_date = models.DateTimeField(
-        verbose_name=_('تاریخ اعتبار کد تخفیف'),
-    )
-    discount_price = models.PositiveBigIntegerField(
-        verbose_name=_('مبلغ تخفیف'),
-    )
-    discount_code = models.CharField(
-        verbose_name=_('کد تخفیف'),
-        max_length=64,
-    )
-    rules = models.TextField(
-        verbose_name=_('قوانین دریافت جایزه'),
-    )
-
-    class Meta:
-        verbose_name = 'جایزه باشگاه مشتریان'
-        verbose_name_plural = 'جوایز باشگاه مشتریان'
-
-    def __str__(self):
-        return f'{self.title}'
 
 class CustomerClubPrize(models.Model):
     PRIZE_TYPES = (
@@ -159,7 +112,8 @@ class CustomerClubPrize(models.Model):
         verbose_name_plural = 'جوایز باشگاه مشتریان'
 
     def __str__(self):
-        return f'{self.title}'
+        return self.title
+
 
 class CustomerReceivedPrize(models.Model):
     customer = models.ForeignKey(
@@ -182,10 +136,7 @@ class CustomerReceivedPrize(models.Model):
         verbose_name_plural = 'جوایز دریافت شده مشتریان'
         constraints = [
             models.UniqueConstraint(
-                fields=[
-                    'customer',
-                    'prize',
-                ],
+                fields=['customer', 'prize'],
                 name='unique_customer_prize'
             )
         ]
