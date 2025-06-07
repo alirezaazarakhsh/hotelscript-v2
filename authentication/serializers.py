@@ -86,30 +86,10 @@ class AuthSerializer(serializers.Serializer):
     )
 
 
-# -----------------------------
-# Natural User Profile Serializer
-# -----------------------------
-class UserProfileSerializer(serializers.ModelSerializer):
-    base_user = serializers.PrimaryKeyRelatedField(
-        queryset=BaseUser.objects.all(),
-        write_only=True,
-    )
-    phone_number = serializers.CharField(
-        source='base_user.phone_number',
-        read_only=True,
-    )
-    wallet_balance = serializers.DecimalField(
-        source='base_user.wallet.balance',
-        max_digits=12,
-        decimal_places=2,
-        read_only=True,
-    )
-
+class NaturalProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = NaturalProfile
         fields = [
-            'base_user',
-            'phone_number',
             'first_name',
             'last_name',
             'email',
@@ -117,28 +97,28 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'image',
             'postal_code',
             'address',
-            'wallet_balance',
+            'level',
         ]
         extra_kwargs = {
-            'first_name': {'required': True},
-            'last_name': {'required': True},
-            'national_code': {'required': True},
+            'image': {'required': False, 'allow_null': True},
+            'email': {'required': False, 'allow_null': True},
+            'national_code': {'required': False, 'allow_null': True},
+            'postal_code': {'required': False, 'allow_null': True},
+            'address': {'required': False, 'allow_null': True},
+            'level': {'required': False, 'allow_null': True},
         }
 
+class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JuridicalProfileDocument
+        fields = ['id', 'file']
 
-# -----------------------------
-# Juridical Profile Serializer
-# -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
-    natural_profile = serializers.PrimaryKeyRelatedField(
-        queryset=NaturalProfile.objects.all(),
-        write_only=True,
-    )
+    documents = JuridicalProfileDocumentSerializer(many=True, read_only=True)
 
     class Meta:
         model = JuridicalProfile
         fields = [
-            'natural_profile',
             'organization_name',
             'national_id',
             'registeration_number',
@@ -150,25 +130,19 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
             'image',
             'status',
             'reject_reason',
+            'documents',
         ]
         extra_kwargs = {
-            'organization_name': {'required': True},
-            'national_id': {'required': True},
-            'registeration_number': {'required': True},
-            'economical_code': {'required': True},
-            'phone_number': {'required': True},
-            'postal_code': {'required': True},
-            'reject_reason': {'read_only': True},
+            'address': {'required': False, 'allow_null': True},
+            'email': {'required': False, 'allow_null': True},
+            'image': {'required': False, 'allow_null': True},
+            'reject_reason': {'required': False, 'allow_blank': True},
         }
 
-
-# -----------------------------
-# Juridical Profile Document Serializer
-# -----------------------------
-class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JuridicalProfileDocument
-        fields = ['profile', 'file']
-        extra_kwargs = {
-            'profile': {'write_only': True},
-        }
+    def validate(self, data):
+        # اعتبارسنجی وضعیت رد شده و دلیل رد
+        if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
+            raise serializers.ValidationError({
+                'reject_reason': 'فیلد دلیل رد برای وضعیت رد شده الزامی است.'
+            })
+        return data
