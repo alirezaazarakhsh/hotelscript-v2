@@ -70,9 +70,9 @@ INSTALLED_APPS = [
     'drf_yasg',
     'corsheaders',
     'safarname24',
-    'ckeditor',
     'icons',
     'setting_sms',
+    'ckeditor',
   
 ]
 
