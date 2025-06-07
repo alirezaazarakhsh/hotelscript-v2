@@ -55,6 +55,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'jalali_date',
+    'django_jalali',
     'colorfield',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
@@ -201,3 +203,19 @@ CORS_ALLOW_HEADERS = [
     'authorization',  
     'x-requested-with',
 ]
+
+
+
+JALALI_DATE_DEFAULTS = {
+    'Strftime': {
+        'date': '%Y/%m/%d',
+    },
+    'Static': {
+        'js': [
+            'admin/js/django_jalali.min.js',
+        ],
+        'css': {
+            'all': ['admin/css/django_jalali.min.css']
+        },
+    },
+}

@@ -81,12 +81,18 @@ urlpatterns = [
         views.RoomDateListView.as_view(),
         name='room-date-list'
     ),
-    
     path(
         'best-hotels/',
         views.BestHotelsListCreateView.as_view(),
         name='best-hotels-list-create'
     ),
     
-    
+    path(
+        'closed-dates/',
+        views.ClosedDateListCreateView.as_view(), 
+        name='closed-date-list-create'
+        
+    ),
+
+
 ]

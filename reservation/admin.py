@@ -1,8 +1,8 @@
 from django.contrib import admin
-
-from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
+from reservation.forms import BestHotelsAdminForm, CityAdminForm,  HotelAdminForm
 from .models import (
     BestHotels,
+    ClosedDate,
     Province,
     City,
     HotelType,
@@ -255,7 +255,6 @@ class RoomAdmin(admin.ModelAdmin):
         'title',
         'capacity',
         'extra_capacity',
-        'is_preferred',
         'customer_club_points',
         'count',
         'auto_approved_count',
@@ -276,22 +275,30 @@ class RoomDateDiscountAdmin(admin.ModelAdmin):
         'count',
     )
 
+
+class ClosedDateInline(admin.TabularInline):
+    model = ClosedDate
+    extra = 1
+
 @admin.register(RoomDate)
 class RoomDateAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'room',
-        'date',
-        'dateend',
+        'jalali_date',
+        'jalali_dateend',
         'price',
         'extra_passenger_price',
         'foreign_passenger_price',
         'discount',
     )
     search_fields = (
-        'room',
+        'room__title',
         'date',
     )
+    inlines = [ClosedDateInline]  # اضافه کردن اینلاین اینجا
+    
+
 
 @admin.register(Passenger)
 class PassengerAdmin(admin.ModelAdmin):

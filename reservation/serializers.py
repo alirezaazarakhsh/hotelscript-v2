@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import (
     BestHotels,
+    ClosedDate,
     Province,
     City,
     HotelType,
@@ -297,7 +298,6 @@ class RoomListSerializer(serializers.ModelSerializer):
             'description',
             'capacity',
             'extra_capacity',
-            'is_preferred',
             'customer_club_points',
             'services',
             'total_price',
@@ -311,18 +311,44 @@ class RoomListSerializer(serializers.ModelSerializer):
         return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')
 
 class RoomDateListSerializer(serializers.ModelSerializer):
-    original_price = serializers.IntegerField(read_only=True)
+    jalali_date = serializers.SerializerMethodField()
+    jalali_dateend = serializers.SerializerMethodField()
     discounted_price = serializers.IntegerField(read_only=True)
+    original_price = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = RoomDate
-        fields = (
+        fields = [
+            'id',
+            'room',
             'date',
             'dateend',
+            'jalali_date',
+            'jalali_dateend',
             'original_price',
             'discounted_price',
-        )
+            'extra_passenger_price',
+            'foreign_passenger_price',
+            'discount',
+        ]
 
+    def get_jalali_date(self, obj):
+        try:
+            if isinstance(obj.date, jdatetime.date):
+                return obj.date.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=obj.date).strftime('%Y/%m/%d')
+        except Exception:
+            return 'تاریخ نامعتبر'
+
+    def get_jalali_dateend(self, obj):
+        try:
+            if isinstance(obj.dateend, jdatetime.date):
+                return obj.dateend.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=obj.dateend).strftime('%Y/%m/%d')
+        except Exception:
+            return 'تاریخ نامعتبر'
+    
+    
 class PassengerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Passenger
@@ -345,3 +371,18 @@ class BestHotelsSerializer(serializers.ModelSerializer):
             'title_logo',
             'image_logo_hotel',
         )
+        
+        
+        
+class ClosedDateSerializer(serializers.ModelSerializer):
+    hotel_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClosedDate
+        fields = ['id','reason', 'room_date', 'date', 'hotel_name']
+
+    def get_hotel_name(self, obj):
+        try:
+            return obj.room_date.room.hotel.name
+        except Exception:
+            return 'نامشخص'

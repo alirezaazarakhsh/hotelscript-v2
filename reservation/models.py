@@ -1,3 +1,6 @@
+import jdatetime
+from django.apps import apps
+from django_jalali.db import models as jmodels
 from decimal import Decimal
 from django.db import models
 from django.db.models import (
@@ -8,7 +11,12 @@ from django.db.models import (
     When,
     ExpressionWrapper,
     PositiveBigIntegerField,
+    OuterRef, 
+    Subquery,
+    IntegerField,
 )
+from django.db.models.functions import Coalesce
+
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import (
@@ -592,9 +600,7 @@ class Room(models.Model):
     extra_capacity = models.PositiveSmallIntegerField(
         verbose_name=_('ظرفیت اضافه'),
     )
-    is_preferred = models.BooleanField(
-        verbose_name=_('منتخب'),
-    )
+    
     customer_club_points = models.PositiveIntegerField(
         verbose_name=_('امتیاز باشگاه مشتریان'),
     )
@@ -681,28 +687,20 @@ class RoomDateDiscount(models.Model):
 #مدل بازه های زمانی اتاق ها
 class RoomDate(models.Model):
     room = models.ForeignKey(
-        Room,
+        'Room',
         on_delete=models.CASCADE,
         verbose_name=_('اتاق'),
         related_name='dates',
     )
-    date = models.DateField(
-        verbose_name=_('تاریخ شروع'),
-    )
-    dateend = models.DateField(
-        verbose_name=_('تاریخ پایان'),
-    )
-    price = models.PositiveBigIntegerField(
-        verbose_name=_('قیمت (به ریال)'),
-    )
-    extra_passenger_price = models.PositiveBigIntegerField(
-        verbose_name=_('قیمت نفر اضافه (به ریال)'),
-    )
-    foreign_passenger_price = models.PositiveBigIntegerField(
-        verbose_name=_('قیمت مسافر خارجی (به ریال)'),
-    )
+    date = jmodels.jDateField(verbose_name=_('تاریخ شروع'))
+    dateend = jmodels.jDateField(verbose_name=_('تاریخ پایان'))
+
+    price = models.PositiveBigIntegerField(verbose_name=_('قیمت (تومان)'))
+    extra_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت نفر اضافه (تومان)'))
+    foreign_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت مسافر خارجی (تومان)'))
+
     discount = models.ForeignKey(
-        RoomDateDiscount,
+        'RoomDateDiscount',
         on_delete=models.CASCADE,
         verbose_name=_('تخفیف'),
         related_name='room_dates',
@@ -710,103 +708,97 @@ class RoomDate(models.Model):
         blank=True,
     )
 
-    @cached_property
-    def occupied_statuses_count(self):
-        return len(self.reservations)
+    def jalali_date(self):
+        try:
+            if isinstance(self.date, jdatetime.date):
+                return self.date.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=self.date).strftime('%Y/%m/%d')
+        except Exception:
+            return 'تاریخ نامعتبر'
+    jalali_date.short_description = _('تاریخ شروع شمسی')
 
-    @cached_property
-    def final_price(self):
-        if self.discount and self.occupied_statuses_count < self.discount.count:
-            if self.discount.type == 'percentage':
-                discount_value = min(self.price * self.discount.value / 100, self.discount.maximum_value)
-                return self.price - discount_value
-            if self.discount.type == 'fixed':
-                return self.price - min(self.discount.value, self.discount.maximum_value)
-        return self.price
+    def jalali_dateend(self):
+        try:
+            if isinstance(self.dateend, jdatetime.date):
+                return self.dateend.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=self.dateend).strftime('%Y/%m/%d')
+        except Exception:
+            return 'تاریخ نامعتبر'
+    jalali_dateend.short_description = _('تاریخ پایان شمسی')
 
-    @staticmethod
-    def get_occupied_statuses_count_expression():
-        occupied_statuses = [
-            'payment',
-            'pending_approve',
-            'approved',
-            'success',
-        ]
+    @classmethod
+    def get_occupied_statuses_count_expression(cls):
+        Reservation = apps.get_model('reservation', 'Reservation')  # تغییر به Reservation
+        booked_count_subquery = Reservation.objects.filter(
+            room_dates=OuterRef('pk'),  # توجه: چون در مدل Reservation، فیلد room_dates است (ManyToMany)
+            status='approved'  # یا هر وضعیتی که مد نظرتان است
+        ).values('room_dates').annotate(
+            c=Count('uuid')
+        ).values('c')
 
-        return Count(
-            'reservations',
-            filter=Q(reservations__status__in=occupied_statuses),
-            distinct=True
+        return ExpressionWrapper(
+            Coalesce(Subquery(booked_count_subquery, output_field=IntegerField()), 0),
+            output_field=IntegerField()
         )
-
-    @staticmethod
-    def get_discount_count_expression():
-        now = timezone.localtime()
-        return Count(
-            'discount',
-            filter=Q(discount__start_date__lte=now) & Q(discount__end_date__gte=now),
-            distinct=True
-        )
-
-    @staticmethod
-    def get_discounted_price_expression():
-        percentage_discount = ExpressionWrapper(
-            F('price') - Case(
-                When(
-                    discount__maximum_value__lt=F('price') * F('discount__value') / 100,
-                    then=F('discount__maximum_value')
-                ),
-                default=F('price') * F('discount__value') / 100,
-                output_field=PositiveBigIntegerField()
+        
+    @classmethod
+    def get_discount_count_expression(cls):
+        return Coalesce(
+            Case(
+                When(discount__isnull=False, then=1),
+                default=0,
+                output_field=IntegerField(),
             ),
+            0
+        )
+
+    @classmethod
+    def get_discounted_price_expression(cls):
+        return ExpressionWrapper(
+            F('price') - (F('price') * F('discount__percent') / 100),
             output_field=PositiveBigIntegerField()
         )
 
-        fixed_discount = ExpressionWrapper(
-            F('price') - Case(
-                When(
-                    discount__maximum_value__lt=F('discount__value'),
-                    then=F('discount__maximum_value')
-                ),
-                default=F('discount__value'),
-                output_field=PositiveBigIntegerField()
-            ),
-            output_field=PositiveBigIntegerField()
-        )
-
-        return Case(
-            When(discount__type='percentage', then=percentage_discount),
-            When(discount__type='fixed', then=fixed_discount),
-            default=F('price'),
-            output_field=PositiveBigIntegerField()
-        )
-
-    @cached_property
-    def reserved_count(self):
-        # TODO
-        pass
-
-    @cached_property
-    def pending_count(self):
-        # TODO
-        pass
+    def __str__(self):
+        return f'{self.room} - {self.jalali_date()}'
 
     class Meta:
-        verbose_name = 'تاریخ اتاق'
-        verbose_name_plural = 'تاریخ‌های اتاق'
+        verbose_name = _('بازه زمانی')
+        verbose_name_plural = _('بازه زمانی اتاق‌ها')
         constraints = [
             models.UniqueConstraint(
-                fields=[
-                    'room',
-                    'date'
-                ],
+                fields=['room', 'date'],
                 name='unique_room_date',
             )
         ]
+        ordering = ['room', 'date']
+    
+
+class ClosedDate(models.Model):
+    room_date = models.ForeignKey(
+        'RoomDate',
+        on_delete=models.CASCADE,
+        related_name='closed_dates',
+        verbose_name=_('بازه زمانی اتاق')
+    )
+    date = jmodels.jDateField(verbose_name=_('تاریخ بسته شده'))  # تاریخ بسته شده به شمسی
+    reason = models.CharField(max_length=255, verbose_name=_('علت بسته بودن'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('تاریخ بسته شده')
+        verbose_name_plural = _('تاریخ‌های بسته شده')
+        unique_together = ('room_date', 'date')
+        ordering = ['date']
 
     def __str__(self):
-        return f'{self.room} - {self.date}'
-    
+        try:
+            if isinstance(self.date, jdatetime.date):
+                persian_date = self.date
+            else:
+                persian_date = jdatetime.date.fromgregorian(date=self.date)
+            return f'{self.room_date} - {persian_date.strftime("%Y/%m/%d")}'
+        except Exception:
+            return f'{self.room_date} - تاریخ نامعتبر'
     
     
     

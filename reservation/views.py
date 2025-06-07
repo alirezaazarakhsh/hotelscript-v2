@@ -37,6 +37,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
     BestHotels,
+    ClosedDate,
     Hotel,
     Room,
     RoomDate,
@@ -54,6 +55,7 @@ from .models import (
 )
 from .serializers import (
     BestHotelsSerializer,
+    ClosedDateSerializer,
     HotelListSerializer,
     CitySerializer,
     HotelTypeSerializer,
@@ -879,40 +881,7 @@ class RoomDateListView(ListAPIView):
             ),
         ).filter(
             room__id=room_id,
-            room__count__gt=F('occupied_count'),
-            date__gte=today,
-        ).order_by('date')
-
-        return queryset
-
-
-
-
-# ای پی ای دریافت تاریخ های قابل رزرو برای یه اتاق خاص 
-class RoomDateListView(ListAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = RoomDateListSerializer
-    pagination_class = None
-
-    def get_queryset(self):
-        room_id = self.kwargs.get('room_id')
-        today = timezone.localdate()
-
-        queryset = RoomDate.objects.annotate(
-            occupied_count=RoomDate.get_occupied_statuses_count_expression(),
-            discount_count=RoomDate.get_discount_count_expression(),
-            original_price=F('price'),
-            discounted_price=Case(
-                When(
-                    discount_count__gt=F('occupied_count'),
-                    then=RoomDate.get_discounted_price_expression()
-                ),
-                default=F('price'),
-                output_field=PositiveBigIntegerField(),
-            ),
-        ).filter(
-            room__id=room_id,
-            room__count__gt=F('occupied_count'),
+            room__count__gt=F('occupied_count'),  # فقط اتاق‌هایی که ظرفیت دارند
             date__gte=today,
         ).order_by('date')
 
@@ -939,7 +908,6 @@ class RoomDateListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
     
     
     
@@ -1030,3 +998,45 @@ class BestHotelsListCreateView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+    
+    
+    
+    
+class ClosedDateListCreateView(ListCreateAPIView):
+        permission_classes = (AllowAny,)
+        serializer_class = ClosedDateSerializer
+
+        def get_queryset(self):
+            """
+            بازگرداندن لیست تاریخ‌های بسته شده به ترتیب تاریخ.
+            """
+            return ClosedDate.objects.all().order_by('date')
+
+        @swagger_auto_schema(
+            operation_summary="لیست تاریخ‌های بسته شده بازه‌های زمانی",
+            operation_description="""
+            این API به کاربر اجازه می‌دهد تا:
+            - لیست تاریخ‌های بسته شده بازه‌های زمانی را مشاهده کند
+            - تاریخ بسته شده جدیدی را ثبت کند
+            """,
+            responses={
+                200: ClosedDateSerializer(many=True),
+                201: ClosedDateSerializer(),
+            }
+        )
+        def get(self, request, *args, **kwargs):
+            return super().get(request, *args, **kwargs)
+
+        @swagger_auto_schema(
+            operation_summary="ثبت تاریخ بسته شده جدید",
+            operation_description="""
+            با استفاده از این API می‌توانید تاریخ بسته شده جدیدی برای یک بازه زمانی اتاق ثبت کنید.
+            """,
+            request_body=ClosedDateSerializer,
+            responses={201: ClosedDateSerializer()}
+        )
+        def post(self, request, *args, **kwargs):
+            return super().post(request, *args, **kwargs)
+        
+        
+        

@@ -59,3 +59,10 @@ class CityAdminForm(forms.ModelForm):
                 self.fields[image_field].help_text = mark_safe(
                     f'<img src="{field_value.url}" style="max-height: 200px; max-width: 200px; margin-top: 10px;" />'
                 )
+
+
+
+
+    
+    
+    
