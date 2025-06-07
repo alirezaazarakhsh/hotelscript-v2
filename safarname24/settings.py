@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'jalali_date',
+    # 'jalali_date',
     'django_jalali',
     'colorfield',
     'rest_framework',
