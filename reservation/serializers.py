@@ -58,6 +58,7 @@ class HotelListSerializer(serializers.ModelSerializer):
     original_total_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
+
     class Meta:
         model = Hotel
         fields = (
@@ -75,18 +76,22 @@ class HotelListSerializer(serializers.ModelSerializer):
             'total_price',
             'rating',
         )
-    
+
     def get_type(self, obj):
-        return obj.type.title
+        # فرض می‌کنیم مدل HotelType فیلد title دارد
+        return obj.type.title if obj.type else None
 
     def get_total_price(self, obj):
-        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price')
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price', None)
 
     def get_original_total_price(self, obj):
-        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price')
-    
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price', None)
+
     def get_rating(self, obj):
-        return obj.rating if obj.rating else None
+        # اگر rating در مدل نیست، مقدار None می‌دهیم یا اگر می‌خواهید می‌توانید اینجا لاجیک بگذارید
+        return getattr(obj, 'rating', None)
+
+
 
 class FavoriteHotelSerializer(serializers.ModelSerializer):
     city = CitySerializer()
