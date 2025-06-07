@@ -1,6 +1,5 @@
-from authentication import permissions
+from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from drf_yasg import openapi
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +12,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from .serializers import (
     AuthSerializer,
@@ -31,7 +31,6 @@ from .utils import generate_otp_code
 from .sms.sms import send_logout_sms, send_otp_sms, send_welcome_sms
 
 
-# خروج از حساب
 class APILogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -39,19 +38,16 @@ class APILogoutView(APIView):
         operation_summary="خروج از حساب کاربری",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            properties={
-                'refresh_token': openapi.Schema(type=openapi.TYPE_STRING)
-            },
+            properties={'refresh_token': openapi.Schema(type=openapi.TYPE_STRING)},
             required=['refresh_token']
         ),
         responses={200: 'OK', 400: 'Bad Request'}
     )
     def post(self, request):
+        refresh_token = request.data.get('refresh_token')
+        if not refresh_token:
+            return Response({"detail": "refresh_token is required"}, status=400)
         try:
-            refresh_token = request.data.get('refresh_token')
-            if not refresh_token:
-                return Response({"detail": "refresh_token is required"}, status=400)
-
             token = RefreshToken(refresh_token)
             token.blacklist()
 
@@ -65,7 +61,6 @@ class APILogoutView(APIView):
             return Response({"detail": str(e)}, status=400)
 
 
-# دریافت OTP
 class AuthView(APIView):
     permission_classes = (AllowAny,)
 
@@ -104,28 +99,35 @@ class AuthView(APIView):
         return Response({"detail": _("کد تایید ارسال شد.")})
 
 
-# ورود با کد OTP
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
-        operation_summary="ورود با کد تایید",
-        responses={200: 'ورود موفق', 403: 'قبلاً وارد شده‌اید', 401: 'نامعتبر'}
+        operation_summary="ورود با کد تایید OTP",
+        operation_description="گرفتن توکن JWT با استفاده از کد تأیید ارسال شده",
+        responses={
+            200: 'دریافت موفق توکن',
+            403: 'قبلاً وارد شده‌اید',
+            401: 'کد نامعتبر است'
+        }
     )
     def post(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            return Response({"detail": _("شما قبلاً وارد شده‌اید.")}, status=403)
+            return Response({"detail": _("شما قبلاً وارد شده‌اید.")}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            return Response({"detail": str(e)}, status=401)
+            return Response({"detail": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
 
         user = serializer.user
-        send_welcome_sms(user.phone_number, f"{user.first_name} {user.last_name}".strip())
-        return Response(serializer.validated_data)
+        phone_number = user.phone_number
+        full_name = f"{user.first_name} {user.last_name}".strip()
+
+        send_welcome_sms(phone_number, full_name)
+
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
-# تازه‌سازی توکن
 class TokenRefreshView(JwtTokenRefreshView):
     @swagger_auto_schema(
         operation_summary="تازه‌سازی توکن",
@@ -140,8 +142,8 @@ class TokenRefreshView(JwtTokenRefreshView):
         return Response(serializer.validated_data)
 
 
-# لیست و ایجاد پروفایل حقوقی
 class JuridicalProfileListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="لیست پروفایل‌های حقوقی",
@@ -164,8 +166,9 @@ class JuridicalProfileListCreateAPIView(APIView):
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
-# ویرایش و حذف پروفایل حقوقی بر اساس شناسه
+
 class JuridicalProfileDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی بر اساس شناسه (ID)",
@@ -197,8 +200,8 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
 
 
-# لیست و ایجاد پروفایل حقیقی
 class NaturalProfileListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="لیست پروفایل‌های حقیقی",
@@ -221,8 +224,9 @@ class NaturalProfileListCreateAPIView(APIView):
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
-# ویرایش و حذف پروفایل حقیقی بر اساس شناسه
+
 class NaturalProfileDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی بر اساس شناسه (ID)",
@@ -252,11 +256,8 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=204)
         except NaturalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
-        
-        
-    
-    
-    
+
+
 class JuridicalProfileDocumentAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -290,37 +291,22 @@ class JuridicalProfileDocumentAPIView(APIView):
         operation_summary="ویرایش مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={
-            200: JuridicalProfileDocumentSerializer(),
-            400: 'درخواست نامعتبر است.',
-            404: 'مدرک یافت نشد.'
-        }
+        responses={200: JuridicalProfileDocumentSerializer(), 404: 'مدرک یافت نشد'}
     )
-    def put(self, request):
-        doc_id = request.data.get("id")
-        if not doc_id:
-            return Response({"id": "شناسه مدرک الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        document = get_object_or_404(JuridicalProfileDocument, id=doc_id)
+    def put(self, request, pk):
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
         serializer = JuridicalProfileDocumentSerializer(document, data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
         operation_summary="حذف مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        responses={
-            204: 'مدرک با موفقیت حذف شد.',
-            404: 'مدرک یافت نشد.'
-        }
+        responses={204: 'مدرک حذف شد', 404: 'مدرک یافت نشد'}
     )
-    def delete(self, request):
-        doc_id = request.data.get("id")
-        if not doc_id:
-            return Response({"id": "شناسه مدرک الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        document = get_object_or_404(JuridicalProfileDocument, id=doc_id)
+    def delete(self, request, pk):
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
         document.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(status=204)
