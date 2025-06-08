@@ -164,6 +164,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
     'PAGE_SIZE': 10,
+  
 }
 
 if not DEBUG:
