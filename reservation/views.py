@@ -332,21 +332,20 @@ class HotelTypeListView(ListAPIView):
     
 
 # ای پی ای دریافت لیست امکانات 
+class CustomPagination(PageNumberPagination):
+    page_size = 15
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
+    pagination_class = CustomPagination
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
         return Facilities.objects.filter(hotels__slug=hotel_slug).order_by('id')
-
-    def get_paginated_response(self, data):
-        self.paginator.page_size = 15
-        return super().get_paginated_response(data)
-
-    def paginate_queryset(self, queryset):
-        self.paginator.page_size = 15
-        return super().paginate_queryset(queryset)
 
     @swagger_auto_schema(
         operation_summary="دریافت امکانات هتل با استفاده از slug",
@@ -391,7 +390,7 @@ class HotelFacilitiesListView(ListAPIView):
                                 properties={
                                     'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه'),
                                     'title': openapi.Schema(type=openapi.TYPE_STRING, description='عنوان'),
-                                    # اگر فیلدهای بیشتری در FacilitiesSerializer دارید اینجا اضافه کنید
+                                    # فیلدهای بیشتر از FacilitiesSerializer را اینجا اضافه کنید
                                 },
                             ),
                         ),
@@ -412,6 +411,7 @@ class HotelFacilitiesListView(ListAPIView):
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
+    pagination_class = CustomPagination
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
@@ -419,17 +419,9 @@ class HotelRoomFacilitiesListView(ListAPIView):
             rooms__hotel__slug=hotel_slug
         ).distinct().order_by('id')
 
-    def get_paginated_response(self, data):
-        self.paginator.page_size = 15
-        return super().get_paginated_response(data)
-
-    def paginate_queryset(self, queryset):
-        self.paginator.page_size = 15
-        return super().paginate_queryset(queryset)
-
     @swagger_auto_schema(
         operation_summary="دریافت امکانات اتاق‌های یک هتل خاص",
-        operation_description="این API لیستی از امکانات اتاق‌های یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
+        operation_description="این API لیستی از امکانات اتاق‌های یک هتل مشخص (با استفاده از slug) را باز می‌گرداند، صفحه‌بندی‌شده.",
         tags=['hotel-room'],
         manual_parameters=[
             openapi.Parameter(
@@ -460,17 +452,17 @@ class HotelRoomFacilitiesListView(ListAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'count': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'next': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
-                        'previous': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
+                        'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل امکانات'),
+                        'next': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True, description='آدرس صفحه بعدی'),
+                        'previous': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True, description='آدرس صفحه قبلی'),
                         'results': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
                             items=openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
-                                    # سایر فیلدها بر اساس RoomFacilitiesSerializer
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه'),
+                                    'title': openapi.Schema(type=openapi.TYPE_STRING, description='عنوان'),
+                                    # فیلدهای بیشتر بر اساس RoomFacilitiesSerializer اینجا اضافه کنید
                                 }
                             ),
                         ),
