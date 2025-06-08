@@ -158,13 +158,11 @@ class HotelAdmin(admin.ModelAdmin):
     def logo_preview(self, obj):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="40" height="40" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.best_logo.image_logo_hotel.url,
-               
-            )
+            '<div style="display:flex;align-items:center;">'
+            '<img src="{}" width="40" height="40" style="margin-right:8px; object-fit: contain;" />'
+            '</div>',
+            obj.best_logo.image_logo_hotel.url
+        )
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
     
