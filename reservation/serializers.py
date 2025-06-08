@@ -176,13 +176,13 @@ class HotelDescriptionSerializer(serializers.ModelSerializer):
 
 class HotelIntroductionSerializer(serializers.ModelSerializer):
     logo_preview = serializers.SerializerMethodField()
+    city_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Hotel
         fields = (
             'name',
-            'city',
-            'city_name',
+            'city_name',  # فقط نام شهر، نه کل مدل
             'latitude',
             'longitude',
             'best_logo',
@@ -203,6 +203,9 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(url)
             return url
         return None
+
+    def get_city_name(self, obj):
+        return obj.city.name if obj.city else None
 
 
 class HotelFurtherDescriptionSerializer(serializers.ModelSerializer):
