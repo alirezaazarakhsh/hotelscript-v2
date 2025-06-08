@@ -1,51 +1,46 @@
-from django.urls import path, include
+from django.urls import path
 from . import views
 
 app_name = 'reservation'
 
 urlpatterns = [
-    path('<str:slug>/', include([
-        path(
-            'detail/',
-            views.HotelRetrieveView.as_view(),
-            name='hotel-detail'
-        ),
-        path(
-            'faq/',
-            views.HotelFAQListView.as_view(),
-            name='hotel-faq-list'
-        ),
-        path(
-            'facilities/',
-            views.HotelFacilitiesListView.as_view(),
-            name='hotel-facility-list'
-        ),
-        path(
-            'room-facilities/',
-            views.HotelRoomFacilitiesListView.as_view(),
-            name='hotel-room-facility-list'
-        ),
-        path(
-            'nearby-places/',
-            views.HotelNearbyPlaceListView.as_view(),
-            name='nearby-place-list'
-        ),
-        path(
-            'comments/',
-            views.HotelCommentListCreateView.as_view(),
-            name='comment-list'
-        ),
-        path(
-            'rating-summary/',
-            views.HotelRatingSummaryListView.as_view(),
-            name='rating-summary-list'
-        ),
-        path(
-            'search/',
-            views.RoomListView.as_view(),
-            name='room-list'
-        ),
-    ])),
+    path(
+        'faq/',
+        views.HotelFAQListView.as_view(),
+        name='hotel-faq-list'
+    ),
+    path(
+        'facilities/',
+        views.HotelFacilitiesListView.as_view(),
+        name='hotel-facility-list'
+    ),
+    path(
+        'room-facilities/',
+        views.HotelRoomFacilitiesListView.as_view(),
+        name='hotel-room-facility-list'
+    ),
+    path(
+        'nearby-places/',
+        views.HotelNearbyPlaceListView.as_view(),
+        name='nearby-place-list'
+    ),
+    path(
+        'comments/',
+        views.HotelCommentListCreateView.as_view(),
+        name='comment-list'
+    ),
+    path(
+        'rating-summary/',
+        views.HotelRatingSummaryListView.as_view(),
+        name='rating-summary-list'
+    ),
+    path(
+        'search/',
+        views.RoomListView.as_view(),
+        name='room-list'
+    ),
+
+    # مسیر جدید search هتل
     path(
         'search/',
         views.HotelListView.as_view(),
@@ -56,13 +51,11 @@ urlpatterns = [
         views.CityListView.as_view(),
         name='city-list'
     ),
-    
     path(
-    'cities/homepage/',
-    views.HomePageCityListView.as_view(),
-    name='homepage-city-list'
+        'cities/homepage/',
+        views.HomePageCityListView.as_view(),
+        name='homepage-city-list'
     ),
-    
     path(
         'types/',
         views.HotelTypeListView.as_view(),
@@ -98,8 +91,6 @@ urlpatterns = [
         views.ClosedDateListCreateView.as_view(),
         name='closed-date-list-create'
     ),
-    
-    
     path(
         'special-offer-hotels/',
         views.SpecialOfferHotelListView.as_view(),
@@ -114,5 +105,30 @@ urlpatterns = [
         'best-seller-hotels/',
         views.BestSellerHotelListView.as_view(),
         name='best-seller-hotel-list'
+    ),
+    path(
+        'hotels/<slug:slug>/images/',
+        views.HotelImagesView.as_view(),
+        name='hotel-images'
+    ),
+    path(
+        'hotels/<slug:slug>/description/',
+        views.HotelDescriptionView.as_view(),
+        name='hotel-description'
+    ),
+    path(
+        'hotels/<slug:slug>/introduction/',
+        views.HotelIntroductionView.as_view(),
+        name='hotel-introduction'
+    ),
+    path(
+        'hotels/<slug:slug>/further-description/',
+        views.HotelFurtherDescriptionView.as_view(),
+        name='hotel-further-description'
+    ),
+    path(
+        'hotels/<slug:slug>/rules/',
+        views.HotelRulesView.as_view(),
+        name='hotel-rules'
     ),
 ]

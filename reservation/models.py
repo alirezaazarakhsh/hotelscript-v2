@@ -108,6 +108,8 @@ class City(models.Model):
         return self.name
 
 
+
+
 #مدل نوع اقامتگاه
 class HotelType(models.Model):
     title = models.CharField(
@@ -117,8 +119,8 @@ class HotelType(models.Model):
     )
 
     class Meta:
-        verbose_name = 'نوع هتل'
-        verbose_name_plural = 'انواع هتل'
+        verbose_name = 'نوع اقامتگاه'
+        verbose_name_plural = 'نوع اقامتگاه'
 
     def __str__(self):
         return self.title
@@ -126,6 +128,7 @@ class HotelType(models.Model):
 
 
 
+#مدل تگ های هتل
 class HotelTag(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -134,11 +137,12 @@ class HotelTag(models.Model):
     )
 
     class Meta:
-        verbose_name = 'تگ'
-        verbose_name_plural = 'تگ‌ها'
+        verbose_name = 'برچسب هتل'
+        verbose_name_plural = 'برچسب‌ها'
 
     def __str__(self):
         return self.title
+
 
 
 
@@ -156,6 +160,7 @@ class Facilities(models.Model):
 
     def __str__(self):
         return self.title
+
 
 
 
@@ -221,17 +226,27 @@ class Hotel(models.Model):
         verbose_name=_('تصویر 4'),
         upload_to=hotel_image_upload_to,
     )
+    
+    best_logo = models.ForeignKey(
+        'BestHotels',
+        verbose_name=_('لوگوی هتل'),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hotels',
+    )
+    
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد ستاره'),
     )
     type = models.ForeignKey(
         'HotelType',
         on_delete=models.CASCADE,
-        verbose_name=_('نوع هتل'),
+        verbose_name=_('نوع اقامتگاه'),
         related_name='hotels',
     )
     description = models.TextField(
-        verbose_name=_('توضیحات'),
+        verbose_name=_('توضیحات هتل'),
     )
     further_description = models.TextField(
         verbose_name=_('توضیحات تکمیلی'),
@@ -239,17 +254,17 @@ class Hotel(models.Model):
         default='',
     )
     floors_count = models.PositiveSmallIntegerField(
-        verbose_name=_('تعداد طبقات'),
+        verbose_name=_('تعداد طبقات هتل'),
     )
     rooms_count = models.PositiveSmallIntegerField(
-        verbose_name=_('تعداد اتاق‌ها'),
+        verbose_name=_('تعداد اتاق‌های هتل'),
         default=1,
     )
     check_in_time = models.TimeField(
-        verbose_name=_('ساعت ورود'),
+        verbose_name=_('ساعت ورود به هتل'),
     )
     check_out_time = models.TimeField(
-        verbose_name=_('ساعت خروج'),
+        verbose_name=_('ساعت خروج از هتل'),
     )
     has_check_in_half_day_charge = models.BooleanField(
         verbose_name=_('نیم شارژ ورود'),
@@ -277,7 +292,7 @@ class Hotel(models.Model):
     )
     tags = models.ManyToManyField(
         'HotelTag',
-        verbose_name=_('تگ'),
+        verbose_name=_('برچسب های هتل'),
         related_name='hotels',
     )
     facilities = models.ManyToManyField(
@@ -291,22 +306,22 @@ class Hotel(models.Model):
         related_name='hotels',
     )
     is_special_offer = models.BooleanField(
-        verbose_name=_('پیشنهاد ویژه'),
+        verbose_name=_('پیشنهاد ویژه صفحه اصلی'),
         default=False,
     )
     is_flash_sale = models.BooleanField(
-        verbose_name=_('شگفت‌انگیز'),
+        verbose_name=_('شگفت‌انگیز صفحه اصلی'),
         default=False,
     )
     is_best_seller = models.BooleanField(
-        verbose_name=_('پرفروش'),
+        verbose_name=_('پرفروش ترین های صفحه اصلی '),
         default=False,
     )
     rules = models.TextField(
-        verbose_name=_('قوانین'),
+        verbose_name=_('قوانین و مقررات هتل '),
     )
     important_notes = models.TextField(
-        verbose_name=_('نکات ضروری'),
+        verbose_name=_('نکات ضروری هتل '),
         blank=True,
         default='',
     )

@@ -57,13 +57,17 @@ from .models import (
 from .serializers import (
     BestHotelsSerializer,
     ClosedDateSerializer,
+    HotelDescriptionSerializer,
+    HotelFurtherDescriptionSerializer,
+    HotelImagesSerializer,
+    HotelIntroductionSerializer,
     HotelListSerializer,
     CitySerializer,
+    HotelRulesSerializer,
     HotelTypeSerializer,
     FacilitiesSerializer,
     RoomFacilitiesSerializer,
     RoomServiceSerializer,
-    HotelRetrieveSerializer,
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
     CommentListSerializer,
@@ -380,21 +384,17 @@ class RoomServiceListView(ListAPIView):
 
 
 
-# ای پی ای یک هتل بر اساس اسلاگ
-class HotelRetrieveView(RetrieveAPIView):
+#دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
+class HotelImagesView(RetrieveAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = HotelRetrieveSerializer
-    queryset = Hotel.objects.select_related('city')\
-                           .select_related('city__province')\
-                           .select_related('type')\
-                           .prefetch_related('tags')\
-                           .all()
+    serializer_class = HotelImagesSerializer
+    queryset = Hotel.objects.all()
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
 
     @swagger_auto_schema(
-        operation_summary="دریافت جزئیات هتل",
-        operation_description="این API جزئیات کامل یک هتل را با توجه به slug آن باز می‌گرداند.",
+        operation_summary="دریافت تصاویر هتل",
+        operation_description="این API تصاویر اصلی هتل را بر اساس slug باز می‌گرداند.",
         tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
@@ -406,7 +406,38 @@ class HotelRetrieveView(RetrieveAPIView):
             ),
         ],
         responses={
-            200: HotelRetrieveSerializer,
+            200: HotelImagesSerializer,
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    
+
+#دریافت توضیحات هتل برای صفحه جزئیات 
+class HotelDescriptionView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelDescriptionSerializer
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت توضیحات هتل",
+        operation_description="این API توضیحات کلی هتل را بر اساس slug باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelDescriptionSerializer,
             404: 'هتل پیدا نشد.'
         }
     )
@@ -414,6 +445,100 @@ class HotelRetrieveView(RetrieveAPIView):
         return super().get(request, *args, **kwargs)
     
     
+    
+    
+#ای پی ای معرفی هتل در صفحه جزئیات هتل 
+class HotelIntroductionView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelIntroductionSerializer
+    queryset = Hotel.objects.select_related('best_logo').all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت معرفی هتل",
+        operation_description="این API اطلاعات معرفی هتل شامل ستاره، آدرس، زمان چک‌این و چک‌اوت و لوگو را باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelIntroductionSerializer,
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+# ای پی ای دریافت توضیحات تکمیلی هتل در صفجه جزئیات 
+class HotelFurtherDescriptionView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelFurtherDescriptionSerializer
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت توضیحات تکمیلی هتل",
+        operation_description="این API توضیحات تکمیلی هتل را بر اساس slug باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelFurtherDescriptionSerializer,
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+#ای پی ای نکات ضروری و قوانین هتل در صفحه جزئیات
+class HotelRulesView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelRulesSerializer
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت قوانین و نکات مهم هتل",
+        operation_description="این API قوانین هتل و نکات مهم را با توجه به slug باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelRulesSerializer,
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
     
     
 # ای پی ای سوالات متداول هتل 

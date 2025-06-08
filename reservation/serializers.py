@@ -152,43 +152,63 @@ class HotelTagSerializer(serializers.ModelSerializer):
             'title',
         )
 
-class HotelRetrieveSerializer(serializers.ModelSerializer):
-    city = CitySerializer()
-    type = serializers.SerializerMethodField()
-    tags = HotelTagSerializer(many=True, read_only=True)
 
+
+class HotelImagesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = (
-            'name',
-            'slug',
-            'city',
-            'address',
             'main_image',
             'image1',
             'image2',
             'image3',
             'image4',
+        )
+
+
+class HotelDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Hotel
+        fields = ('description',)
+
+
+
+class HotelIntroductionSerializer(serializers.ModelSerializer):
+    logo_preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'best_logo',
+            'logo_preview',
             'stars',
-            'type',
-            'description',
-            'further_description',
+            'address',
             'floors_count',
             'rooms_count',
             'check_in_time',
             'check_out_time',
-            'latitude',
-            'longitude',
-            'is_special_offer',
-            'is_flash_sale',
-            'is_best_seller',
+        )
+
+    def get_logo_preview(self, obj):
+        if obj.best_logo and obj.best_logo.image_logo_hotel:
+            return obj.best_logo.image_logo_hotel.url
+        return None
+
+
+class HotelFurtherDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Hotel
+        fields = ('further_description',)
+
+
+
+class HotelRulesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Hotel
+        fields = (
             'rules',
             'important_notes',
-            'tags',
         )
-    
-    def get_type(self, obj):
-        return obj.type.title
 
 class HotelFAQListSerializer(serializers.ModelSerializer):
     class Meta:

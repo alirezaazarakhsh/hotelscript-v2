@@ -94,6 +94,8 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
         'title',
     )
 
+
+
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
@@ -102,16 +104,10 @@ class HotelAdmin(admin.ModelAdmin):
         'name',
         'slug',
         'city',
-        'address',
+        'best_logo',
+        'logo_preview',  
         'latitude',     
         'longitude', 
-        'description',
-        'further_description',    
-        'main_image',
-        'image1',
-        'image2',
-        'image3',
-        'image4',
         'stars',
         'type',
         'floors_count',
@@ -126,6 +122,14 @@ class HotelAdmin(admin.ModelAdmin):
         'is_special_offer',
         'is_flash_sale',
         'is_best_seller',
+        'main_image',
+        'image1',
+        'image2',
+        'image3',
+        'image4',
+        'address',
+        'description',
+        'further_description',    
         'rules',
         'important_notes',
     )
@@ -141,12 +145,27 @@ class HotelAdmin(admin.ModelAdmin):
         'stars',
         'type',
         'floors_count',
+        'logo_preview',
     )
     search_fields = (
         'name',
         'address',
     )
-    autocomplete_fields = ['tags', 'facilities', 'room_facilities']
+    autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
+    readonly_fields = ('logo_preview',)
+
+    def logo_preview(self, obj):
+        if obj.best_logo and obj.best_logo.image_logo_hotel:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="40" height="40" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.best_logo.image_logo_hotel.url,
+                obj.best_logo.title_logo
+            )
+        return "-"
+    logo_preview.short_description = "لوگو انتخاب‌شده"
     
 
 @admin.register(HotelGallery)
