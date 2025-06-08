@@ -30,7 +30,6 @@ urlpatterns = [
 
     # ==== Facilities and Services ====
     path('hotel/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facilities'),
-    path('room-facilities/', views.RoomFacilitiesListView.as_view(), name='room-facility-list'),
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
     path('room-facilities-list/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),  
 
