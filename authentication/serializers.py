@@ -93,6 +93,8 @@ class AuthSerializer(serializers.Serializer):
 # NaturalProfile Serializer
 # -----------------------------
 class NaturalProfileSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = NaturalProfile
         fields = [
@@ -106,13 +108,21 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level',
         ]
         extra_kwargs = {
-            'image': {'required': False, 'allow_null': True},
             'email': {'required': False, 'allow_null': True},
             'national_code': {'required': False, 'allow_null': True},
             'postal_code': {'required': False, 'allow_null': True},
             'address': {'required': False, 'allow_null': True},
             'level': {'required': False, 'allow_null': True},
         }
+
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            image_url = obj.image.url
+            if request is not None:
+                return request.build_absolute_uri(image_url)
+            return image_url
+        return None
 
 
 # -----------------------------
@@ -136,6 +146,7 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
 # -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = JuridicalProfileDocumentSerializer(many=True, read_only=True)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = JuridicalProfile
@@ -156,12 +167,19 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'address': {'required': False, 'allow_null': True},
             'email': {'required': False, 'allow_null': True},
-            'image': {'required': False, 'allow_null': True},
             'reject_reason': {'required': False, 'allow_blank': True},
         }
 
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            url = obj.image.url
+            if request is not None:
+                return request.build_absolute_uri(url)
+            return url
+        return None
+
     def validate(self, data):
-        # اگر وضعیت رد شده است، دلیل رد باید وجود داشته باشد
         if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
             raise serializers.ValidationError({
                 'reject_reason': _('فیلد دلیل رد برای وضعیت رد شده الزامی است.')

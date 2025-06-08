@@ -208,6 +208,8 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
         return obj.city.name if obj.city else None
 
 
+
+
 class HotelFurtherDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
