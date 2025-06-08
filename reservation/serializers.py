@@ -181,6 +181,7 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
         model = Hotel
         fields = (
             'name',
+            'city',
             'city_name',
             'latitude',
             'longitude',
