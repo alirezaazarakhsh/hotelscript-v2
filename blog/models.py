@@ -18,6 +18,8 @@ from .managers import (
 )
 
 # Create your models here.
+
+# مدل دسته بندی استوری وبلاگ
 class StoryCategory(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -45,10 +47,7 @@ class StoryCategory(models.Model):
         verbose_name_plural = 'دسته‌های استوری'
         ordering = ('order',)
         
-        
-
-
-
+    
     def __str__(self):
         return self.title
 
@@ -63,6 +62,9 @@ class StoryCategory(models.Model):
 
         super().save(*args, **kwargs)
 
+
+
+# مدل استوری وبلاگ
 class Story(models.Model):
     image = models.ImageField(
         verbose_name=_('عکس'),
@@ -97,6 +99,9 @@ class Story(models.Model):
     def __str__(self):
         return f'{self.category}-{self.pk}'
 
+
+
+# مدل دسته بندی مقالات
 class ArticleCategory(models.Model):
     title = models.CharField(
         max_length=256,
@@ -122,6 +127,8 @@ class ArticleCategory(models.Model):
     def __str__(self):
         return self.title
 
+
+# مدل دسته بندی فرعی مقالات
 class ArticleSubCategory(models.Model):
     title = models.CharField(
         max_length=256,
@@ -156,6 +163,9 @@ class ArticleSubCategory(models.Model):
     def __str__(self):
         return self.title
 
+
+
+#مدل برچسب های مقالات
 class ArticleTag(models.Model):
     title = models.CharField(
         max_length=256,
@@ -170,6 +180,10 @@ class ArticleTag(models.Model):
         return self.title
 
 
+
+
+
+#مدل مقاله
 class Article(models.Model):
     ARTICLE_STATUSES = (
         ('draft', 'پیش‌نویس'),
@@ -288,6 +302,8 @@ class Article(models.Model):
 
     def __str__(self):
         return self.title
+
+
 
 class Comment(models.Model):
     author_name = models.CharField(

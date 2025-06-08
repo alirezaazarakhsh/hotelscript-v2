@@ -179,6 +179,9 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = (
+            'name',
+            'latitude',
+            'longitude',
             'best_logo',
             'logo_preview',
             'stars',
