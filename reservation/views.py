@@ -332,11 +332,6 @@ class HotelTypeListView(ListAPIView):
     
 
 # ای پی ای دریافت لیست امکانات 
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny
-
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
@@ -358,9 +353,27 @@ class HotelFacilitiesListView(ListAPIView):
         operation_description="این API لیستی از امکانات یک هتل مشخص را باز می‌گرداند، صفحه‌بندی‌شده.",
         tags=['hotel'],
         manual_parameters=[
-            openapi.Parameter('slug', openapi.IN_PATH, description='شناسه slug هتل', type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('page', openapi.IN_QUERY, description='شماره صفحه', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description='تعداد در هر صفحه', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                name='page',
+                in_=openapi.IN_QUERY,
+                description='شماره صفحه',
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                name='page_size',
+                in_=openapi.IN_QUERY,
+                description='تعداد در هر صفحه',
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
         ],
         responses={
             200: openapi.Response(
@@ -395,7 +408,6 @@ class HotelFacilitiesListView(ListAPIView):
 
 
 
-
 #ای پی ای امکاتات اتاق در هتل 
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
@@ -420,9 +432,27 @@ class HotelRoomFacilitiesListView(ListAPIView):
         operation_description="این API لیستی از امکانات اتاق‌های یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
         tags=['hotel-room'],
         manual_parameters=[
-            openapi.Parameter('slug', openapi.IN_PATH, 'شناسه slug هتل', openapi.TYPE_STRING, required=True),
-            openapi.Parameter('page', openapi.IN_QUERY, 'شماره صفحه', openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter('page_size', openapi.IN_QUERY, 'تعداد در هر صفحه', openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True
+            ),
+            openapi.Parameter(
+                name='page',
+                in_=openapi.IN_QUERY,
+                description='شماره صفحه',
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
+            openapi.Parameter(
+                name='page_size',
+                in_=openapi.IN_QUERY,
+                description='تعداد در هر صفحه',
+                type=openapi.TYPE_INTEGER,
+                required=False
+            ),
         ],
         responses={
             200: openapi.Response(
@@ -447,7 +477,7 @@ class HotelRoomFacilitiesListView(ListAPIView):
                     },
                 ),
             ),
-            404: 'هتل یا امکانات اتاق مرتبط یافت نشد.'
+            404: openapi.Response(description='هتل یا امکانات اتاق مرتبط یافت نشد.')
         }
     )
     def get(self, request, *args, **kwargs):
