@@ -331,14 +331,17 @@ class HotelTypeListView(ListAPIView):
     
 
  # کلاس صفحه‌بندی استاندارد با page_size = 15
-
+class Paginator(PageNumberPagination):
+    page_size = 15
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 # API دریافت لیست امکانات هتل با صفحه‌بندی
 class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
     queryset = Facilities.objects.all()
-    # pagination_class = None
+    pagination_class = Paginator
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
@@ -356,7 +359,7 @@ class RoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer  # اصلاح شد
     queryset = RoomFacilities.objects.all()       # اصلاح شد
-    pagination_class = None
+    pagination_class = Paginator
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات داخل اتاق",
