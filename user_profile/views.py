@@ -151,6 +151,8 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
         return paginator.get_paginated_response(collection_data)
 
 
+
+
 class FavoriteCreateView(CreateAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = FavoriteCreateSerializer

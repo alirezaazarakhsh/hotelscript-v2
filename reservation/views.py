@@ -2,6 +2,7 @@ from collections import defaultdict
 from itertools import product
 from datetime import datetime
 from .utils import Round
+from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from rest_framework import (
     status,
@@ -329,12 +330,15 @@ class HotelTypeListView(ListAPIView):
         return super().get(request, *args, **kwargs)
     
     
-    
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 15
+    page_size_query_param = 'page_size'  # اختیاری، اگر بخواهید کاربر اندازه صفحه را تعیین کند
+    max_page_size = 100  
 # ای پی ای دریافت لیست امکانات 
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
-    pagination_class = None
+    pagination_class = StandardResultsSetPagination  
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
@@ -361,14 +365,12 @@ class HotelFacilitiesListView(ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-    
-    
 
-# ای پی ای لیست امکانات اتاق ها
+#ای پی ای امکاتات اتاق در هتل 
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
-    pagination_class = None
+    pagination_class = StandardResultsSetPagination  
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')

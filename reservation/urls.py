@@ -29,9 +29,9 @@ urlpatterns = [
     path('room-dates/<int:room_id>/', views.RoomDateListView.as_view(), name='room-date-list'),
 
     # ==== Facilities and Services ====
-    path('hotel/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facilities'),
+    path('hotels/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facilities'),
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
-    path('room-facilities-list/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),  
+    path('hotels/<slug:slug>/room-facilities-list/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),
 
     # ==== Cities ====
     path('cities/', views.CityListView.as_view(), name='city-list'),
