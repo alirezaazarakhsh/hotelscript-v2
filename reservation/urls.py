@@ -29,7 +29,7 @@ urlpatterns = [
     path('room-dates/<int:room_id>/', views.RoomDateListView.as_view(), name='room-date-list'),
 
     # ==== Facilities and Services ====
-    path('facilities/', views.FacilitiesListView.as_view(), name='facility-list'),
+    path('hotel/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facilities'),
     path('room-facilities/', views.RoomFacilitiesListView.as_view(), name='room-facility-list'),
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
     path('room-facilities-list/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),  
