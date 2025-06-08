@@ -448,33 +448,33 @@ class HotelDescriptionView(RetrieveAPIView):
     
     
 #ای پی ای معرفی هتل در صفحه جزئیات هتل 
-class HotelIntroductionView(RetrieveAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = HotelIntroductionSerializer
-    queryset = Hotel.objects.select_related('best_logo').all()
-    lookup_field = 'slug'
-    lookup_url_kwarg = 'slug'
+class HotelIntroductionSerializer(serializers.ModelSerializer):
+    logo_preview = serializers.SerializerMethodField()
 
-    @swagger_auto_schema(
-        operation_summary="دریافت معرفی هتل",
-        operation_description="این API اطلاعات معرفی هتل شامل ستاره، آدرس، زمان چک‌این و چک‌اوت و لوگو را باز می‌گرداند.",
-        tags=['hotel'],
-        manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
-        responses={
-            200: HotelIntroductionSerializer,
-            404: 'هتل پیدا نشد.'
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    class Meta:
+        model = Hotel
+        fields = (
+            'name',
+            'latitude',
+            'longitude',
+            'best_logo',
+            'logo_preview',
+            'stars',
+            'address',
+            'floors_count',
+            'rooms_count',
+            'check_in_time',
+            'check_out_time',
+        )
+
+    def get_logo_preview(self, obj):
+        request = self.context.get('request')
+        if obj.best_logo and obj.best_logo.image_logo_hotel:
+            url = obj.best_logo.image_logo_hotel.url
+            if request:
+                return request.build_absolute_uri(url)
+            return url
+        return None
 
 
 
