@@ -163,7 +163,7 @@ class HotelAdmin(admin.ModelAdmin):
                 '<span>{}</span>'
                 '</div>',
                 obj.best_logo.image_logo_hotel.url,
-                obj.best_logo.title_logo
+               
             )
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
