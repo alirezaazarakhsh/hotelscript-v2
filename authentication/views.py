@@ -197,6 +197,8 @@ class TokenRefreshView(JwtTokenRefreshView):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
+
+#ای پی ای لیست پروفایل های حقوقی 
 class JuridicalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -220,6 +222,8 @@ class JuridicalProfileListCreateAPIView(APIView):
             serializer.save()
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
+
 
 
 class JuridicalProfileDetailAPIView(APIView):
@@ -255,6 +259,8 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
 
 
+
+
 class NaturalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -278,6 +284,8 @@ class NaturalProfileListCreateAPIView(APIView):
             serializer.save()
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
+
 
 
 class NaturalProfileDetailAPIView(APIView):
@@ -311,6 +319,8 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=204)
         except NaturalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
+
+
 
 
 class JuridicalProfileDocumentAPIView(APIView):

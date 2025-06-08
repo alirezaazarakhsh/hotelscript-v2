@@ -20,9 +20,9 @@ urlpatterns = [
         name='hotel-room-facility-list'
     ),
     path(
-        'nearby-places/',
-        views.HotelNearbyPlaceListView.as_view(),
-        name='nearby-place-list'
+    'hotels/<slug:slug>/nearby-places/',
+    views.HotelNearbyPlaceListView.as_view(),
+    name='nearby-place-list'
     ),
     path(
         'comments/',
