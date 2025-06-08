@@ -4,11 +4,11 @@ from . import views
 app_name = 'reservation'
 
 urlpatterns = [
-    path(
-    'faq/',
+   path(
+    'hotels/<slug:slug>/faq/',
     views.HotelFAQListView.as_view(),
     name='hotel-faq-list'
-   ),
+  ),
    path(
     'hotels/<slug:slug>/facilities/',
     views.HotelFacilitiesListView.as_view(),
