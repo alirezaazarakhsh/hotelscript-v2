@@ -5,12 +5,12 @@ app_name = 'reservation'
 
 urlpatterns = [
     path(
-        'faq/',
-        views.HotelFAQListView.as_view(),
-        name='hotel-faq-list'
+        'hotels/<slug:slug>/facilities/',
+        views.HotelFacilitiesListView.as_view(),
+        name='hotel-facility-list'
     ),
     path(
-        'facilities/',
+        'hotels/<slug:slug>/facilities/',
         views.HotelFacilitiesListView.as_view(),
         name='hotel-facility-list'
     ),
@@ -25,12 +25,12 @@ urlpatterns = [
     name='nearby-place-list'
     ),
     path(
-        'comments/',
-        views.HotelCommentListCreateView.as_view(),
-        name='comment-list'
-    ),
+    'hotels/<slug:slug>/comments/',
+    views.HotelCommentListCreateView.as_view(),
+    name='hotel-comments'
+    ),  
     path(
-        'rating-summary/',
+        'hotels/<slug:slug>/rating-summary/',
         views.HotelRatingSummaryListView.as_view(),
         name='rating-summary-list'
     ),
