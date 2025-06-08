@@ -5,10 +5,10 @@ app_name = 'reservation'
 
 urlpatterns = [
     path(
-        'hotels/<slug:slug>/facilities/',
-        views.HotelFacilitiesListView.as_view(),
-        name='hotel-facility-list'
-    ),
+    'faq/',
+    views.HotelFAQListView.as_view(),
+    name='hotel-faq-list'
+),
     path(
         'hotels/<slug:slug>/facilities/',
         views.HotelFacilitiesListView.as_view(),
