@@ -179,7 +179,7 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if obj.image:
             url = obj.image.url
-            if request is not None:
+            if request:
                 return request.build_absolute_uri(url)
             return url
         return None
