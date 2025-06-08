@@ -334,11 +334,11 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size = 15
     page_size_query_param = 'page_size'  # اختیاری، اگر بخواهید کاربر اندازه صفحه را تعیین کند
     max_page_size = 100  
-# ای پی ای دریافت لیست امکانات 
+# امکانات عمومی هتل
 class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
-    pagination_class = StandardResultsSetPagination  
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
@@ -346,53 +346,44 @@ class HotelFacilitiesListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت امکانات هتل با استفاده از slug",
-        operation_description="این API لیستی از امکانات یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
+        operation_description="این API لیستی از امکانات یک هتل مشخص را باز می‌گرداند، صفحه‌بندی‌شده.",
         tags=['hotel'],
         manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
+            openapi.Parameter('slug', openapi.IN_PATH, 'شناسه slug هتل', openapi.TYPE_STRING, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, 'شماره صفحه', openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter('page_size', openapi.IN_QUERY, 'تعداد در هر صفحه', openapi.TYPE_INTEGER, required=False),
         ],
         responses={
             200: openapi.Response(
-                description='لیست امکانات هتل به صورت صفحه‌بندی شده',
+                description='لیست امکانات هتل (صفحه‌بندی شده)',
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل موارد'),
+                        'count': openapi.Schema(type=openapi.TYPE_INTEGER),
                         'next': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
                         'previous': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
                         'results': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
-                            items=openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
-                                }
-                            ),
-                        ),
-                    },
-                ),
+                            items=openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'title': openapi.Schema(type=openapi.TYPE_STRING),
+                            })
+                        )
+                    }
+                )
             ),
-            404: 'هتل یا امکاناتی برای آن یافت نشد.',
+            404: 'هتل یا امکاناتی برای آن یافت نشد.'
         }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
 
-
-
-#ای پی ای امکاتات اتاق در هتل 
+# امکانات اتاق‌ها در هتل
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
-    pagination_class = StandardResultsSetPagination  
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
@@ -400,47 +391,37 @@ class HotelRoomFacilitiesListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت امکانات اتاق‌های یک هتل خاص",
-        operation_description="این API لیستی از امکانات اتاق‌های یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
+        operation_description="این API امکانات اتاق‌های یک هتل را صفحه‌بندی‌شده برمی‌گرداند.",
         tags=['hotel-room'],
         manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
+            openapi.Parameter('slug', openapi.IN_PATH, 'شناسه slug هتل', openapi.TYPE_STRING, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, 'شماره صفحه', openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter('page_size', openapi.IN_QUERY, 'تعداد در هر صفحه', openapi.TYPE_INTEGER, required=False),
         ],
         responses={
             200: openapi.Response(
-                description='لیست امکانات اتاق‌ها به صورت صفحه‌بندی شده',
+                description='لیست امکانات اتاق (صفحه‌بندی شده)',
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل موارد'),
+                        'count': openapi.Schema(type=openapi.TYPE_INTEGER),
                         'next': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
                         'previous': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
                         'results': openapi.Schema(
                             type=openapi.TYPE_ARRAY,
-                            items=openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
-                                    # اگر فیلدهای بیشتری در RoomFacilitiesSerializer دارید، اینجا اضافه کنید
-                                }
-                            ),
-                        ),
-                    },
-                ),
+                            items=openapi.Schema(type=openapi.TYPE_OBJECT, properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'title': openapi.Schema(type=openapi.TYPE_STRING),
+                            })
+                        )
+                    }
+                )
             ),
             404: 'هتل یا امکانات اتاق مرتبط یافت نشد.'
         }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
-
 
 
 
