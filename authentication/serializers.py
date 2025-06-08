@@ -150,7 +150,7 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
 # JuridicalProfile Serializer
 # -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
-    documents = JuridicalProfileDocumentSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
 
     class Meta:
@@ -183,6 +183,12 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(url)
             return url
         return None
+
+    def get_documents(self, obj):
+        request = self.context.get('request')
+        documents = obj.documents.all()
+        serializer = JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request})
+        return serializer.data
 
     def validate(self, data):
         if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
