@@ -319,7 +319,7 @@ class HotelTypeListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelTypeSerializer
     queryset = HotelType.objects.all()
-    pagination_class = None
+    # pagination_class = None
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست نوع اقامتگاه",
@@ -338,7 +338,7 @@ class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
     queryset = Facilities.objects.all()
-    pagination_class = None
+    # pagination_class = None
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
