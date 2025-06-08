@@ -173,6 +173,7 @@ class HotelDescriptionSerializer(serializers.ModelSerializer):
 
 
 
+
 class HotelIntroductionSerializer(serializers.ModelSerializer):
     logo_preview = serializers.SerializerMethodField()
 
@@ -180,6 +181,7 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
         model = Hotel
         fields = (
             'name',
+            'city',
             'latitude',
             'longitude',
             'best_logo',
@@ -193,8 +195,12 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
         )
 
     def get_logo_preview(self, obj):
+        request = self.context.get('request')
         if obj.best_logo and obj.best_logo.image_logo_hotel:
-            return obj.best_logo.image_logo_hotel.url
+            url = obj.best_logo.image_logo_hotel.url
+            if request:
+                return request.build_absolute_uri(url)
+            return url
         return None
 
 
