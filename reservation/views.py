@@ -331,37 +331,70 @@ class HotelTypeListView(ListAPIView):
     
     
 # ای پی ای دریافت لیست امکانات 
-class FacilitiesListView(ListAPIView):
+class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
-    queryset = Facilities.objects.all()
     pagination_class = None
 
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+        return Facilities.objects.filter(hotels__slug=hotel_slug).order_by('id')
+
     @swagger_auto_schema(
-        operation_summary="دریافت لیست امکانات",
-        operation_description="این API لیستی از امکانات هتل‌ها یا خدمات را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['hotel']
+        operation_summary="دریافت امکانات هتل با استفاده از slug",
+        operation_description="این API لیستی از امکانات یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: FacilitiesSerializer(many=True),
+            404: 'هتل یا امکاناتی برای آن یافت نشد.',
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
+
     
     
 
 # ای پی ای لیست امکانات اتاق ها
-class RoomFacilitiesListView(ListAPIView):
+class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomFacilitiesSerializer
-    queryset = RoomFacilities.objects.all()
     pagination_class = None
 
+    def get_queryset(self):
+        hotel_slug = self.kwargs.get('slug')
+        return RoomFacilities.objects.filter(rooms__hotel__slug=hotel_slug).distinct().order_by('id')
+
     @swagger_auto_schema(
-        operation_summary="دریافت لیست امکانات اتاق‌ها",
-        operation_description="این API لیستی از امکانات موجود در اتاق‌ها را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['hotel-room']
+        operation_summary="دریافت امکانات اتاق‌های یک هتل خاص",
+        operation_description="این API لیستی از امکانات اتاق‌های یک هتل مشخص (با استفاده از slug) را باز می‌گرداند.",
+        tags=['hotel-room'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: RoomFacilitiesSerializer(many=True),
+            404: 'هتل یا امکانات اتاق مرتبط یافت نشد.'
+        }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
 
 
 
