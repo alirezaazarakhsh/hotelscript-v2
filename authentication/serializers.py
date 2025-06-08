@@ -146,7 +146,6 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.file.url)
         return obj.file.url
 
-
 # -----------------------------
 # JuridicalProfile Serializer
 # -----------------------------
