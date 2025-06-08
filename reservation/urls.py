@@ -34,15 +34,16 @@ urlpatterns = [
         views.HotelRatingSummaryListView.as_view(),
         name='rating-summary-list'
     ),
+    # مسیر جستجوی اتاق‌ها
     path(
-        'search/',
+        'rooms/search/',
         views.RoomListView.as_view(),
         name='room-list'
     ),
 
-    # مسیر جدید search هتل
+    # مسیر جستجوی هتل‌ها
     path(
-        'search/',
+        'hotels/search/',
         views.HotelListView.as_view(),
         name='hotel-list'
     ),
