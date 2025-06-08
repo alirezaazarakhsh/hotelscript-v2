@@ -358,7 +358,7 @@ class RoomFacilitiesListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات اتاق‌ها",
         operation_description="این API لیستی از امکانات موجود در اتاق‌ها را بدون صفحه‌بندی باز می‌گرداند.",
-        tags=['hotel']
+        tags=['hotel-room']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)

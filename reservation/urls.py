@@ -8,12 +8,12 @@ urlpatterns = [
     'faq/',
     views.HotelFAQListView.as_view(),
     name='hotel-faq-list'
-),
-    path(
-        'hotels/<slug:slug>/facilities/',
-        views.HotelFacilitiesListView.as_view(),
-        name='hotel-facility-list'
-    ),
+   ),
+   path(
+    'hotels/<slug:slug>/facilities/',
+    views.HotelFacilitiesListView.as_view(),
+    name='hotel-facilities'
+   ),
     path(
         'room-facilities/',
         views.HotelRoomFacilitiesListView.as_view(),
