@@ -130,7 +130,8 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
 # -----------------------------
 class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     id = serializers.ReadOnlyField()
-    file = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    file = serializers.FileField(write_only=True)  # فقط ورودی
     profile = serializers.PrimaryKeyRelatedField(
         queryset=JuridicalProfile.objects.all(),
         label='پروفایل حقوقی'
@@ -138,9 +139,9 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = JuridicalProfileDocument
-        fields = ['id', 'file', 'profile']
+        fields = ['id', 'file', 'file_url', 'profile']
 
-    def get_file(self, obj):
+    def get_file_url(self, obj):
         request = self.context.get('request')
         if request:
             return request.build_absolute_uri(obj.file.url)
