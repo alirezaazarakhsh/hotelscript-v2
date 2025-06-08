@@ -330,12 +330,14 @@ class HotelTypeListView(ListAPIView):
         return super().get(request, *args, **kwargs)
     
 
+ # کلاس صفحه‌بندی استاندارد با page_size = 15
 class StandardPagination(PageNumberPagination):
     page_size = 15
-    page_size_query_param = 'page_size'
+    page_size_query_param = 'page_size'  # کاربر می‌تونه page_size رو override کنه
     max_page_size = 100
 
-# ای پی ای دریافت لیست امکانات 
+
+# API دریافت لیست امکانات هتل با صفحه‌بندی
 class HotelFacilitiesListView(ListAPIView):
     serializer_class = FacilitiesSerializer
     permission_classes = (AllowAny,)
@@ -348,30 +350,12 @@ class HotelFacilitiesListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات هتل",
-        operation_description="این API لیستی از امکانات مربوط به یک هتل خاص را با استفاده از اسلاگ بازمی‌گرداند (به صورت صفحه‌بندی ۱۵ موردی).",
+        operation_description="این API لیستی از امکانات مربوط به یک هتل خاص را با استفاده از اسلاگ بازمی‌گرداند (صفحه‌بندی ۱۵ موردی).",
         tags=['hotel-filter'],
         manual_parameters=[
-            openapi.Parameter(
-                'slug',
-                openapi.IN_PATH,
-                description="اسلاگ هتل",
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="شماره صفحه (برای پجینیشن)",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
-            openapi.Parameter(
-                'page_size',
-                openapi.IN_QUERY,
-                description="تعداد موارد در هر صفحه (اختیاری)",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
+            openapi.Parameter('slug', openapi.IN_PATH, description="اسلاگ هتل", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, description="شماره صفحه (اختیاری)", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد موارد در هر صفحه (اختیاری)", type=openapi.TYPE_INTEGER),
         ],
         responses={
             200: openapi.Response(
@@ -389,7 +373,6 @@ class HotelFacilitiesListView(ListAPIView):
                                 properties={
                                     'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه امکان'),
                                     'title': openapi.Schema(type=openapi.TYPE_STRING, description='عنوان امکان'),
-                                    # در صورت وجود فیلدهای دیگر در FacilitiesSerializer اینجا اضافه شود
                                 },
                             ),
                         ),
@@ -397,10 +380,12 @@ class HotelFacilitiesListView(ListAPIView):
                 ),
                 examples={
                     "application/json": {
-                        "count": 0,
+                        "count": 1,
                         "next": None,
                         "previous": None,
-                        "results": []
+                        "results": [
+                            {"id": 1, "title": "امکان نمونه"}
+                        ]
                     }
                 }
             ),
@@ -411,10 +396,7 @@ class HotelFacilitiesListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
-
-
-
-#ای پی ای امکاتات اتاق در هتل 
+# API دریافت لیست امکانات داخل اتاق هتل با صفحه‌بندی
 class HotelRoomFacilitiesListView(ListAPIView):
     serializer_class = RoomFacilitiesSerializer
     permission_classes = (AllowAny,)
@@ -427,30 +409,12 @@ class HotelRoomFacilitiesListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات داخل اتاق",
-        operation_description="این API لیستی از امکانات داخل اتاق برای یک هتل خاص را با استفاده از اسلاگ برمی‌گرداند (پجینیشن ۱۵ موردی).",
+        operation_description="این API لیستی از امکانات داخل اتاق برای یک هتل خاص را با استفاده از اسلاگ برمی‌گرداند (صفحه‌بندی ۱۵ موردی).",
         tags=['hotel-filter'],
         manual_parameters=[
-            openapi.Parameter(
-                'slug',
-                openapi.IN_PATH,
-                description="اسلاگ هتل",
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="شماره صفحه (برای پجینیشن)",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
-            openapi.Parameter(
-                'page_size',
-                openapi.IN_QUERY,
-                description="تعداد موارد در هر صفحه (اختیاری)",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
+            openapi.Parameter('slug', openapi.IN_PATH, description="اسلاگ هتل", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, description="شماره صفحه (اختیاری)", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد موارد در هر صفحه (اختیاری)", type=openapi.TYPE_INTEGER),
         ],
         responses={
             200: openapi.Response(
@@ -468,7 +432,6 @@ class HotelRoomFacilitiesListView(ListAPIView):
                                 properties={
                                     'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه امکان'),
                                     'title': openapi.Schema(type=openapi.TYPE_STRING, description='عنوان امکان'),
-                                    # در صورت وجود فیلدهای دیگر در RoomFacilitiesSerializer اینجا اضافه شود
                                 },
                             ),
                         ),
@@ -476,10 +439,13 @@ class HotelRoomFacilitiesListView(ListAPIView):
                 ),
                 examples={
                     "application/json": {
-                        "count": 0,
+                        "count": 2,
                         "next": None,
                         "previous": None,
-                        "results": []
+                        "results": [
+                            {"id": 1, "title": "تلویزیون"},
+                            {"id": 2, "title": "کولر"}
+                        ]
                     }
                 }
             ),
