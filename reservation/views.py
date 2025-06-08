@@ -355,7 +355,7 @@ class FacilitiesListView(ListAPIView):
     
 
 # API دریافت لیست امکانات داخل اتاق هتل با صفحه‌بندی
-class RoomServiceListView(ListAPIView):
+class RoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomServiceSerializer
     queryset = RoomService.objects.all()
