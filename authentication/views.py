@@ -323,7 +323,7 @@ class JuridicalProfileDocumentAPIView(APIView):
     )
     def get(self, request):
         documents = JuridicalProfileDocument.objects.all()
-        serializer = JuridicalProfileDocumentSerializer(documents, many=True)
+        serializer = JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -336,7 +336,7 @@ class JuridicalProfileDocumentAPIView(APIView):
         }
     )
     def post(self, request):
-        serializer = JuridicalProfileDocumentSerializer(data=request.data)
+        serializer = JuridicalProfileDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -350,7 +350,7 @@ class JuridicalProfileDocumentAPIView(APIView):
     )
     def put(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)
-        serializer = JuridicalProfileDocumentSerializer(document, data=request.data)
+        serializer = JuridicalProfileDocumentSerializer(document, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
