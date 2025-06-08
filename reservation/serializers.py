@@ -127,6 +127,13 @@ class FacilitiesSerializer(serializers.ModelSerializer):
             'id',
             'title',
         )
+        swagger_schema_fields = {
+            'example': {
+                'id': 1,
+                'title': 'استخر'
+            }
+        }
+
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
@@ -135,6 +142,13 @@ class RoomFacilitiesSerializer(serializers.ModelSerializer):
             'id',
             'title',
         )
+        swagger_schema_fields = {
+            'example': {
+                'id': 2,
+                'title': 'تلویزیون'
+            }
+        }
+
 
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
