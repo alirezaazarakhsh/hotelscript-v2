@@ -165,7 +165,7 @@ class ArticleListView(ListAPIView):
 
 class EngagingArticleListView(ListAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = ArticleListSerializer
+    serializer_class = EngagingArticleListSerializer  # استفاده از سریالایزر مناسب
     pagination_class = None  # غیرفعال کردن صفحه‌بندی
 
     @swagger_auto_schema(
@@ -177,7 +177,7 @@ class EngagingArticleListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        # فقط مقالات جذاب که منتشر شده‌اند
+        # فقط مقالات جذاب که منتشر شده‌اند و مرتب شده بر اساس تاریخ انتشار
         return Article.published.filter(is_engaging=True).order_by('-published_date', '-created')
     
     
