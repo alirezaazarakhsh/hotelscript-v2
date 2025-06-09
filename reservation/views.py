@@ -340,7 +340,7 @@ class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
     queryset = Facilities.objects.all()
-    pagination_class = FacilitiesPaginator  
+    pagination_class = FacilitiesPaginator
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
