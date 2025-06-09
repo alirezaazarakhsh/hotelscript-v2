@@ -172,7 +172,7 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
             'author',
             'thumbnail',
             'summary',
-            'published_date,
+            'published_date',
             'is_popular',
             'is_engaging',
             'post_url',
