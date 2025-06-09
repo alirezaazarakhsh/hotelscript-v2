@@ -14,7 +14,7 @@ class Paginator(PageNumberPagination):
         
         
 class FacilitiesPaginator(PageNumberPagination):
-    page_query_param = 'p'
+    page_query_param = 'page'  
     page_size = 15
 
     def get_paginated_response(self, data):
@@ -24,11 +24,10 @@ class FacilitiesPaginator(PageNumberPagination):
             'current_page': self.page.number,
             'results': data
         })
-        
 
 
 class RoomFacilitiesPaginator(PageNumberPagination):
-    page_query_param = 'p'
+    page_query_param = 'page'  
     page_size = 15
 
     def get_paginated_response(self, data):
@@ -38,5 +37,3 @@ class RoomFacilitiesPaginator(PageNumberPagination):
             'current_page': self.page.number,
             'results': data
         })
-        
-        
