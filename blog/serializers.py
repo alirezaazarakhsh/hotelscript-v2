@@ -173,14 +173,14 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
             'thumbnail',
             'summary',
             'published_date',
-            # 'published_date_jalali',
+            'published_date_jalali',  # این رو اضافه کن که تو خروجی بیاد
             'is_popular',
             'is_engaging',
             'post_url',
         )
 
     def get_published_date_jalali(self, obj):
-        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
+        return obj.published_date.strftime('%Y/%m/%d')
 
     def get_post_url(self, obj):
         request = self.context.get('request')
@@ -188,6 +188,9 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(url)
         return url
+
+
+
 
 # --- Comment Serializer ---
 class CommentSerializer(serializers.ModelSerializer):
