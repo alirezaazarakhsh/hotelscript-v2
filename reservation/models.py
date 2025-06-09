@@ -3,6 +3,7 @@ from django.apps import apps
 from django_jalali.db import models as jmodels
 from decimal import Decimal
 from django.db import models
+from icons.models import IconShortcut
 from django.db.models import (
     Q,
     F,
@@ -14,6 +15,7 @@ from django.db.models import (
     OuterRef, 
     Subquery,
     IntegerField,
+    
 )
 from django.db.models.functions import Coalesce
 
@@ -454,10 +456,6 @@ class NearbyPlace(models.Model):
 
 
 # مدل سوالات متداول برای هر هتل
-from django.db import models
-from django.utils.translation import gettext_lazy as _
-from yourapp.models import IconShortcut  # اگر در اپ دیگری هست مسیر درست رو بدید
-
 class HotelFAQ(models.Model):
     question = models.TextField(
         verbose_name=_('سوال'),
@@ -477,7 +475,7 @@ class HotelFAQ(models.Model):
         null=True,
         blank=True,
         verbose_name=_('آیکون'),
-        related_name='faqs',
+        related_name='hotel_faqs',
     )
 
     class Meta:

@@ -210,10 +210,40 @@ class HotelFAQAdmin(admin.ModelAdmin):
         'id',
         'question',
         'hotel',
+        'icon_preview',  # به جای 'icon' که فقط متن بود، نمایش تصویر گذاشتیم
     )
     search_fields = (
         'question',
+        'hotel__title',   # اگر می‌خوای سرچ روی نام هتل هم داشته باشی
+        'icon__title_icon',  # سرچ روی عنوان آیکون هم اضافه کردم
     )
+    autocomplete_fields = ('hotel', 'icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'question',
+                'answer',
+                'hotel',
+                'icon',
+                'icon_preview',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex; align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
