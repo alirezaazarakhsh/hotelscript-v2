@@ -586,6 +586,7 @@ class HotelFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
 
+
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
         queryset = Facilities.objects.filter(hotels__slug=hotel_slug).order_by('id')
@@ -654,6 +655,8 @@ class HotelRoomFacilitiesListView(ListAPIView):
 class HotelNearbyPlaceListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = NearbyPlaceListSerializer
+    pagination_class = None
+
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
@@ -693,7 +696,7 @@ class HotelCommentListCreateView(ListCreateAPIView):
         hotel_slug = self.kwargs.get('slug')
 
         queryset = Comment.objects\
-            .select_related('user__natural_profile')\
+            .select_related('user')\
             .prefetch_related('points')\
             .filter(
                 hotel__slug=hotel_slug,
@@ -707,7 +710,6 @@ class HotelCommentListCreateView(ListCreateAPIView):
     @transaction.atomic
     def perform_create(self, serializer):
         slug = self.kwargs.get('slug')
-
         hotel = get_object_or_404(Hotel, slug=slug)
         comment = serializer.save(user=self.request.user, hotel=hotel)
 
@@ -717,7 +719,7 @@ class HotelCommentListCreateView(ListCreateAPIView):
             item_id = rating_data.get('item')
             rating = rating_data.get('rating')
 
-            comment_point_item = CommentPointItem.objects.get(id=item_id)
+            comment_point_item = get_object_or_404(CommentPointItem, id=item_id)
             comment_points.append(CommentPoint(
                 comment=comment,
                 comment_point_item=comment_point_item,
@@ -727,11 +729,8 @@ class HotelCommentListCreateView(ListCreateAPIView):
         CommentPoint.objects.bulk_create(comment_points)
 
     @swagger_auto_schema(
-        operation_summary="لیست و ثبت نظرات هتل",
-        operation_description=(
-            "این API لیستی از نظرات کاربران برای هتل مشخص شده (براساس slug) را بازمی‌گرداند. "
-            "همچنین کاربران لاگین کرده می‌توانند نظر خود را ثبت کنند."
-        ),
+        operation_summary="لیست نظرات هتل",
+        operation_description="نمایش نظرات تاییدشده‌ی یک هتل بر اساس slug.",
         tags=['hotel comments'],
         manual_parameters=[
             openapi.Parameter(
@@ -744,47 +743,49 @@ class HotelCommentListCreateView(ListCreateAPIView):
         ],
         responses={
             200: CommentListSerializer(many=True),
-            201: "نظر جدید با موفقیت ثبت شد.",
-            400: "داده نامعتبر یا خطا در پردازش",
         }
     )
     def get(self, request, *args, **kwargs):
-       
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
         operation_summary="ثبت نظر جدید برای هتل",
-        operation_description="کاربر لاگین کرده می‌تواند نظر خود را برای یک هتل ثبت کند همراه با امتیازدهی به آیتم‌های مختلف.",
+        operation_description="ثبت نظر به همراه امتیازدهی به آیتم‌های مختلف توسط کاربر لاگین‌شده.",
         tags=['hotel comments'],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['content', 'ratings'],
+            required=['text', 'ratings'],
             properties={
-                'content': openapi.Schema(type=openapi.TYPE_STRING, description='متن نظر'),
+                'text': openapi.Schema(type=openapi.TYPE_STRING, description='متن نظر'),
+                'strengths': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING), description='نقاط قوت'),
+                'weaknesses': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING), description='نقاط ضعف'),
                 'ratings': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(
                         type=openapi.TYPE_OBJECT,
                         properties={
-                            'item': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه آیتم امتیاز'),
-                            'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description='مقدار امتیاز (مثلاً 4 از 5)'),
+                            'item': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه معیار امتیازدهی'),
+                            'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description='مقدار امتیاز بین ۱ تا ۵'),
                         }
                     ),
-                    description='لیست امتیازدهی به آیتم‌ها'
+                    description='لیست امتیازات'
                 )
             }
-        )
+        ),
+        responses={
+            201: "نظر با موفقیت ثبت شد.",
+            400: "خطا در داده‌های ورودی",
+        }
     )
     def post(self, request, *args, **kwargs):
-        try:
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            try:
                 self.perform_create(serializer)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            except Exception as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 #ای پی ای خلاصه امتیاز های هتل
