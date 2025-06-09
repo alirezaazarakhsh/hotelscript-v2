@@ -226,12 +226,28 @@ class HotelRulesSerializer(serializers.ModelSerializer):
         )
 
 class HotelFAQListSerializer(serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+
     class Meta:
         model = HotelFAQ
         fields = (
             'question',
             'answer',
+            'icon',
         )
+
+    def get_icon(self, obj):
+        icon = getattr(obj, 'icon', None)
+        if not icon:
+            return None
+
+        request = self.context.get('request', None)
+        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+
+        return {
+            "title": icon.title_icon or "",
+            "link": url,
+        }
 
 class NearbyPlaceListSerializer(serializers.ModelSerializer):
     class Meta:

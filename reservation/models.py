@@ -234,6 +234,7 @@ class Hotel(models.Model):
         null=True,
         blank=True,
         related_name='hotels',
+
     )
     
     stars = models.PositiveSmallIntegerField(
@@ -453,6 +454,10 @@ class NearbyPlace(models.Model):
 
 
 # مدل سوالات متداول برای هر هتل
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+from yourapp.models import IconShortcut  # اگر در اپ دیگری هست مسیر درست رو بدید
+
 class HotelFAQ(models.Model):
     question = models.TextField(
         verbose_name=_('سوال'),
@@ -466,6 +471,14 @@ class HotelFAQ(models.Model):
         verbose_name=_('هتل'),
         related_name='faqs',
     )
+    icon = models.ForeignKey(  
+        IconShortcut,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('آیکون'),
+        related_name='faqs',
+    )
 
     class Meta:
         verbose_name = 'سوال متداول هتل'
@@ -473,6 +486,7 @@ class HotelFAQ(models.Model):
 
     def __str__(self):
         return f'{self.hotel} - {self.question}'
+
 
 
 
