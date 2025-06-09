@@ -268,7 +268,7 @@ class RatingInputSerializer(serializers.Serializer):
 
 class CommentListSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
-    rating = serializers.FloatField(read_only=True)
+    rating = serializers.FloatField(read_only=True, required=False)  # <--- این خط
     ratings = serializers.ListField(
         write_only=True,
         child=RatingInputSerializer(),
