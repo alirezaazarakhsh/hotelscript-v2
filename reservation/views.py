@@ -1,6 +1,8 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime
+
+from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from .utils import Round
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
@@ -331,18 +333,14 @@ class HotelTypeListView(ListAPIView):
         return super().get(request, *args, **kwargs)
     
 
- # کلاس صفحه‌بندی استاندارد با page_size = 15
-class Paginator(PageNumberPagination):
-    page_size = 15
-    page_size_query_param = 'page_size'
-    max_page_size = 100
+ 
 
 # API دریافت لیست امکانات هتل با صفحه‌بندی
 class FacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitiesSerializer
     queryset = Facilities.objects.all()
-    pagination_class = Paginator
+    pagination_class = FacilitiesPaginator  
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
@@ -358,9 +356,9 @@ class FacilitiesListView(ListAPIView):
 # API دریافت لیست امکانات داخل اتاق هتل با صفحه‌بندی
 class RoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = RoomFacilitiesSerializer  # اصلاح شد
-    queryset = RoomFacilities.objects.all()       # اصلاح شد
-    pagination_class = Paginator
+    serializer_class = RoomFacilitiesSerializer
+    queryset = RoomFacilities.objects.all()
+    pagination_class = RoomFacilitiesPaginator
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات داخل اتاق",
