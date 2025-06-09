@@ -271,7 +271,7 @@ class NaturalProfileListCreateAPIView(APIView):
     )
     def get(self, request):
         queryset = NaturalProfile.objects.all()
-        serializer = NaturalProfileSerializer(queryset, many=True)
+        serializer = NaturalProfileSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
@@ -280,11 +280,12 @@ class NaturalProfileListCreateAPIView(APIView):
         responses={201: NaturalProfileSerializer()}
     )
     def post(self, request):
-        serializer = NaturalProfileSerializer(data=request.data)
+        serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
 
 
 
