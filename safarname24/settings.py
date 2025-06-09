@@ -9,16 +9,14 @@ env = environ.Env(
     DB_NAME=(str, 'safarname24'),
     DB_USER=(str, 'postgres'),
     DB_PASSWORD=(str, ''),
-    DB_HOST=(str, 'localhost'),  # چون در .env شما localhost است
+    DB_HOST=(str, 'localhost'),
     DB_PORT=(str, '5432'),
 )
 
-# فقط این خط env را برای دیتابیس می‌خواند
 environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# مقدار دهی مستقیم برای این دو
 SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
 DEBUG = True
 
@@ -44,7 +42,6 @@ CSRF_TRUSTED_ORIGINS = [
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
@@ -59,6 +56,7 @@ INSTALLED_APPS = [
     'django_jalali',
     # 'django_jalali_datepicker',
     'colorfield',
+    'ckeditor',  # فقط یکبار
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'authentication',
@@ -73,8 +71,6 @@ INSTALLED_APPS = [
     'safarname24',
     'icons',
     'setting_sms',
-    'ckeditor',
-  
 ]
 
 MIDDLEWARE = [
@@ -165,7 +161,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
     'PAGE_SIZE': 15,
-  
 }
 
 if not DEBUG:
@@ -184,29 +179,26 @@ SIMPLE_JWT = {
 
 INTERNAL_IPS = ['127.0.0.1']
 
-# CORS CONFIGURATION
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  
-    "http://127.0.0.1:3000", 
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://safarnameh24.com",
     "https://safarnameh24.com",
     "http://www.safarnameh24.com",
     "https://www.safarnameh24.com",
-    "http://cps.safarnameh24.com",  
-    "https://cps.safarnameh24.com",  
-    "http://localhost:8000", 
-    "http://127.0.0.1:8000", 
+    "http://cps.safarnameh24.com",
+    "https://cps.safarnameh24.com",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
 
-CORS_ALLOW_CREDENTIALS = True  
-CORS_ORIGIN_ALLOW_ALL = False  
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOW_HEADERS = [
     'content-type',
-    'authorization',  
+    'authorization',
     'x-requested-with',
 ]
-
-
 
 JALALI_DATE_DEFAULTS = {
     'Strftime': {

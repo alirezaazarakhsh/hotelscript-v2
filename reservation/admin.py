@@ -1,5 +1,7 @@
 from django.contrib import admin
+from django.utils.html import format_html, format_html_join
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from reservation.forms import BestHotelsAdminForm, CityAdminForm,  HotelAdminForm
 from .models import (
     BestHotels,
@@ -252,8 +254,8 @@ class CommentAdmin(admin.ModelAdmin):
         'user',
         'hotel',
         'text',
-        'strengths',
-        'weaknesses',
+        'show_strengths',
+        'show_weaknesses',
         'is_approved',
         'created',
     )
@@ -265,6 +267,26 @@ class CommentAdmin(admin.ModelAdmin):
     list_filter = (
         'is_approved',
     )
+
+    def show_strengths(self, obj):
+        if not obj.strengths:
+            return "-"
+        return format_html_join(
+            mark_safe('<br>'),
+            '{}',
+            ((s,) for s in obj.strengths)
+        )
+    show_strengths.short_description = 'نقاط قوت'
+
+    def show_weaknesses(self, obj):
+        if not obj.weaknesses:
+            return "-"
+        return format_html_join(
+            mark_safe('<br>'),
+            '{}',
+            ((w,) for w in obj.weaknesses)
+        )
+    show_weaknesses.short_description = 'نقاط ضعف'
 
 @admin.register(CommentPointItem)
 class CommentPointItemAdmin(admin.ModelAdmin):
