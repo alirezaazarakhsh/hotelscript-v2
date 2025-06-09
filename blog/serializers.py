@@ -10,6 +10,7 @@ from .models import (
 )
 from authentication.models import Admin
 from django.urls import reverse
+from jalali_date import datetime2jalali
 
 
 # --- Author Serializer ---
@@ -24,12 +25,18 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 
 # --- Story Serializers ---
 class NestedStorySerializer(serializers.ModelSerializer):
+    created_jalali = serializers.SerializerMethodField()
+
     class Meta:
         model = Story
         fields = (
             'image',
             'created',
+            'created_jalali',
         )
+
+    def get_created_jalali(self, obj):
+        return datetime2jalali(obj.created).strftime('%Y/%m/%d')
 
 
 class StoryCategorySerializer(serializers.ModelSerializer):
@@ -68,6 +75,7 @@ class ArticleCategoryRetrieveSerializer(serializers.ModelSerializer):
 # --- Article Serializers ---
 class ArticleListSerializer(serializers.ModelSerializer):
     author = ArticleAuthorSerializer()
+    published_date_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = Article
@@ -77,12 +85,18 @@ class ArticleListSerializer(serializers.ModelSerializer):
             'author',
             'thumbnail',
             'published_date',
+            'published_date_jalali',
             'is_popular',
             'is_engaging',
         )
 
+    def get_published_date_jalali(self, obj):
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
+
 
 class FavoriteArticleSerializer(serializers.ModelSerializer):
+    published_date_jalali = serializers.SerializerMethodField()
+
     class Meta:
         model = Article
         fields = (
@@ -92,7 +106,11 @@ class FavoriteArticleSerializer(serializers.ModelSerializer):
             'body',
             'thumbnail',
             'published_date',
+            'published_date_jalali',
         )
+
+    def get_published_date_jalali(self, obj):
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
 
 
 class ArticleTagSerializer(serializers.ModelSerializer):
@@ -105,6 +123,7 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
     author = ArticleAuthorSerializer()
     tags = ArticleTagSerializer(many=True)
     similar_articles = serializers.SerializerMethodField()
+    published_date_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = Article
@@ -118,8 +137,12 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
             'thumbnail',
             'view_count',
             'published_date',
+            'published_date_jalali',
             'similar_articles',
         )
+
+    def get_published_date_jalali(self, obj):
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
 
     def get_similar_articles(self, obj):
         def serialize_article(article):
@@ -129,7 +152,7 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
                 'slug': article.slug,
                 'author': author,
                 'thumbnail': article.thumbnail.url if article.thumbnail else '',
-                'published_date': article.published_date,
+                'published_date': datetime2jalali(article.published_date).strftime('%Y/%m/%d'),
             }
 
         return list(map(serialize_article, obj.get_similar_articles()))
@@ -156,7 +179,6 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
         )
 
     def get_published_date_jalali(self, obj):
-        from jalali_date import datetime2jalali
         return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
 
     def get_post_url(self, obj):
@@ -169,6 +191,7 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
 # --- Comment Serializer ---
 class CommentSerializer(serializers.ModelSerializer):
     replies = serializers.SerializerMethodField()
+    created_jalali = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
@@ -177,6 +200,7 @@ class CommentSerializer(serializers.ModelSerializer):
             'author_email',
             'text',
             'created',
+            'created_jalali',
             'replies',
             'reply_to',
         )
@@ -191,6 +215,9 @@ class CommentSerializer(serializers.ModelSerializer):
 
     def get_replies(self, obj):
         return self.__class__(obj.get_replies(), many=True, context=self.context).data
+
+    def get_created_jalali(self, obj):
+        return datetime2jalali(obj.created).strftime('%Y/%m/%d')
 
     def create(self, validated_data):
         article = self.context['article']

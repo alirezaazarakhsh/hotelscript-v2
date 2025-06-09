@@ -3,6 +3,7 @@ from ckeditor.fields import RichTextField
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from django_jalali.db import models as jmodels
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import (
     GenericForeignKey,
@@ -267,15 +268,15 @@ class Article(models.Model):
         verbose_name=_('جذاب'),
         default=False,
     )
-    created = models.DateTimeField(
-        verbose_name=_('تاریخ ایجاد'),
-        auto_now_add=True,
+    created = jmodels.jDateTimeField(
+    verbose_name=_('تاریخ ایجاد'),
+    auto_now_add=True,
     )
-    updated = models.DateTimeField(
+    updated = jmodels.jDateTimeField(
         verbose_name=_('تاریخ تغییر'),
         auto_now=True,
     )
-    published_date = models.DateTimeField(
+    published_date = jmodels.jDateTimeField(
         verbose_name=_('تاریخ انتشار'),
         default=timezone.now,
     )

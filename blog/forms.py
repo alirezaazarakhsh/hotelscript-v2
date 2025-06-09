@@ -48,3 +48,6 @@ class ArticleAdminForm(forms.ModelForm):
                 field_value = getattr(self.instance, field_name, None)
                 self.fields.get(field_name).widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
                 self.fields.get(field_name).help_text = f'<img src="{field_value.url}" style="max-height: 200px; max-width: 200px;" />' if field_value else ""
+
+
+
