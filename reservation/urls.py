@@ -16,6 +16,8 @@ urlpatterns = [
     path('hotels/<slug:slug>/introduction/', views.HotelIntroductionView.as_view(), name='hotel-introduction'),
     path('hotels/<slug:slug>/further-description/', views.HotelFurtherDescriptionView.as_view(), name='hotel-further-description'),
     path('hotels/<slug:slug>/rules/', views.HotelRulesView.as_view(), name='hotel-rules'),
+    path('hotels/<slug:slug>/tags/', views.HotelTagsView.as_view(), name='hotel-tags'),
+
 
     # ==== Hotel Listings ====
     path('hotels/search/', views.HotelListView.as_view(), name='hotel-list'),

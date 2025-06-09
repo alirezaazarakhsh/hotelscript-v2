@@ -449,3 +449,13 @@ class ClosedDateSerializer(serializers.ModelSerializer):
             return obj.room_date.room.hotel.name
         except Exception:
             return 'نامشخص'
+
+
+
+class HotelTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelTag
+        fields = (
+            'id',
+            'title',
+        )

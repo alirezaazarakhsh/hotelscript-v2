@@ -65,6 +65,7 @@ from .serializers import (
     HotelListSerializer,
     CitySerializer,
     HotelRulesSerializer,
+    HotelTagSerializer,
     HotelTypeSerializer,
     FacilitiesSerializer,
     RoomFacilitiesSerializer,
@@ -1246,3 +1247,37 @@ class BestSellerHotelListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
+# مدل برچسب های هتل بر اساس اسلاگ هتل 
+class HotelTagsView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelTagSerializer
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت برچسب‌های هتل",
+        operation_description="این API برچسب‌های مربوط به هتل را بر اساس slug باز می‌گرداند.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelTagSerializer(many=True),
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        hotel = self.get_object()  # هتل بر اساس slug
+        tags = hotel.tags.all()    # فرض بر این است که هتل برچسب دارد
+        serializer = self.get_serializer(tags, many=True)
+        return Response(serializer.data)
