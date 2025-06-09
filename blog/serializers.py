@@ -160,10 +160,10 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
 
 class EngagingArticleListSerializer(serializers.ModelSerializer):
     published_date_jalali = serializers.SerializerMethodField()
-    summary = serializers.CharField(allow_blank=True, allow_null=True)
+    summary = serializers.CharField()
     post_url = serializers.SerializerMethodField()
-    author = ArticleAuthorSerializer(read_only=True)
-    
+    author = ArticleAuthorSerializer()
+
     class Meta:
         model = Article
         fields = (
@@ -178,14 +178,16 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
             'is_engaging',
             'post_url',
         )
-    
+
     def get_published_date_jalali(self, obj):
-        # توجه: مطمئن باشید datetime2jalali تعریف شده است و تاریخ ورودی درست است
-        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d') if obj.published_date else None
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
 
     def get_post_url(self, obj):
-        # اینجا اسم url pattern مربوط به جزئیات مقاله باید درست باشه
-        return reverse('article-detail', kwargs={'slug': obj.slug})
+        request = self.context.get('request')
+        url = reverse('blog:article-retrieve', kwargs={'slug': obj.slug})
+        if request:
+            return request.build_absolute_uri(url)
+        return url
 
 # --- Comment Serializer ---
 class CommentSerializer(serializers.ModelSerializer):
