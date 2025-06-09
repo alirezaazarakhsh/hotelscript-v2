@@ -160,10 +160,10 @@ class ArticleRetrieveSerializer(serializers.ModelSerializer):
 
 class EngagingArticleListSerializer(serializers.ModelSerializer):
     published_date_jalali = serializers.SerializerMethodField()
-    summary = serializers.CharField()
+    summary = serializers.CharField(allow_blank=True, allow_null=True)
     post_url = serializers.SerializerMethodField()
-    author = ArticleAuthorSerializer()
-
+    author = ArticleAuthorSerializer(read_only=True)
+    
     class Meta:
         model = Article
         fields = (
@@ -173,20 +173,19 @@ class EngagingArticleListSerializer(serializers.ModelSerializer):
             'thumbnail',
             'summary',
             'published_date',
+            'published_date_jalali',
             'is_popular',
             'is_engaging',
             'post_url',
         )
-
+    
     def get_published_date_jalali(self, obj):
-        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d')
+        # توجه: مطمئن باشید datetime2jalali تعریف شده است و تاریخ ورودی درست است
+        return datetime2jalali(obj.published_date).strftime('%Y/%m/%d') if obj.published_date else None
 
     def get_post_url(self, obj):
+        # اینجا اسم url pattern مربوط به جزئیات مقاله باید درست باشه
         return reverse('article-detail', kwargs={'slug': obj.slug})
-        # اگر می‌خواهید لینک کامل برگردد:
-        # request = self.context.get('request')
-        # return request.build_absolute_uri(reverse('article-detail', kwargs={'slug': obj.slug}))
-
 
 # --- Comment Serializer ---
 class CommentSerializer(serializers.ModelSerializer):
