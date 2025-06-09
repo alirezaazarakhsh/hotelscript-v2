@@ -208,7 +208,7 @@ class JuridicalProfileListCreateAPIView(APIView):
     )
     def get(self, request):
         queryset = JuridicalProfile.objects.all()
-        serializer = JuridicalProfileSerializer(queryset, many=True)
+        serializer = JuridicalProfileSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
@@ -217,11 +217,12 @@ class JuridicalProfileListCreateAPIView(APIView):
         responses={201: JuridicalProfileSerializer()}
     )
     def post(self, request):
-        serializer = JuridicalProfileSerializer(data=request.data)
+        serializer = JuridicalProfileSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
 
 
 
