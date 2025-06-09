@@ -123,7 +123,7 @@ tomli==2.0.1
 Twisted==24.3.0
 txaio==23.1.1
 typing_extensions==4.13.2
-tzdata==2021.2.post0
+tzdata>=2022.7
 tzlocal==3.0
 uritemplate==4.1.1
 urllib3==1.26.7

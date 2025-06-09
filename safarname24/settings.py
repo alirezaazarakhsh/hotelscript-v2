@@ -160,7 +160,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
-    'PAGE_SIZE': 15,
+    'PAGE_SIZE': 18,
 }
 
 if not DEBUG:
