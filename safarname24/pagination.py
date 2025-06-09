@@ -14,7 +14,7 @@ class Paginator(PageNumberPagination):
         
         
 class FacilitiesPaginator(PageNumberPagination):
-    page_query_param = 'page'  
+    page_query_param = 'p'  
     page_size = 15
 
     def get_paginated_response(self, data):
@@ -27,7 +27,7 @@ class FacilitiesPaginator(PageNumberPagination):
 
 
 class RoomFacilitiesPaginator(PageNumberPagination):
-    page_query_param = 'page'  
+    page_query_param = 'p'  
     page_size = 15
 
     def get_paginated_response(self, data):

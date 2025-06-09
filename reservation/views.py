@@ -342,6 +342,7 @@ class FacilitiesListView(ListAPIView):
     queryset = Facilities.objects.all()
     pagination_class = FacilitiesPaginator
 
+
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
         operation_description="این API لیستی از امکانات رفاهی و تفریحی را به صورت صفحه‌بندی شده (۱۵ مورد در هر صفحه) باز می‌گرداند.",
