@@ -57,7 +57,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # 'jalali_date',
     'django_jalali',
-    'django_jalali_datepicker',
+    # 'django_jalali_datepicker',
     'colorfield',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
