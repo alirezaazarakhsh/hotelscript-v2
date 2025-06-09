@@ -3,6 +3,7 @@ from itertools import product
 from datetime import datetime
 from .utils import Round
 from rest_framework.pagination import PageNumberPagination
+from icons.models import IconShortcut
 from django.shortcuts import get_object_or_404
 from rest_framework import (
     status,
