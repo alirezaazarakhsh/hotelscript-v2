@@ -204,27 +204,70 @@ class JuridicalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
-        responses={200: JuridicalProfileSerializer()}
+        responses={
+            200: JuridicalProfileSerializer(),
+            404: "پروفایل حقوقی یافت نشد"
+        }
     )
     def get(self, request):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
-            serializer = JuridicalProfileSerializer(profile, context={'request': request})
+            # ابتدا پروفایل حقیقی کاربر را پیدا می‌کنیم
+            natural_profile = NaturalProfile.objects.get(base_user=request.user)
+            
+            # سپس پروفایل حقوقی مرتبط با آن را پیدا می‌کنیم
+            juridical_profile = JuridicalProfile.objects.get(natural_profile=natural_profile)
+            
+            serializer = JuridicalProfileSerializer(juridical_profile, context={'request': request})
             return Response(serializer.data)
+            
+        except NaturalProfile.DoesNotExist:
+            return Response(
+                {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
+                status=404
+            )
         except JuridicalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل حقوقی برای این کاربر یافت نشد."}, status=404)
+            return Response(
+                {"detail": "پروفایل حقوقی برای این کاربر یافت نشد."},
+                status=404
+            )
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
         request_body=JuridicalProfileSerializer,
-        responses={201: JuridicalProfileSerializer()}
+        responses={
+            201: JuridicalProfileSerializer(),
+            400: "داده‌های نامعتبر"
+        }
     )
     def post(self, request):
-        serializer = JuridicalProfileSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
+        try:
+            # بررسی می‌کنیم که کاربر پروفایل حقیقی دارد
+            natural_profile = NaturalProfile.objects.get(base_user=request.user)
+            
+            # بررسی می‌کنیم که کاربر از قبل پروفایل حقوقی ندارد
+            if hasattr(natural_profile, 'juridical_profile'):
+                return Response(
+                    {"detail": "این کاربر از قبل پروفایل حقوقی دارد."},
+                    status=400
+                )
+            
+            serializer = JuridicalProfileSerializer(
+                data=request.data,
+                context={'request': request}
+            )
+            
+            if serializer.is_valid():
+                # پروفایل حقیقی را به داده‌های سریالایزر اضافه می‌کنیم
+                serializer.save(natural_profile=natural_profile)
+                return Response(serializer.data, status=201)
+                
+            return Response(serializer.errors, status=400)
+            
+        except NaturalProfile.DoesNotExist:
+            return Response(
+                {"detail": "برای ایجاد پروفایل حقوقی، ابتدا باید پروفایل حقیقی ایجاد کنید."},
+                status=400
+            )
 
 
 
