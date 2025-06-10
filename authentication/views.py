@@ -317,7 +317,8 @@ class NaturalProfileListCreateAPIView(APIView):
     )
     def get(self, request):
         try:
-            profile = NaturalProfile.objects.get(user=request.user)
+            # تغییر از user به base_user
+            profile = NaturalProfile.objects.get(base_user=request.user)
             serializer = NaturalProfileSerializer(profile, context={'request': request})
             return Response(serializer.data)
         except NaturalProfile.DoesNotExist:
@@ -329,9 +330,17 @@ class NaturalProfileListCreateAPIView(APIView):
         responses={201: NaturalProfileSerializer()}
     )
     def post(self, request):
+        # بررسی وجود پروفایل از قبل
+        if hasattr(request.user, 'natural_profile'):
+            return Response(
+                {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
+                status=400
+            )
+            
         serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            # تغییر از user به base_user
+            serializer.save(base_user=request.user)
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
@@ -339,37 +348,51 @@ class NaturalProfileListCreateAPIView(APIView):
 
 
 
-class NaturalProfileDetailAPIView(APIView):
+class NaturalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="ویرایش پروفایل حقیقی بر اساس شناسه (ID)",
-        request_body=NaturalProfileSerializer,
+        operation_summary="دریافت پروفایل حقیقی کاربر جاری",
         responses={200: NaturalProfileSerializer()}
     )
-    def put(self, request, pk):
+    def get(self, request):
         try:
-            profile = NaturalProfile.objects.get(pk=pk)
-        except NaturalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل یافت نشد"}, status=404)
-
-        serializer = NaturalProfileSerializer(profile, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+            # استفاده از related_name برای دسترسی مستقیم
+            profile = request.user.natural_profile
+            serializer = NaturalProfileSerializer(profile, context={'request': request})
             return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی برای این کاربر یافت نشد."}, status=404)
 
     @swagger_auto_schema(
-        operation_summary="حذف پروفایل حقیقی بر اساس شناسه (ID)",
-        responses={204: "پروفایل حذف شد"}
+        operation_summary="ایجاد پروفایل حقیقی",
+        request_body=NaturalProfileSerializer,
+        responses={
+            201: NaturalProfileSerializer(),
+            400: "داده‌های نامعتبر یا پروفایل موجود"
+        }
     )
-    def delete(self, request, pk):
-        try:
-            profile = NaturalProfile.objects.get(pk=pk)
-            profile.delete()
-            return Response(status=204)
-        except NaturalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل یافت نشد"}, status=404)
+    def post(self, request):
+        # بررسی وجود پروفایل قبلی
+        if hasattr(request.user, 'natural_profile'):
+            return Response(
+                {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
+                status=400
+            )
+
+        serializer = NaturalProfileSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            # ایجاد پروفایل با اتصال به کاربر جاری
+            profile = serializer.save(base_user=request.user)
+            return Response(
+                NaturalProfileSerializer(profile, context={'request': request}).data,
+                status=201
+            )
+        return Response(serializer.errors, status=400)
 
 
 
