@@ -107,7 +107,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'postal_code',
             'address',
             'level',
-            'level_name',  # اضافه شده
+            'level_name',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -128,6 +128,10 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
 
     def get_level_name(self, obj):
         return obj.level.name if obj.level else None
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return NaturalProfile.objects.create(base_user=user, **validated_data)
 
 
 
