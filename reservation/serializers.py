@@ -2,6 +2,8 @@ from rest_framework import serializers
 from .models import (
     BestHotels,
     ClosedDate,
+    HotelGallery,
+    HotelGalleryImage,
     Province,
     City,
     HotelType,
@@ -458,4 +460,28 @@ class HotelTagSerializer(serializers.ModelSerializer):
         fields = (
             'id',
             'title',
+        )
+        
+        
+        
+class HotelGalleryImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelGalleryImage
+        fields = (
+            'id',
+            'image',
+            'order',
+        )
+
+
+class HotelGallerySerializer(serializers.ModelSerializer):
+    images = HotelGalleryImageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = HotelGallery
+        fields = (
+            'id',
+            'title',
+            'hotel',
+            'images',
         )

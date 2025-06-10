@@ -169,26 +169,31 @@ class HotelAdmin(admin.ModelAdmin):
     logo_preview.short_description = "لوگو انتخاب‌شده"
     
 
+
+
+class HotelGalleryImageInline(admin.TabularInline):
+    model = HotelGalleryImage
+    extra = 1
+    fields = ('image', 'order', 'preview',)
+    readonly_fields = ('preview',)
+    ordering = ('order',)
+
+    def preview(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" width="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />', obj.image.url)
+        return "-"
+    preview.short_description = 'پیش‌نمایش'
+
+
 @admin.register(HotelGallery)
 class HotelGalleryAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title', 'hotel')
+    search_fields = ('title', 'hotel__name')
+    autocomplete_fields = ['hotel']  # ✅ انتخاب هتل با قابلیت جستجو
+    inlines = [HotelGalleryImageInline]
+    
+    
 
-@admin.register(HotelGalleryImage)
-class HotelGalleryImageAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'gallery',
-    )
-    search_fields = (
-        'title',
-    )
 
 @admin.register(NearbyPlace)
 class NearbyPlaceAdmin(admin.ModelAdmin):

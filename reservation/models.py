@@ -1,45 +1,44 @@
+# 📦 استاندارد کتابخانه‌های پایتون
+import os
+import uuid
 import jdatetime
-from django.apps import apps
-from django_jalali.db import models as jmodels
 from decimal import Decimal
+from datetime import timedelta
+from functools import cached_property
+
+# 🌐 Django
 from django.db import models
-from icons.models import IconShortcut
+from django.apps import apps
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+# 🛠️ Django Model Fields و Expressions
 from django.db.models import (
-    Q,
-    F,
-    Count,
-    Case,
-    When,
-    ExpressionWrapper,
-    PositiveBigIntegerField,
-    OuterRef, 
-    Subquery,
-    IntegerField,
-    
+    Q, F, Count, Case, When,
+    ExpressionWrapper, PositiveBigIntegerField,
+    OuterRef, Subquery, IntegerField
 )
 from django.db.models.functions import Coalesce
 
-from django.utils.translation import gettext_lazy as _
-from django.core.exceptions import ValidationError
-from django.core.validators import (
-    MinValueValidator,
-    MaxValueValidator,
-)
+# 🌍 Django Postgres
 from django.contrib.postgres.fields import ArrayField
-from authentication.models import (
-    BaseUser,
-)
-from functools import cached_property
+
+# 📅 Django Jalali
+from django_jalali.db import models as jmodels
+
+# 🧩 برنامه‌های داخلی پروژه
+from icons.models import IconShortcut
+from authentication.models import BaseUser
 from authentication.validators import (
     validate_phone_number,
     validate_national_code,
-    validate_passport_code,
+    validate_passport_code
 )
-import uuid
-from django.utils import timezone
-from datetime import (
-    timedelta,
-)
+
+
+
 
 # مدل اضافه کردن استان ها
 class Province(models.Model):
@@ -344,7 +343,7 @@ class Hotel(models.Model):
 #مدل گالری های هتل 
 class HotelGallery(models.Model):
     title = models.CharField(
-        verbose_name=_('عنوان'),
+        verbose_name=_('عنوان گالری'),
         max_length=256,
     )
     hotel = models.ForeignKey(
@@ -355,42 +354,42 @@ class HotelGallery(models.Model):
     )
 
     class Meta:
-        verbose_name = 'گالری هتل'
-        verbose_name_plural = 'گالری‌های هتل'
+        verbose_name = 'گالری تصاویر هتل'
+        verbose_name_plural = 'گالری‌های تصاویر هتل'
 
     def __str__(self):
-        return f'{self.title} - {self.hotel}'
+        return f'{self.title} ({self.hotel})'
 
 
-
-
-
-#مدل عکس گالری های هتل
+#مدل عکس های گالری تصاویر هتل
 class HotelGalleryImage(models.Model):
-
     def image_upload_to(instance, filename):
-        return f'images/hotel-gallery/{instance.gallery.pk}/{filename}'
+        ext = filename.split('.')[-1]
+        filename = f'{uuid.uuid4().hex}.{ext}'
+        return os.path.join('hotel_gallery', str(instance.gallery.id), filename)
 
-    title = models.CharField(
-        verbose_name=_('عنوان'),
-        max_length=256,
-    )
-    image = models.ImageField(
-        verbose_name=_('عکس'),
-        upload_to=image_upload_to,
-    )
     gallery = models.ForeignKey(
         HotelGallery,
         on_delete=models.CASCADE,
-        verbose_name=_('گالری'),
         related_name='images',
+        verbose_name='گالری',
+    )
+    image = models.ImageField(
+        upload_to=image_upload_to,
+        verbose_name='تصویر',
+    )
+    order = models.PositiveIntegerField(
+        verbose_name='ترتیب نمایش',
+        default=0,
     )
 
     class Meta:
-        verbose_name = 'عکس گالری هتل'
-        verbose_name_plural = 'عکس‌های گالری هتل'
+        verbose_name = 'تصویر گالری'
+        verbose_name_plural = 'تصاویر گالری'
+        ordering = ['order']
 
     def __str__(self):
+        return f'تصویر #{self.id} از گالری {self.gallery}'
         return self.title
 
 

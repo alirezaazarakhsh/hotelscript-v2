@@ -62,6 +62,7 @@ from .serializers import (
     ClosedDateSerializer,
     HotelDescriptionSerializer,
     HotelFurtherDescriptionSerializer,
+    HotelGallerySerializer,
     HotelImagesSerializer,
     HotelIntroductionSerializer,
     HotelListSerializer,
@@ -1280,4 +1281,39 @@ class HotelTagsView(RetrieveAPIView):
         hotel = self.get_object()  # هتل بر اساس slug
         tags = hotel.tags.all()    # فرض بر این است که هتل برچسب دارد
         serializer = self.get_serializer(tags, many=True)
+        return Response(serializer.data)
+    
+    
+    
+    
+#ای پی ای گالری تصاویر هتل 
+class HotelGalleryView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = HotelGallerySerializer
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
+
+    @swagger_auto_schema(
+        operation_summary="دریافت گالری تصاویر هتل",
+        operation_description="این API گالری‌های تصویری مربوط به یک هتل را بر اساس slug بازمی‌گرداند. هر گالری شامل عنوان و لیست تصاویر با ترتیب نمایش است.",
+        tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={
+            200: HotelGallerySerializer(many=True),
+            404: 'هتل پیدا نشد.'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        hotel = self.get_object()
+        galleries = hotel.galleries.all()
+        serializer = self.get_serializer(galleries, many=True)
         return Response(serializer.data)
