@@ -134,3 +134,5 @@ websockets==10.0
 yarl==1.9.4
 zeep==4.2.1
 zope.interface==6.4.post2
+runflare==1.2.0
+
