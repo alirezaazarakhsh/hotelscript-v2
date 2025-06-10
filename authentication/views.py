@@ -203,13 +203,16 @@ class JuridicalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست پروفایل‌های حقوقی",
-        responses={200: JuridicalProfileSerializer(many=True)}
+        operation_summary="دریافت پروفایل حقوقی کاربر جاری",
+        responses={200: JuridicalProfileSerializer()}
     )
     def get(self, request):
-        queryset = JuridicalProfile.objects.all()
-        serializer = JuridicalProfileSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
+        try:
+            profile = JuridicalProfile.objects.get(user=request.user)
+            serializer = JuridicalProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+        except JuridicalProfile.DoesNotExist:
+            return Response({"detail": "پروفایل حقوقی برای این کاربر یافت نشد."}, status=404)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
@@ -219,7 +222,7 @@ class JuridicalProfileListCreateAPIView(APIView):
     def post(self, request):
         serializer = JuridicalProfileSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(user=request.user)
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
@@ -266,13 +269,16 @@ class NaturalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست پروفایل‌های حقیقی",
-        responses={200: NaturalProfileSerializer(many=True)}
+        operation_summary="دریافت پروفایل حقیقی کاربر جاری",
+        responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
-        queryset = NaturalProfile.objects.all()
-        serializer = NaturalProfileSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
+        try:
+            profile = NaturalProfile.objects.get(user=request.user)
+            serializer = NaturalProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+        except NaturalProfile.DoesNotExist:
+            return Response({"detail": "پروفایل حقیقی برای این کاربر یافت نشد."}, status=404)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقیقی",
@@ -282,7 +288,7 @@ class NaturalProfileListCreateAPIView(APIView):
     def post(self, request):
         serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(user=request.user)
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
