@@ -320,7 +320,7 @@ class NaturalProfileListCreateAPIView(APIView):
         گرفتن پروفایل حقیقی مربوط به کاربر احراز هویت‌شده.
         """
         try:
-            profile = request.user.natural_profile
+            profile = NaturalProfile.objects.get(base_user=request.user)
         except NaturalProfile.DoesNotExist:
             raise NotFound("پروفایل حقیقی برای این کاربر یافت نشد.")
 
