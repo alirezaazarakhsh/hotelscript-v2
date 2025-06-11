@@ -94,7 +94,6 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 class NaturalProfileSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
-    level_name = serializers.SerializerMethodField()
 
     class Meta:
         model = NaturalProfile
@@ -107,7 +106,6 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'postal_code',
             'address',
             'level',
-            'level_name',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -125,14 +123,6 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(image_url)
             return image_url
         return None
-
-    def get_level_name(self, obj):
-        return obj.level.name if obj.level else None
-
-    def create(self, validated_data):
-        user = self.context['request'].user
-        return NaturalProfile.objects.create(base_user=user, **validated_data)
-
 
 
 # -----------------------------
