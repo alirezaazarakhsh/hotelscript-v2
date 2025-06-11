@@ -351,7 +351,7 @@ class HotelFacilitiesView(RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
+ 
 
 
 # ای پی ای لیست خدمات اتاق ها 

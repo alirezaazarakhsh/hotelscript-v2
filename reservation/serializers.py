@@ -125,27 +125,27 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
 class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
-        fields = (
-            'id',
-            'title',
-        )
+        fields = ('id', 'title')
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomFacilities
-        fields = (
-            'id',
-            'title',
-        )
-        
-    
+        fields = ('id', 'title')
+
 class HotelFacilitiesSerializer(serializers.ModelSerializer):
     facilities = FacilitiesSerializer(many=True, read_only=True)
     room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
 
     class Meta:
         model = Hotel
-        fields = ['id', 'name', 'slug', 'facilities', 'room_facilities']
+        fields = (
+            'id',
+            'name',
+            'slug',
+            'facilities',
+            'room_facilities',
+        )
+
 
 
 class RoomServiceSerializer(serializers.ModelSerializer):
