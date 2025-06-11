@@ -1108,6 +1108,7 @@ class PassengerListCreateView(ListCreateAPIView):
 
 
 # ای پی ای حذف و ویرایش مسافران
+
 class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PassengerSerializer
@@ -1131,9 +1132,10 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_summary="ویرایش اطلاعات یک مسافر",
+        operation_summary="ویرایش کامل اطلاعات یک مسافر",
         operation_description="""
-        با استفاده از این متد می‌توان اطلاعات یک مسافر خاص را ویرایش کرد.  
+        
+        با استفاده از این متد می‌توان اطلاعات یک مسافر خاص را به صورت کامل ویرایش کرد.  
         تغییرات شامل نام، نام خانوادگی، شماره موبایل، ملیت و سایر اطلاعات مرتبط است.
         فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
         """,
@@ -1142,6 +1144,19 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     )
     def put(self, request, *args, **kwargs):
         return super().put(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش جزئی اطلاعات یک مسافر",
+        operation_description="""
+        با استفاده از این متد می‌توان بخشی از اطلاعات یک مسافر خاص را ویرایش کرد.  
+        مثلا فقط شماره موبایل یا ملیت را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
+        فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
+        """,
+        request_body=PassengerSerializer,
+        responses={200: PassengerSerializer()}
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
 
     @swagger_auto_schema(
         operation_summary="حذف یک مسافر",
@@ -1155,7 +1170,7 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
 
-    
+
 
 
 # ای پی ای اضافه کردن لوگوی برترین هتل های صفجه اصلی 
