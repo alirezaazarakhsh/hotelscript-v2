@@ -137,6 +137,16 @@ class RoomFacilitiesSerializer(serializers.ModelSerializer):
             'id',
             'title',
         )
+        
+    
+class HotelFacilitiesSerializer(serializers.ModelSerializer):
+    facilities = FacilitiesSerializer(many=True, read_only=True)
+    room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Hotel
+        fields = ['id', 'name', 'slug', 'facilities', 'room_facilities']
+
 
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:

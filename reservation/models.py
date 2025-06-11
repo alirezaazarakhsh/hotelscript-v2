@@ -338,8 +338,6 @@ class Hotel(models.Model):
 
 
 
-
-
 #مدل گالری های هتل 
 class HotelGallery(models.Model):
     title = models.CharField(
