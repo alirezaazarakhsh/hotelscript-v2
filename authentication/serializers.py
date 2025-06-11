@@ -116,17 +116,22 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         }
 
     def get_image(self, obj):
-        request = self.context.get('request')
-        if obj.image:
-            image_url = obj.image.url
-            if request is not None:
-                return request.build_absolute_uri(image_url)
-            return image_url
+        try:
+            request = self.context.get('request')
+            if obj.image and hasattr(obj.image, 'url'):
+                image_url = obj.image.url
+                if request is not None:
+                    return request.build_absolute_uri(image_url)
+                return image_url
+        except Exception as e:
+            return None
         return None
 
     def get_level_name(self, obj):
-        return obj.level.name if obj.level else None
-
+        try:
+            return obj.level.name if obj.level else None
+        except Exception as e:
+            return None
 
 
 # -----------------------------
