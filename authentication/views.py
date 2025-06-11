@@ -321,10 +321,8 @@ class NaturalProfileListCreateAPIView(APIView):
         try:
             profile = user.natural_profile
         except NaturalProfile.DoesNotExist:
-            return Response(
-                {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            # نمونه‌ی موقت بدون ذخیره‌سازی در دیتابیس
+            profile = NaturalProfile(base_user=user)
 
         serializer = NaturalProfileSerializer(profile, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -347,7 +345,6 @@ class NaturalProfileListCreateAPIView(APIView):
             )
 
         serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
-
         if serializer.is_valid():
             profile = serializer.save(base_user=user)
             return Response(
@@ -356,8 +353,6 @@ class NaturalProfileListCreateAPIView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    
 
 
 
