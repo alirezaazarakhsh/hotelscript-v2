@@ -92,7 +92,6 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
-
 class NaturalProfileSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     level_name = serializers.SerializerMethodField()

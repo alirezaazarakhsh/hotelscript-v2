@@ -316,10 +316,15 @@ class NaturalProfileListCreateAPIView(APIView):
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
-        profile = getattr(request.user, 'natural_profile', None)
-        if not profile:
-            return Response({"detail": "پروفایل حقیقی برای این کاربر یافت نشد."}, status=404)
+        user = request.user
 
+        if not hasattr(user, 'natural_profile'):
+            return Response(
+                {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
+                status=404
+            )
+
+        profile = user.natural_profile
         serializer = NaturalProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
 
@@ -332,16 +337,23 @@ class NaturalProfileListCreateAPIView(APIView):
         }
     )
     def post(self, request):
-        if hasattr(request.user, 'natural_profile'):
-            return Response({"detail": "این کاربر از قبل پروفایل حقیقی دارد."}, status=400)
+        user = request.user
+
+        if hasattr(user, 'natural_profile'):
+            return Response(
+                {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
+                status=400
+            )
 
         serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
+
         if serializer.is_valid():
-            profile = serializer.save(base_user=request.user)
+            profile = serializer.save(base_user=user)
             return Response(
                 NaturalProfileSerializer(profile, context={'request': request}).data,
                 status=201
             )
+
         return Response(serializer.errors, status=400)
     
     
