@@ -194,41 +194,27 @@ class FAQListView(ListAPIView):
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
-                'page_id',
+                'path',
                 openapi.IN_QUERY,
-                description="فیلتر براساس آی‌دی صفحه",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
-            openapi.Parameter(
-                'page_title',
-                openapi.IN_QUERY,
-                description="فیلتر براساس عنوان صفحه (مثلاً: سوالات متداول)",
+                description="مسیر صفحه (مثال: /rules یا /faqs)",
                 type=openapi.TYPE_STRING,
-                required=False,
-            )
+                required=True,
+            ),
         ],
-        operation_summary="دریافت لیست سوالات متداول",
-        operation_description="این API لیست سوالات متداول را با فیلتر بر اساس آی‌دی یا عنوان صفحه بازمی‌گرداند.",
+        operation_summary="دریافت لیست سوالات متداول بر اساس مسیر صفحه",
+        operation_description="این API لیست سوالات متداول را بر اساس مسیر صفحه (path) بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        page_id = request.query_params.get('page_id')
-        page_title = request.query_params.get('page_title')
-        page_obj = None
+        path = request.query_params.get('path')
 
-        if page_id:
-            try:
-                page_obj = Page.objects.get(id=page_id)
-            except Page.DoesNotExist:
-                return Response({"detail": "صفحه با این آی‌دی پیدا نشد."}, status=404)
-        elif page_title:
-            try:
-                page_obj = Page.objects.get(title=page_title)
-            except Page.DoesNotExist:
-                return Response({"detail": "صفحه با این عنوان پیدا نشد."}, status=404)
-        else:
-            return Response({"detail": "لطفاً یکی از پارامترهای page_id یا page_title را وارد کنید."}, status=400)
+        if not path:
+            return Response({"detail": "پارامتر path الزامی است."}, status=400)
+
+        try:
+            page_obj = Page.objects.get(path=path)  # فرض بر اینکه فیلد path در مدل Page وجود دارد
+        except Page.DoesNotExist:
+            return Response({"detail": "صفحه با این مسیر یافت نشد."}, status=404)
 
         queryset = FAQ.objects.filter(page=page_obj)
         serializer = self.get_serializer(queryset, many=True)
@@ -308,41 +294,30 @@ class BannerListView(ListAPIView):
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
-                'page_id',
+                'path',
                 openapi.IN_QUERY,
-                description="فیلتر بر اساس آی‌دی صفحه",
-                type=openapi.TYPE_INTEGER,
-                required=False,
-            ),
-            openapi.Parameter(
-                'page_title',
-                openapi.IN_QUERY,
-                description="فیلتر بر اساس عنوان صفحه (مثلاً: صفحه اصلی)",
+                description="مسیر صفحه (مثلاً: / یا /about)",
                 type=openapi.TYPE_STRING,
-                required=False,
+                required=True,
             )
         ],
         operation_summary="دریافت لیست بنرها",
-        operation_description="این API لیست بنرهای سایت را بر اساس آی‌دی یا عنوان صفحه فیلتر و بازمی‌گرداند.",
+        operation_description="این API لیست بنرهای صفحه خاص را بر اساس path بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        page_id = request.query_params.get('page_id')
-        page_title = request.query_params.get('page_title')
-        page_obj = None
+        path = request.query_params.get('path')
 
-        if page_id:
-            try:
-                page_obj = Page.objects.get(id=page_id)
-            except Page.DoesNotExist:
-                return Response({"detail": "صفحه با این آی‌دی پیدا نشد."}, status=404)
-        elif page_title:
-            try:
-                page_obj = Page.objects.get(title=page_title)
-            except Page.DoesNotExist:
-                return Response({"detail": "صفحه با این عنوان پیدا نشد."}, status=404)
-        else:
-            return Response({"detail": "لطفاً یکی از پارامترهای page_id یا page_title را وارد کنید."}, status=400)
+        if not path:
+            return Response({"detail": "پارامتر path الزامی است."}, status=400)
+
+        if not path.startswith('/'):
+            path = '/' + path
+
+        try:
+            page_obj = Page.objects.get(path=path)
+        except Page.DoesNotExist:
+            return Response({"detail": "صفحه‌ای با این مسیر یافت نشد."}, status=404)
 
         queryset = Banner.objects.filter(page=page_obj).order_by('order')
         serializer = self.get_serializer(queryset, many=True)
@@ -351,7 +326,6 @@ class BannerListView(ListAPIView):
             'page_title': page_obj.title,
             'banners': serializer.data,
         })
-
 
 
 
