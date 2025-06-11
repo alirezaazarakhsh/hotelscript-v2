@@ -129,7 +129,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'economical_code',
         'phone_number',
     )
-    list_filter = ('status',)
+    # list_filter = ('status',)
     ordering = ('-id',)
 
     inlines = [JuridicalProfileDocumentInline]
