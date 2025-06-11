@@ -261,37 +261,46 @@ class CommentAdmin(admin.ModelAdmin):
         'text',
         'show_strengths',
         'show_weaknesses',
+        'stars',
         'is_approved',
-        'created',
+        'created_jalali',  # تاریخ شمسی بجای created میلادی
     )
     search_fields = (
         'text',
-        'strengths',
-        'weaknesses',
+        'strengths__title',  # چون ManyToManyField هست و به CommentPointItem رفرنس میده
+        'weaknesses__title',
     )
     list_filter = (
         'is_approved',
+        'stars',
     )
 
     def show_strengths(self, obj):
-        if not obj.strengths:
+        qs = obj.strengths.all()
+        if not qs.exists():
             return "-"
         return format_html_join(
             mark_safe('<br>'),
             '{}',
-            ((s,) for s in obj.strengths)
+            ((s.title,) for s in qs)
         )
     show_strengths.short_description = 'نقاط قوت'
 
     def show_weaknesses(self, obj):
-        if not obj.weaknesses:
+        qs = obj.weaknesses.all()
+        if not qs.exists():
             return "-"
         return format_html_join(
             mark_safe('<br>'),
             '{}',
-            ((w,) for w in obj.weaknesses)
+            ((w.title,) for w in qs)
         )
     show_weaknesses.short_description = 'نقاط ضعف'
+
+    def created_jalali(self, obj):
+        return obj.created_jalali
+    created_jalali.admin_order_field = 'created'  # امکان مرتب سازی بر اساس created میلادی
+    created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
 @admin.register(CommentPointItem)
 class CommentPointItemAdmin(admin.ModelAdmin):

@@ -505,30 +505,51 @@ class Comment(models.Model):
     text = models.TextField(
         verbose_name=_('متن'),
     )
-    strengths = ArrayField(
-        models.TextField(),
+    strengths = models.ManyToManyField(
+        'CommentPointItem',
         verbose_name=_('نقاط قوت'),
         blank=True,
-        default=list,
+        related_name='comments_as_strength',
+        limit_choices_to={'is_positive': True},
     )
-    weaknesses = ArrayField(
-        models.TextField(),
+    weaknesses = models.ManyToManyField(
+        'CommentPointItem',
         verbose_name=_('نقاط ضعف'),
         blank=True,
-        default=list,
+        related_name='comments_as_weakness',
+        limit_choices_to={'is_negative': True},
     )
     is_approved = models.BooleanField(
         verbose_name=_('تایید شده'),
         default=False,
     )
+    
+    stars = models.PositiveSmallIntegerField(
+        verbose_name=_('امتیاز (ستاره)'),
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5)
+        ],
+        default=1,
+        help_text=_('امتیاز باید بین ۱ تا ۵ باشد')
+    )
+
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
         auto_now_add=True,
     )
+
+    @property
+    def created_jalali(self):
+        if self.created:
+            # تبدیل تاریخ میلادی به شمسی
+            dt = jdatetime.datetime.fromgregorian(datetime=self.created)
+            return dt.strftime('%Y/%m/%d ساعت %H:%M')
+        return ''
     
     class Meta:
-        verbose_name = 'نظر'
-        verbose_name_plural = 'نظرات'
+        verbose_name = 'کامنت'
+        verbose_name_plural = 'کامنت های هتل '
 
     def __str__(self):
         return f'{self.hotel} - {self.user}'
@@ -537,17 +558,32 @@ class Comment(models.Model):
     
 #مدل معیار امتیاز دهی
 class CommentPointItem(models.Model):
+    hotel = models.ForeignKey(
+        Hotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='comment_point_items',
+    )
     title = models.CharField(
         verbose_name=_('عنوان'),
         max_length=128,
     )
-    
+    is_positive = models.BooleanField(
+        verbose_name=_('نظر مثبت'),
+        default=False,
+    )
+    is_negative = models.BooleanField(
+        verbose_name=_('نظر منفی'),
+        default=False,
+    )
+
     class Meta:
-        verbose_name = 'معیار امتیازدهی'
-        verbose_name_plural = 'معیارهای امتیازدهی'
+        verbose_name = 'نظر منفی / نظر مثبت'
+        verbose_name_plural = 'افزودن ایتم های نظرات مثبت و منفی'
 
     def __str__(self):
-        return self.title
+        return f'{self.hotel} - {self.title}'
+
 
 
 
