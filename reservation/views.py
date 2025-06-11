@@ -1143,7 +1143,6 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
     
-    
 
 
 # ای پی ای اضافه کردن لوگوی برترین هتل های صفجه اصلی 
