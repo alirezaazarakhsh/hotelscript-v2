@@ -318,15 +318,16 @@ class NaturalProfileListCreateAPIView(APIView):
     def get(self, request):
         user = request.user
 
-        if not hasattr(user, 'natural_profile'):
+        try:
+            profile = user.natural_profile
+        except NaturalProfile.DoesNotExist:
             return Response(
                 {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
-                status=404
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        profile = user.natural_profile
         serializer = NaturalProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقیقی",
@@ -339,10 +340,10 @@ class NaturalProfileListCreateAPIView(APIView):
     def post(self, request):
         user = request.user
 
-        if hasattr(user, 'natural_profile'):
+        if NaturalProfile.objects.filter(base_user=user).exists():
             return Response(
                 {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
-                status=400
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
@@ -351,10 +352,10 @@ class NaturalProfileListCreateAPIView(APIView):
             profile = serializer.save(base_user=user)
             return Response(
                 NaturalProfileSerializer(profile, context={'request': request}).data,
-                status=201
+                status=status.HTTP_201_CREATED
             )
 
-        return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     
 
