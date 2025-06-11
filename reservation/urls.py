@@ -8,6 +8,8 @@ urlpatterns = [
     # ==== Hotel Info ====
     path('hotels/<slug:slug>/faq/', views.HotelFAQListView.as_view(), name='hotel-faq-list'),
     path('hotels/<slug:slug>/facilities/', views.HotelFacilitiesListView.as_view(), name='hotel-facilities'),
+    path('hotels/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),
+    path('hotels/<slug:slug>/all-facilities/', views.HotelFacilitiesView.as_view(), name='hotel-all-facilities'),  # ✅ اضافه شد
     path('hotels/<slug:slug>/nearby-places/', views.HotelNearbyPlaceListView.as_view(), name='nearby-place-list'),
     path('hotels/<slug:slug>/comments/', views.HotelCommentListCreateView.as_view(), name='hotel-comments'),
     path('hotels/<slug:slug>/rating-summary/', views.HotelRatingSummaryListView.as_view(), name='rating-summary-list'),
@@ -32,7 +34,6 @@ urlpatterns = [
 
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
-    # path('hotels/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),
 
     # ==== Cities ====
     path('cities/', views.CityListView.as_view(), name='city-list'),
