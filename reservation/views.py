@@ -79,7 +79,8 @@ from .serializers import (
     RoomListSerializer,
     RoomDateListSerializer,
     PassengerSerializer,
-    
+    FacilitiesSerializer, 
+    HotelFacilitiesSerializer
 )
 
 # ای پی ای لیست هتل ها 
