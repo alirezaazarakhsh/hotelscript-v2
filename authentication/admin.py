@@ -147,10 +147,6 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     natural_profile__last_name.short_description = 'نام خانوادگی'
 
 
-@admin.register(JuridicalProfileDocument)
-class JuridicalProfileDocumentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'profile', 'file')
-
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
     list_display = (
