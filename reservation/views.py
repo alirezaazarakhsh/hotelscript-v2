@@ -1,7 +1,8 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime
-
+from rest_framework.generics import RetrieveUpdateDestroyAPIView
+from rest_framework.exceptions import PermissionDenied
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from .utils import Round
 from rest_framework.pagination import PageNumberPagination
@@ -1105,6 +1106,44 @@ class PassengerListCreateView(ListCreateAPIView):
         return super().post(request, *args, **kwargs)
 
 
+
+# ای پی ای حذف و ویرایش مسافران
+class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = PassengerSerializer
+    queryset = Passenger.objects.all()
+
+    def get_object(self):
+        obj = super().get_object()
+        if obj.user != self.request.user:
+            raise PermissionDenied("شما اجازه دسترسی به این مسافر را ندارید.")
+        return obj
+
+    @swagger_auto_schema(
+        operation_summary="دریافت اطلاعات یک مسافر",
+        responses={200: PassengerSerializer()}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش اطلاعات یک مسافر",
+        operation_description="با استفاده از این متد می‌توان اطلاعات یک مسافر را ویرایش کرد.",
+        request_body=PassengerSerializer,
+        responses={200: PassengerSerializer()}
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="حذف یک مسافر",
+        operation_description="این متد برای حذف یک مسافر خاص استفاده می‌شود.",
+        responses={204: 'Deleted successfully'}
+    )
+    def delete(self, request, *args, **kwargs):
+        return super().delete(request, *args, **kwargs)
+    
+    
 
 
 # ای پی ای اضافه کردن لوگوی برترین هتل های صفجه اصلی 

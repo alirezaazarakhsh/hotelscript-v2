@@ -4,12 +4,11 @@ from . import views
 app_name = 'reservation'
 
 urlpatterns = [
-
     # ==== Hotel Info ====
     path('hotels/<slug:slug>/faq/', views.HotelFAQListView.as_view(), name='hotel-faq-list'),
     path('hotels/<slug:slug>/facilities/', views.HotelFacilitiesListView.as_view(), name='hotel-facilities'),
     path('hotels/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),
-    path('hotels/<slug:slug>/all-facilities/', views.HotelFacilitiesView.as_view(), name='hotel-all-facilities'),  # ✅ اضافه شد
+    path('hotels/<slug:slug>/all-facilities/', views.HotelFacilitiesView.as_view(), name='hotel-all-facilities'),
     path('hotels/<slug:slug>/nearby-places/', views.HotelNearbyPlaceListView.as_view(), name='nearby-place-list'),
     path('hotels/<slug:slug>/comments/', views.HotelCommentListCreateView.as_view(), name='hotel-comments'),
     path('hotels/<slug:slug>/rating-summary/', views.HotelRatingSummaryListView.as_view(), name='rating-summary-list'),
@@ -19,7 +18,7 @@ urlpatterns = [
     path('hotels/<slug:slug>/further-description/', views.HotelFurtherDescriptionView.as_view(), name='hotel-further-description'),
     path('hotels/<slug:slug>/rules/', views.HotelRulesView.as_view(), name='hotel-rules'),
     path('hotels/<slug:slug>/tags/', views.HotelTagsView.as_view(), name='hotel-tags'),
-    path('hotels/<slug:slug>/gallery/', views.HotelGalleryView.as_view(), name='hotel-gallery'),  # ✅ اضافه شده
+    path('hotels/<slug:slug>/gallery/', views.HotelGalleryView.as_view(), name='hotel-gallery'),
 
     # ==== Hotel Listings ====
     path('hotels/search/', views.HotelListView.as_view(), name='hotel-list'),
@@ -44,4 +43,8 @@ urlpatterns = [
 
     # ==== Availability and Scheduling ====
     path('closed-dates/', views.ClosedDateListCreateView.as_view(), name='closed-date-list-create'),
+
+    # ==== Passenger ====
+    path('passengers/', views.PassengerListCreateView.as_view(), name='passenger-list-create'),
+    path('passengers/<int:pk>/', views.PassengerRetrieveUpdateDestroyView.as_view(), name='passenger-detail'),
 ]
