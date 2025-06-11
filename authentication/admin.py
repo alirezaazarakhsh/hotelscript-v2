@@ -96,6 +96,14 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
 
+class JuridicalProfileDocumentInline(admin.TabularInline):
+    model = JuridicalProfileDocument
+    extra = 3  # تعداد فرم‌های خالی اضافه برای آپلود مدارک جدید
+    fields = ['file']
+    verbose_name = 'مدرک پروفایل حقوقی'
+    verbose_name_plural = 'مدارک پروفایل حقوقی'
+
+
 @admin.register(JuridicalProfile)
 class JuridicalProfileAdmin(admin.ModelAdmin):
     list_display = (
@@ -121,12 +129,10 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'economical_code',
         'phone_number',
     )
-    list_filter = (
-        'status',
-    )
-    ordering = (
-        '-id',
-    )
+    list_filter = ('status',)
+    ordering = ('-id',)
+
+    inlines = [JuridicalProfileDocumentInline]
 
     def base_user__phone_number(self, obj):
         return obj.natural_profile.base_user.phone_number
@@ -134,18 +140,16 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
 
     def natural_profile__first_name(self, obj):
         return obj.natural_profile.first_name
-    base_user__phone_number.short_description = 'نام'
+    natural_profile__first_name.short_description = 'نام'
 
     def natural_profile__last_name(self, obj):
         return obj.natural_profile.last_name
-    base_user__phone_number.short_description = 'نام خانوادگی'
+    natural_profile__last_name.short_description = 'نام خانوادگی'
+
 
 @admin.register(JuridicalProfileDocument)
 class JuridicalProfileDocumentAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'profile',
-    )
+    list_display = ('id', 'profile', 'file')
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
