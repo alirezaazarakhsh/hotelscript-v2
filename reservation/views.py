@@ -297,6 +297,8 @@ class CityListView(ListAPIView):
     
 
 
+
+
 # ای پی ای لیست شهر های مربوط یه صفحه اصلی 
 class HomePageCityListView(ListAPIView):
     permission_classes = (AllowAny,)
@@ -364,7 +366,7 @@ class RoomFacilitiesListView(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست امکانات داخل اتاق",
-        operation_description="این API لیستی از امکانات داخل اتاق را به صورت صفحه‌بندی شده (۱۵ مورد در هر صفحه) باز می‌گرداند.",
+        operation_description="این API لیستی از امکانات داخل اتاق را به صورت صفحه‌بندی شده (18 مورد در هر صفحه) باز می‌گرداند.",
         tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
