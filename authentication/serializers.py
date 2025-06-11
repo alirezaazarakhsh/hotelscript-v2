@@ -92,6 +92,7 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
+
 class NaturalProfileSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     level_name = serializers.SerializerMethodField()
@@ -106,7 +107,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'image',
             'postal_code',
             'address',
-            'level_name',  # به جای level
+            'level_name',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
