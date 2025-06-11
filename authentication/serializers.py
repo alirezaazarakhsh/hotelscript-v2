@@ -120,23 +120,21 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'national_code': {'required': False, 'allow_null': True},
             'postal_code': {'required': False, 'allow_null': True},
             'address': {'required': False, 'allow_null': True},
+            'level': {'required': False, 'allow_null': True},
         }
 
     def get_image(self, obj):
-        try:
-            request = self.context.get('request')
-            if obj.image and hasattr(obj.image, 'url'):
-                image_url = obj.image.url
-                if request is not None:
-                    return request.build_absolute_uri(image_url)
-                return image_url
-        except Exception:
-            return None
+        request = self.context.get('request')
+        if obj.image and hasattr(obj.image, 'url'):
+            image_url = obj.image.url
+            if request:
+                return request.build_absolute_uri(image_url)
+            return image_url
         return None
 
     def get_level_name(self, obj):
         try:
-            return obj.level.name if obj.level else None
+            return obj.level.title if obj.level else None
         except Exception:
             return None
 
