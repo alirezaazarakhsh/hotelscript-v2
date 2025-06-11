@@ -317,10 +317,11 @@ class NaturalProfileListCreateAPIView(APIView):
     )
     def get(self, request):
         try:
+            # استفاده از related_name برای دسترسی مستقیم
             profile = request.user.natural_profile
             serializer = NaturalProfileSerializer(profile, context={'request': request})
             return Response(serializer.data)
-        except NaturalProfile.DoesNotExist:
+        except AttributeError:
             return Response({"detail": "پروفایل حقیقی برای این کاربر یافت نشد."}, status=404)
 
     @swagger_auto_schema(
@@ -332,23 +333,27 @@ class NaturalProfileListCreateAPIView(APIView):
         }
     )
     def post(self, request):
+        # بررسی وجود پروفایل قبلی
         if hasattr(request.user, 'natural_profile'):
             return Response(
                 {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
                 status=400
             )
 
-        serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
-
+        serializer = NaturalProfileSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
         if serializer.is_valid():
+            # ایجاد پروفایل با اتصال به کاربر جاری
             profile = serializer.save(base_user=request.user)
             return Response(
                 NaturalProfileSerializer(profile, context={'request': request}).data,
                 status=201
             )
         return Response(serializer.errors, status=400)
-    
-    
+
 
 
 

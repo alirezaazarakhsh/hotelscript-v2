@@ -94,7 +94,7 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 class NaturalProfileSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
-    level_name = serializers.SerializerMethodField()  # فیلد جدید برای نام سطح کاربری
+    level_name = serializers.SerializerMethodField()
 
     class Meta:
         model = NaturalProfile
@@ -106,15 +106,13 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'image',
             'postal_code',
             'address',
-            'level',       # این مقدار آیدی سطح کاربری هست
-            'level_name',  # این مقدار نام سطح کاربری هست
+            'level_name',  # به جای level
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
             'national_code': {'required': False, 'allow_null': True},
             'postal_code': {'required': False, 'allow_null': True},
             'address': {'required': False, 'allow_null': True},
-            'level': {'required': False, 'allow_null': True},
         }
 
     def get_image(self, obj):
@@ -127,7 +125,6 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         return None
 
     def get_level_name(self, obj):
-        # اگر سطح کاربری ست شده بود، نام آن را برمی‌گرداند، در غیر اینصورت None
         return obj.level.name if obj.level else None
 
 
