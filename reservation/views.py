@@ -61,6 +61,7 @@ from .serializers import (
     BestHotelsSerializer,
     ClosedDateSerializer,
     HotelDescriptionSerializer,
+    HotelFacilitiesSerializer,
     HotelFurtherDescriptionSerializer,
     HotelGallerySerializer,
     HotelImagesSerializer,
@@ -70,8 +71,6 @@ from .serializers import (
     HotelRulesSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
-    FacilitiesSerializer,
-    RoomFacilitiesSerializer,
     RoomServiceSerializer,
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
@@ -338,40 +337,20 @@ class HotelTypeListView(ListAPIView):
 
  
 
-# API دریافت لیست امکانات هتل با صفحه‌بندی
-class FacilitiesListView(ListAPIView):
+# API دریافت لیست امکانات هتل  و اتاق بر اساس یه هتل خاص 
+class HotelFacilitiesView(RetrieveAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = FacilitiesSerializer
-    queryset = Facilities.objects.all()
-    pagination_class = FacilitiesPaginator
-
+    serializer_class = HotelFacilitiesSerializer
+    lookup_field = 'slug'
+    queryset = Hotel.objects.prefetch_related('facilities', 'room_facilities')
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست امکانات رفاهی و تفریحی",
-        operation_description="این API لیستی از امکانات رفاهی و تفریحی را به صورت صفحه‌بندی شده (۱۵ مورد در هر صفحه) باز می‌گرداند.",
+        operation_summary="دریافت امکانات هتل بر اساس اسلاگ",
+        operation_description="این API امکانات رفاهی و امکانات داخل اتاق را برای یک هتل خاص (با استفاده از slug) باز می‌گرداند.",
         tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
-    
-    
-
-# API دریافت لیست امکانات داخل اتاق هتل با صفحه‌بندی
-class RoomFacilitiesListView(ListAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = RoomFacilitiesSerializer
-    queryset = RoomFacilities.objects.all()
-    pagination_class = RoomFacilitiesPaginator
-
-    @swagger_auto_schema(
-        operation_summary="دریافت لیست امکانات داخل اتاق",
-        operation_description="این API لیستی از امکانات داخل اتاق را به صورت صفحه‌بندی شده (18 مورد در هر صفحه) باز می‌گرداند.",
-        tags=['hotel']
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
 
 
 

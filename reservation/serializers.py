@@ -122,21 +122,14 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
     def get_rating(self, obj):
         return obj.rating if obj.rating else None
 
-class FacilitiesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Facilities
-        fields = (
-            'id',
-            'title',
-        )
+class HotelFacilitiesSerializer(serializers.ModelSerializer):
+    facilities = FacilitiesSerializer(many=True, read_only=True)
+    room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
 
-class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
-        model = RoomFacilities
-        fields = (
-            'id',
-            'title',
-        )
+        model = Hotel
+        fields = ('id', 'name', 'slug', 'facilities', 'room_facilities')
+
 
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
