@@ -1,3 +1,4 @@
+from config.models import UserLevel
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, PasswordField
 from django.contrib.auth import authenticate
 from rest_framework import exceptions, serializers
