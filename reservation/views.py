@@ -1076,11 +1076,11 @@ class PassengerListCreateView(ListCreateAPIView):
         serializer.save(user=self.request.user)
 
     @swagger_auto_schema(
-        operation_summary="لیست و ثبت مسافران",
+        operation_summary="لیست  مسافران",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
         - لیست مسافرانی که قبلاً ثبت کرده را ببیند
-        - یک مسافر جدید ثبت کند
+        
         
         این عملیات فقط برای کاربران لاگین‌کرده در دسترس است.
         """,
@@ -1121,6 +1121,10 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت اطلاعات یک مسافر",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد تا اطلاعات یک مسافر خاص را که قبلاً ثبت کرده است، مشاهده کند.  
+        دسترسی به مسافران متعلق به خود کاربر محدود شده است.
+        """,
         responses={200: PassengerSerializer()}
     )
     def get(self, request, *args, **kwargs):
@@ -1128,7 +1132,11 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش اطلاعات یک مسافر",
-        operation_description="با استفاده از این متد می‌توان اطلاعات یک مسافر را ویرایش کرد.",
+        operation_description="""
+        با استفاده از این متد می‌توان اطلاعات یک مسافر خاص را ویرایش کرد.  
+        تغییرات شامل نام، نام خانوادگی، شماره موبایل، ملیت و سایر اطلاعات مرتبط است.
+        فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
+        """,
         request_body=PassengerSerializer,
         responses={200: PassengerSerializer()}
     )
@@ -1137,11 +1145,16 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
     @swagger_auto_schema(
         operation_summary="حذف یک مسافر",
-        operation_description="این متد برای حذف یک مسافر خاص استفاده می‌شود.",
+        operation_description="""
+        این متد برای حذف یک مسافر خاص استفاده می‌شود.  
+        تنها مسافرانی که متعلق به کاربر فعلی هستند قابل حذف‌اند.
+        پس از حذف، اطلاعات مسافر دیگر در دسترس نخواهد بود.
+        """,
         responses={204: 'Deleted successfully'}
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
+
     
 
 
