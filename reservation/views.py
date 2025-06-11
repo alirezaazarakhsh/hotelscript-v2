@@ -1130,6 +1130,8 @@ class PassengerListCreateView(ListCreateAPIView):
 class BestHotelsListCreateView(ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = BestHotelsSerializer
+    pagination_class = None 
+    
 
     def get_queryset(self):
         """
