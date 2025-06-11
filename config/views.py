@@ -291,40 +291,51 @@ class BannerListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = BannerSerializer
     pagination_class = None
-    filter_backends = (PageFilter,)  # فرض می‌کنیم PageFilter صفحه را فیلتر می‌کند
 
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
-                'page',
+                'page_id',
                 openapi.IN_QUERY,
-                description="فیلتر براساس صفحه (آی‌دی صفحه)",
+                description="فیلتر بر اساس آی‌دی صفحه",
                 type=openapi.TYPE_INTEGER,
-                required=True,
+                required=False,
+            ),
+            openapi.Parameter(
+                'page_title',
+                openapi.IN_QUERY,
+                description="فیلتر بر اساس عنوان صفحه (مثلاً: صفحه اصلی)",
+                type=openapi.TYPE_STRING,
+                required=False,
             )
         ],
         operation_summary="دریافت لیست بنرها",
-        operation_description="این API لیست بنرهای سایت را بر اساس صفحه فیلتر و بازمی‌گرداند.",
+        operation_description="این API لیست بنرهای سایت را بر اساس آی‌دی یا عنوان صفحه فیلتر و بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        page_id = request.query_params.get('page')
+        page_id = request.query_params.get('page_id')
+        page_title = request.query_params.get('page_title')
+        page_obj = None
 
-        # گرفتن عنوان صفحه بر اساس page_id
-        page_title = None
         if page_id:
             try:
                 page_obj = Page.objects.get(id=page_id)
-                page_title = page_obj.title
             except Page.DoesNotExist:
-                return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
+                return Response({"detail": "صفحه با این آی‌دی پیدا نشد."}, status=404)
+        elif page_title:
+            try:
+                page_obj = Page.objects.get(title=page_title)
+            except Page.DoesNotExist:
+                return Response({"detail": "صفحه با این عنوان پیدا نشد."}, status=404)
+        else:
+            return Response({"detail": "لطفاً یکی از پارامترهای page_id یا page_title را وارد کنید."}, status=400)
 
-        # فیلتر کردن بنرها براساس صفحه
-        queryset = Banner.objects.filter(page_id=page_id).order_by('order') if page_id else Banner.objects.none()
+        queryset = Banner.objects.filter(page=page_obj).order_by('order')
         serializer = self.get_serializer(queryset, many=True)
 
         return Response({
-            'page_title': page_title,
+            'page_title': page_obj.title,
             'banners': serializer.data,
         })
 
