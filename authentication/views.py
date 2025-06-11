@@ -316,16 +316,13 @@ class NaturalProfileListCreateAPIView(APIView):
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
-        """
-        گرفتن پروفایل حقیقی مربوط به کاربر احراز هویت‌شده.
-        """
         try:
-            profile = NaturalProfile.objects.get(base_user=request.user)
-        except NaturalProfile.DoesNotExist:
-            raise NotFound("پروفایل حقیقی برای این کاربر یافت نشد.")
-
-        serializer = NaturalProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+            # استفاده از related_name برای دسترسی مستقیم
+            profile = request.user.natural_profile
+            serializer = NaturalProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی برای این کاربر یافت نشد."}, status=404)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقیقی",
@@ -336,11 +333,8 @@ class NaturalProfileListCreateAPIView(APIView):
         }
     )
     def post(self, request):
-        """
-        ساخت پروفایل حقیقی برای کاربر احراز هویت‌شده.
-        اگر قبلاً پروفایل دارد، اجازه ساخت مجدد داده نمی‌شود.
-        """
-        if NaturalProfile.objects.filter(base_user=request.user).exists():
+        # بررسی وجود پروفایل قبلی
+        if hasattr(request.user, 'natural_profile'):
             return Response(
                 {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
                 status=400
@@ -350,15 +344,16 @@ class NaturalProfileListCreateAPIView(APIView):
             data=request.data,
             context={'request': request}
         )
-
+        
         if serializer.is_valid():
+            # ایجاد پروفایل با اتصال به کاربر جاری
             profile = serializer.save(base_user=request.user)
             return Response(
                 NaturalProfileSerializer(profile, context={'request': request}).data,
                 status=201
             )
-
         return Response(serializer.errors, status=400)
+
 
 
 
