@@ -190,34 +190,47 @@ class FAQListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FAQSerializer
     pagination_class = None
-    filter_backends = (PageFilter,)  # اگر PageFilter خودش order_by نمی‌زنه
 
     @swagger_auto_schema(
         manual_parameters=[
             openapi.Parameter(
-                'page',
+                'page_id',
                 openapi.IN_QUERY,
-                description="فیلتر براساس صفحه (آی‌دی صفحه)",
+                description="فیلتر براساس آی‌دی صفحه",
                 type=openapi.TYPE_INTEGER,
-                required=True,
+                required=False,
+            ),
+            openapi.Parameter(
+                'page_title',
+                openapi.IN_QUERY,
+                description="فیلتر براساس عنوان صفحه (مثلاً: سوالات متداول)",
+                type=openapi.TYPE_STRING,
+                required=False,
             )
         ],
         operation_summary="دریافت لیست سوالات متداول",
-        operation_description="این API لیست سوالات متداول سایت را با فیلتر صفحه بازمی‌گرداند.",
+        operation_description="این API لیست سوالات متداول را با فیلتر بر اساس آی‌دی یا عنوان صفحه بازمی‌گرداند.",
         tags=['static']
     )
     def get(self, request, *args, **kwargs):
-        page_id = request.query_params.get('page')
+        page_id = request.query_params.get('page_id')
+        page_title = request.query_params.get('page_title')
+        page_obj = None
 
-        if not page_id:
-            return Response({"detail": "پارامتر page لازم است."}, status=400)
+        if page_id:
+            try:
+                page_obj = Page.objects.get(id=page_id)
+            except Page.DoesNotExist:
+                return Response({"detail": "صفحه با این آی‌دی پیدا نشد."}, status=404)
+        elif page_title:
+            try:
+                page_obj = Page.objects.get(title=page_title)
+            except Page.DoesNotExist:
+                return Response({"detail": "صفحه با این عنوان پیدا نشد."}, status=404)
+        else:
+            return Response({"detail": "لطفاً یکی از پارامترهای page_id یا page_title را وارد کنید."}, status=400)
 
-        try:
-            page_obj = Page.objects.get(id=page_id)
-        except Page.DoesNotExist:
-            return Response({"detail": "صفحه مورد نظر یافت نشد."}, status=404)
-
-        queryset = FAQ.objects.filter(page_id=page_id)
+        queryset = FAQ.objects.filter(page=page_obj)
         serializer = self.get_serializer(queryset, many=True)
 
         return Response({
