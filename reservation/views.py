@@ -1060,6 +1060,7 @@ class RoomDateListView(ListAPIView):
     
     
 # ای پی ای ثبت مسافر جدید 
+@swagger_auto_schema(tags=["Passenger-user"])  # تگ روی کلاس
 class PassengerListCreateView(ListCreateAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PassengerSerializer
@@ -1072,7 +1073,6 @@ class PassengerListCreateView(ListCreateAPIView):
         serializer.save(user=self.request.user)
 
     @swagger_auto_schema(
-        tags=["Passenger-user"],
         operation_summary="لیست مسافران",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
@@ -1085,7 +1085,6 @@ class PassengerListCreateView(ListCreateAPIView):
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        tags=["Passenger-user"],
         operation_summary="ثبت مسافر جدید",
         operation_description="""
         با استفاده از این متد می‌توان یک مسافر جدید را ثبت کرد.  
@@ -1097,6 +1096,7 @@ class PassengerListCreateView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+
 
 
 
