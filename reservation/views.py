@@ -1065,30 +1065,21 @@ class PassengerListCreateView(ListCreateAPIView):
     serializer_class = PassengerSerializer
 
     def get_queryset(self):
-        """
-        بازگرداندن لیست مسافران متعلق به کاربر فعلی.
-        """
         user = self.request.user
-        queryset = Passenger.objects.filter(user=user)
-        return queryset
+        return Passenger.objects.filter(user=user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
-        operation_summary="لیست  مسافران",
+        operation_summary="لیست مسافران",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
         - لیست مسافرانی که قبلاً ثبت کرده را ببیند
-        
-        
         این عملیات فقط برای کاربران لاگین‌کرده در دسترس است.
         """,
-        responses={
-            200: PassengerSerializer(many=True),
-            201: PassengerSerializer(),
-        }
+        responses={200: PassengerSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
