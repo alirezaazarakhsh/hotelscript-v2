@@ -1076,6 +1076,7 @@ class PassengerListCreateView(ListCreateAPIView):
         serializer.save(user=self.request.user)
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="لیست  مسافران",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا:
@@ -1093,6 +1094,7 @@ class PassengerListCreateView(ListCreateAPIView):
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="ثبت مسافر جدید",
         operation_description="""
         با استفاده از این متد می‌توان یک مسافر جدید را ثبت کرد.  
@@ -1121,6 +1123,7 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return obj
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="دریافت اطلاعات یک مسافر",
         operation_description="""
         این API به کاربر اجازه می‌دهد تا اطلاعات یک مسافر خاص را که قبلاً ثبت کرده است، مشاهده کند.  
@@ -1132,6 +1135,7 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="ویرایش کامل اطلاعات یک مسافر",
         operation_description="""
         
@@ -1146,6 +1150,7 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return super().put(request, *args, **kwargs)
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="ویرایش جزئی اطلاعات یک مسافر",
         operation_description="""
         با استفاده از این متد می‌توان بخشی از اطلاعات یک مسافر خاص را ویرایش کرد.  
@@ -1159,6 +1164,7 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         return super().patch(request, *args, **kwargs)
 
     @swagger_auto_schema(
+        tags=["Passenger-user"],
         operation_summary="حذف یک مسافر",
         operation_description="""
         این متد برای حذف یک مسافر خاص استفاده می‌شود.  
