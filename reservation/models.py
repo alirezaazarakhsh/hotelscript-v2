@@ -583,15 +583,14 @@ class CommentPointItem(models.Model):
     
 # مدل اضافه کردن نظر پیشنهادی برای هر هتل 
 class SuggestedCommentItem(models.Model):
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255,verbose_name='عنوان')
 
     class Meta:
         verbose_name = 'پشنهاد'
         verbose_name_plural = 'آیتم پیشنهاد های کامنت هتل ها'
 
     def __str__(self):
-        return f'{self.title} ({self.hotel})'
-
+        return self.title
 
 
 
