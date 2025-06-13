@@ -1,5 +1,9 @@
 from django.urls import path
 from . import views
+from .views import HotelCommentsBySlugView, CreateCommentView
+
+
+
 
 app_name = 'reservation'
 
@@ -10,8 +14,6 @@ urlpatterns = [
     path('hotels/<slug:slug>/room-facilities/', views.HotelRoomFacilitiesListView.as_view(), name='hotel-room-facility-list'),
     path('hotels/<slug:slug>/all-facilities/', views.HotelFacilitiesView.as_view(), name='hotel-all-facilities'),
     path('hotels/<slug:slug>/nearby-places/', views.HotelNearbyPlaceListView.as_view(), name='nearby-place-list'),
-    path('hotels/<slug:slug>/comments/', views.HotelCommentListCreateView.as_view(), name='hotel-comments'),
-    path('hotels/<slug:slug>/rating-summary/', views.HotelRatingSummaryListView.as_view(), name='rating-summary-list'),
     path('hotels/<slug:slug>/images/', views.HotelImagesView.as_view(), name='hotel-images'),
     path('hotels/<slug:slug>/description/', views.HotelDescriptionView.as_view(), name='hotel-description'),
     path('hotels/<slug:slug>/introduction/', views.HotelIntroductionView.as_view(), name='hotel-introduction'),
@@ -47,4 +49,10 @@ urlpatterns = [
     # ==== Passenger ====
     path('passengers/', views.PassengerListCreateView.as_view(), name='passenger-list-create'),
     path('passengers/<int:pk>/', views.PassengerRetrieveUpdateDestroyView.as_view(), name='passenger-detail'),
+    
+     # ==== Comments ====
+    path('hotels/<slug:slug>/comments/', HotelCommentsBySlugView.as_view(), name='hotel-comments-by-slug'),
+    path('hotels/<slug:slug>/comments/create/', CreateCommentView.as_view(), name='hotel-comment-create'),
+
+
 ]

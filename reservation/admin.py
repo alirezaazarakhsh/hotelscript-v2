@@ -26,6 +26,7 @@ from .models import (
     RoomDate,
     Passenger,
     Reservation,
+    SuggestedCommentItem,
 )
 
 # Register your models here.
@@ -252,6 +253,12 @@ class HotelFAQAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
+
+class CommentPointInline(admin.TabularInline):
+    model = CommentPoint
+    extra = 1
+    autocomplete_fields = ['comment_point_item']
+
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
     list_display = (
@@ -262,18 +269,20 @@ class CommentAdmin(admin.ModelAdmin):
         'show_strengths',
         'show_weaknesses',
         'stars',
-        'is_approved',
-        'created_jalali',  # تاریخ شمسی بجای created میلادی
+        'is_approved',  
+        'created_jalali',
     )
     search_fields = (
         'text',
-        'strengths__title',  # چون ManyToManyField هست و به CommentPointItem رفرنس میده
+        'strengths__title',
         'weaknesses__title',
     )
     list_filter = (
         'is_approved',
         'stars',
     )
+    autocomplete_fields = ['user', 'hotel']
+    inlines = [CommentPointInline]
 
     def show_strengths(self, obj):
         qs = obj.strengths.all()
@@ -299,7 +308,7 @@ class CommentAdmin(admin.ModelAdmin):
 
     def created_jalali(self, obj):
         return obj.created_jalali
-    created_jalali.admin_order_field = 'created'  # امکان مرتب سازی بر اساس created میلادی
+    created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
 @admin.register(CommentPointItem)
@@ -312,17 +321,25 @@ class CommentPointItemAdmin(admin.ModelAdmin):
         'title',
     )
 
-@admin.register(CommentPoint)
-class CommentPointAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'comment',
-        'comment_point_item',
-        'point',
-    )
-    search_fields = (
-        'comment',
-    )
+# @admin.register(CommentPoint)
+# class CommentPointAdmin(admin.ModelAdmin):
+#     list_display = (
+#         'id',
+#         'comment',
+#         'comment_point_item',
+#         'point',
+#     )
+#     search_fields = (
+#         'comment',
+#     )
+    
+    
+@admin.register(SuggestedCommentItem)
+class SuggestedCommentItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title')
+    search_fields = ['title']
+
+
 
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):

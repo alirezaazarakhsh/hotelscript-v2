@@ -517,10 +517,6 @@ class Comment(models.Model):
         related_name='comments_as_weakness',
         limit_choices_to={'is_negative': True},
     )
-    is_approved = models.BooleanField(
-        verbose_name=_('تایید شده'),
-        default=False,
-    )
     
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('امتیاز (ستاره)'),
@@ -531,6 +527,12 @@ class Comment(models.Model):
         default=1,
         help_text=_('امتیاز باید بین ۱ تا ۵ باشد')
     )
+    
+    is_approved = models.BooleanField(
+        verbose_name=_('تایید شده'),
+        default=False,
+    )
+    
 
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
@@ -556,12 +558,6 @@ class Comment(models.Model):
     
 #مدل معیار امتیاز دهی
 class CommentPointItem(models.Model):
-    hotel = models.ForeignKey(
-        Hotel,
-        on_delete=models.CASCADE,
-        verbose_name=_('هتل'),
-        related_name='comment_point_items',
-    )
     title = models.CharField(
         verbose_name=_('عنوان'),
         max_length=128,
@@ -577,12 +573,24 @@ class CommentPointItem(models.Model):
 
     class Meta:
         verbose_name = 'نظر منفی / نظر مثبت'
-        verbose_name_plural = 'افزودن ایتم های نظرات مثبت و منفی'
+        verbose_name_plural = 'آیتم مثبت و منفی کامنت هتل ها'
 
     def __str__(self):
         return f'{self.hotel} - {self.title}'
+    
+    
+    
+    
+# مدل اضافه کردن نظر پیشنهادی برای هر هتل 
+class SuggestedCommentItem(models.Model):
+    title = models.CharField(max_length=255)
 
+    class Meta:
+        verbose_name = 'پشنهاد'
+        verbose_name_plural = 'آیتم پیشنهاد های کامنت هتل ها'
 
+    def __str__(self):
+        return f'{self.title} ({self.hotel})'
 
 
 
@@ -596,9 +604,9 @@ class CommentPoint(models.Model):
         related_name='points',
     )
     comment_point_item = models.ForeignKey(
-        CommentPointItem,
+        SuggestedCommentItem,
         on_delete=models.CASCADE,
-        verbose_name=_('معیار امتیازدهی'),
+        verbose_name=_('معیار امتیازدهی پیشنهادها'),
         related_name='points'
     )
     point = models.PositiveSmallIntegerField(

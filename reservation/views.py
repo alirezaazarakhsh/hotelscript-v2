@@ -1,10 +1,14 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime
+from tokenize import Comment
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from .utils import Round
+from rest_framework.generics import CreateAPIView
+from rest_framework.generics import ListCreateAPIView
+
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from rest_framework import (
@@ -52,15 +56,13 @@ from .models import (
     RoomService,
     HotelFAQ,
     NearbyPlace,
-    Comment,
-    CommentPoint,
-    CommentPointItem,
     Passenger,
     
 )
 from .serializers import (
     BestHotelsSerializer,
     ClosedDateSerializer,
+    CommentSerializer,
     HotelDescriptionSerializer,
     HotelFacilitiesSerializer,
     HotelFurtherDescriptionSerializer,
@@ -76,13 +78,11 @@ from .serializers import (
     RoomServiceSerializer,
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
-    CommentListSerializer,
-    RatingSummarySerializer,
     RoomListSerializer,
     RoomDateListSerializer,
     PassengerSerializer,
     FacilitiesSerializer, 
-    HotelFacilitiesSerializer
+    HotelFacilitiesSerializer,
 )
 
 # ای پی ای لیست هتل ها 
@@ -673,155 +673,7 @@ class HotelNearbyPlaceListView(ListAPIView):
     
 
 # ای پی ای های مربوط به کامنت هتل
-class HotelCommentListCreateView(ListCreateAPIView):
-    permission_classes = (IsAuthenticatedOrReadOnly,)
-    serializer_class = CommentListSerializer
 
-    def get_queryset(self):
-        hotel_slug = self.kwargs.get('slug')
-
-        queryset = Comment.objects\
-            .select_related('user')\
-            .prefetch_related('points')\
-            .filter(
-                hotel__slug=hotel_slug,
-                is_approved=True,
-            ).annotate(
-                rating=Round(Avg('points__point'), 1)
-            ).order_by('-created')
-
-        return queryset
-
-    @transaction.atomic
-    def perform_create(self, serializer):
-        slug = self.kwargs.get('slug')
-        hotel = get_object_or_404(Hotel, slug=slug)
-        comment = serializer.save(user=self.request.user, hotel=hotel)
-
-        ratings_data = self.request.data.get('ratings', [])
-        comment_points = []
-        for rating_data in ratings_data:
-            item_id = rating_data.get('item')
-            rating = rating_data.get('rating')
-
-            comment_point_item = get_object_or_404(CommentPointItem, id=item_id)
-            comment_points.append(CommentPoint(
-                comment=comment,
-                comment_point_item=comment_point_item,
-                point=rating
-            ))
-
-        CommentPoint.objects.bulk_create(comment_points)
-
-    @swagger_auto_schema(
-        operation_summary="لیست نظرات هتل",
-        operation_description="نمایش نظرات تاییدشده‌ی یک هتل بر اساس slug.",
-        tags=['hotel comments'],
-        manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
-        responses={
-            200: CommentListSerializer(many=True),
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    @swagger_auto_schema(
-        operation_summary="ثبت نظر جدید برای هتل",
-        operation_description="ثبت نظر به همراه امتیازدهی به آیتم‌های مختلف توسط کاربر لاگین‌شده.",
-        tags=['hotel comments'],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['text', 'ratings'],
-            properties={
-                'text': openapi.Schema(type=openapi.TYPE_STRING, description='متن نظر'),
-                'strengths': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING), description='نقاط قوت'),
-                'weaknesses': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING), description='نقاط ضعف'),
-                'ratings': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Items(
-                        type=openapi.TYPE_OBJECT,
-                        properties={
-                            'item': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه معیار امتیازدهی'),
-                            'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description='مقدار امتیاز بین ۱ تا ۵'),
-                        }
-                    ),
-                    description='لیست امتیازات'
-                )
-            }
-        ),
-        responses={
-            201: "نظر با موفقیت ثبت شد.",
-            400: "خطا در داده‌های ورودی",
-        }
-    )
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            try:
-                self.perform_create(serializer)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            except Exception as e:
-                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-#ای پی ای خلاصه امتیاز های هتل
-class HotelRatingSummaryListView(ListAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = RatingSummarySerializer
-    pagination_class = None
-
-    def get_queryset(self):
-        hotel_slug = self.kwargs.get('slug')
-
-        queryset = CommentPointItem.objects.annotate(
-            avg_rating=Round(Avg(
-                'points__point',
-                filter=Q(
-                    points__comment__hotel__slug=hotel_slug,
-                    points__comment__is_approved=True
-                )
-            ), 1)
-        ).order_by('id')
-
-        return queryset
-
-    @swagger_auto_schema(
-        operation_summary="خلاصه امتیازهای هتل",
-        operation_description=(
-            "این API میانگین امتیاز هر آیتم (مانند تمیزی، موقعیت مکانی و...) را برای یک هتل مشخص شده با استفاده از slug بازمی‌گرداند. "
-            "فقط نظرات تأیید شده در محاسبه لحاظ می‌شوند."
-        ),
-        tags=['hotel'],
-        manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='slug مربوط به هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            )
-        ],
-        responses={
-            200: RatingSummarySerializer(many=True),
-            400: "درخواست نامعتبر"
-        }
-    )
-    def get(self, request, *args, **kwargs):
-       
-        return super().get(request, *args, **kwargs)
-    
-    
-    
-    
     
     
 
@@ -1365,3 +1217,52 @@ class HotelGalleryView(RetrieveAPIView):
         galleries = hotel.galleries.all()
         serializer = self.get_serializer(galleries, many=True)
         return Response(serializer.data)
+    
+    
+    
+    
+#دریافت لیست نظرات کاربران بر اساس اسلاگ هتل 
+class HotelCommentsBySlugView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        slug = self.kwargs.get('slug')
+        hotel = Hotel.objects.filter(slug=slug).first()
+        if hotel:
+            return Comment.objects.filter(hotel=hotel, is_approved=True).order_by('-created')
+        return Comment.objects.none()
+
+    @swagger_auto_schema(
+        operation_summary="لیست نظرات هتل بر اساس اسلاگ هتل",
+        operation_description="این API نظرات تایید شده‌ی هتل مشخص شده توسط اسلاگ را به همراه معیارهای امتیازدهی برمی‌گرداند.",
+        tags=['comment-hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='اسلاگ هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+        ],
+        responses={200: CommentSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+class CreateCommentView(ListCreateAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = CommentSerializer
+
+    @swagger_auto_schema(
+        operation_summary="ایجاد کامنت برای هتل",
+        operation_description="این API برای ارسال کامنت جدید به یک هتل استفاده می‌شود.",
+        tags=['comment-hotel'],
+        request_body=CommentSerializer,
+        responses={201: CommentSerializer},
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
