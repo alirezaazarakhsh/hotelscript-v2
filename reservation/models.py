@@ -630,7 +630,7 @@ class CommentPoint(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.comment} - {self.comment_point_item}'
+        return self.title
 
 
 
