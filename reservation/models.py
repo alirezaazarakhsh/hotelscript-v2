@@ -576,7 +576,7 @@ class CommentPointItem(models.Model):
         verbose_name_plural = 'آیتم مثبت و منفی کامنت هتل ها'
 
     def __str__(self):
-        return f'{self.hotel} - {self.title}'
+            return self.title
     
     
     
