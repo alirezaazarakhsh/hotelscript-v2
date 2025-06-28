@@ -282,13 +282,11 @@ class JuridicalProfileDetailAPIView(APIView):
     )
     def get(self, request):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
+            profile = request.user.natural_profile.juridical_profile
             serializer = JuridicalProfileSerializer(profile, context={'request': request})
             return Response(serializer.data)
-        except JuridicalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=400)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
@@ -297,11 +295,9 @@ class JuridicalProfileDetailAPIView(APIView):
     )
     def put(self, request):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
-        except JuridicalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=400)
+            profile = request.user.natural_profile.juridical_profile
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
 
         serializer = JuridicalProfileSerializer(
             profile,
@@ -320,13 +316,13 @@ class JuridicalProfileDetailAPIView(APIView):
     )
     def delete(self, request):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
+            profile = request.user.natural_profile.juridical_profile
             profile.delete()
             return Response(status=204)
-        except JuridicalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
-        except Exception as e:
-            return Response({"detail": str(e)}, status=400)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
+        
+        
 
 
 
