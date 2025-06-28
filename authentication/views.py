@@ -378,17 +378,29 @@ class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
+        operation_summary="دریافت پروفایل حقیقی کاربر جاری",
+        responses={200: NaturalProfileSerializer()}
+    )
+    def get(self, request):
+        try:
+            profile = request.user.natural_profile
+            serializer = NaturalProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
+
+    @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
         request_body=NaturalProfileSerializer,
         responses={200: NaturalProfileSerializer()}
     )
     def put(self, request):
         try:
-            profile = NaturalProfile.objects.get(user=request.user)
-        except NaturalProfile.DoesNotExist:
+            profile = request.user.natural_profile
+        except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
 
-        serializer = NaturalProfileSerializer(profile, data=request.data)
+        serializer = NaturalProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -400,10 +412,10 @@ class NaturalProfileDetailAPIView(APIView):
     )
     def delete(self, request):
         try:
-            profile = NaturalProfile.objects.get(user=request.user)
+            profile = request.user.natural_profile
             profile.delete()
             return Response(status=204)
-        except NaturalProfile.DoesNotExist:
+        except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
 
 
