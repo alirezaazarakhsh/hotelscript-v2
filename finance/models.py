@@ -30,7 +30,12 @@ class Wallet(models.Model):
         verbose_name_plural = 'کیف پول‌ها'
 
     def __str__(self):
-        return f'{self.user.natural_profile.first_name} {self.user.natural_profile.last_name}'
+    try:
+        natural_profile = self.user.natural_profile
+        return f'{natural_profile.first_name or ""} {natural_profile.last_name or ""}'.strip()
+    except NaturalProfile.DoesNotExist:
+        return f'{self.user.email or self.user.username} (بدون پروفایل)'
+
     
     
 
