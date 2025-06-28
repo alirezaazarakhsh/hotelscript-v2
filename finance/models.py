@@ -10,10 +10,11 @@ from django.core.validators import (
 )
 from authentication.models import (
     BaseUser,
+    NaturalProfile,
 )
 
 
-#  مدل کیف پول کاربر برای موجودی 
+# مدل کیف پول کاربر برای موجودی 
 class Wallet(models.Model):
     user = models.OneToOneField(
         BaseUser,
@@ -37,11 +38,7 @@ class Wallet(models.Model):
             return f'{self.user.email or self.user.username} (بدون پروفایل)'
 
 
-    
-    
-
-
-#مدل کارت های بانکی کاربر
+# مدل کارت های بانکی کاربر
 class BankCard(models.Model):
     profile_content_type = models.ForeignKey(
         ContentType,

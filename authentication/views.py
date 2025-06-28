@@ -277,26 +277,13 @@ class JuridicalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="دریافت پروفایل حقوقی کاربر جاری",
-        responses={200: JuridicalProfileSerializer()}
-    )
-    def get(self, request):
-        try:
-            profile = JuridicalProfile.objects.get(user=request.user)
-        except JuridicalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل یافت نشد"}, status=404)
-
-        serializer = JuridicalProfileSerializer(profile)
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
+        operation_summary="ویرایش پروفایل حقوقی بر اساس شناسه (ID)",
         request_body=JuridicalProfileSerializer,
         responses={200: JuridicalProfileSerializer()}
     )
-    def put(self, request):
+    def put(self, request, pk):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
+            profile = JuridicalProfile.objects.get(pk=pk)
         except JuridicalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
 
@@ -307,18 +294,16 @@ class JuridicalProfileDetailAPIView(APIView):
         return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
-        operation_summary="حذف پروفایل حقوقی کاربر جاری",
+        operation_summary="حذف پروفایل حقوقی بر اساس شناسه (ID)",
         responses={204: "پروفایل حذف شد"}
     )
-    def delete(self, request):
+    def delete(self, request, pk):
         try:
-            profile = JuridicalProfile.objects.get(user=request.user)
+            profile = JuridicalProfile.objects.get(pk=pk)
             profile.delete()
             return Response(status=204)
         except JuridicalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
-
-
 
 
 
@@ -375,26 +360,13 @@ class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="دریافت پروفایل حقیقی کاربر جاری",
-        responses={200: NaturalProfileSerializer()}
-    )
-    def get(self, request):
-        try:
-            profile = NaturalProfile.objects.get(user=request.user)
-        except NaturalProfile.DoesNotExist:
-            return Response({"detail": "پروفایل یافت نشد"}, status=404)
-
-        serializer = NaturalProfileSerializer(profile)
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
+        operation_summary="ویرایش پروفایل حقیقی بر اساس شناسه (ID)",
         request_body=NaturalProfileSerializer,
         responses={200: NaturalProfileSerializer()}
     )
-    def put(self, request):
+    def put(self, request, pk):
         try:
-            profile = NaturalProfile.objects.get(user=request.user)
+            profile = NaturalProfile.objects.get(pk=pk)
         except NaturalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
 
@@ -405,18 +377,16 @@ class NaturalProfileDetailAPIView(APIView):
         return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
-        operation_summary="حذف پروفایل حقیقی کاربر جاری",
+        operation_summary="حذف پروفایل حقیقی بر اساس شناسه (ID)",
         responses={204: "پروفایل حذف شد"}
     )
-    def delete(self, request):
+    def delete(self, request, pk):
         try:
-            profile = NaturalProfile.objects.get(user=request.user)
+            profile = NaturalProfile.objects.get(pk=pk)
             profile.delete()
             return Response(status=204)
         except NaturalProfile.DoesNotExist:
             return Response({"detail": "پروفایل یافت نشد"}, status=404)
-
-
 
 
 
