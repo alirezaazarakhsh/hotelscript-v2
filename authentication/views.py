@@ -281,12 +281,17 @@ class JuridicalProfileDetailAPIView(APIView):
         responses={200: JuridicalProfileSerializer()}
     )
     def get(self, request):
+        from .models import NaturalProfile, JuridicalProfile
         try:
             profile = request.user.natural_profile.juridical_profile
-            serializer = JuridicalProfileSerializer(profile, context={'request': request})
-            return Response(serializer.data)
         except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
+            try:
+                natural_profile = request.user.natural_profile
+            except AttributeError:
+                natural_profile = NaturalProfile(base_user=request.user)
+            profile = JuridicalProfile(natural_profile=natural_profile)  # شیء فیک
+        serializer = JuridicalProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
@@ -321,6 +326,7 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=204)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
+
         
         
 
@@ -374,6 +380,9 @@ class NaturalProfileListCreateAPIView(APIView):
 
 
 
+
+
+
 class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -382,12 +391,13 @@ class NaturalProfileDetailAPIView(APIView):
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
+        from .models import NaturalProfile
         try:
             profile = request.user.natural_profile
-            serializer = NaturalProfileSerializer(profile, context={'request': request})
-            return Response(serializer.data)
         except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
+            profile = NaturalProfile(base_user=request.user)  # شیء فیک
+        serializer = NaturalProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
@@ -417,6 +427,7 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=204)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
+
 
 
 
