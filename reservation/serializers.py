@@ -433,59 +433,44 @@ class CommentSerializer(serializers.ModelSerializer):
     )
 
     # دریافت points به صورت قابل نوشتن
-    points = CommentPointSerializer(many=True)
+    class HotelCommentListSerializer(serializers.ModelSerializer):
+        first_name = serializers.SerializerMethodField()
+        last_name = serializers.SerializerMethodField()
+        user_image = serializers.SerializerMethodField()
+        created_date = serializers.SerializerMethodField()
+        created_time = serializers.SerializerMethodField()
 
-    class Meta:
-        model = Comment
-        fields = [
-            'id',
-            'user',
-            'hotel',
-            'text',
-            'strengths',
-            'strength_ids',
-            'weaknesses',
-            'weakness_ids',
-            'stars',
-            'is_approved',
-            'created',
-            'created_jalali',
-            'points',
-        ]
-        read_only_fields = ['created', 'created_jalali', 'is_approved']
-        ref_name = "CommentSerializerHotel"
+        class Meta:
+            model = Comment
+            fields = [
+                'id',
+                'first_name',
+                'last_name',
+                'user_image',
+                'text',
+                'strengths',
+                'weaknesses',
+                'stars',
+                'created_date',
+                'created_time',
+            ]
 
-    def create(self, validated_data):
-        strengths = validated_data.pop('strengths', [])
-        weaknesses = validated_data.pop('weaknesses', [])
-        points_data = validated_data.pop('points', [])
+        def get_first_name(self, obj):
+            return obj.user.first_name if obj.user else None
 
-        comment = Comment.objects.create(**validated_data)
-        comment.strengths.set(strengths)
-        comment.weaknesses.set(weaknesses)
+        def get_last_name(self, obj):
+            return obj.user.last_name if obj.user else None
 
-        for point_data in points_data:
-            CommentPoint.objects.create(comment=comment, **point_data)
+        def get_user_image(self, obj):
+            return getattr(obj.user.profile, 'image', None) if obj.user and hasattr(obj.user, 'profile') else None
 
-        return comment
+        def get_created_date(self, obj):
+            # فرض بر این است که `created_jalali` به فرمت "YYYY/MM/DD ساعت HH:MM" است
+            if obj.created_jalali:
+                return obj.created_jalali.split(" ساعت ")[0]
+            return None
 
-    def update(self, instance, validated_data):
-        strengths = validated_data.pop('strengths', None)
-        weaknesses = validated_data.pop('weaknesses', None)
-        points_data = validated_data.pop('points', None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        if strengths is not None:
-            instance.strengths.set(strengths)
-        if weaknesses is not None:
-            instance.weaknesses.set(weaknesses)
-
-        if points_data is not None:
-            instance.points.all().delete()
-            for point_data in points_data:
-                CommentPoint.objects.create(comment=instance, **point_data)
-
-        return instance
+        def get_created_time(self, obj):
+            if obj.created_jalali and " ساعت " in obj.created_jalali:
+                return obj.created_jalali.split(" ساعت ")[1]
+            return None

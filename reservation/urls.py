@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import HotelCommentsBySlugView, CreateCommentView
+from .views import HotelCommentPointSummaryView, HotelCommentPointsBySlugView, HotelCommentsBySlugView, CreateCommentView
 
 
 
@@ -53,6 +53,9 @@ urlpatterns = [
      # ==== Comments ====
     path('hotels/<slug:slug>/comments/', HotelCommentsBySlugView.as_view(), name='hotel-comments-by-slug'),
     path('hotels/<slug:slug>/comments/create/', CreateCommentView.as_view(), name='hotel-comment-create'),
+    path('hotels/<slug:slug>/comments/points/', HotelCommentPointsBySlugView.as_view(), name='hotel-comments-points-by-slug'),
+    path('hotels/<slug:slug>/comments/points-summary/', HotelCommentPointSummaryView.as_view(), name='hotel-comment-point-summary'),
+  
 
 
 ]

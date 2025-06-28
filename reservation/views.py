@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime
+from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
@@ -46,6 +47,7 @@ from drf_yasg import openapi
 from .models import (
     BestHotels,
     ClosedDate,
+    CommentPoint,
     Hotel,
     Room,
     RoomDate,
@@ -62,6 +64,7 @@ from .models import (
 from .serializers import (
     BestHotelsSerializer,
     ClosedDateSerializer,
+    CommentPointSerializer,
     CommentSerializer,
     HotelDescriptionSerializer,
     HotelFacilitiesSerializer,
@@ -1224,7 +1227,8 @@ class HotelGalleryView(RetrieveAPIView):
 #دریافت لیست نظرات کاربران بر اساس اسلاگ هتل 
 class HotelCommentsBySlugView(ListAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = CommentSerializer
+    serializer_class = HotelCommentListSerializer
+    pagination_class = None  # ❌ حذف pagination
 
     def get_queryset(self):
         slug = self.kwargs.get('slug')
@@ -1234,24 +1238,98 @@ class HotelCommentsBySlugView(ListAPIView):
         return Comment.objects.none()
 
     @swagger_auto_schema(
-        operation_summary="لیست نظرات هتل بر اساس اسلاگ هتل",
-        operation_description="این API نظرات تایید شده‌ی هتل مشخص شده توسط اسلاگ را به همراه معیارهای امتیازدهی برمی‌گرداند.",
-        tags=['comment-hotel'],
+        operation_summary="لیست نظرات تایید شده یک هتل با اسلاگ",
+        tags=["comment-hotel"],
         manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='اسلاگ هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
-        responses={200: CommentSerializer(many=True)},
+            openapi.Parameter('slug', openapi.IN_PATH, description="اسلاگ هتل", type=openapi.TYPE_STRING)
+        ]
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
+#ای پی ای معیار امتیازدهی کامنت ها 
+class HotelCommentPointsBySlugView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت امتیازهای نظرات هتل با اسلاگ (تفکیک‌شده برای هر کامنت)",
+        tags=["comment-hotel"],
+        responses={200: openapi.Response('امتیازهای تفکیک‌شده')}
+    )
+    def get(self, request, slug):
+        hotel = Hotel.objects.filter(slug=slug).first()
+        if not hotel:
+            return Response([], status=200)
+
+        comments = Comment.objects.filter(hotel=hotel, is_approved=True)
+        data = []
+
+        for comment in comments:
+            points = CommentPoint.objects.filter(comment=comment)
+            serialized_points = CommentPointSerializer(points, many=True).data
+            data.append({
+                "comment_id": comment.id,
+                "user_id": comment.user.id if comment.user else None,
+                "user_first_name": comment.user.first_name if comment.user else None,
+                "user_last_name": comment.user.last_name if comment.user else None,
+                "points": serialized_points
+            })
+
+        return Response(data)
 
 
+#محاسبه میانگین معیار های امتیاز دهی کامنت ها بر اساس هر هتل 
+class HotelCommentPointSummaryView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="میانگین امتیازهای داده‌شده به بخش‌های مختلف هتل بر اساس اسلاگ",
+        tags=["comment-hotel"],
+        responses={200: openapi.Response("میانگین‌ها به تفکیک آیتم و امتیاز کلی")}
+    )
+    def get(self, request, slug):
+        hotel = Hotel.objects.filter(slug=slug).first()
+        if not hotel:
+            return Response({"detail": "Hotel not found"}, status=404)
+
+        comments = Comment.objects.filter(hotel=hotel, is_approved=True)
+        if not comments.exists():
+            return Response({
+                "average_score": 0.0,
+                "items": []
+            })
+
+        all_points = CommentPoint.objects.filter(comment__in=comments)
+
+        items = (
+            all_points
+            .values("comment_point_item__id", "comment_point_item__title")
+            .annotate(average=Avg("point"))
+            .order_by("comment_point_item__id")
+        )
+
+        # میانگین کلی از همه امتیازها
+        overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
+
+        data = {
+            "average_score": round(overall_average or 0, 1),
+            "items": [
+                {
+                    "id": item["comment_point_item__id"],
+                    "title": item["comment_point_item__title"],
+                    "average": round(item["average"], 1) if item["average"] else 0.0
+                }
+                for item in items
+            ]
+        }
+
+        return Response(data)
+
+        
+    
+    
 
 class CreateCommentView(ListCreateAPIView):
     permission_classes = (AllowAny,)
