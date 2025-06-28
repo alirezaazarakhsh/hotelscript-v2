@@ -126,10 +126,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         request = self.context.get('request')
         if obj.image and hasattr(obj.image, 'url'):
-            image_url = obj.image.url
-            if request:
-                return request.build_absolute_uri(image_url)
-            return image_url
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
         return None
 
     def get_level_name(self, obj):
@@ -138,6 +135,14 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+    def create(self, validated_data):
+        return NaturalProfile.objects.create(user=self.context['request'].user, **validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 # -----------------------------
@@ -202,18 +207,14 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         request = self.context.get('request')
-        if obj.image:
-            url = obj.image.url
-            if request:
-                return request.build_absolute_uri(url)
-            return url
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
         return None
 
     def get_documents(self, obj):
         request = self.context.get('request')
         documents = obj.documents.all()
-        serializer = JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request})
-        return serializer.data
+        return JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request}).data
 
     def validate(self, data):
         if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
@@ -221,3 +222,12 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                 'reject_reason': _('فیلد دلیل رد برای وضعیت رد شده الزامی است.')
             })
         return data
+
+    def create(self, validated_data):
+        return JuridicalProfile.objects.create(user=self.context['request'].user, **validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
