@@ -57,7 +57,7 @@ from .models import (
     HotelFAQ,
     NearbyPlace,
     Passenger,
-    
+    Comment,
 )
 from .serializers import (
     BestHotelsSerializer,
