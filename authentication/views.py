@@ -277,6 +277,20 @@ class JuridicalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
+        operation_summary="دریافت پروفایل حقوقی کاربر جاری",
+        responses={200: JuridicalProfileSerializer()}
+    )
+    def get(self, request):
+        try:
+            profile = JuridicalProfile.objects.get(user=request.user)
+            serializer = JuridicalProfileSerializer(profile, context={'request': request})
+            return Response(serializer.data)
+        except JuridicalProfile.DoesNotExist:
+            return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
+
+    @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
         request_body=JuridicalProfileSerializer,
         responses={200: JuridicalProfileSerializer()}
@@ -286,8 +300,15 @@ class JuridicalProfileDetailAPIView(APIView):
             profile = JuridicalProfile.objects.get(user=request.user)
         except JuridicalProfile.DoesNotExist:
             return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
 
-        serializer = JuridicalProfileSerializer(profile, data=request.data)
+        serializer = JuridicalProfileSerializer(
+            profile,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -304,7 +325,8 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=204)
         except JuridicalProfile.DoesNotExist:
             return Response({"detail": "پروفایل حقوقی یافت نشد"}, status=404)
-
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
 
 
 
