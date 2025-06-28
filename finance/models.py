@@ -35,7 +35,7 @@ class Wallet(models.Model):
             natural_profile = self.user.natural_profile
             return f'{natural_profile.first_name or ""} {natural_profile.last_name or ""}'.strip()
         except NaturalProfile.DoesNotExist:
-            return f'{self.user.username} (بدون پروفایل)'
+            return f'{self.user.phone_number} (بدون پروفایل)'
 
 
 
