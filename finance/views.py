@@ -1,25 +1,20 @@
 from django.contrib.contenttypes.models import ContentType
-from rest_framework.permissions import (
-    IsAuthenticated,
-)
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.exceptions import ValidationError
+from rest_framework.generics import ListCreateAPIView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from rest_framework.generics import (
-    ListCreateAPIView,
-)
-from .models import (
-    BankCard,
-    Wallet,
-)
-from .serializers import (
-    BankCardSerializer,
-    WalletSerializer,
-)
+
+from .models import BankCard, Wallet
+from .serializers import BankCardSerializer, WalletSerializer
 
 
 
-# Create your views here.
+
+
 class BankCardListCreateView(ListCreateAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = BankCardSerializer
@@ -74,7 +69,6 @@ class BankCardListCreateView(ListCreateAPIView):
         ⚠️ پارامتر `profile_type` اجباری است و مقادیر مجاز آن عبارتند از:
         - `natural` برای پروفایل‌های شخص حقیقی
         - `juridical` برای پروفایل‌های حقوقی
-
         """,
         manual_parameters=[
             openapi.Parameter(
@@ -123,11 +117,12 @@ class BankCardListCreateView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
-    
-    
-    
-    
-#wallet retrieve API view
+
+
+
+
+
+
 class WalletRetrieveAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -148,5 +143,3 @@ class WalletRetrieveAPIView(APIView):
 
         serializer = WalletSerializer(wallet)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-
