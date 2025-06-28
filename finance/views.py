@@ -10,9 +10,11 @@ from rest_framework.generics import (
 )
 from .models import (
     BankCard,
+    Wallet,
 )
 from .serializers import (
     BankCardSerializer,
+    WalletSerializer,
 )
 
 
