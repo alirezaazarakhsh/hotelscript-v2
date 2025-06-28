@@ -9,4 +9,12 @@ urlpatterns = [
         views.BankCardListCreateView.as_view(),
         name='bank-card-list-create'
     ),
+    
+    
+    path(
+            'wallet/',
+            views.WalletRetrieveAPIView.as_view(),
+            name='wallet-detail'
+        ),
+    
 ]

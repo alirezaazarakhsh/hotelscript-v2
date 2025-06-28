@@ -121,3 +121,30 @@ class BankCardListCreateView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+    
+    
+    
+    
+#wallet retrieve API view
+class WalletRetrieveAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت موجودی کیف پول",
+        operation_description="""
+        این API به کاربر احراز هویت شده اجازه می‌دهد تا موجودی کیف پول خود را مشاهده کند.
+        
+        این موجودی فقط برای کاربر جاری بازگردانده می‌شود.
+        """,
+        responses={200: WalletSerializer()}
+    )
+    def get(self, request):
+        try:
+            wallet = Wallet.objects.get(user=request.user)
+        except Wallet.DoesNotExist:
+            return Response({"detail": "کیف پول یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = WalletSerializer(wallet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+

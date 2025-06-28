@@ -16,3 +16,9 @@ class BankCardSerializer(serializers.ModelSerializer):
             'sheba_number',
             'profile_type',
         )
+
+
+class WalletSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Wallet
+        fields = ['balance']
