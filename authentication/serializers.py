@@ -152,7 +152,7 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     id = serializers.ReadOnlyField()
     file = serializers.SerializerMethodField()
     profile = serializers.PrimaryKeyRelatedField(
-        queryset=JuridicalProfile.objects.all(),
+        read_only=True,  # کاربر نمی‌تونه profile بفرسته
         label='پروفایل حقوقی'
     )
 
@@ -173,6 +173,7 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
         if request is not None:
             return request.build_absolute_uri(url)
         return url
+
 
 
 

@@ -233,7 +233,7 @@ class PassengerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Passenger
         fields = (
-            'first_name', 'last_name', 'is_foreign', 'national_code', 'passport_code', 'phone_number'
+           'id','first_name', 'last_name', 'is_foreign', 'national_code', 'passport_code', 'phone_number'
         )
 
 class BestHotelsSerializer(serializers.ModelSerializer):

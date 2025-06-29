@@ -456,9 +456,14 @@ class JuridicalProfileDocumentAPIView(APIView):
         }
     )
     def post(self, request):
+        try:
+            profile = request.user.juridical_profile
+        except AttributeError:
+            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
         serializer = JuridicalProfileDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(profile=profile)  # اتصال خودکار پروفایل
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
