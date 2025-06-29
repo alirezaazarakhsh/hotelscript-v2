@@ -343,8 +343,16 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         return obj.user.last_name if obj.user else None
 
     def get_user_image(self, obj):
-        if obj.user and hasattr(obj.user, 'profile') and obj.user.profile.image:
-            return obj.user.profile.image.url
+        user = obj.user
+        if user:
+            # بررسی وجود natural_profile و عکس در آن
+            natural_profile = getattr(user, 'natural_profile', None)
+            if natural_profile and natural_profile.image:
+                request = self.context.get('request')
+                url = natural_profile.image.url
+                if request:
+                    return request.build_absolute_uri(url)
+                return url
         return None
 
     def get_created_date(self, obj):
