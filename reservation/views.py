@@ -9,7 +9,6 @@ from .utils import Round
 from rest_framework.generics import CreateAPIView
 from rest_framework.generics import ListCreateAPIView
 
-
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from rest_framework import (
@@ -62,6 +61,7 @@ from .models import (
     Comment,
 )
 from .serializers import (
+    CitySerializer,
     BestHotelsSerializer,
     ClosedDateSerializer,
     CommentPointSerializer,
@@ -84,9 +84,10 @@ from .serializers import (
     RoomListSerializer,
     RoomDateListSerializer,
     PassengerSerializer,
-    FacilitiesSerializer, 
-    HotelFacilitiesSerializer,
+    FacilitiesSerializer,
+    HotelCommentListSerializer,   # اینجا اضافه شد
 )
+
 
 # ای پی ای لیست هتل ها 
 from rest_framework.generics import ListAPIView
@@ -1228,7 +1229,7 @@ class HotelGalleryView(RetrieveAPIView):
 class HotelCommentsBySlugView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelCommentListSerializer
-    pagination_class = None  # ❌ حذف pagination
+    pagination_class = None
 
     def get_queryset(self):
         slug = self.kwargs.get('slug')
@@ -1241,11 +1242,16 @@ class HotelCommentsBySlugView(ListAPIView):
         operation_summary="لیست نظرات تایید شده یک هتل با اسلاگ",
         tags=["comment-hotel"],
         manual_parameters=[
-            openapi.Parameter('slug', openapi.IN_PATH, description="اسلاگ هتل", type=openapi.TYPE_STRING)
+            openapi.Parameter(
+                'slug', openapi.IN_PATH,
+                description="اسلاگ هتل",
+                type=openapi.TYPE_STRING
+            )
         ]
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
     
     
     
