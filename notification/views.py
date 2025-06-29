@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
 from .models import Notification
 from .serializers import NotificationSerializer
+from django.db import models
+
 
 class NotificationListView(generics.ListAPIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -20,7 +22,8 @@ class NotificationListView(generics.ListAPIView):
         این API لیست اعلان‌های مربوط به کاربر را نمایش می‌دهد.
         شامل اعلان‌هایی که به صورت فردی برای کاربر ارسال شده‌اند یا برای همه ارسال شده‌اند.
         """,
-        responses={200: NotificationSerializer(many=True)}
+        responses={200: NotificationSerializer(many=True)},
+        tags=["notification-user"]
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -44,7 +47,8 @@ class NotificationDeleteView(generics.DestroyAPIView):
         responses={
             204: "حذف موفقیت‌آمیز",
             404: "اعلان یافت نشد یا متعلق به کاربر نیست",
-        }
+        },
+        tags=["notification-user"]
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
