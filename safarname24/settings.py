@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     'safarname24',
     'icons',
     'setting_sms',
+    'notification',
 ]
 
 MIDDLEWARE = [
