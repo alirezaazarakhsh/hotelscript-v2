@@ -47,6 +47,7 @@ from .models import (
     BestHotels,
     ClosedDate,
     CommentPoint,
+    CommentPointItem,
     Hotel,
     Room,
     RoomDate,
@@ -59,6 +60,7 @@ from .models import (
     NearbyPlace,
     Passenger,
     Comment,
+    SuggestedCommentItem,
 )
 from .serializers import (
     CitySerializer,
@@ -1256,34 +1258,34 @@ class HotelCommentsBySlugView(ListAPIView):
     
     
 #ای پی ای معیار امتیازدهی کامنت ها 
-class HotelCommentPointsBySlugView(APIView):
-    permission_classes = [AllowAny]
+# class HotelCommentPointsBySlugView(APIView):
+#     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(
-        operation_summary="دریافت امتیازهای نظرات هتل با اسلاگ (تفکیک‌شده برای هر کامنت)",
-        tags=["comment-hotel"],
-        responses={200: openapi.Response('امتیازهای تفکیک‌شده')}
-    )
-    def get(self, request, slug):
-        hotel = Hotel.objects.filter(slug=slug).first()
-        if not hotel:
-            return Response([], status=200)
+#     @swagger_auto_schema(
+#         operation_summary="دریافت امتیازهای نظرات هتل با اسلاگ (تفکیک‌شده برای هر کامنت)",
+#         tags=["comment-hotel"],
+#         responses={200: openapi.Response('امتیازهای تفکیک‌شده')}
+#     )
+#     def get(self, request, slug):
+#         hotel = Hotel.objects.filter(slug=slug).first()
+#         if not hotel:
+#             return Response([], status=200)
 
-        comments = Comment.objects.filter(hotel=hotel, is_approved=True)
-        data = []
+#         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
+#         data = []
 
-        for comment in comments:
-            points = CommentPoint.objects.filter(comment=comment)
-            serialized_points = CommentPointSerializer(points, many=True).data
-            data.append({
-                "comment_id": comment.id,
-                "user_id": comment.user.id if comment.user else None,
-                "user_first_name": comment.user.first_name if comment.user else None,
-                "user_last_name": comment.user.last_name if comment.user else None,
-                "points": serialized_points
-            })
+#         for comment in comments:
+#             points = CommentPoint.objects.filter(comment=comment)
+#             serialized_points = CommentPointSerializer(points, many=True).data
+#             data.append({
+#                 "comment_id": comment.id,
+#                 "user_id": comment.user.id if comment.user else None,
+#                 "user_first_name": comment.user.first_name if comment.user else None,
+#                 "user_last_name": comment.user.last_name if comment.user else None,
+#                 "points": serialized_points
+#             })
 
-        return Response(data)
+#         return Response(data)
 
 
 #محاسبه میانگین معیار های امتیاز دهی کامنت ها بر اساس هر هتل 
@@ -1335,7 +1337,58 @@ class HotelCommentPointSummaryView(APIView):
 
         
     
-    
+
+# ای پی ای لیست های پیشنهاد ها و نظرات منفی و مثبت 
+class CommentPointsAndSuggestionsView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="لیست معیارهای امتیازدهی و آیتم‌های پیشنهاد شده برای کامنت‌های هتل",
+        tags=["comment-hotel"],
+        responses={
+            200: openapi.Response(
+                description="لیست آیتم‌ها",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'comment_point_items': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
+                                }
+                            )
+                        ),
+                        'suggested_comment_items': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
+                                }
+                            )
+                        ),
+                    }
+                )
+            )
+        }
+    )
+    def get(self, request):
+        comment_point_items = CommentPointItem.objects.all().values('id', 'title')
+        suggested_comment_items = SuggestedCommentItem.objects.all().values('id', 'title')
+
+        data = {
+            "comment_point_items": list(comment_point_items),
+            "suggested_comment_items": list(suggested_comment_items),
+        }
+
+        return Response(data)
+
+
+
 
 class CreateCommentView(ListCreateAPIView):
     permission_classes = (AllowAny,)
