@@ -1410,10 +1410,6 @@ class CreateCommentView(ListCreateAPIView):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         return Comment.objects.filter(hotel=hotel, is_approved=True).order_by('-created')
 
-    def perform_create(self, serializer):
-        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
-        serializer.save(user=self.request.user, hotel=hotel)
-
     @swagger_auto_schema(
         operation_summary="ایجاد کامنت برای هتل",
         operation_description="ارسال کامنت جدید برای یک هتل مشخص با slug. فقط کاربران احراز هویت‌شده مجاز هستند.",
@@ -1428,4 +1424,23 @@ class CreateCommentView(ListCreateAPIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        hotel = get_object_or_404(Hotel, slug=kwargs['slug'])
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save(user=request.user, hotel=hotel)
+
+        # ✅ ذخیره‌ی CommentPoint‌ها
+        points_data = serializer.validated_data.get('points', [])
+        for point_item in points_data:
+            try:
+                CommentPoint.objects.create(
+                    comment=comment,
+                    comment_point_item_id=point_item['comment_point_item'],
+                    point=point_item['point']
+                )
+            except Exception as e:
+                print(f"❌ CommentPoint error: {e}")
+                continue
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
