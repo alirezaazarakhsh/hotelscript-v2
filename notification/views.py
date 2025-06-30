@@ -47,7 +47,7 @@ class NotificationDeleteView(generics.DestroyAPIView):
         فقط اعلان‌هایی که به کاربر تعلق دارند قابل حذف هستند.
         """,
         responses={
-            204: "حذف موفقیت‌آمیز",
+            204: "حذف نوتیفیکیشن موفقیت‌آمیز بود",
             404: "اعلان یافت نشد یا متعلق به کاربر نیست",
         },
         tags=["notification-user"]
