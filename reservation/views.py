@@ -1398,7 +1398,7 @@ class CreateCommentView(ListCreateAPIView):
 
     def get_queryset(self):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
-        return Comment.objects.filter(hotel=hotel, is_approved=True)
+        return Comment.objects.filter(hotel=hotel, is_approved=True).order_by('-created')
 
     def perform_create(self, serializer):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
@@ -1406,10 +1406,13 @@ class CreateCommentView(ListCreateAPIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد کامنت برای هتل",
-        operation_description="ارسال کامنت جدید برای یک هتل مشخص با slug، فقط کاربران لاگین‌کرده مجاز هستند.",
+        operation_description="ارسال کامنت جدید برای یک هتل مشخص با slug. فقط کاربران احراز هویت‌شده مجاز هستند.",
         tags=["comment-hotel"],
         request_body=CommentSerializer,
-        responses={201: CommentSerializer}
+        responses={201: openapi.Response(
+            description="کامنت با موفقیت ثبت شد",
+            schema=CommentSerializer
+        )}
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
