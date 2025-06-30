@@ -21,4 +21,6 @@ urlpatterns = [
     path('juridical-profiles/me/', views.JuridicalProfileDetailAPIView.as_view(), name='juridical_profile_me'),
 
     path('juridical-profile-documents/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document'),
+    path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentDetailAPIView.as_view(), name='juridical_profile_document_detail'),
+
 ]

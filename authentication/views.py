@@ -433,7 +433,7 @@ class NaturalProfileDetailAPIView(APIView):
 
 
 
-class JuridicalProfileDocumentAPIView(APIView):
+class JuridicalProfileDocumentListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
@@ -442,30 +442,34 @@ class JuridicalProfileDocumentAPIView(APIView):
         responses={200: JuridicalProfileDocumentSerializer(many=True)}
     )
     def get(self, request):
-        documents = JuridicalProfileDocument.objects.all()
+        profile = getattr(request.user, 'juridical_profile', None)
+        if not profile:
+            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=404)
+
+        documents = JuridicalProfileDocument.objects.filter(profile=profile)
         serializer = JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=200)
 
     @swagger_auto_schema(
         operation_summary="آپلود مدرک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={
-            201: JuridicalProfileDocumentSerializer(),
-            400: 'درخواست نامعتبر است.'
-        }
+        responses={201: JuridicalProfileDocumentSerializer()}
     )
     def post(self, request):
-        try:
-            profile = request.user.juridical_profile
-        except AttributeError:
-            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+        profile = getattr(request.user, 'juridical_profile', None)
+        if not profile:
+            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=404)
 
         serializer = JuridicalProfileDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(profile=profile)  # اتصال خودکار پروفایل
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer.save(profile=profile)
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+class JuridicalProfileDocumentDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ویرایش مدرک پروفایل حقوقی",
@@ -474,7 +478,11 @@ class JuridicalProfileDocumentAPIView(APIView):
         responses={200: JuridicalProfileDocumentSerializer(), 404: 'مدرک یافت نشد'}
     )
     def put(self, request, pk):
-        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
+        profile = getattr(request.user, 'juridical_profile', None)
+        if not profile:
+            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=404)
+
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk, profile=profile)
         serializer = JuridicalProfileDocumentSerializer(document, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
@@ -487,6 +495,10 @@ class JuridicalProfileDocumentAPIView(APIView):
         responses={204: 'مدرک حذف شد', 404: 'مدرک یافت نشد'}
     )
     def delete(self, request, pk):
-        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
+        profile = getattr(request.user, 'juridical_profile', None)
+        if not profile:
+            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=404)
+
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk, profile=profile)
         document.delete()
         return Response(status=204)
