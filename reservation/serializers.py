@@ -308,19 +308,22 @@ class CommentSerializer(serializers.ModelSerializer):
         many=True,
         queryset=CommentPointItem.objects.filter(is_positive=True),
         write_only=True,
-        source='strengths'
+        source='strengths',
+        required=True,
     )
     weakness_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=CommentPointItem.objects.filter(is_negative=True),
         write_only=True,
-        source='weaknesses'
+        source='weaknesses',
+        required=True,
     )
     suggested_item_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=SuggestedCommentItem.objects.all(),
         write_only=True,
-        source='suggested_items'
+        source='suggested_items',
+        required=False,
     )
 
     user = serializers.StringRelatedField(read_only=True)
