@@ -298,10 +298,19 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
 
 
 
+class CommentPointSerializer(serializers.ModelSerializer):
+    comment_point_item = serializers.PrimaryKeyRelatedField(queryset=CommentPointItem.objects.all())
+    point = serializers.IntegerField(min_value=1, max_value=5)
+
+    class Meta:
+        model = CommentPoint
+        fields = ['comment_point_item', 'point']
+
+
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
-    points = CommentPointSerializer(many=True, read_only=True)
+    points = CommentPointSerializer(many=True)  # حالا writeable شده
     suggested_items = SuggestedCommentItemSerializer(many=True, read_only=True)
 
     strength_ids = serializers.PrimaryKeyRelatedField(
@@ -341,7 +350,7 @@ class CommentSerializer(serializers.ModelSerializer):
             'strengths',
             'weaknesses',
             'suggested_items',
-            'points',
+            'points',       # هم read و هم write
             'user',
             'hotel',
             'created',
@@ -349,6 +358,19 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
         ref_name = 'CustomCommentSerializer'
+
+    def create(self, validated_data):
+        points_data = validated_data.pop('points', [])
+        comment = super().create(validated_data)
+
+        for point_data in points_data:
+            CommentPoint.objects.create(
+                comment=comment,
+                comment_point_item=point_data['comment_point_item'],
+                point=point_data['point']
+            )
+
+        return comment
 
 
 
