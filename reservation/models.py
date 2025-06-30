@@ -14,6 +14,8 @@ from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+
+
 # 🛠️ Django Model Fields و Expressions
 from django.db.models import (
     Q, F, Count, Case, When,
@@ -494,30 +496,41 @@ class Comment(models.Model):
         verbose_name=_('ثبت کننده'),
         related_name='comments',
     )
+
     hotel = models.ForeignKey(
-        Hotel,
+        'reservation.Hotel',
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='comments',
     )
+
     text = models.TextField(
         verbose_name=_('متن'),
     )
+
     strengths = models.ManyToManyField(
-        'CommentPointItem',
+        'reservation.CommentPointItem',  # استفاده از string جلوگیری از import error
         verbose_name=_('نقاط قوت'),
         blank=True,
         related_name='comments_as_strength',
         limit_choices_to={'is_positive': True},
     )
+
     weaknesses = models.ManyToManyField(
-        'CommentPointItem',
+        'reservation.CommentPointItem',
         verbose_name=_('نقاط ضعف'),
         blank=True,
         related_name='comments_as_weakness',
         limit_choices_to={'is_negative': True},
     )
-    
+
+    suggested_items = models.ManyToManyField(
+        'reservation.SuggestedCommentItem',
+        verbose_name=_('آیتم‌های پیشنهادی'),
+        blank=True,
+        related_name='comments'
+    )
+
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('امتیاز (ستاره)'),
         validators=[
@@ -527,12 +540,11 @@ class Comment(models.Model):
         default=1,
         help_text=_('امتیاز باید بین ۱ تا ۵ باشد')
     )
-    
+
     is_approved = models.BooleanField(
         verbose_name=_('تایید شده'),
         default=False,
     )
-    
 
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
@@ -542,14 +554,13 @@ class Comment(models.Model):
     @property
     def created_jalali(self):
         if self.created:
-            # تبدیل تاریخ میلادی به شمسی
             dt = jdatetime.datetime.fromgregorian(datetime=self.created)
             return dt.strftime('%Y/%m/%d ساعت %H:%M')
         return ''
-    
+
     class Meta:
         verbose_name = 'کامنت'
-        verbose_name_plural = 'کامنت های هتل '
+        verbose_name_plural = 'کامنت های هتل'
 
     def __str__(self):
         return f'{self.hotel} - {self.user}'
