@@ -4,6 +4,7 @@ from .models import Notification
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     list_display = (
+        'id',
         'title',
         'status',
         'created_date_jalali',
