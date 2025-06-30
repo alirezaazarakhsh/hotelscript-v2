@@ -20,7 +20,8 @@ urlpatterns = [
     path('juridical-profiles/', views.JuridicalProfileListCreateAPIView.as_view(), name='juridical_profile_list_create'),
     path('juridical-profiles/me/', views.JuridicalProfileDetailAPIView.as_view(), name='juridical_profile_me'),
 
-    path('juridical-profile-documents/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document'),
-    path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentDetailAPIView.as_view(), name='juridical_profile_document_detail'),
+    path('juridical-profile-documents/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document_list_create'),
+    path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document_detail'),
+
 
 ]
