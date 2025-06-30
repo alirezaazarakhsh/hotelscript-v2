@@ -259,6 +259,7 @@ class CommentPointInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ['comment_point_item']
 
+
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
     list_display = (
@@ -281,8 +282,9 @@ class CommentAdmin(admin.ModelAdmin):
         'is_approved',
         'stars',
     )
-    autocomplete_fields = ['user', 'hotel']
-    inlines = [CommentPointInline]
+    autocomplete_fields = ['user', 'hotel', 'suggested_items']  # ✅ اضافه شده برای نمایش درست
+    exclude = ['suggested_items']  # ✅ جلوگیری از نمایش تکراری پیش‌فرض
+    inlines = [CommentPointInline]  # ✅ اینلاین معیارهای امتیاز
 
     def show_strengths(self, obj):
         qs = obj.strengths.all()

@@ -1392,6 +1392,16 @@ class CommentPointsAndSuggestionsView(APIView):
 
 
 
+comment_create_manual_params = [
+    openapi.Parameter(
+        name='slug',
+        in_=openapi.IN_PATH,
+        type=openapi.TYPE_STRING,
+        description='اسلاگ هتل',
+        required=True
+    )
+]
+
 class CreateCommentView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = CommentSerializer
@@ -1408,11 +1418,14 @@ class CreateCommentView(ListCreateAPIView):
         operation_summary="ایجاد کامنت برای هتل",
         operation_description="ارسال کامنت جدید برای یک هتل مشخص با slug. فقط کاربران احراز هویت‌شده مجاز هستند.",
         tags=["comment-hotel"],
+        manual_parameters=comment_create_manual_params,
         request_body=CommentSerializer,
-        responses={201: openapi.Response(
-            description="کامنت با موفقیت ثبت شد",
-            schema=CommentSerializer
-        )}
+        responses={
+            201: openapi.Response(
+                description="کامنت با موفقیت ثبت شد",
+                schema=CommentSerializer
+            )
+        }
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)

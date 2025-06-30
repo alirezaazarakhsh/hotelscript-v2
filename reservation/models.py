@@ -489,9 +489,10 @@ class HotelFAQ(models.Model):
 
 
 #مدل نظرات هتل ها 
+
 class Comment(models.Model):
     user = models.ForeignKey(
-        BaseUser,
+        'authentication.BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('ثبت کننده'),
         related_name='comments',
@@ -506,14 +507,16 @@ class Comment(models.Model):
 
     text = models.TextField(
         verbose_name=_('متن'),
+        help_text=_('متن کامل نظر کاربر درباره هتل')
     )
 
     strengths = models.ManyToManyField(
-        'reservation.CommentPointItem',  # استفاده از string جلوگیری از import error
+        'reservation.CommentPointItem',
         verbose_name=_('نقاط قوت'),
         blank=True,
         related_name='comments_as_strength',
         limit_choices_to={'is_positive': True},
+        help_text=_('موارد مثبتی که کاربر درباره هتل گفته')
     )
 
     weaknesses = models.ManyToManyField(
@@ -522,13 +525,15 @@ class Comment(models.Model):
         blank=True,
         related_name='comments_as_weakness',
         limit_choices_to={'is_negative': True},
+        help_text=_('موارد منفی که کاربر درباره هتل گفته')
     )
 
     suggested_items = models.ManyToManyField(
         'reservation.SuggestedCommentItem',
         verbose_name=_('آیتم‌های پیشنهادی'),
         blank=True,
-        related_name='comments'
+        related_name='comments',
+        help_text=_('آیتم‌های پیشنهادی برای نوشتن کامنت راحت‌تر')
     )
 
     stars = models.PositiveSmallIntegerField(
@@ -544,6 +549,7 @@ class Comment(models.Model):
     is_approved = models.BooleanField(
         verbose_name=_('تایید شده'),
         default=False,
+        help_text=_('آیا کامنت توسط ادمین تایید شده؟')
     )
 
     created = models.DateTimeField(
@@ -560,7 +566,8 @@ class Comment(models.Model):
 
     class Meta:
         verbose_name = 'کامنت'
-        verbose_name_plural = 'کامنت های هتل'
+        verbose_name_plural = 'کامنت‌های هتل'
+        ordering = ['-created']
 
     def __str__(self):
         return f'{self.hotel} - {self.user}'
