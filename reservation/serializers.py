@@ -296,6 +296,9 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'is_positive', 'is_negative']
         ref_name = "CommentPointItemSerializer"
 
+
+
+
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
@@ -314,10 +317,28 @@ class CommentSerializer(serializers.ModelSerializer):
         source='weaknesses'
     )
 
+    user = serializers.StringRelatedField(read_only=True)
+    hotel = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = Comment
-        fields = '__all__'
-        ref_name = 'CustomCommentSerializer'  
+        fields = [
+            'id',
+            'text',
+            'stars',
+            'strength_ids',
+            'weakness_ids',
+            'strengths',
+            'weaknesses',
+            'points',
+            'user',
+            'hotel',
+            'created',
+            'created_jalali'
+        ]
+        read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
+        ref_name = 'CustomCommentSerializer'
+
 
 
 class HotelCommentListSerializer(serializers.ModelSerializer):

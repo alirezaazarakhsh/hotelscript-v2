@@ -1393,15 +1393,23 @@ class CommentPointsAndSuggestionsView(APIView):
 
 
 class CreateCommentView(ListCreateAPIView):
-    permission_classes = (AllowAny,)
+    permission_classes = [IsAuthenticated]
     serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
+        return Comment.objects.filter(hotel=hotel, is_approved=True)
+
+    def perform_create(self, serializer):
+        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
+        serializer.save(user=self.request.user, hotel=hotel)
 
     @swagger_auto_schema(
         operation_summary="ایجاد کامنت برای هتل",
-        operation_description="این API برای ارسال کامنت جدید به یک هتل استفاده می‌شود.",
-        tags=['comment-hotel'],
+        operation_description="ارسال کامنت جدید برای یک هتل مشخص با slug، فقط کاربران لاگین‌کرده مجاز هستند.",
+        tags=["comment-hotel"],
         request_body=CommentSerializer,
-        responses={201: CommentSerializer},
+        responses={201: CommentSerializer}
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
