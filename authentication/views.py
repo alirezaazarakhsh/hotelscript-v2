@@ -433,7 +433,7 @@ class NaturalProfileDetailAPIView(APIView):
 
 
 
-class JuridicalProfileDocumentListCreateAPIView(APIView):
+class JuridicalProfileDocumentAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
