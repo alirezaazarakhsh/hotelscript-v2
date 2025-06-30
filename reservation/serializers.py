@@ -298,11 +298,11 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
 
 
 
-
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
     points = CommentPointSerializer(many=True, read_only=True)
+    suggested_items = SuggestedCommentItemSerializer(many=True, read_only=True)
 
     strength_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -316,6 +316,12 @@ class CommentSerializer(serializers.ModelSerializer):
         write_only=True,
         source='weaknesses'
     )
+    suggested_item_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=SuggestedCommentItem.objects.all(),
+        write_only=True,
+        source='suggested_items'
+    )
 
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
@@ -328,8 +334,10 @@ class CommentSerializer(serializers.ModelSerializer):
             'stars',
             'strength_ids',
             'weakness_ids',
+            'suggested_item_ids',
             'strengths',
             'weaknesses',
+            'suggested_items',
             'points',
             'user',
             'hotel',
@@ -338,6 +346,7 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
         ref_name = 'CustomCommentSerializer'
+
 
 
 
