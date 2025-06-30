@@ -1358,6 +1358,8 @@ class CommentPointsAndSuggestionsView(APIView):
                                 properties={
                                     'id': openapi.Schema(type=openapi.TYPE_INTEGER),
                                     'title': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'is_positive': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                    'is_negative': openapi.Schema(type=openapi.TYPE_BOOLEAN),
                                 }
                             )
                         ),
@@ -1377,7 +1379,7 @@ class CommentPointsAndSuggestionsView(APIView):
         }
     )
     def get(self, request):
-        comment_point_items = CommentPointItem.objects.all().values('id', 'title')
+        comment_point_items = CommentPointItem.objects.all().values('id', 'title', 'is_positive', 'is_negative')
         suggested_comment_items = SuggestedCommentItem.objects.all().values('id', 'title')
 
         data = {
