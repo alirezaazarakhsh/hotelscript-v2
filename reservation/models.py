@@ -549,7 +549,6 @@ class Comment(models.Model):
             MinValueValidator(1),
             MaxValueValidator(5)
         ],
-        default=1,
         help_text=_('امتیاز باید بین ۱ تا ۵ باشد')
     )
 
