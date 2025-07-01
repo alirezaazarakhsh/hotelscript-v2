@@ -10,6 +10,7 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
+    RoomDatePrice,
     RoomFacilities,
     RoomService,
     HotelTag,
@@ -206,26 +207,26 @@ class RoomDateListSerializer(serializers.ModelSerializer):
     original_price = serializers.IntegerField(read_only=True)
 
     class Meta:
-        model = RoomDate
+        model = RoomDatePrice
         fields = [
-            'id', 'room', 'date', 'dateend', 'jalali_date', 'jalali_dateend',
+            'id', 'room', 'start_date', 'end_date', 'jalali_date', 'jalali_dateend',
             'original_price', 'discounted_price', 'extra_passenger_price',
-            'foreign_passenger_price', 'discount'
+            'foreign_passenger_price', 'discount_type', 'discount_value'
         ]
 
     def get_jalali_date(self, obj):
         try:
-            if isinstance(obj.date, jdatetime.date):
-                return obj.date.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=obj.date).strftime('%Y/%m/%d')
+            if isinstance(obj.start_date, jdatetime.date):
+                return obj.start_date.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=obj.start_date).strftime('%Y/%m/%d')
         except Exception:
             return 'تاریخ نامعتبر'
 
     def get_jalali_dateend(self, obj):
         try:
-            if isinstance(obj.dateend, jdatetime.date):
-                return obj.dateend.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=obj.dateend).strftime('%Y/%m/%d')
+            if isinstance(obj.end_date, jdatetime.date):
+                return obj.end_date.strftime('%Y/%m/%d')
+            return jdatetime.date.fromgregorian(date=obj.end_date).strftime('%Y/%m/%d')
         except Exception:
             return 'تاریخ نامعتبر'
 
