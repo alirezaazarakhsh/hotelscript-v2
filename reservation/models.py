@@ -14,13 +14,11 @@ from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 
-
-
 # 🛠️ Django Model Fields و Expressions
 from django.db.models import (
     Q, F, Count, Case, When,
     ExpressionWrapper, PositiveBigIntegerField,
-    OuterRef, Subquery, IntegerField
+    OuterRef, Subquery, IntegerField, CheckConstraint
 )
 from django.db.models.functions import Coalesce
 
@@ -31,6 +29,7 @@ from django.contrib.postgres.fields import ArrayField
 from django_jalali.db import models as jmodels
 
 # 🧩 برنامه‌های داخلی پروژه
+from config.models import UserLevel
 from icons.models import IconShortcut
 from authentication.models import BaseUser
 from authentication.validators import (
@@ -38,6 +37,14 @@ from authentication.validators import (
     validate_national_code,
     validate_passport_code
 )
+
+# اگر RoomDate در همین فایل نیست و نیاز است ایمپورت شود:
+try:
+    from reservation.models import RoomDate
+except ImportError:
+    RoomDate = None  # یا حذف کنید و در تعریف فیلدها از 'reservation.RoomDate' به صورت رشته استفاده کنید
+
+
 
 
 
@@ -675,203 +682,165 @@ class RoomService(models.Model):
 #مدل اتاق ها 
 class Room(models.Model):
     hotel = models.ForeignKey(
-        Hotel,
+        'Hotel',
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='rooms',
     )
     title = models.CharField(
-        verbose_name=_('عنوان'),
+        verbose_name=_('نام اتاق'),
         max_length=256,
     )
     description = models.TextField(
-        verbose_name=_('توضیحات'),
+        verbose_name=_('توضیحات در مورد اتاق'),
         blank=True,
         default='',
     )
-    capacity = models.PositiveSmallIntegerField(
-        verbose_name=_('ظرفیت'),
+    inventory = models.PositiveIntegerField(
+        verbose_name=_('موجودی اتاق'),
+        help_text=_('تعداد کل اتاق‌های قابل رزرو'),
     )
-    extra_capacity = models.PositiveSmallIntegerField(
-        verbose_name=_('ظرفیت اضافه'),
+    count = models.PositiveIntegerField(
+        verbose_name=_('تعداد رزرو نیازمند تایید ادمین'),
+        help_text=_('تعداد رزروهایی که باید تایید ادمین داشته باشند'),
     )
-    
+    auto_approved_count = models.PositiveIntegerField(
+        verbose_name=_('تعداد رزرو بدون تایید ادمین'),
+        help_text=_('تعداد رزروهایی که بدون تایید ادمین تایید می‌شوند'),
+    )
     customer_club_points = models.PositiveIntegerField(
         verbose_name=_('امتیاز باشگاه مشتریان'),
     )
     services = models.ManyToManyField(
-        RoomService,
+        'RoomService',
         verbose_name=_('خدمات'),
         related_name='rooms',
-    )
-    count = models.PositiveSmallIntegerField(
-        verbose_name=_('تعداد'),
-    )
-    auto_approved_count = models.PositiveSmallIntegerField(
-        verbose_name=_('تعداد بدون تایید ادمین'),
+        blank=True,
     )
 
     class Meta:
         verbose_name = 'اتاق'
         verbose_name_plural = 'اتاق‌ها'
         constraints = [
-            models.CheckConstraint(
-                check=Q(auto_approved_count__lte=F('count')),
-                name='auto_approved_count_lte_count',
-            )
+            CheckConstraint(
+                check=Q(count__gte=0),
+                name='check_admin_approved_non_negative',
+            ),
+            CheckConstraint(
+                check=Q(auto_approved_count__gte=0),
+                name='check_auto_approved_non_negative',
+            ),
+            CheckConstraint(
+                check=Q(count__lte=F('inventory')),
+                name='count_lte_inventory',
+            ),
+            CheckConstraint(
+                check=Q(auto_approved_count__lte=F('inventory')),
+                name='auto_count_lte_inventory',
+            ),
         ]
+
+    def clean(self):
+        super().clean()
+        if (self.count + self.auto_approved_count) > self.inventory:
+            raise ValidationError({
+                'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
+                'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
+            })
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
     
     
     
-    
 
-# مدل تخفیف اتاق ها 
-class RoomDateDiscount(models.Model):
+# مدل بازه زمانی اتاق ها 
+class RoomDatePrice(models.Model):
     DISCOUNT_TYPES = (
         ('percentage', 'درصدی'),
         ('fixed', 'ثابت'),
     )
-    type = models.CharField(
-        verbose_name=_('نوع'),
-        max_length=16,
-        choices=DISCOUNT_TYPES,
-        default='percentage',
-    )
-    value = models.PositiveBigIntegerField(
-        verbose_name=_('مقدار تخفیف'),
-    )
-    maximum_value = models.PositiveBigIntegerField(
-        verbose_name=_('سقف تخفیف (به ریال)'),
-    )
-    start_date = models.DateTimeField(
-        verbose_name=_('زمان شروع تخفیف'),
-    )
-    end_date = models.DateTimeField(
-        verbose_name=_('زمان اتمام تخفیف'),
-    )
-    count = models.PositiveSmallIntegerField(
-        verbose_name=_('تعداد'),
-    )
 
-    class Meta:
-        verbose_name = 'تخفیف اتاق'
-        verbose_name_plural = 'تخفیف‌های اتاق'
-        constraints = [
-            models.CheckConstraint(
-                check=Q(start_date__lte=F('end_date')),
-                name='check_start_date_lte_end_date'
-            ),
-            models.CheckConstraint(
-                check=Q(type='percentage', value__lte=100) | ~Q(type='percentage'),
-                name='check_value_lte_100_if_percentage'
-            )
-        ]
-
-    def __str__(self):
-        if self.type == 'percentage':
-            return f'{self.value}% - {self.start_date}'
-        elif self.type == 'fixed':
-            return f'{self.value} ریال - {self.start_date}'
-        
-        
-        
-    
-#مدل بازه های زمانی اتاق ها
-class RoomDate(models.Model):
     room = models.ForeignKey(
         'Room',
         on_delete=models.CASCADE,
         verbose_name=_('اتاق'),
-        related_name='dates',
+        related_name='date_prices',
     )
-    date = jmodels.jDateField(verbose_name=_('تاریخ شروع'))
-    dateend = jmodels.jDateField(verbose_name=_('تاریخ پایان'))
 
-    price = models.PositiveBigIntegerField(verbose_name=_('قیمت (تومان)'))
+    user_level = models.ForeignKey(
+        UserLevel,
+        on_delete=models.CASCADE,
+        verbose_name=_('سطح کاربری'),
+        related_name='room_date_prices',
+        help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود')
+    )
+
+    start_date = jmodels.jDateField(verbose_name=_('تاریخ شروع بازه'))
+    end_date = jmodels.jDateField(verbose_name=_('تاریخ پایان بازه'))
+
+    price = models.PositiveBigIntegerField(verbose_name=_('قیمت هر شب (تومان)'))
     extra_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت نفر اضافه (تومان)'))
     foreign_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت مسافر خارجی (تومان)'))
 
-    discount = models.ForeignKey(
-        'RoomDateDiscount',
-        on_delete=models.CASCADE,
-        verbose_name=_('تخفیف'),
-        related_name='room_dates',
+    discount_type = models.CharField(
+        verbose_name=_('نوع تخفیف'),
+        max_length=16,
+        choices=DISCOUNT_TYPES,
+        default='none',
+    )
+
+    discount_value = models.PositiveIntegerField(
+        verbose_name=_('مقدار تخفیف'),
+        help_text=_('در صورت درصدی بودن، عدد بین 1 تا 100؛ در صورت ثابت بودن، مبلغ به تومان'),
+        default=0,
+    )
+
+    discount_start = jmodels.jDateField(
+        verbose_name=_('شروع تخفیف'),
         null=True,
         blank=True,
     )
 
-    def jalali_date(self):
-        try:
-            if isinstance(self.date, jdatetime.date):
-                return self.date.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=self.date).strftime('%Y/%m/%d')
-        except Exception:
-            return 'تاریخ نامعتبر'
-    jalali_date.short_description = _('تاریخ شروع شمسی')
+    discount_end = jmodels.jDateField(
+        verbose_name=_('پایان تخفیف'),
+        null=True,
+        blank=True,
+    )
 
-    def jalali_dateend(self):
-        try:
-            if isinstance(self.dateend, jdatetime.date):
-                return self.dateend.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=self.dateend).strftime('%Y/%m/%d')
-        except Exception:
-            return 'تاریخ نامعتبر'
-    jalali_dateend.short_description = _('تاریخ پایان شمسی')
-
-    @classmethod
-    def get_occupied_statuses_count_expression(cls):
-        Reservation = apps.get_model('reservation', 'Reservation')  # تغییر به Reservation
-        booked_count_subquery = Reservation.objects.filter(
-            room_dates=OuterRef('pk'),  # توجه: چون در مدل Reservation، فیلد room_dates است (ManyToMany)
-            status='approved'  # یا هر وضعیتی که مد نظرتان است
-        ).values('room_dates').annotate(
-            c=Count('uuid')
-        ).values('c')
-
-        return ExpressionWrapper(
-            Coalesce(Subquery(booked_count_subquery, output_field=IntegerField()), 0),
-            output_field=IntegerField()
-        )
-        
-    @classmethod
-    def get_discount_count_expression(cls):
-        return Coalesce(
-            Case(
-                When(discount__isnull=False, then=1),
-                default=0,
-                output_field=IntegerField(),
-            ),
-            0
-        )
-
-    @classmethod
-    def get_discounted_price_expression(cls):
-        return ExpressionWrapper(
-            F('price') - (F('price') * F('discount__percent') / 100),
-            output_field=PositiveBigIntegerField()
-        )
-
-    def __str__(self):
-        return f'{self.room} - {self.jalali_date()}'
+    is_fixed_discount_one_time = models.BooleanField(
+        verbose_name=_('تخفیف اولین خرید'),
+        default=False,
+    )
 
     class Meta:
-        verbose_name = _('بازه زمانی')
-        verbose_name_plural = _('بازه زمانی اتاق‌ها')
+        verbose_name = _('قیمت اتاق بر اساس سطح و بازه')
+        verbose_name_plural = _('بازه زمانی اتاقها')
+        ordering = ['room', 'start_date', 'user_level']
         constraints = [
             models.UniqueConstraint(
-                fields=['room', 'date'],
-                name='unique_room_date',
+                fields=['room', 'start_date', 'end_date', 'user_level'],
+                name='unique_room_date_user_level'
+            ),
+            models.CheckConstraint(
+                check=models.Q(start_date__lte=models.F('end_date')),
+                name='check_start_date_before_end_date',
+            ),
+            models.CheckConstraint(
+                check=models.Q(discount_type='percentage', discount_value__lte=100) | ~models.Q(discount_type='percentage'),
+                name='check_percentage_discount_max_100'
             )
         ]
-        ordering = ['room', 'date']
-    
+
+    def __str__(self):
+        return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
+
+
+
 
 class ClosedDate(models.Model):
     room_date = models.ForeignKey(
-        'RoomDate',
+        'RoomDatePrice',
         on_delete=models.CASCADE,
         related_name='closed_dates',
         verbose_name=_('بازه زمانی اتاق')
@@ -965,6 +934,7 @@ class Reservation(models.Model):
         ('success', 'موفق'),
         ('expired', 'منقضی شده'),
     )
+
     def ten_minutes_from_now():
         return timezone.now() + timedelta(minutes=10)
 
@@ -975,23 +945,23 @@ class Reservation(models.Model):
         editable=False,
     )
     user = models.ForeignKey(
-        BaseUser,
+        'authentication.BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
         related_name='reservations',
     )
     room_dates = models.ManyToManyField(
-        RoomDate,
+        'reservation.RoomDatePrice',
         verbose_name=_('تاریخ اتاق'),
         related_name='reservations',
     )
     passengers = models.ManyToManyField(
-        Passenger,
+        'reservation.Passenger',
         verbose_name=_('مسافران'),
         related_name='reservations',
     )
     extra_passengers = models.ManyToManyField(
-        Passenger,
+        'reservation.Passenger',
         verbose_name=_('مسافران اضافه'),
         blank=True,
     )
@@ -1011,7 +981,6 @@ class Reservation(models.Model):
     )
     expired_date = models.DateTimeField(
         verbose_name=_('تاریخ انقضا'),
-        # TODO: read from approve time config
         default=ten_minutes_from_now,
     )
     additional_details = models.TextField(
@@ -1021,9 +990,11 @@ class Reservation(models.Model):
     )
     has_check_in_half_day_charge = models.BooleanField(
         verbose_name=_('نیم شارژ ورود'),
+        default=False,
     )
     has_check_out_half_day_charge = models.BooleanField(
         verbose_name=_('نیم شارژ خروج'),
+        default=False,
     )
     created = models.DateTimeField(
         verbose_name=_('تاریخ ایجاد'),
@@ -1037,59 +1008,65 @@ class Reservation(models.Model):
     @cached_property
     def first_night_room_dates(self):
         room_dates = self.room_dates.all()
-        first_night = min(map(lambda room_date: room_date.date, room_dates))
-        return filter(lambda room_date: room_date.date == first_night, room_dates)
+        if not room_dates:
+            return []
+        first_night = min(room_date.start_date for room_date in room_dates)
+        return [rd for rd in room_dates if rd.start_date == first_night]
 
     @cached_property
     def last_night_room_dates(self):
         room_dates = self.room_dates.all()
-        last_night = max(map(lambda room_date: room_date.date, room_dates))
-        return filter(lambda room_date: room_date.date == last_night, room_dates)
+        if not room_dates:
+            return []
+        last_night = max(room_date.end_date for room_date in room_dates)
+        return [rd for rd in room_dates if rd.end_date == last_night]
 
     @cached_property
     def price(self):
         total_price = 0
-
+        first_passenger = self.passengers.first()
         for room_date in self.room_dates.all():
-            total_price += room_date.final_price
-            if self.passengers.first().is_foreign:
+            total_price += room_date.price  # توجه کن که باید در مدل RoomDatePrice فیلد price داشته باشی
+            if first_passenger and first_passenger.is_foreign:
                 total_price += room_date.foreign_passenger_price
 
         for passenger in self.extra_passengers.all():
+            # توجه کن این خط ممکنه نیاز باشه فیلد extra_passenger_price از کدام room_date محاسبه شود
+            # الان برای همه مسافران اضافه فقط یک room_date آخر استفاده می‌کند که شاید درست نباشد.
+            # بهتر است منطق دقیقتر براساس نیاز خودت پیاده کنی
             total_price += room_date.extra_passenger_price
-        
+
         if self.has_check_in_half_day_charge:
             for room_date in self.first_night_room_dates:
-                total_price += room_date.final_price / 2
-        
+                total_price += room_date.price / 2
+
         if self.has_check_out_half_day_charge:
             for room_date in self.last_night_room_dates:
-                total_price += room_date.final_price / 2
-        
+                total_price += room_date.price / 2
+
         return total_price
     
     def clean(self):
-        passengers = self.passengers.all()
-        
+        passengers = list(self.passengers.all())
+
         if passengers:
             first_status = passengers[0].is_foreign
             if any(passenger.is_foreign != first_status for passenger in passengers):
-                raise ValidationError('همه مسافران باید ایرانی یا همه مسافران باید خارجی باشند.')
+                raise ValidationError(_('همه مسافران باید ایرانی یا همه مسافران باید خارجی باشند.'))
 
         for room_date in self.room_dates.all():
             room = room_date.room
             if self.passengers.count() > room.capacity:
-                raise ValidationError(f'تعداد مسافران اصلی اتاق {room} نمی‌تواند بیشتر از {room.capacity} باشد.')
+                raise ValidationError(_(f'تعداد مسافران اصلی اتاق {room} نمی‌تواند بیشتر از {room.capacity} باشد.'))
             if self.extra_passengers.count() > room.extra_capacity:
-                raise ValidationError(f'تعداد نفرات اضافه اتاق {room} نمی‌تواند بیشتر از {room.extra_capacity} باشد.')
+                raise ValidationError(_(f'تعداد نفرات اضافه اتاق {room} نمی‌تواند بیشتر از {room.extra_capacity} باشد.'))
 
     class Meta:
-        verbose_name = 'رزرواسیون'
-        verbose_name_plural = 'رزرواسیون‌ها'
+        verbose_name = _('رزرواسیون')
+        verbose_name_plural = _('رزرواسیون‌ها')
 
     def __str__(self):
-        return f'{self.uuid}'
-
+        return str(self.uuid)
 
 
 # مدل لوگو های هتل در صفحه اصلی 

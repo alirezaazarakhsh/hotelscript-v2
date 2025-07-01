@@ -3,6 +3,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from reservation.forms import BestHotelsAdminForm, CityAdminForm,  HotelAdminForm
+from django.utils.translation import gettext_lazy as _
 from .models import (
     BestHotels,
     ClosedDate,
@@ -11,6 +12,7 @@ from .models import (
     HotelType,
     HotelTag,
     Facilities,
+    RoomDatePrice,
     RoomFacilities,
     Hotel,
     HotelGallery,
@@ -22,8 +24,6 @@ from .models import (
     CommentPointItem,
     RoomService,
     Room,
-    RoomDateDiscount,
-    RoomDate,
     Passenger,
     Reservation,
     SuggestedCommentItem,
@@ -353,56 +353,97 @@ class RoomServiceAdmin(admin.ModelAdmin):
         'title',
     )
 
+class RoomDateInline(admin.TabularInline):
+    model = RoomDatePrice
+    extra = 1
+    fields = (
+        'user_level',
+        'start_date',
+        'end_date',
+        'price',
+        'extra_passenger_price',
+        'foreign_passenger_price',
+        'discount_type',
+        'discount_value',
+        'discount_start',
+        'discount_end',
+        'is_fixed_discount_one_time',
+    )
+    ordering = ('start_date',)
+
+
+
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'hotel',
         'title',
-        'capacity',
-        'extra_capacity',
         'customer_club_points',
+        'inventory',
         'count',
         'auto_approved_count',
     )
-    search_fields = (
-        'title',
-    )
+    search_fields = ('title',)
+    autocomplete_fields = ('hotel',)
+    inlines = [RoomDateInline]
 
-@admin.register(RoomDateDiscount)
-class RoomDateDiscountAdmin(admin.ModelAdmin):
+
+
+
+@admin.register(RoomDatePrice)
+class RoomDatePriceAdmin(admin.ModelAdmin):
     list_display = (
-        'id',
-        'type',
-        'value',
-        'maximum_value',
+        'room',
+        'user_level',
         'start_date',
         'end_date',
-        'count',
-    )
-
-
-class ClosedDateInline(admin.TabularInline):
-    model = ClosedDate
-    extra = 1
-
-@admin.register(RoomDate)
-class RoomDateAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'room',
-        'jalali_date',
-        'jalali_dateend',
         'price',
-        'extra_passenger_price',
-        'foreign_passenger_price',
-        'discount',
+        'discount_type',
+        'discount_value',
+        'discount_start',
+        'discount_end',
+        'is_fixed_discount_one_time',
+    )
+    list_filter = (
+        'room',
+        'user_level',
+        'discount_type',
+        'is_fixed_discount_one_time',
     )
     search_fields = (
         'room__title',
-        'date',
+        'user_level__title',
     )
-    inlines = [ClosedDateInline]  # اضافه کردن اینلاین اینجا
+    autocomplete_fields = ('room', 'user_level')
+    ordering = ('room', 'start_date', 'user_level')
+    fieldsets = (
+        (_('اطلاعات بازه و اتاق'), {
+            'fields': (
+                'room',
+                'user_level',
+                'start_date',
+                'end_date',
+            )
+        }),
+        (_('قیمت‌گذاری'), {
+            'fields': (
+                'price',
+                'extra_passenger_price',
+                'foreign_passenger_price',
+            )
+        }),
+        (_('تخفیف'), {
+            'fields': (
+                'discount_type',
+                'discount_value',
+                'discount_start',
+                'discount_end',
+                'is_fixed_discount_one_time',
+            )
+        }),
+    )
+    
     
 
 
