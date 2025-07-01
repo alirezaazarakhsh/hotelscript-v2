@@ -757,6 +757,7 @@ class Room(models.Model):
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
     DISCOUNT_TYPES = (
+        ('none', 'بدون تخفیف'),
         ('percentage', 'درصدی'),
         ('fixed', 'ثابت'),
     )
@@ -773,27 +774,51 @@ class RoomDatePrice(models.Model):
         on_delete=models.CASCADE,
         verbose_name=_('سطح کاربری'),
         related_name='room_date_prices',
-        help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود')
+        help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود'),
+        blank=True,
+        null=True,  # اگر لازم باشد سطح کاربری هم اختیاری شود
     )
 
-    start_date = jmodels.jDateField(verbose_name=_('تاریخ شروع بازه'))
-    end_date = jmodels.jDateField(verbose_name=_('تاریخ پایان بازه'))
+    start_date = jmodels.jDateField(
+        verbose_name=_('تاریخ شروع بازه'),
+        null=False,
+        blank=False,
+    )
+    end_date = jmodels.jDateField(
+        verbose_name=_('تاریخ پایان بازه'),
+        null=False,
+        blank=False,
+    )
 
-    price = models.PositiveBigIntegerField(verbose_name=_('قیمت هر شب (تومان)'))
-    extra_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت نفر اضافه (تومان)'))
-    foreign_passenger_price = models.PositiveBigIntegerField(verbose_name=_('قیمت مسافر خارجی (تومان)'))
+    price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت هر شب (تومان)'),
+        null=False,
+        blank=False,
+    )
+    extra_passenger_price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت نفر اضافه (تومان)'),
+        null=False,
+        blank=False,
+    )
+    foreign_passenger_price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت مسافر خارجی (تومان)'),
+        null=True,
+        blank=True,
+    )
 
     discount_type = models.CharField(
         verbose_name=_('نوع تخفیف'),
         max_length=16,
         choices=DISCOUNT_TYPES,
         default='none',
+        blank=True,
     )
 
     discount_value = models.PositiveIntegerField(
         verbose_name=_('مقدار تخفیف'),
         help_text=_('در صورت درصدی بودن، عدد بین 1 تا 100؛ در صورت ثابت بودن، مبلغ به تومان'),
         default=0,
+        blank=True,
     )
 
     discount_start = jmodels.jDateField(
@@ -834,6 +859,7 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
+
 
 
 
