@@ -310,21 +310,24 @@ class CommentSerializer(serializers.ModelSerializer):
         queryset=CommentPointItem.objects.filter(is_positive=True),
         write_only=True,
         source='strengths',
-        required=True,
+        required=False,  # اختیاری
+        allow_empty=True,
     )
     weakness_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=CommentPointItem.objects.filter(is_negative=True),
         write_only=True,
         source='weaknesses',
-        required=True,
+        required=False,  # اختیاری
+        allow_empty=True,
     )
     suggested_item_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=SuggestedCommentItem.objects.all(),
         write_only=True,
         source='suggested_items',
-        required=False,
+        required=False,  # اختیاری
+        allow_empty=True,
     )
 
     user = serializers.StringRelatedField(read_only=True)
@@ -350,6 +353,15 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
         ref_name = 'CustomCommentSerializer'
+
+    def validate(self, data):
+        # اطمینان از اینکه text و stars ارسال شده اند
+        if not data.get('text'):
+            raise serializers.ValidationError({'text': 'این فیلد الزامی است.'})
+        if not data.get('stars'):
+            raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
+        return data
+
 
 
 
