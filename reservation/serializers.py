@@ -299,6 +299,13 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
 
 
 
+class SuggestedItemWithRatingSerializer(serializers.Serializer):
+    id = serializers.PrimaryKeyRelatedField(
+        queryset=SuggestedCommentItem.objects.all(),
+        source='suggested_item'
+    )
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
@@ -310,7 +317,7 @@ class CommentSerializer(serializers.ModelSerializer):
         queryset=CommentPointItem.objects.filter(is_positive=True),
         write_only=True,
         source='strengths',
-        required=False,  # اختیاری
+        required=False,
         allow_empty=True,
     )
     weakness_ids = serializers.PrimaryKeyRelatedField(
@@ -318,16 +325,16 @@ class CommentSerializer(serializers.ModelSerializer):
         queryset=CommentPointItem.objects.filter(is_negative=True),
         write_only=True,
         source='weaknesses',
-        required=False,  # اختیاری
+        required=False,
         allow_empty=True,
     )
-    suggested_item_ids = serializers.PrimaryKeyRelatedField(
+    
+    # اینجا ورودی سفارشی برای suggested_items با امتیاز:
+    suggested_items_with_rating = SuggestedItemWithRatingSerializer(
         many=True,
-        queryset=SuggestedCommentItem.objects.all(),
         write_only=True,
-        source='suggested_items',
-        required=False,  # اختیاری
-        allow_empty=True,
+        required=False,
+        source='suggested_items_custom'
     )
 
     user = serializers.StringRelatedField(read_only=True)
@@ -341,7 +348,7 @@ class CommentSerializer(serializers.ModelSerializer):
             'stars',
             'strength_ids',
             'weakness_ids',
-            'suggested_item_ids',
+            'suggested_items_with_rating',
             'strengths',
             'weaknesses',
             'suggested_items',
@@ -354,8 +361,28 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
         ref_name = 'CustomCommentSerializer'
 
+    def create(self, validated_data):
+        # ابتدا داده مربوط به suggested_items_with_rating را جدا می‌کنیم
+        suggested_items_data = validated_data.pop('suggested_items_custom', [])
+        
+        # ابتدا کامنت اصلی را می‌سازیم
+        comment = super().create(validated_data)
+        
+        # فقط شناسه‌ها را برای ذخیره ManyToMany می‌گیریم، امتیازها ذخیره نمی‌شوند
+        suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
+        comment.suggested_items.set(suggested_item_ids)
+
+        # اینجا می‌توانید امتیازها را لاگ کنید یا به شکل دلخواه استفاده کنید
+        # مثلا print یا ذخیره جداگانه در جای دیگر
+        for item in suggested_items_data:
+            suggested_item = item['suggested_item']
+            rating = item['rating']
+            # فعلاً ذخیره‌ای انجام نمی‌دهیم؛ اگر خواستید ذخیره کنید باید مدل را تغییر دهید
+            print(f"SuggestedItem: {suggested_item}, Rating: {rating}")
+
+        return comment
+
     def validate(self, data):
-        # اطمینان از اینکه text و stars ارسال شده اند
         if not data.get('text'):
             raise serializers.ValidationError({'text': 'این فیلد الزامی است.'})
         if not data.get('stars'):
