@@ -150,17 +150,18 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
 # -----------------------------
 class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     id = serializers.ReadOnlyField()
-    file = serializers.SerializerMethodField()
+    file = serializers.FileField(write_only=True)
+    file_url = serializers.SerializerMethodField(read_only=True)
     profile = serializers.PrimaryKeyRelatedField(
-        read_only=True,  # کاربر نمی‌تونه profile بفرسته
+        read_only=True,  
         label='پروفایل حقوقی'
     )
 
     class Meta:
         model = JuridicalProfileDocument
-        fields = ['id', 'file', 'profile']
+        fields = ['id', 'file', 'file_url', 'profile']
 
-    def get_file(self, obj):
+    def get_file_url(self, obj):
         if not obj.file:
             return None
 
