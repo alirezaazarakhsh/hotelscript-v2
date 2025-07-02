@@ -454,9 +454,10 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         responses={201: JuridicalProfileDocumentSerializer()}
     )
     def post(self, request):
-        # ابتدا چک می‌کنیم کاربر پروفایل حقوقی دارد یا خیر
+        # ابتدا چک می‌کنیم که کاربر پروفایل طبیعی دارد و سپس پروفایل حقوقی مرتبط را می‌گیریم
         try:
-            profile = request.user.juridical_profile
+            natural_profile = request.user.natural_profile
+            profile = natural_profile.juridical_profile
         except AttributeError:
             return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -464,7 +465,7 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         if 'file' not in request.FILES:
             return Response({'detail': 'فایل آپلود نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # چون فایل در request.FILES است، می‌خواهیم داده‌ها را ترکیب کنیم
+        # چون فایل در request.FILES است، داده‌ها را کپی کرده و فایل را جایگزین می‌کنیم
         data = request.data.copy()
         data['file'] = request.FILES['file']
 
@@ -473,6 +474,7 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
             serializer.save(profile=profile)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # 🧾 جزئیات، ویرایش و حذف
