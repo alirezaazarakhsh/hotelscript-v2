@@ -437,7 +437,7 @@ class NaturalProfileDetailAPIView(APIView):
 # 📄 لیست و ایجاد
 class JuridicalProfileDocumentListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]  # ✅ اضافه شده
+    parser_classes = [MultiPartParser, FormParser]
 
     @swagger_auto_schema(
         operation_summary="لیست مدارک پروفایل حقوقی",
@@ -452,21 +452,28 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="آپلود مدرک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        request_body=JuridicalProfileDocumentSerializer,  # در صورت نیاز میشه با یک فرم خاص override کرد
+        request_body=JuridicalProfileDocumentSerializer,
         responses={201: JuridicalProfileDocumentSerializer()}
     )
     def post(self, request):
+        # ✅ چاپ کردن فایل‌ها برای تست
+        print("request.FILES:", request.FILES)
+        print("request.data:", request.data)
+
+        # بررسی پروفایل حقوقی
         try:
             natural_profile = request.user.natural_profile
             profile = natural_profile.juridical_profile
         except AttributeError:
             return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if 'file' not in request.FILES:
+        # بررسی فایل
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
             return Response({'detail': 'فایل آپلود نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
 
         data = request.data.copy()
-        data['file'] = request.FILES['file']
+        data['file'] = uploaded_file
 
         serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
         if serializer.is_valid():
