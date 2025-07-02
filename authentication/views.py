@@ -436,6 +436,7 @@ class NaturalProfileDetailAPIView(APIView):
 # 📄 لیست و ایجاد
 class JuridicalProfileDocumentListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  # ✅ اضافه شده
 
     @swagger_auto_schema(
         operation_summary="لیست مدارک پروفایل حقوقی",
@@ -450,22 +451,19 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="آپلود مدرک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        request_body=JuridicalProfileDocumentSerializer,
+        request_body=JuridicalProfileDocumentSerializer,  # در صورت نیاز میشه با یک فرم خاص override کرد
         responses={201: JuridicalProfileDocumentSerializer()}
     )
     def post(self, request):
-        # ابتدا چک می‌کنیم که کاربر پروفایل طبیعی دارد و سپس پروفایل حقوقی مرتبط را می‌گیریم
         try:
             natural_profile = request.user.natural_profile
             profile = natural_profile.juridical_profile
         except AttributeError:
             return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # چک می‌کنیم فایل در درخواست هست یا خیر
         if 'file' not in request.FILES:
             return Response({'detail': 'فایل آپلود نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # چون فایل در request.FILES است، داده‌ها را کپی کرده و فایل را جایگزین می‌کنیم
         data = request.data.copy()
         data['file'] = request.FILES['file']
 
