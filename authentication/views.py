@@ -433,7 +433,8 @@ class NaturalProfileDetailAPIView(APIView):
 
 
 
-class JuridicalProfileDocumentAPIView(APIView):
+# 📄 لیست و ایجاد
+class JuridicalProfileDocumentListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
@@ -450,10 +451,7 @@ class JuridicalProfileDocumentAPIView(APIView):
         operation_summary="آپلود مدرک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={
-            201: JuridicalProfileDocumentSerializer(),
-            400: 'درخواست نامعتبر است.'
-        }
+        responses={201: JuridicalProfileDocumentSerializer()}
     )
     def post(self, request):
         try:
@@ -463,15 +461,20 @@ class JuridicalProfileDocumentAPIView(APIView):
 
         serializer = JuridicalProfileDocumentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(profile=profile)  # اتصال خودکار پروفایل
+            serializer.save(profile=profile)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# 🧾 جزئیات، ویرایش و حذف
+class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ویرایش مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={200: JuridicalProfileDocumentSerializer(), 404: 'مدرک یافت نشد'}
+        responses={200: JuridicalProfileDocumentSerializer()}
     )
     def put(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)
@@ -484,7 +487,7 @@ class JuridicalProfileDocumentAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="حذف مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        responses={204: 'مدرک حذف شد', 404: 'مدرک یافت نشد'}
+        responses={204: 'مدرک حذف شد'}
     )
     def delete(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)

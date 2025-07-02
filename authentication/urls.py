@@ -12,16 +12,14 @@ urlpatterns = [
     path('token/', views.TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', views.TokenRefreshView.as_view(), name='token_refresh'),
 
-    # پروفایل‌های حقیقی
+    # پروفایل‌ها
     path('natural-profiles/', views.NaturalProfileListCreateAPIView.as_view(), name='natural_profile_list_create'),
     path('natural-profiles/me/', views.NaturalProfileDetailAPIView.as_view(), name='natural_profile_me'),
 
-    # پروفایل‌های حقوقی
     path('juridical-profiles/', views.JuridicalProfileListCreateAPIView.as_view(), name='juridical_profile_list_create'),
     path('juridical-profiles/me/', views.JuridicalProfileDetailAPIView.as_view(), name='juridical_profile_me'),
 
-    path('juridical-profile-documents/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document_list_create'),
-    path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentAPIView.as_view(), name='juridical_profile_document_detail'),
-
-
+    # مدارک پروفایل حقوقی
+    path('juridical-profile-documents/', views.JuridicalProfileDocumentListCreateAPIView.as_view(), name='juridical_profile_document_list_create'),
+    path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentRetrieveUpdateDestroyAPIView.as_view(), name='juridical_profile_document_detail'),
 ]
