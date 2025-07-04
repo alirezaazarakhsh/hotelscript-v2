@@ -862,7 +862,7 @@ class RoomDatePrice(models.Model):
 
 
 
-
+#مدل بستن یه روز از بازه خواستی 
 class ClosedDate(models.Model):
     room_date = models.ForeignKey(
         'RoomDatePrice',
@@ -870,25 +870,53 @@ class ClosedDate(models.Model):
         related_name='closed_dates',
         verbose_name=_('بازه زمانی اتاق')
     )
-    date = jmodels.jDateField(verbose_name=_('تاریخ بسته شده'))  # تاریخ بسته شده به شمسی
-    reason = models.CharField(max_length=255, verbose_name=_('علت بسته بودن'), blank=True, null=True)
+
+    date = jmodels.jDateField(verbose_name=_('تاریخ بسته شده'))
+
+    user_level = models.ForeignKey(
+        'config.UserLevel',  # ← اصلاح شده: مسیر درست به مدل UserLevel در اپ config
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name=_('سطح کاربری'),
+        help_text=_('اگر انتخاب شود، فقط برای این سطح کاربر غیرفعال است')
+    )
+
+    reason = models.CharField(
+        max_length=255,
+        verbose_name=_('علت بسته بودن'),
+        blank=True,
+        null=True
+    )
 
     class Meta:
-        verbose_name = _('تاریخ بسته شده')
-        verbose_name_plural = _('تاریخ‌های بسته شده')
-        unique_together = ('room_date', 'date')
+        verbose_name = _('تاریخ بستن بازه')
+        verbose_name_plural = _('تاریخ‌های بستن بازه ')
+        unique_together = ('room_date', 'date', 'user_level')
         ordering = ['date']
 
     def __str__(self):
-        try:
-            if isinstance(self.date, jdatetime.date):
-                persian_date = self.date
-            else:
-                persian_date = jdatetime.date.fromgregorian(date=self.date)
-            return f'{self.room_date} - {persian_date.strftime("%Y/%m/%d")}'
-        except Exception:
-            return f'{self.room_date} - تاریخ نامعتبر'
+        return f'{self.room_date} - {self.date} - {self.user_level or "همه سطوح"}'
+
+
     
+
+#مدت زمان تایید رزرو 
+class ReservationApprovalDuration(models.Model):
+    duration_minutes = models.PositiveIntegerField(
+        verbose_name=_('مدت زمان تایید رزرو (دقیقه)'),
+        help_text=_('مدت زمانی که برای تایید رزرو توسط ادمین اختصاص داده شده است. برحسب دقیقه.'),
+        default=5,
+    )
+
+    class Meta:
+        verbose_name = _('مدت زمان تایید رزرو')
+        verbose_name_plural = _('مدت زمان‌های تایید رزرو')
+
+    def __str__(self):
+        return f'{self.duration_minutes} دقیقه'
+    
+
     
     
 #مدل مسافران اشخاص در هتل 

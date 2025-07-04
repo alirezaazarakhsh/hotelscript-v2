@@ -72,6 +72,9 @@ INSTALLED_APPS = [
     'icons',
     'setting_sms',
     'notification',
+
+    # اضافه‌شده برای Channels
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -108,6 +111,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'safarname24.wsgi.application'
+
+# اضافه‌شده برای Channels
+ASGI_APPLICATION = 'safarname24.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 DATABASES = {
     'default': {

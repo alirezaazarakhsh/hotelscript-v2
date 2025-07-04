@@ -1,17 +1,17 @@
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from reservation.forms import BestHotelsAdminForm, CityAdminForm,  HotelAdminForm
 from django.utils.translation import gettext_lazy as _
+from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
-    ClosedDate,
+    ClosedDate,  # 🔥 اضافه شده
     Province,
     City,
     HotelType,
     HotelTag,
     Facilities,
+    ReservationApprovalDuration,
     RoomDatePrice,
     RoomFacilities,
     Hotel,
@@ -29,7 +29,7 @@ from .models import (
     SuggestedCommentItem,
 )
 
-# Register your models here.
+
 @admin.register(Province)
 class ProvinceAdmin(admin.ModelAdmin):
     list_display = (
@@ -42,9 +42,10 @@ class ProvinceAdmin(admin.ModelAdmin):
         'slug',
     )
 
+
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
-    form = CityAdminForm  
+    form = CityAdminForm
     list_display = (
         'id',
         'name',
@@ -58,6 +59,7 @@ class CityAdmin(admin.ModelAdmin):
         'slug',
     )
 
+
 @admin.register(HotelType)
 class HotelTypeAdmin(admin.ModelAdmin):
     list_display = (
@@ -67,6 +69,7 @@ class HotelTypeAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
     )
+
 
 @admin.register(HotelTag)
 class HotelTagAdmin(admin.ModelAdmin):
@@ -78,6 +81,7 @@ class HotelTagAdmin(admin.ModelAdmin):
         'title',
     )
 
+
 @admin.register(Facilities)
 class FacilitiesAdmin(admin.ModelAdmin):
     list_display = (
@@ -87,6 +91,7 @@ class FacilitiesAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
     )
+
 
 @admin.register(RoomFacilities)
 class RoomFacilitiesAdmin(admin.ModelAdmin):
@@ -99,7 +104,6 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     )
 
 
-
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
@@ -109,9 +113,9 @@ class HotelAdmin(admin.ModelAdmin):
         'slug',
         'city',
         'best_logo',
-        'logo_preview',  
-        'latitude',     
-        'longitude', 
+        'logo_preview',
+        'latitude',
+        'longitude',
         'stars',
         'type',
         'floors_count',
@@ -133,7 +137,7 @@ class HotelAdmin(admin.ModelAdmin):
         'image4',
         'address',
         'description',
-        'further_description',    
+        'further_description',
         'rules',
         'important_notes',
     )
@@ -161,15 +165,13 @@ class HotelAdmin(admin.ModelAdmin):
     def logo_preview(self, obj):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
-            '<div style="display:flex;align-items:center;">'
-            '<img src="{}" width="100" height="100" style="margin-right:8px; object-fit: contain;" />'
-            '</div>',
-            obj.best_logo.image_logo_hotel.url
-        )
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="100" height="100" style="margin-right:8px; object-fit: contain;" />'
+                '</div>',
+                obj.best_logo.image_logo_hotel.url
+            )
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
-    
-
 
 
 class HotelGalleryImageInline(admin.TabularInline):
@@ -181,7 +183,10 @@ class HotelGalleryImageInline(admin.TabularInline):
 
     def preview(self, obj):
         if obj.image:
-            return format_html('<img src="{}" width="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />', obj.image.url)
+            return format_html(
+                '<img src="{}" width="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />',
+                obj.image.url
+            )
         return "-"
     preview.short_description = 'پیش‌نمایش'
 
@@ -190,10 +195,8 @@ class HotelGalleryImageInline(admin.TabularInline):
 class HotelGalleryAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'hotel')
     search_fields = ('title', 'hotel__name')
-    autocomplete_fields = ['hotel']  # ✅ انتخاب هتل با قابلیت جستجو
+    autocomplete_fields = ['hotel']
     inlines = [HotelGalleryImageInline]
-    
-    
 
 
 @admin.register(NearbyPlace)
@@ -212,18 +215,19 @@ class NearbyPlaceAdmin(admin.ModelAdmin):
         'title',
     )
 
+
 @admin.register(HotelFAQ)
 class HotelFAQAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'question',
         'hotel',
-        'icon_preview',  # به جای 'icon' که فقط متن بود، نمایش تصویر گذاشتیم
+        'icon_preview',
     )
     search_fields = (
         'question',
-        'hotel__title',   # اگر می‌خوای سرچ روی نام هتل هم داشته باشی
-        'icon__title_icon',  # سرچ روی عنوان آیکون هم اضافه کردم
+        'hotel__title',
+        'icon__title_icon',
     )
     autocomplete_fields = ('hotel', 'icon',)
     readonly_fields = ('icon_preview',)
@@ -270,7 +274,7 @@ class CommentAdmin(admin.ModelAdmin):
         'show_strengths',
         'show_weaknesses',
         'stars',
-        'is_approved',  
+        'is_approved',
         'created_jalali',
     )
     search_fields = (
@@ -282,9 +286,9 @@ class CommentAdmin(admin.ModelAdmin):
         'is_approved',
         'stars',
     )
-    autocomplete_fields = ['user', 'hotel', 'suggested_items']  # ✅ اضافه شده برای نمایش درست
-    exclude = ['suggested_items']  # ✅ جلوگیری از نمایش تکراری پیش‌فرض
-    inlines = [CommentPointInline]  # ✅ اینلاین معیارهای امتیاز
+    autocomplete_fields = ['user', 'hotel', 'suggested_items']
+    exclude = ['suggested_items']
+    inlines = [CommentPointInline]
 
     def show_strengths(self, obj):
         qs = obj.strengths.all()
@@ -313,6 +317,7 @@ class CommentAdmin(admin.ModelAdmin):
     created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
+
 @admin.register(CommentPointItem)
 class CommentPointItemAdmin(admin.ModelAdmin):
     list_display = (
@@ -323,24 +328,11 @@ class CommentPointItemAdmin(admin.ModelAdmin):
         'title',
     )
 
-# @admin.register(CommentPoint)
-# class CommentPointAdmin(admin.ModelAdmin):
-#     list_display = (
-#         'id',
-#         'comment',
-#         'comment_point_item',
-#         'point',
-#     )
-#     search_fields = (
-#         'comment',
-#     )
-    
-    
+
 @admin.register(SuggestedCommentItem)
 class SuggestedCommentItemAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
     search_fields = ['title']
-
 
 
 @admin.register(RoomService)
@@ -352,6 +344,7 @@ class RoomServiceAdmin(admin.ModelAdmin):
     search_fields = (
         'title',
     )
+
 
 class RoomDateInline(admin.TabularInline):
     model = RoomDatePrice
@@ -372,6 +365,14 @@ class RoomDateInline(admin.TabularInline):
     ordering = ('start_date',)
 
 
+# 🔥 اضافه شده: Inline برای ClosedDate
+class ClosedDateInline(admin.TabularInline):
+    model = ClosedDate
+    extra = 1
+    fields = ('date', 'user_level', 'reason')
+    autocomplete_fields = ('user_level',)
+    ordering = ('date',)
+
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
@@ -387,8 +388,6 @@ class RoomAdmin(admin.ModelAdmin):
     search_fields = ('title',)
     autocomplete_fields = ('hotel',)
     inlines = [RoomDateInline]
-
-
 
 
 @admin.register(RoomDatePrice)
@@ -443,8 +442,16 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             )
         }),
     )
-    
-    
+    inlines = [ClosedDateInline]  # 🔥 اضافه شده: اضافه کردن اینلاین برای ClosedDate
+
+
+@admin.register(ClosedDate)
+class ClosedDateAdmin(admin.ModelAdmin):
+    list_display = ('room_date', 'date', 'user_level', 'reason')
+    list_filter = ('room_date', 'user_level')
+    search_fields = ('room_date__room__name',)
+    autocomplete_fields = ('room_date', 'user_level')
+    ordering = ('date',)
 
 
 @admin.register(Passenger)
@@ -464,6 +471,7 @@ class PassengerAdmin(admin.ModelAdmin):
         'phone_number',
     )
 
+
 @admin.register(Reservation)
 class ReservationAdmin(admin.ModelAdmin):
     list_display = (
@@ -479,9 +487,8 @@ class ReservationAdmin(admin.ModelAdmin):
     list_filter = (
         'status',
     )
-    
-    
-    
+
+
 @admin.register(BestHotels)
 class BestHotelsAdmin(admin.ModelAdmin):
     form = BestHotelsAdminForm
@@ -496,3 +503,19 @@ class BestHotelsAdmin(admin.ModelAdmin):
     list_filter = (
         'order',
     )
+
+
+
+
+@admin.register(ReservationApprovalDuration)
+class ReservationApprovalDurationAdmin(admin.ModelAdmin):
+    list_display = ('duration_minutes',)
+    search_fields = ('duration_minutes',)
+    fields = ('duration_minutes',)
+    ordering = ('duration_minutes',)
+
+    def has_add_permission(self, request):
+        count = ReservationApprovalDuration.objects.count()
+        if count >= 1:
+            return False
+        return True

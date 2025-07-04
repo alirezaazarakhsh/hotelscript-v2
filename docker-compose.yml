@@ -7,7 +7,7 @@ services:
     command: bash /app/start.sh && python /app/manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
-      - /var/hotelscript-v2/media:/app/media  # <-- bind mount به فولدر واقعی روی سرور
+      - /var/hotelscript-v2/media:/app/media
     ports:
       - "8000:8000"
     environment:
@@ -21,8 +21,11 @@ services:
       DB_PORT: "5432"
       ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,91.107.134.107"
       CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       - db
+      - redis
     networks:
       - app_network
 
@@ -53,8 +56,20 @@ services:
     networks:
       - app_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:
