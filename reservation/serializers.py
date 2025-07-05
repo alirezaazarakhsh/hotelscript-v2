@@ -442,6 +442,8 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
 
 
 class RoomSerializer(serializers.ModelSerializer):
+    services = RoomServiceSerializer(many=True, read_only=True)
+
     class Meta:
         model = Room
         fields = [
