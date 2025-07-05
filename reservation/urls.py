@@ -57,5 +57,8 @@ urlpatterns = [
     path('hotels/comments/points-and-suggestions/', CommentPointsAndSuggestionsView.as_view(), name='comment-points-and-suggestions'),
 
 
+# ==== Room Info ====
+path('hotels/<slug:slug>/rooms/', views.CreateRoomView.as_view(), name='hotel-room-create'),
+
 
 ]

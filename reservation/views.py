@@ -80,6 +80,7 @@ from .serializers import (
     HotelTagSerializer,
     HotelTypeSerializer,
     RoomFacilitiesSerializer,
+    RoomSerializer,
     RoomServiceSerializer,
     HotelFAQListSerializer,
     NearbyPlaceListSerializer,
@@ -377,6 +378,51 @@ class RoomServiceListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
+# ای پی ای اتاق ها بر اساس اسلاگ 
+class CreateRoomView(ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = RoomSerializer
+
+    # فقط اتاق‌های مربوط به هتل موردنظر را نشان می‌دهد
+    def get_queryset(self):
+        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
+        return Room.objects.filter(hotel=hotel).order_by('id')
+
+    # هنگام ساخت اتاق، هتل را از طریق slug ست می‌کنیم
+    def perform_create(self, serializer):
+        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
+        serializer.save(hotel=hotel)
+
+    @swagger_auto_schema(
+        operation_summary="ایجاد و لیست اتاق‌های یک هتل",
+        operation_description="لیست گرفتن از اتاق‌های یک هتل خاص و همچنین افزودن اتاق جدید. فقط برای کاربران احراز هویت‌شده.",
+        tags=["hotel-room"],
+        responses={
+            200: openapi.Response(
+                description="لیست اتاق‌ها",
+                schema=RoomSerializer(many=True)
+            ),
+            201: openapi.Response(
+                description="اتاق جدید با موفقیت ثبت شد",
+                schema=RoomSerializer
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="ایجاد اتاق جدید برای یک هتل",
+        request_body=RoomSerializer
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+
+
 
 
 

@@ -437,3 +437,22 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         if obj.created_jalali and " ساعت " in obj.created_jalali:
             return obj.created_jalali.split(" ساعت ")[1]
         return None
+
+
+
+
+class RoomSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Room
+        fields = [
+            'id',
+            'title',
+            'description',
+            'inventory',
+            'count',
+            'auto_approved_count',
+            'customer_club_points',
+            'services',
+        ]
+        read_only_fields = ['id']
+        ref_name = "RoomSerializer"
