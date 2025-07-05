@@ -381,50 +381,30 @@ class RoomServiceListView(ListAPIView):
 
 
 # ای پی ای اتاق ها بر اساس اسلاگ 
-class CreateRoomView(ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+class RoomDetailListByHotelSlugView(ListAPIView):
     serializer_class = RoomSerializer
+    permission_classes = [AllowAny]
 
-    # فقط اتاق‌های مربوط به هتل موردنظر را نشان می‌دهد
     def get_queryset(self):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         return Room.objects.filter(hotel=hotel).order_by('id')
 
-    # غیرفعال کردن pagination
     def paginate_queryset(self, queryset):
-        return None
-
-    # هنگام ساخت اتاق، هتل را از طریق slug ست می‌کنیم
-    def perform_create(self, serializer):
-        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
-        serializer.save(hotel=hotel)
+        return None  # حذف صفحه‌بندی
 
     @swagger_auto_schema(
-        operation_summary="ایجاد و لیست اتاق‌های یک هتل (بدون صفحه‌بندی)",
-        operation_description="لیست کامل اتاق‌های یک هتل خاص و همچنین افزودن اتاق جدید. فقط برای کاربران احراز هویت‌شده.",
+        operation_summary="لیست اتاق‌های یک هتل (با جزئیات کامل)",
+        operation_description="نمایش تمام اتاق‌های مربوط به یک هتل خاص بدون نیاز به احراز هویت، بدون صفحه‌بندی.",
         tags=["hotel-room"],
         responses={
             200: openapi.Response(
-                description="لیست اتاق‌ها (بدون صفحه‌بندی)",
+                description="لیست اتاق‌ها با جزئیات کامل",
                 schema=RoomSerializer(many=True)
-            ),
-            201: openapi.Response(
-                description="اتاق جدید با موفقیت ثبت شد",
-                schema=RoomSerializer
             )
         }
     )
     def get(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        operation_summary="ایجاد اتاق جدید برای یک هتل",
-        request_body=RoomSerializer
-    )
-    def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        return super().get(request, *args, **kwargs)
 
 
 
