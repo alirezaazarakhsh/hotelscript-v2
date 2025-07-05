@@ -384,6 +384,8 @@ class RoomServiceListView(ListAPIView):
 class RoomDetailListByHotelSlugView(ListAPIView):
     serializer_class = RoomSerializer
     permission_classes = [AllowAny]
+    pagination_class = None
+
 
     def get_queryset(self):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
