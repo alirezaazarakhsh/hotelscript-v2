@@ -685,30 +685,47 @@ class Room(models.Model):
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='rooms',
+        null=True,
+        blank=True,
     )
     title = models.CharField(
         verbose_name=_('نام اتاق'),
         max_length=256,
+        null=True,
+        blank=True,
     )
     description = models.TextField(
         verbose_name=_('توضیحات در مورد اتاق'),
         blank=True,
         default='',
+        null=True,
     )
     inventory = models.PositiveIntegerField(
         verbose_name=_('موجودی اتاق'),
         help_text=_('تعداد کل اتاق‌های قابل رزرو'),
+        default=0,
+        null=True,
+        blank=True,
     )
     count = models.PositiveIntegerField(
         verbose_name=_('تعداد رزرو نیازمند تایید ادمین'),
         help_text=_('تعداد رزروهایی که باید تایید ادمین داشته باشند'),
+        default=0,
+        null=True,
+        blank=True,
     )
     auto_approved_count = models.PositiveIntegerField(
         verbose_name=_('تعداد رزرو بدون تایید ادمین'),
         help_text=_('تعداد رزروهایی که بدون تایید ادمین تایید می‌شوند'),
+        default=0,
+        null=True,
+        blank=True,
     )
     customer_club_points = models.PositiveIntegerField(
         verbose_name=_('امتیاز باشگاه مشتریان'),
+        default=0,
+        null=True,
+        blank=True,
     )
     services = models.ManyToManyField(
         'RoomService',
@@ -741,14 +758,15 @@ class Room(models.Model):
 
     def clean(self):
         super().clean()
-        if (self.count + self.auto_approved_count) > self.inventory:
+        if (self.count or 0) + (self.auto_approved_count or 0) > (self.inventory or 0):
             raise ValidationError({
                 'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
                 'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
             })
 
     def __str__(self):
-        return f'{self.title} - {self.hotel}'
+        return f'{self.title} - {self.hotel}' if self.hotel else self.title
+
     
     
     
