@@ -390,18 +390,22 @@ class CreateRoomView(ListCreateAPIView):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         return Room.objects.filter(hotel=hotel).order_by('id')
 
+    # غیرفعال کردن pagination
+    def paginate_queryset(self, queryset):
+        return None
+
     # هنگام ساخت اتاق، هتل را از طریق slug ست می‌کنیم
     def perform_create(self, serializer):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         serializer.save(hotel=hotel)
 
     @swagger_auto_schema(
-        operation_summary="ایجاد و لیست اتاق‌های یک هتل",
-        operation_description="لیست گرفتن از اتاق‌های یک هتل خاص و همچنین افزودن اتاق جدید. فقط برای کاربران احراز هویت‌شده.",
+        operation_summary="ایجاد و لیست اتاق‌های یک هتل (بدون صفحه‌بندی)",
+        operation_description="لیست کامل اتاق‌های یک هتل خاص و همچنین افزودن اتاق جدید. فقط برای کاربران احراز هویت‌شده.",
         tags=["hotel-room"],
         responses={
             200: openapi.Response(
-                description="لیست اتاق‌ها",
+                description="لیست اتاق‌ها (بدون صفحه‌بندی)",
                 schema=RoomSerializer(many=True)
             ),
             201: openapi.Response(
@@ -411,7 +415,9 @@ class CreateRoomView(ListCreateAPIView):
         }
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ایجاد اتاق جدید برای یک هتل",
@@ -419,7 +425,6 @@ class CreateRoomView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
-
 
 
 
