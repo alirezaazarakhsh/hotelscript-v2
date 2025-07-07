@@ -306,6 +306,10 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
     )
     rating = serializers.IntegerField(min_value=1, max_value=5)
 
+
+
+
+
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
@@ -339,6 +343,9 @@ class CommentSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
 
+    created_jalali_date = serializers.SerializerMethodField()
+    created_jalali_time = serializers.SerializerMethodField()
+
     class Meta:
         model = Comment
         fields = [
@@ -354,24 +361,41 @@ class CommentSerializer(serializers.ModelSerializer):
             'points',
             'user',
             'hotel',
-            'created',
-            'created_jalali'
+            'created_jalali_date',
+            'created_jalali_time',
+            # حذف فیلد created از اینجا برای مخفی کردن
         ]
-        read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
+        read_only_fields = ['user', 'hotel', 'created_jalali_date', 'created_jalali_time']
         ref_name = 'CustomCommentSerializer'
 
+    def get_created_jalali_date(self, obj):
+        from jalali_date import datetime2jalali
+        return datetime2jalali(obj.created).strftime('%Y/%m/%d')
+
+    def get_created_jalali_time(self, obj):
+        from jalali_date import datetime2jalali
+        return datetime2jalali(obj.created).strftime('%H:%M')
+
     def create(self, validated_data):
-        # گرفتن داده‌های مربوط به آیتم‌ها و امتیازشان
+        # استخراج داده‌های آیتم‌های پیشنهادی با امتیاز
         suggested_items_data = validated_data.pop('suggested_items_custom', [])
 
-        # ایجاد کامنت اصلی
-        comment = super().create(validated_data)
+        # استخراج strengths و weaknesses که به صورت related هستند
+        strengths = validated_data.pop('strengths', [])
+        weaknesses = validated_data.pop('weaknesses', [])
 
-        # ست‌کردن آیتم‌های پیشنهادی
+        # ایجاد کامنت اصلی
+        comment = Comment.objects.create(**validated_data)
+
+        # تنظیم strengths و weaknesses
+        comment.strengths.set(strengths)
+        comment.weaknesses.set(weaknesses)
+
+        # ست کردن suggested_items (فقط idها)
         suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
         comment.suggested_items.set(suggested_item_ids)
 
-        # ایجاد CommentPoint برای هر آیتم پیشنهادی با امتیاز
+        # ایجاد CommentPoint برای هر آیتم پیشنهادی با امتیاز (point)
         for item in suggested_items_data:
             CommentPoint.objects.create(
                 comment=comment,
@@ -387,6 +411,7 @@ class CommentSerializer(serializers.ModelSerializer):
         if not data.get('stars'):
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
+
 
 
 
