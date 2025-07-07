@@ -25,10 +25,12 @@ from .models import (
     CommentPointItem,
 )
 
+
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Province
         fields = ('name',)
+
 
 class CitySerializer(serializers.ModelSerializer):
     province = serializers.SerializerMethodField()
@@ -38,12 +40,14 @@ class CitySerializer(serializers.ModelSerializer):
         fields = ('name', 'image', 'province', 'show_in_homepage')
 
     def get_province(self, obj):
-        return obj.province.name
+        return obj.province.name if obj.province else None
+
 
 class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelType
         fields = ('id', 'title')
+
 
 class HotelListSerializer(serializers.ModelSerializer):
     city = CitySerializer()
@@ -72,6 +76,7 @@ class HotelListSerializer(serializers.ModelSerializer):
     def get_rating(self, obj):
         return getattr(obj, 'rating', None)
 
+
 class FavoriteHotelSerializer(serializers.ModelSerializer):
     city = CitySerializer()
     min_price = serializers.SerializerMethodField()
@@ -91,15 +96,18 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
     def get_rating(self, obj):
         return obj.rating
 
+
 class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
         fields = ('id', 'title')
 
+
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomFacilities
         fields = ('id', 'title')
+
 
 class HotelFacilitiesSerializer(serializers.ModelSerializer):
     facilities = FacilitiesSerializer(many=True, read_only=True)
@@ -109,25 +117,30 @@ class HotelFacilitiesSerializer(serializers.ModelSerializer):
         model = Hotel
         fields = ('id', 'name', 'slug', 'facilities', 'room_facilities')
 
+
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomService
         fields = ('id', 'title')
+
 
 class HotelTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelTag
         fields = ('title',)
 
+
 class HotelImagesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('main_image', 'image1', 'image2', 'image3', 'image4')
 
+
 class HotelDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('description',)
+
 
 class HotelIntroductionSerializer(serializers.ModelSerializer):
     logo_preview = serializers.SerializerMethodField()
@@ -151,15 +164,18 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
     def get_city_name(self, obj):
         return obj.city.name if obj.city else None
 
+
 class HotelFurtherDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('further_description',)
 
+
 class HotelRulesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('rules', 'important_notes')
+
 
 class HotelFAQListSerializer(serializers.ModelSerializer):
     icon = serializers.SerializerMethodField()
@@ -175,6 +191,7 @@ class HotelFAQListSerializer(serializers.ModelSerializer):
         url = request.build_absolute_uri(obj.icon.svg_icon.url) if request and obj.icon.svg_icon else None
         return {"title": obj.icon.title_icon or "", "link": url}
 
+
 class NearbyPlaceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = NearbyPlace
@@ -182,39 +199,22 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
             'title', 'distance', 'driving_time', 'walking_time', 'image', 'latitude', 'longitude'
         )
 
-class RoomListSerializer(serializers.ModelSerializer):
-    original_total_price = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
-    services = RoomServiceSerializer(many=True)
-
-    class Meta:
-        model = Room
-        fields = (
-            'id', 'title', 'description', 'capacity', 'extra_capacity',
-            'customer_club_points', 'services', 'total_price', 'original_total_price'
-        )
-
-    def get_total_price(self, obj):
-        return self.context.get('room_data_map', {}).get(obj.id, {}).get('total_price')
-
-    def get_original_total_price(self, obj):
-        return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')
 
 class RoomDateListSerializer(serializers.ModelSerializer):
-    jalali_date = serializers.SerializerMethodField()
-    jalali_dateend = serializers.SerializerMethodField()
+    jalali_start_date = serializers.SerializerMethodField()
+    jalali_end_date = serializers.SerializerMethodField()
     discounted_price = serializers.IntegerField(read_only=True)
     original_price = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = RoomDatePrice
         fields = [
-            'id', 'room', 'start_date', 'end_date', 'jalali_date', 'jalali_dateend',
+            'id', 'room', 'start_date', 'end_date', 'jalali_start_date', 'jalali_end_date',
             'original_price', 'discounted_price', 'extra_passenger_price',
             'foreign_passenger_price', 'discount_type', 'discount_value'
         ]
 
-    def get_jalali_date(self, obj):
+    def get_jalali_start_date(self, obj):
         try:
             if isinstance(obj.start_date, jdatetime.date):
                 return obj.start_date.strftime('%Y/%m/%d')
@@ -222,7 +222,7 @@ class RoomDateListSerializer(serializers.ModelSerializer):
         except Exception:
             return 'تاریخ نامعتبر'
 
-    def get_jalali_dateend(self, obj):
+    def get_jalali_end_date(self, obj):
         try:
             if isinstance(obj.end_date, jdatetime.date):
                 return obj.end_date.strftime('%Y/%m/%d')
@@ -230,17 +230,20 @@ class RoomDateListSerializer(serializers.ModelSerializer):
         except Exception:
             return 'تاریخ نامعتبر'
 
+
 class PassengerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Passenger
         fields = (
-           'id','first_name', 'last_name', 'is_foreign', 'national_code', 'passport_code', 'phone_number'
+            'id', 'first_name', 'last_name', 'is_foreign', 'national_code', 'passport_code', 'phone_number'
         )
+
 
 class BestHotelsSerializer(serializers.ModelSerializer):
     class Meta:
         model = BestHotels
         fields = ('order', 'title_logo', 'image_logo_hotel')
+
 
 class ClosedDateSerializer(serializers.ModelSerializer):
     hotel_name = serializers.SerializerMethodField()
@@ -255,15 +258,18 @@ class ClosedDateSerializer(serializers.ModelSerializer):
         except Exception:
             return 'نامشخص'
 
+
 class HotelTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelTag
         fields = ('id', 'title')
 
+
 class HotelGalleryImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelGalleryImage
         fields = ('id', 'image', 'order')
+
 
 class HotelGallerySerializer(serializers.ModelSerializer):
     images = HotelGalleryImageSerializer(many=True, read_only=True)
@@ -272,11 +278,13 @@ class HotelGallerySerializer(serializers.ModelSerializer):
         model = HotelGallery
         fields = ('id', 'title', 'hotel', 'images')
 
+
 class SuggestedCommentItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuggestedCommentItem
         fields = ['id', 'title']
         ref_name = "SuggestedCommentItemSerializer"
+
 
 class CommentPointSerializer(serializers.ModelSerializer):
     comment_point_item = SuggestedCommentItemSerializer(read_only=True)
@@ -291,12 +299,12 @@ class CommentPointSerializer(serializers.ModelSerializer):
         fields = ['id', 'comment_point_item', 'comment_point_item_id', 'point']
         ref_name = "CommentPointSerializer"
 
+
 class CommentPointItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommentPointItem
         fields = ['id', 'title', 'is_positive', 'is_negative']
         ref_name = "CommentPointItemSerializer"
-
 
 
 class SuggestedItemWithRatingSerializer(serializers.Serializer):
@@ -305,9 +313,6 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
         source='suggested_item'
     )
     rating = serializers.IntegerField(min_value=1, max_value=5)
-
-
-
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -363,7 +368,6 @@ class CommentSerializer(serializers.ModelSerializer):
             'hotel',
             'created_jalali_date',
             'created_jalali_time',
-            # حذف فیلد created از اینجا برای مخفی کردن
         ]
         read_only_fields = ['user', 'hotel', 'created_jalali_date', 'created_jalali_time']
         ref_name = 'CustomCommentSerializer'
@@ -377,25 +381,18 @@ class CommentSerializer(serializers.ModelSerializer):
         return datetime2jalali(obj.created).strftime('%H:%M')
 
     def create(self, validated_data):
-        # استخراج داده‌های آیتم‌های پیشنهادی با امتیاز
         suggested_items_data = validated_data.pop('suggested_items_custom', [])
-
-        # استخراج strengths و weaknesses که به صورت related هستند
         strengths = validated_data.pop('strengths', [])
         weaknesses = validated_data.pop('weaknesses', [])
 
-        # ایجاد کامنت اصلی
         comment = Comment.objects.create(**validated_data)
 
-        # تنظیم strengths و weaknesses
         comment.strengths.set(strengths)
         comment.weaknesses.set(weaknesses)
 
-        # ست کردن suggested_items (فقط idها)
         suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
         comment.suggested_items.set(suggested_item_ids)
 
-        # ایجاد CommentPoint برای هر آیتم پیشنهادی با امتیاز (point)
         for item in suggested_items_data:
             CommentPoint.objects.create(
                 comment=comment,
@@ -411,10 +408,6 @@ class CommentSerializer(serializers.ModelSerializer):
         if not data.get('stars'):
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
-
-
-
-
 
 
 class HotelCommentListSerializer(serializers.ModelSerializer):
@@ -442,7 +435,6 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
     def get_user_image(self, obj):
         user = obj.user
         if user:
-            # بررسی وجود natural_profile و عکس در آن
             natural_profile = getattr(user, 'natural_profile', None)
             if natural_profile and natural_profile.image:
                 request = self.context.get('request')
@@ -463,10 +455,9 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         return None
 
 
-
-
 class RoomSerializer(serializers.ModelSerializer):
     services = RoomServiceSerializer(many=True, read_only=True)
+    date_prices = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
@@ -479,6 +470,13 @@ class RoomSerializer(serializers.ModelSerializer):
             'auto_approved_count',
             'customer_club_points',
             'services',
+            'date_prices',
         ]
         read_only_fields = ['id']
         ref_name = "RoomSerializer"
+
+    def get_date_prices(self, obj):
+        # فرض: date_prices مرتبط به room از طریق RoomDatePrice مدل
+        # فیلتر بر اساس room_id و مرتب‌سازی بر اساس start_date
+        qs = RoomDatePrice.objects.filter(room=obj).order_by('start_date')
+        return RoomDateListSerializer(qs, many=True, context=self.context).data
