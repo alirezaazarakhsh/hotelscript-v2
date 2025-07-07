@@ -455,6 +455,25 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         return None
 
 
+class RoomListSerializer(serializers.ModelSerializer):
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    services = RoomServiceSerializer(many=True)
+
+    class Meta:
+        model = Room
+        fields = (
+            'id', 'title', 'description', 'capacity', 'extra_capacity',
+            'customer_club_points', 'services', 'total_price', 'original_total_price'
+        )
+
+    def get_total_price(self, obj):
+        return self.context.get('room_data_map', {}).get(obj.id, {}).get('total_price')
+
+    def get_original_total_price(self, obj):
+        return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')
+
+
 class RoomSerializer(serializers.ModelSerializer):
     services = RoomServiceSerializer(many=True, read_only=True)
     date_prices = serializers.SerializerMethodField()
@@ -476,7 +495,5 @@ class RoomSerializer(serializers.ModelSerializer):
         ref_name = "RoomSerializer"
 
     def get_date_prices(self, obj):
-        # فرض: date_prices مرتبط به room از طریق RoomDatePrice مدل
-        # فیلتر بر اساس room_id و مرتب‌سازی بر اساس start_date
         qs = RoomDatePrice.objects.filter(room=obj).order_by('start_date')
         return RoomDateListSerializer(qs, many=True, context=self.context).data
