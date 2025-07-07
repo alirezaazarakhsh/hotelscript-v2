@@ -328,8 +328,7 @@ class CommentSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True,
     )
-    
-    # اینجا ورودی سفارشی برای suggested_items با امتیاز:
+
     suggested_items_with_rating = SuggestedItemWithRatingSerializer(
         many=True,
         write_only=True,
@@ -362,23 +361,23 @@ class CommentSerializer(serializers.ModelSerializer):
         ref_name = 'CustomCommentSerializer'
 
     def create(self, validated_data):
-        # ابتدا داده مربوط به suggested_items_with_rating را جدا می‌کنیم
+        # گرفتن داده‌های مربوط به آیتم‌ها و امتیازشان
         suggested_items_data = validated_data.pop('suggested_items_custom', [])
-        
-        # ابتدا کامنت اصلی را می‌سازیم
+
+        # ایجاد کامنت اصلی
         comment = super().create(validated_data)
-        
-        # فقط شناسه‌ها را برای ذخیره ManyToMany می‌گیریم، امتیازها ذخیره نمی‌شوند
+
+        # ست‌کردن آیتم‌های پیشنهادی
         suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
         comment.suggested_items.set(suggested_item_ids)
 
-        # اینجا می‌توانید امتیازها را لاگ کنید یا به شکل دلخواه استفاده کنید
-        # مثلا print یا ذخیره جداگانه در جای دیگر
+        # ایجاد CommentPoint برای هر آیتم پیشنهادی با امتیاز
         for item in suggested_items_data:
-            suggested_item = item['suggested_item']
-            rating = item['rating']
-            # فعلاً ذخیره‌ای انجام نمی‌دهیم؛ اگر خواستید ذخیره کنید باید مدل را تغییر دهید
-            print(f"SuggestedItem: {suggested_item}, Rating: {rating}")
+            CommentPoint.objects.create(
+                comment=comment,
+                comment_point_item=item['suggested_item'],
+                point=item['rating']
+            )
 
         return comment
 

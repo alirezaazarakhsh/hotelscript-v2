@@ -353,6 +353,8 @@ class RoomDateInline(admin.TabularInline):
         'user_level',
         'start_date',
         'end_date',
+        'room_capacity',  
+        'extra_capacity',
         'price',
         'extra_passenger_price',
         'foreign_passenger_price',
@@ -398,24 +400,31 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         'start_date',
         'end_date',
         'price',
+        'room_capacity',           # ← اضافه شد
+        'extra_capacity',          # ← اضافه شد
         'discount_type',
         'discount_value',
         'discount_start',
         'discount_end',
         'is_fixed_discount_one_time',
     )
+
     list_filter = (
         'room',
         'user_level',
         'discount_type',
         'is_fixed_discount_one_time',
     )
+
     search_fields = (
         'room__title',
         'user_level__title',
     )
+
     autocomplete_fields = ('room', 'user_level')
+
     ordering = ('room', 'start_date', 'user_level')
+
     fieldsets = (
         (_('اطلاعات بازه و اتاق'), {
             'fields': (
@@ -423,6 +432,8 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
                 'user_level',
                 'start_date',
                 'end_date',
+                'room_capacity',       
+                'extra_capacity',      
             )
         }),
         (_('قیمت‌گذاری'), {
@@ -442,7 +453,9 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             )
         }),
     )
-    inlines = [ClosedDateInline]  # 🔥 اضافه شده: اضافه کردن اینلاین برای ClosedDate
+
+    inlines = [ClosedDateInline]  # ← باقی ماند
+
 
 
 @admin.register(ClosedDate)

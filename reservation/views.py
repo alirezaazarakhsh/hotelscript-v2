@@ -711,7 +711,6 @@ class HotelNearbyPlaceListView(ListAPIView):
     
     
 
-# ای پی ای های مربوط به کامنت هتل
 
     
     

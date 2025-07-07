@@ -793,7 +793,7 @@ class RoomDatePrice(models.Model):
         related_name='room_date_prices',
         help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود'),
         blank=True,
-        null=True,  # اگر لازم باشد سطح کاربری هم اختیاری شود
+        null=True,
     )
 
     start_date = jmodels.jDateField(
@@ -830,7 +830,6 @@ class RoomDatePrice(models.Model):
         default='none',
         blank=True,
     )
-
     discount_value = models.PositiveIntegerField(
         verbose_name=_('مقدار تخفیف'),
         help_text=_('در صورت درصدی بودن، عدد بین 1 تا 100؛ در صورت ثابت بودن، مبلغ به تومان'),
@@ -843,7 +842,6 @@ class RoomDatePrice(models.Model):
         null=True,
         blank=True,
     )
-
     discount_end = jmodels.jDateField(
         verbose_name=_('پایان تخفیف'),
         null=True,
@@ -853,6 +851,22 @@ class RoomDatePrice(models.Model):
     is_fixed_discount_one_time = models.BooleanField(
         verbose_name=_('تخفیف اولین خرید'),
         default=False,
+    )
+
+    room_capacity = models.PositiveIntegerField(
+        verbose_name=_('ظرفیت اتاق'),
+        help_text=_('تعداد نفرات پایه قابل اقامت در این بازه'),
+        null=False,
+        blank=False,
+        default=0,
+    )
+
+    extra_capacity = models.PositiveIntegerField(
+        verbose_name=_('ظرفیت نفر اضافه'),
+        help_text=_('تعداد نفرات اضافی مجاز در این بازه'),
+        null=False,
+        blank=False,
+        default=0,
     )
 
     class Meta:
@@ -876,6 +890,7 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
+
 
 
 
