@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import product
-from datetime import datetime
+from datetime import datetime, timedelta
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
@@ -386,28 +386,91 @@ class RoomDetailListByHotelSlugView(ListAPIView):
     permission_classes = [AllowAny]
     pagination_class = None
 
-
     def get_queryset(self):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
-        return Room.objects.filter(hotel=hotel).order_by('id')
+        rooms = Room.objects.filter(hotel=hotel)
 
-    def paginate_queryset(self, queryset):
-        return None  # حذف صفحه‌بندی
+        # فیلتر ورودی‌ها
+        start_date_str = self.request.GET.get("start_date")
+        end_date_str = self.request.GET.get("end_date")
+        passenger_count = int(self.request.GET.get("passenger_count", 1))
+        room_count = int(self.request.GET.get("room_count", 1))
+
+        if start_date_str and end_date_str:
+            try:
+                start_jdate = JalaliDate(*map(int, start_date_str.split("-")))
+                end_jdate = JalaliDate(*map(int, end_date_str.split("-")))
+            except Exception:
+                return Room.objects.none()
+
+            # نمایش بازه تا ۳۰ روز بعد از start
+            show_until = start_jdate + timedelta(days=30)
+
+            # فیلتر RoomDatePrice که در بازه ما هستند و ظرفیت مناسب دارند
+            valid_rooms = []
+            for room in rooms:
+                matched_prices = []
+                for date_price in room.date_prices.filter(
+                    start_date__lte=show_until,
+                    end_date__gte=start_jdate,
+                    room_capacity__gte=passenger_count,
+                ).prefetch_related('closed_dates'):
+                    closed_dates = {cd.date for cd in date_price.closed_dates.all()}
+                    valid = True
+                    current = start_jdate
+                    while current <= end_jdate:
+                        if current in closed_dates:
+                            valid = False
+                            break
+                        current += timedelta(days=1)
+                    if valid:
+                        matched_prices.append(date_price)
+                if matched_prices:
+                    room._matched_prices = matched_prices
+                    valid_rooms.append(room)
+
+            # اگر room_count = 1 → هر اتاق جدا
+            if room_count == 1:
+                return sorted(valid_rooms, key=lambda r: min([p.price for p in r._matched_prices]))
+            
+            # اگر بیش از ۱ → اتاق‌هایی که با هم میشه group کرد
+            result = []
+            room_groups = []
+            sorted_rooms = sorted(valid_rooms, key=lambda r: min([p.price for p in r._matched_prices]))
+            for i in range(0, len(sorted_rooms) - room_count + 1):
+                group = sorted_rooms[i:i + room_count]
+                if len(group) == room_count:
+                    group_price = sum([min([p.price for p in r._matched_prices]) for r in group])
+                    room_groups.append((group_price, group))
+            room_groups.sort(key=lambda x: x[0])  # بر اساس مجموع قیمت‌ها
+            if room_groups:
+                for _, group in room_groups:
+                    result.extend(group)
+            return result
+
+        return rooms.order_by('id')
 
     @swagger_auto_schema(
-        operation_summary="لیست اتاق‌های یک هتل (با جزئیات کامل)",
-        operation_description="نمایش تمام اتاق‌های مربوط به یک هتل خاص بدون نیاز به احراز هویت، بدون صفحه‌بندی.",
+        operation_summary="لیست اتاق‌های یک هتل (فیلتر شده و گروه‌بندی شده)",
+        operation_description="""
+        دریافت اتاق‌های یک هتل با فیلتر تاریخ، ظرفیت، و تعداد اتاق.
+        - فیلتر بر اساس تعداد مسافر، تاریخ، روزهای بسته‌شده.
+        - نمایش بازه ۳۰ روزه از تاریخ ورود.
+        - اگر تعداد اتاق بیشتر از ۱ باشد، گروه‌بندی اتاق‌ها به پکیج‌های قیمت پایین تا بالا انجام می‌شود.
+        """,
+        manual_parameters=[
+            openapi.Parameter('start_date', openapi.IN_QUERY, description="تاریخ ورود (مثلاً 1403-04-15)", type=openapi.TYPE_STRING),
+            openapi.Parameter('end_date', openapi.IN_QUERY, description="تاریخ خروج (مثلاً 1403-05-05)", type=openapi.TYPE_STRING),
+            openapi.Parameter('passenger_count', openapi.IN_QUERY, description="تعداد نفرات", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('room_count', openapi.IN_QUERY, description="تعداد اتاق درخواستی", type=openapi.TYPE_INTEGER),
+        ],
         tags=["hotel-room"],
         responses={
-            200: openapi.Response(
-                description="لیست اتاق‌ها با جزئیات کامل",
-                schema=RoomSerializer(many=True)
-            )
+            200: openapi.Response("اتاق‌ها", RoomSerializer(many=True))
         }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 
 
 

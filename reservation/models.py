@@ -738,20 +738,20 @@ class Room(models.Model):
         verbose_name = 'اتاق'
         verbose_name_plural = 'اتاق‌ها'
         constraints = [
-            CheckConstraint(
-                check=Q(count__gte=0),
+            models.CheckConstraint(
+                check=models.Q(count__gte=0),
                 name='check_admin_approved_non_negative',
             ),
-            CheckConstraint(
-                check=Q(auto_approved_count__gte=0),
+            models.CheckConstraint(
+                check=models.Q(auto_approved_count__gte=0),
                 name='check_auto_approved_non_negative',
             ),
-            CheckConstraint(
-                check=Q(count__lte=F('inventory')),
+            models.CheckConstraint(
+                check=models.Q(count__lte=models.F('inventory')),
                 name='count_lte_inventory',
             ),
-            CheckConstraint(
-                check=Q(auto_approved_count__lte=F('inventory')),
+            models.CheckConstraint(
+                check=models.Q(auto_approved_count__lte=models.F('inventory')),
                 name='auto_count_lte_inventory',
             ),
         ]
@@ -766,6 +766,16 @@ class Room(models.Model):
 
     def __str__(self):
         return f'{self.title} - {self.hotel}' if self.hotel else self.title
+
+    def is_closed(self, target_date=None):
+        from khayyam import JalaliDate
+        if target_date is None:
+            target_date = JalaliDate.today()
+        active_prices = self.date_prices.filter(
+            start_date__lte=target_date,
+            end_date__gte=target_date
+        )
+        return not active_prices.exists()
 
     
     
@@ -896,7 +906,14 @@ class RoomDatePrice(models.Model):
 
 
 #مدل بستن یه روز از بازه خواستی 
+
 class ClosedDate(models.Model):
+    REASON_CHOICES = (
+        ('', 'هیچ‌کدام'),  # مقدار پیش‌فرض و نمایشی برای حالت خالی
+        ('full_capacity', 'ظرفیت تکمیل می‌باشد'),
+        ('reserved', 'رزرو شده'),
+    )
+
     room_date = models.ForeignKey(
         'RoomDatePrice',
         on_delete=models.CASCADE,
@@ -904,10 +921,12 @@ class ClosedDate(models.Model):
         verbose_name=_('بازه زمانی اتاق')
     )
 
-    date = jmodels.jDateField(verbose_name=_('تاریخ بسته شده'))
+    date = jmodels.jDateField(
+        verbose_name=_('تاریخ بسته شده')
+    )
 
     user_level = models.ForeignKey(
-        'config.UserLevel',  # ← اصلاح شده: مسیر درست به مدل UserLevel در اپ config
+        'config.UserLevel',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -916,21 +935,25 @@ class ClosedDate(models.Model):
     )
 
     reason = models.CharField(
-        max_length=255,
+        max_length=32,
+        choices=REASON_CHOICES,
         verbose_name=_('علت بسته بودن'),
         blank=True,
-        null=True
+        null=True,
+        default='',
+        help_text=_('علت اختیاری است. اگر انتخاب نشود، "هیچ‌کدام" در نظر گرفته می‌شود.')
     )
 
     class Meta:
         verbose_name = _('تاریخ بستن بازه')
-        verbose_name_plural = _('تاریخ‌های بستن بازه ')
+        verbose_name_plural = _('تاریخ‌های بستن بازه')
         unique_together = ('room_date', 'date', 'user_level')
         ordering = ['date']
 
     def __str__(self):
-        return f'{self.room_date} - {self.date} - {self.user_level or "همه سطوح"}'
-
+        reason_display = self.get_reason_display() if self.reason else 'بدون علت'
+        user_level_display = self.user_level if self.user_level else 'همه سطوح'
+        return f'{self.room_date} - {self.date} - {reason_display} - {user_level_display}'
 
     
 
