@@ -499,7 +499,7 @@ class RoomDateListSerializer(serializers.ModelSerializer):
         return ClosedDateSerializer(qs, many=True).data
 
 
-class RoomSerializer(serializers.ModelSerializer):
+class RoomListSerializer(serializers.ModelSerializer):
     services = RoomServiceSerializer(many=True, read_only=True)
     date_prices = serializers.SerializerMethodField()
 
@@ -517,7 +517,7 @@ class RoomSerializer(serializers.ModelSerializer):
             'date_prices',
         ]
         read_only_fields = ['id']
-        ref_name = "RoomSerializer"
+        ref_name = "RoomListSerializer"
 
     def get_date_prices(self, obj):
         qs = RoomDatePrice.objects.filter(room=obj).order_by('start_date')
