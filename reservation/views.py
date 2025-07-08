@@ -411,22 +411,27 @@ class HotelRoomsView(RetrieveAPIView):
 
         try:
             passenger_count_int = int(passenger_count) if passenger_count else 1
-        except:
-            return Response({'detail': 'پارامتر passenger_count باید عدد صحیح باشد.'}, status=400)
-
-        try:
             room_count_int = int(room_count) if room_count else 1
         except:
-            return Response({'detail': 'پارامتر room_count باید عدد صحیح باشد.'}, status=400)
+            return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
         hotel = self.get_object()
 
+        # فیلتر اتاق‌ها بر اساس تاریخ و موجودی
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
+            inventory__gte=1,
         ).distinct()
 
-        # فیلتر ظرفیت با دقت بیشتر
+        # بررسی تاریخ‌های بسته‌شده
+        closed_dates = ClosedDate.objects.filter(
+            room_date__room__hotel=hotel,
+            date__range=(start_date_obj, end_date_obj)
+        ).values_list('room_date__room__id', flat=True)
+        rooms_qs = rooms_qs.exclude(id__in=closed_dates)
+
+        # فیلتر بر اساس ظرفیت (با احتساب ظرفیت اضافه)
         rooms_qs = rooms_qs.filter(
             Q(date_prices__room_capacity__gte=passenger_count_int) |
             Q(
@@ -435,10 +440,8 @@ class HotelRoomsView(RetrieveAPIView):
             )
         )
 
-        rooms_qs = rooms_qs.filter(inventory__gte=1)
-
+        # محاسبه حداقل قیمت با در نظر گرفتن تخفیف
         user_level = request.user.user_level if request.user.is_authenticated else None
-
         rooms_qs = rooms_qs.annotate(
             min_price_in_range=Min(
                 'date_prices__price',
@@ -451,7 +454,7 @@ class HotelRoomsView(RetrieveAPIView):
 
         rooms_list = list(rooms_qs)
 
-        if room_count_int == 1:
+        if room_count_int == 1 or len(rooms_list) < 2:
             serializer = RoomSerializer(
                 rooms_list,
                 many=True,
@@ -465,37 +468,45 @@ class HotelRoomsView(RetrieveAPIView):
             )
             return Response(serializer.data)
 
-        # پک بندی ساده بر اساس قیمت (می توانید الگوریتم بهتر بنویسید)
+        # پک‌بندی اتاق‌ها (به صورت ۲ تایی یا بیشتر اگر تعداد اتاق‌ها کافی باشد)
         packs = []
-        for i in range(0, len(rooms_list), room_count_int):
-            pack = rooms_list[i:i + room_count_int]
-            if len(pack) == room_count_int:
-                packs.append(pack)
+        for i in range(0, len(rooms_list) - 1, 2):  # گام 2 برای پک 2 تایی
+            if i + 1 < len(rooms_list):  # مطمئن شو که پک کامل است
+                pack = rooms_list[i:i + 2]
+                total_capacity = sum(
+                    dp.room_capacity + (dp.extra_capacity or 0)
+                    for r in pack
+                    for dp in r.date_prices.filter(
+                        start_date__lte=end_date_obj,
+                        end_date__gte=start_date_obj
+                    )[:1]  # اولین بازه زمانی
+                )
+                if total_capacity >= passenger_count_int:  # بررسی ظرفیت کل پک
+                    pack_total_price = sum(
+                        r.min_price_in_range or 0
+                        for r in pack
+                    )
+                    serializer = RoomSerializer(
+                        pack,
+                        many=True,
+                        context={
+                            'start_date': start_date_obj,
+                            'end_date': end_date_obj,
+                            'user_level': user_level,
+                            'passenger_count': passenger_count_int,
+                            'room_count': room_count_int,
+                        }
+                    )
+                    packs.append({
+                        'pack_rooms': serializer.data,
+                        'total_capacity': total_capacity,
+                        'total_price': pack_total_price,
+                    })
 
-        response_data = []
-        for pack in packs:
-            serializer = RoomSerializer(
-                pack,
-                many=True,
-                context={
-                    'start_date': start_date_obj,
-                    'end_date': end_date_obj,
-                    'user_level': user_level,
-                    'passenger_count': passenger_count_int,
-                    'room_count': room_count_int,
-                }
-            )
-            pack_min_price = min([r.min_price_in_range or 0 for r in pack])
-            pack_max_price = max([r.min_price_in_range or 0 for r in pack])
+        # مرتب‌سازی پک‌ها بر اساس قیمت کل (از کم به زیاد)
+        packs.sort(key=lambda x: x['total_price'])
 
-            response_data.append({
-                'pack_rooms': serializer.data,
-                'pack_min_price': pack_min_price,
-                'pack_max_price': pack_max_price,
-            })
-
-        return Response(response_data)
-
+        return Response(packs)
 
 
 
