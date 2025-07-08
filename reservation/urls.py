@@ -29,9 +29,6 @@ urlpatterns = [
     path('flash-sale-hotels/', views.FlashSaleHotelListView.as_view(), name='flash-sale-hotel-list'),
     path('best-seller-hotels/', views.BestSellerHotelListView.as_view(), name='best-seller-hotel-list'),
 
-    # ==== Room Info ====
-    path('rooms/search/', views.RoomListView.as_view(), name='room-list'),
-    path('room-dates/<int:room_id>/', views.RoomDateListView.as_view(), name='room-date-list'),
 
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
@@ -42,9 +39,6 @@ urlpatterns = [
 
     # ==== Hotel Types ====
     path('types/', views.HotelTypeListView.as_view(), name='hotel-type-list'),
-
-    # ==== Availability and Scheduling ====
-    path('closed-dates/', views.ClosedDateListCreateView.as_view(), name='closed-date-list-create'),
 
     # ==== Passenger ====
     path('passengers/', views.PassengerListCreateView.as_view(), name='passenger-list-create'),
@@ -57,8 +51,8 @@ urlpatterns = [
     path('hotels/comments/points-and-suggestions/', CommentPointsAndSuggestionsView.as_view(), name='comment-points-and-suggestions'),
 
 
-# ==== Room Info ====
-path('hotels/<slug:slug>/rooms/detail/', RoomDetailListByHotelSlugView.as_view(), name='hotel-rooms-detail'),
+    # ==== Room Info ====
+    path('hotels/<slug:slug>/rooms/detail/', RoomDetailListByHotelSlugView.as_view(), name='hotel-rooms-detail'),
 
 
 ]
