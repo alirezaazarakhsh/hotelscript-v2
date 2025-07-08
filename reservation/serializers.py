@@ -112,7 +112,7 @@ class HotelFacilitiesSerializer(serializers.ModelSerializer):
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomService
-        fields = ('id', 'title')
+        fields = ('title')
 
 class HotelTagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -405,32 +405,37 @@ class RoomDatePriceSerializer(serializers.ModelSerializer):
 
 
 class RoomSerializer(serializers.ModelSerializer):
+    services = RoomServiceSerializer(many=True, read_only=True)
     date_prices = serializers.SerializerMethodField()
     min_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
-        fields = ['id', 'hotel', 'title', 'description', 'inventory', 'count', 'auto_approved_count',
-                  'customer_club_points', 'services', 'date_prices', 'min_price']
+        fields = [
+            'id',
+            'hotel',
+            'title',
+            'description',
+            'inventory',
+            'count',
+            'auto_approved_count',
+            'customer_club_points',
+            'services',
+            'date_prices',
+            'min_price'
+        ]
 
     def get_date_prices(self, obj):
-        start_date = self.context.get('start_date')
-        end_date = self.context.get('end_date')
         user_level = self.context.get('user_level')
 
         prices = obj.date_prices.all()
-
-        if start_date and end_date:
-            prices = prices.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date
-            )
 
         if user_level:
             prices = prices.filter(
                 models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
             )
 
+        # محاسبه قیمت نهایی با اعمال تخفیف
         def final_price(price_obj):
             price = price_obj.price
             if price_obj.discount_type == 'percentage' and price_obj.discount_value:
@@ -439,19 +444,26 @@ class RoomSerializer(serializers.ModelSerializer):
                 price = price - price_obj.discount_value
             return price
 
+        # مرتب‌سازی بر اساس قیمت نهایی (ارزان‌ترین اول)
         prices = sorted(prices, key=final_price)
+
         return RoomDatePriceSerializer(prices, many=True).data
 
     def get_min_price(self, obj):
         prices = obj.date_prices.all()
-        if not prices:
+        if not prices.exists():
             return None
+
         user_level = self.context.get('user_level')
         if user_level:
             prices = prices.filter(
                 models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
             )
 
+        if not prices.exists():
+            return None
+
+        # محاسبه قیمت نهایی
         def final_price(price_obj):
             price = price_obj.price
             if price_obj.discount_type == 'percentage' and price_obj.discount_value:
@@ -462,7 +474,6 @@ class RoomSerializer(serializers.ModelSerializer):
 
         min_p = min(prices, key=final_price)
         return final_price(min_p)
-
     
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
