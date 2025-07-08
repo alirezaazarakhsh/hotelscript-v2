@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime, timedelta
+import jdatetime
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
@@ -394,7 +395,7 @@ class HotelRoomsView(RetrieveAPIView):
             "این API لیست کامل اتاق‌های یک هتل را بر اساس slug هتل باز می‌گرداند "
             "و شامل جزییات اتاق‌ها و بازه‌های زمانی قیمت آن‌ها می‌باشد."
         ),
-        tags=['hotel-room'],  # تگ تغییر داده شده
+        tags=['hotel-room'],
         manual_parameters=[
             openapi.Parameter(
                 name='slug',
@@ -420,6 +421,7 @@ class HotelRoomsView(RetrieveAPIView):
         ],
         responses={
             200: RoomSerializer(many=True),
+            400: 'پارامترهای ارسالی نامعتبر است.',
             404: 'هتل پیدا نشد.'
         }
     )
@@ -432,9 +434,11 @@ class HotelRoomsView(RetrieveAPIView):
                 status=400
             )
         try:
-            from khayyam import JalaliDate
-            start_date_obj = JalaliDate.strptime(start_date, '%Y-%m-%d')
-            end_date_obj = JalaliDate.strptime(end_date, '%Y-%m-%d')
+            start_date_parts = [int(x) for x in start_date.split('-')]
+            start_date_obj = jdatetime.date(*start_date_parts)
+
+            end_date_parts = [int(x) for x in end_date.split('-')]
+            end_date_obj = jdatetime.date(*end_date_parts)
         except Exception:
             return Response(
                 {'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'},
@@ -449,13 +453,21 @@ class HotelRoomsView(RetrieveAPIView):
         hotel = self.get_object()
         rooms_qs = hotel.rooms.all()
 
+        user_level = None
+        user = request.user
+        if user.is_authenticated:
+            user_level = getattr(user, 'user_level', None)
+
         serializer = RoomSerializer(
             rooms_qs,
             many=True,
-            context={'start_date': start_date_obj, 'end_date': end_date_obj}
+            context={
+                'start_date': start_date_obj,
+                'end_date': end_date_obj,
+                'user_level': user_level,
+            }
         )
         return Response(serializer.data)
-
 
 
 

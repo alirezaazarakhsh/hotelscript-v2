@@ -386,24 +386,23 @@ class ClosedDateSerializer(serializers.ModelSerializer):
 class RoomDatePriceSerializer(serializers.ModelSerializer):
     closed_dates = serializers.SerializerMethodField()
     month = serializers.SerializerMethodField()
-    
+    user_level = serializers.StringRelatedField()  # نمایش نام سطح کاربری
+
     class Meta:
         model = RoomDatePrice
         fields = [
             'start_date', 'end_date', 'price', 'extra_passenger_price', 'foreign_passenger_price',
             'discount_type', 'discount_value', 'discount_start', 'discount_end',
-            'room_capacity', 'extra_capacity', 'closed_dates', 'month'
+            'room_capacity', 'extra_capacity', 'closed_dates', 'month', 'user_level'
         ]
 
     def get_closed_dates(self, obj):
-        # بازگرداندن تاریخ های بسته شده در این بازه زمانی
-        # فقط روزهایی که در بازه start_date تا end_date هستند
         closed_qs = obj.closed_dates.filter(date__gte=obj.start_date, date__lte=obj.end_date)
         return ClosedDateSerializer(closed_qs, many=True).data
-    
+
     def get_month(self, obj):
-        # برگرداندن ماه شروع بازه
         return obj.start_date.strftime('%B')
+
 
 class RoomSerializer(serializers.ModelSerializer):
     date_prices = serializers.SerializerMethodField()
@@ -415,18 +414,23 @@ class RoomSerializer(serializers.ModelSerializer):
                   'customer_club_points', 'services', 'date_prices', 'min_price']
 
     def get_date_prices(self, obj):
-        # فیلتر کردن بر اساس تاریخ ورودی کاربر
         start_date = self.context.get('start_date')
         end_date = self.context.get('end_date')
-        if not start_date or not end_date:
-            prices = obj.date_prices.all()
-        else:
-            # برگرداندن بازه‌هایی که حداقل با یکی از روزهای انتخاب شده کاربر همپوشانی دارند
-            prices = obj.date_prices.filter(
+        user_level = self.context.get('user_level')
+
+        prices = obj.date_prices.all()
+
+        if start_date and end_date:
+            prices = prices.filter(
                 start_date__lte=end_date,
                 end_date__gte=start_date
             )
-        # مرتب سازی قیمت کم به زیاد (قیمت نهایی بعد از تخفیف)
+
+        if user_level:
+            prices = prices.filter(
+                models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
+            )
+
         def final_price(price_obj):
             price = price_obj.price
             if price_obj.discount_type == 'percentage' and price_obj.discount_value:
@@ -442,6 +446,12 @@ class RoomSerializer(serializers.ModelSerializer):
         prices = obj.date_prices.all()
         if not prices:
             return None
+        user_level = self.context.get('user_level')
+        if user_level:
+            prices = prices.filter(
+                models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
+            )
+
         def final_price(price_obj):
             price = price_obj.price
             if price_obj.discount_type == 'percentage' and price_obj.discount_value:
@@ -452,8 +462,7 @@ class RoomSerializer(serializers.ModelSerializer):
 
         min_p = min(prices, key=final_price)
         return final_price(min_p)
-    
-    
+
     
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
