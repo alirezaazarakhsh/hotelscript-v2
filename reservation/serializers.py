@@ -244,19 +244,10 @@ class BestHotelsSerializer(serializers.ModelSerializer):
         model = BestHotels
         fields = ('order', 'title_logo', 'image_logo_hotel')
 
-
 class ClosedDateSerializer(serializers.ModelSerializer):
-    hotel_name = serializers.SerializerMethodField()
-
     class Meta:
         model = ClosedDate
-        fields = ['id', 'reason', 'room_date', 'date', 'hotel_name']
-
-    def get_hotel_name(self, obj):
-        try:
-            return obj.room_date.room.hotel.name
-        except Exception:
-            return 'نامشخص'
+        fields = ['id', 'date', 'reason']
 
 
 class HotelTagSerializer(serializers.ModelSerializer):
@@ -455,23 +446,57 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         return None
 
 
-class RoomListSerializer(serializers.ModelSerializer):
-    original_total_price = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
-    services = RoomServiceSerializer(many=True)
+class RoomDateListSerializer(serializers.ModelSerializer):
+    jalali_start_date = serializers.SerializerMethodField()
+    jalali_end_date = serializers.SerializerMethodField()
+    discounted_price = serializers.SerializerMethodField()
+    original_price = serializers.SerializerMethodField()
+    closed_dates = serializers.SerializerMethodField()
 
     class Meta:
-        model = Room
-        fields = (
-            'id', 'title', 'description', 'capacity', 'extra_capacity',
-            'customer_club_points', 'services', 'total_price', 'original_total_price'
-        )
+        model = RoomDatePrice
+        fields = [
+            'id', 'room', 'start_date', 'end_date',
+            'jalali_start_date', 'jalali_end_date',
+            'original_price', 'discounted_price',
+            'extra_passenger_price', 'foreign_passenger_price',
+            'discount_type', 'discount_value',
+            'closed_dates',
+        ]
 
-    def get_total_price(self, obj):
-        return self.context.get('room_data_map', {}).get(obj.id, {}).get('total_price')
+    def get_jalali_start_date(self, obj):
+        try:
+            return jdatetime.date.fromgregorian(date=obj.start_date).strftime('%Y/%m/%d')
+        except:
+            return 'تاریخ نامعتبر'
 
-    def get_original_total_price(self, obj):
-        return self.context.get('room_data_map', {}).get(obj.id, {}).get('original_total_price')
+    def get_jalali_end_date(self, obj):
+        try:
+            return jdatetime.date.fromgregorian(date=obj.end_date).strftime('%Y/%m/%d')
+        except:
+            return 'تاریخ نامعتبر'
+
+    def get_original_price(self, obj):
+        return obj.price
+
+    def get_discounted_price(self, obj):
+        today = jdatetime.date.today()
+        if obj.discount_start and obj.discount_end:
+            if not (obj.discount_start <= today <= obj.discount_end):
+                return obj.price
+
+        if obj.discount_type == 'fixed':
+            return max(0, obj.price - obj.discount_value)
+        elif obj.discount_type == 'percentage':
+            return max(0, int(obj.price * (100 - obj.discount_value) / 100))
+        return obj.price
+
+    def get_closed_dates(self, obj):
+        user_level = self.context.get('user_level')
+        qs = obj.closed_dates.all()
+        if user_level:
+            qs = qs.filter(models.Q(user_level=user_level) | models.Q(user_level__isnull=True))
+        return ClosedDateSerializer(qs, many=True).data
 
 
 class RoomSerializer(serializers.ModelSerializer):
