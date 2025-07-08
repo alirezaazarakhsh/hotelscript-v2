@@ -191,8 +191,6 @@ class RoomDatePriceSerializer(serializers.ModelSerializer):
         model = RoomDatePrice
         fields = [
             'id',
-            'start_date',
-            'end_date',
             'jalali_start_date',
             'jalali_end_date',
             'price',
@@ -225,9 +223,9 @@ class RoomDatePriceSerializer(serializers.ModelSerializer):
             return None
 
     def get_closed_dates(self, obj):
-        # فرض شده در مدل RoomDatePrice رابطه reverse به ClosedDate با related_name='closed_dates' هست
         closed_dates = obj.closed_dates.all()
         return ClosedDateSerializer(closed_dates, many=True).data
+
 
 class ClosedDateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -254,46 +252,52 @@ class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
         fields = [
-            'id',
-            'title',
-            'description',
-            'inventory',
-            'count',
-            'auto_approved_count',
-            'customer_club_points',
-            'services',
-            'facilities',
-            'date_prices',
-            'final_price',
+            'id', 'title', 'description', 'inventory', 'count', 'auto_approved_count',
+            'customer_club_points', 'services', 'facilities', 'date_prices', 'final_price',
         ]
-        read_only_fields = ['id']
 
     def get_final_price(self, obj):
-        request = self.context.get('request')
-        passenger_count = int(request.GET.get("passenger_count", 1)) if request else 1
-        start_date_str = request.GET.get("start_date") if request else None
-        end_date_str = request.GET.get("end_date") if request else None
+        if hasattr(obj, '_final_price'):
+            return obj._final_price
 
-        if not start_date_str or not end_date_str or not hasattr(obj, '_matched_prices'):
+        request = self.context.get('request')
+        if not request:
+            return None
+
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        passenger_count = int(request.GET.get("passenger_count", 1))
+
+        if not start_date or not end_date or not hasattr(obj, '_matched_prices'):
             return None
 
         try:
-            start_date = JalaliDate(*map(int, start_date_str.split("-"))).todate()
-            end_date = JalaliDate(*map(int, end_date_str.split("-"))).todate()
-            nights = (end_date - start_date).days
+            start = JalaliDate(*map(int, start_date.split("-"))).todate()
+            end = JalaliDate(*map(int, end_date.split("-"))).todate()
+            nights = (end - start).days
         except Exception:
             return None
 
+        if nights <= 0:
+            return None
+
         min_price_obj = min(obj._matched_prices, key=lambda p: p.price)
-        base_price = min_price_obj.price
-        extra_price = 0
+        extra = max(passenger_count - min_price_obj.room_capacity, 0)
+        base_price = min_price_obj.price + extra * min_price_obj.extra_passenger_price
 
-        if passenger_count > min_price_obj.room_capacity:
-            extra_count = passenger_count - min_price_obj.room_capacity
-            extra_price = extra_count * min_price_obj.extra_passenger_price
+        # محاسبه تخفیف اگر هست
+        discount = 0
+        if min_price_obj.discount_type == 'fixed':
+            if min_price_obj.is_fixed_discount_one_time:
+                discount = min_price_obj.discount_value
+            else:
+                discount = min_price_obj.discount_value * nights
+        elif min_price_obj.discount_type == 'percentage':
+            discount = base_price * (min_price_obj.discount_value / 100) * nights
 
-        total_price = (base_price + extra_price) * nights
-        return total_price
+        final_price = base_price * nights - discount
+        return max(final_price, 0)
+
 
 
 class PassengerSerializer(serializers.ModelSerializer):

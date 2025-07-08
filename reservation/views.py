@@ -394,7 +394,6 @@ class RoomDetailListByHotelSlugView(ListAPIView):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         rooms = Room.objects.filter(hotel=hotel)
 
-        # فیلتر ورودی‌ها
         start_date_str = self.request.GET.get("start_date")
         end_date_str = self.request.GET.get("end_date")
         passenger_count = int(self.request.GET.get("passenger_count", 1))
@@ -404,6 +403,9 @@ class RoomDetailListByHotelSlugView(ListAPIView):
             try:
                 start_jdate = JalaliDate(*map(int, start_date_str.split("-")))
                 end_jdate = JalaliDate(*map(int, end_date_str.split("-")))
+                nights = (end_jdate.todate() - start_jdate.todate()).days
+                if nights <= 0:
+                    return Room.objects.none()
             except Exception:
                 return Room.objects.none()
 
@@ -420,21 +422,23 @@ class RoomDetailListByHotelSlugView(ListAPIView):
                     closed_dates = {cd.date for cd in date_price.closed_dates.all()}
                     valid = True
                     current = start_jdate
-                    while current <= end_jdate:
+                    while current < end_jdate:
                         if current in closed_dates:
                             valid = False
                             break
                         current += timedelta(days=1)
                     if valid:
                         matched_prices.append(date_price)
+
                 if matched_prices:
                     room._matched_prices = matched_prices
+                    min_price_obj = min(matched_prices, key=lambda p: p.price)
+                    base_price = min_price_obj.price
+                    extra = max(passenger_count - min_price_obj.room_capacity, 0)
+                    room._final_price = (base_price + extra * min_price_obj.extra_passenger_price) * nights
                     valid_rooms.append(room)
 
-            sorted_rooms = sorted(
-                valid_rooms,
-                key=lambda r: min([p.price for p in r._matched_prices])
-            )
+            sorted_rooms = sorted(valid_rooms, key=lambda r: r._final_price)
             return sorted_rooms
 
         return rooms.order_by('id')
@@ -445,11 +449,12 @@ class RoomDetailListByHotelSlugView(ListAPIView):
         دریافت اتاق‌های یک هتل با فیلتر تاریخ، ظرفیت، و تعداد اتاق.
         - فیلتر بر اساس تعداد مسافر، تاریخ، روزهای بسته‌شده.
         - نمایش بازه ۳۰ روزه از تاریخ ورود.
+        - محاسبه قیمت نهایی بر اساس تعداد شب، ظرفیت، و قیمت پایه.
         - سورت بر اساس قیمت نهایی از کم به زیاد.
         """,
         manual_parameters=[
             openapi.Parameter('start_date', openapi.IN_QUERY, description="تاریخ ورود (مثلاً 1403-04-15)", type=openapi.TYPE_STRING),
-            openapi.Parameter('end_date', openapi.IN_QUERY, description="تاریخ خروج (مثلاً 1403-05-05)", type=openapi.TYPE_STRING),
+            openapi.Parameter('end_date', openapi.IN_QUERY, description="تاریخ خروج (مثلاً 1403-04-17)", type=openapi.TYPE_STRING),
             openapi.Parameter('passenger_count', openapi.IN_QUERY, description="تعداد نفرات", type=openapi.TYPE_INTEGER),
             openapi.Parameter('room_count', openapi.IN_QUERY, description="تعداد اتاق درخواستی", type=openapi.TYPE_INTEGER),
         ],
