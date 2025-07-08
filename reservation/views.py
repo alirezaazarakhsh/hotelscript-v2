@@ -394,6 +394,7 @@ class HotelRoomsView(RetrieveAPIView):
         operation_description=(
             "این API لیست کامل اتاق‌های یک هتل را بر اساس slug هتل باز می‌گرداند "
             "و شامل جزییات اتاق‌ها و بازه‌های زمانی قیمت آن‌ها می‌باشد."
+            "همچنین فیلتر بر اساس تعداد مسافر (passenger_count) و تعداد اتاق (room_count) پشتیبانی می‌شود."
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -418,6 +419,20 @@ class HotelRoomsView(RetrieveAPIView):
                 type=openapi.TYPE_STRING,
                 required=True,
             ),
+            openapi.Parameter(
+                name='passenger_count',
+                in_=openapi.IN_QUERY,
+                description='تعداد کل مسافران',
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                name='room_count',
+                in_=openapi.IN_QUERY,
+                description='تعداد اتاق‌های درخواستی',
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
         ],
         responses={
             200: RoomSerializer(many=True),
@@ -428,6 +443,9 @@ class HotelRoomsView(RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
+        passenger_count = request.query_params.get('passenger_count')
+        room_count = request.query_params.get('room_count')
+
         if not start_date or not end_date:
             return Response(
                 {'detail': 'پارامترهای start_date و end_date الزامی هستند.'},
@@ -453,6 +471,28 @@ class HotelRoomsView(RetrieveAPIView):
         hotel = self.get_object()
         rooms_qs = hotel.rooms.all()
 
+        # فیلتر تعداد اتاق (inventory >= room_count)
+        if room_count:
+            try:
+                room_count_int = int(room_count)
+                rooms_qs = rooms_qs.filter(inventory__gte=room_count_int)
+            except ValueError:
+                return Response(
+                    {'detail': 'پارامتر room_count باید عدد صحیح باشد.'},
+                    status=400
+                )
+
+        # برای فیلتر مسافر داخل سریالایزر به context اضافه می‌کنیم
+        passenger_count_int = None
+        if passenger_count:
+            try:
+                passenger_count_int = int(passenger_count)
+            except ValueError:
+                return Response(
+                    {'detail': 'پارامتر passenger_count باید عدد صحیح باشد.'},
+                    status=400
+                )
+
         user_level = None
         user = request.user
         if user.is_authenticated:
@@ -465,6 +505,7 @@ class HotelRoomsView(RetrieveAPIView):
                 'start_date': start_date_obj,
                 'end_date': end_date_obj,
                 'user_level': user_level,
+                'passenger_count': passenger_count_int,
             }
         )
         return Response(serializer.data)
