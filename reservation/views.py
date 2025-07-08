@@ -426,11 +426,12 @@ class HotelRoomsView(RetrieveAPIView):
             date_prices__end_date__gte=start_date_obj,
         ).distinct()
 
+        # فیلتر ظرفیت با دقت بیشتر
         rooms_qs = rooms_qs.filter(
             Q(date_prices__room_capacity__gte=passenger_count_int) |
-            (
-                Q(date_prices__room_capacity__lt=passenger_count_int) &
-                Q(date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity'))
+            Q(
+                date_prices__room_capacity__lt=passenger_count_int,
+                date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
             )
         )
 
@@ -464,6 +465,7 @@ class HotelRoomsView(RetrieveAPIView):
             )
             return Response(serializer.data)
 
+        # پک بندی ساده بر اساس قیمت (می توانید الگوریتم بهتر بنویسید)
         packs = []
         for i in range(0, len(rooms_list), room_count_int):
             pack = rooms_list[i:i + room_count_int]
@@ -493,6 +495,7 @@ class HotelRoomsView(RetrieveAPIView):
             })
 
         return Response(response_data)
+
 
 
 
