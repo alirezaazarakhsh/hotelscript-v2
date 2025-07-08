@@ -383,6 +383,13 @@ class RoomDetailListByHotelSlugView(ListAPIView):
     permission_classes = [AllowAny]
     pagination_class = None
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({
+            "request": self.request,
+        })
+        return context
+
     def get_queryset(self):
         hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
         rooms = Room.objects.filter(hotel=hotel)
@@ -400,10 +407,8 @@ class RoomDetailListByHotelSlugView(ListAPIView):
             except Exception:
                 return Room.objects.none()
 
-            # نمایش بازه تا ۳۰ روز بعد از start
             show_until = start_jdate + timedelta(days=30)
 
-            # فیلتر RoomDatePrice که در بازه ما هستند و ظرفیت مناسب دارند
             valid_rooms = []
             for room in rooms:
                 matched_prices = []
@@ -426,24 +431,11 @@ class RoomDetailListByHotelSlugView(ListAPIView):
                     room._matched_prices = matched_prices
                     valid_rooms.append(room)
 
-            # اگر room_count = 1 → هر اتاق جدا
-            if room_count == 1:
-                return sorted(valid_rooms, key=lambda r: min([p.price for p in r._matched_prices]))
-            
-            # اگر بیش از ۱ → اتاق‌هایی که با هم میشه group کرد
-            result = []
-            room_groups = []
-            sorted_rooms = sorted(valid_rooms, key=lambda r: min([p.price for p in r._matched_prices]))
-            for i in range(0, len(sorted_rooms) - room_count + 1):
-                group = sorted_rooms[i:i + room_count]
-                if len(group) == room_count:
-                    group_price = sum([min([p.price for p in r._matched_prices]) for r in group])
-                    room_groups.append((group_price, group))
-            room_groups.sort(key=lambda x: x[0])  # بر اساس مجموع قیمت‌ها
-            if room_groups:
-                for _, group in room_groups:
-                    result.extend(group)
-            return result
+            sorted_rooms = sorted(
+                valid_rooms,
+                key=lambda r: min([p.price for p in r._matched_prices])
+            )
+            return sorted_rooms
 
         return rooms.order_by('id')
 
@@ -453,7 +445,7 @@ class RoomDetailListByHotelSlugView(ListAPIView):
         دریافت اتاق‌های یک هتل با فیلتر تاریخ، ظرفیت، و تعداد اتاق.
         - فیلتر بر اساس تعداد مسافر، تاریخ، روزهای بسته‌شده.
         - نمایش بازه ۳۰ روزه از تاریخ ورود.
-        - اگر تعداد اتاق بیشتر از ۱ باشد، گروه‌بندی اتاق‌ها به پکیج‌های قیمت پایین تا بالا انجام می‌شود.
+        - سورت بر اساس قیمت نهایی از کم به زیاد.
         """,
         manual_parameters=[
             openapi.Parameter('start_date', openapi.IN_QUERY, description="تاریخ ورود (مثلاً 1403-04-15)", type=openapi.TYPE_STRING),
@@ -468,7 +460,6 @@ class RoomDetailListByHotelSlugView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 
 
 

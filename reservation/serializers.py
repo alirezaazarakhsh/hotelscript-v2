@@ -244,10 +244,12 @@ class RoomFacilitiesSerializer(serializers.ModelSerializer):
         model = RoomFacilities
         fields = ['id', 'title']
 
+
 class RoomSerializer(serializers.ModelSerializer):
     services = RoomServiceSerializer(many=True, read_only=True)
     facilities = RoomFacilitiesSerializer(many=True, read_only=True)
-    date_prices = RoomDatePriceSerializer(many=True, read_only=True)  # باید related_name در مدل تعریف شده باشد
+    date_prices = RoomDatePriceSerializer(many=True, read_only=True)
+    final_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
@@ -262,8 +264,37 @@ class RoomSerializer(serializers.ModelSerializer):
             'services',
             'facilities',
             'date_prices',
+            'final_price',
         ]
         read_only_fields = ['id']
+
+    def get_final_price(self, obj):
+        request = self.context.get('request')
+        passenger_count = int(request.GET.get("passenger_count", 1)) if request else 1
+        start_date_str = request.GET.get("start_date") if request else None
+        end_date_str = request.GET.get("end_date") if request else None
+
+        if not start_date_str or not end_date_str or not hasattr(obj, '_matched_prices'):
+            return None
+
+        try:
+            start_date = JalaliDate(*map(int, start_date_str.split("-"))).todate()
+            end_date = JalaliDate(*map(int, end_date_str.split("-"))).todate()
+            nights = (end_date - start_date).days
+        except Exception:
+            return None
+
+        min_price_obj = min(obj._matched_prices, key=lambda p: p.price)
+        base_price = min_price_obj.price
+        extra_price = 0
+
+        if passenger_count > min_price_obj.room_capacity:
+            extra_count = passenger_count - min_price_obj.room_capacity
+            extra_price = extra_count * min_price_obj.extra_passenger_price
+
+        total_price = (base_price + extra_price) * nights
+        return total_price
+
 
 class PassengerSerializer(serializers.ModelSerializer):
     class Meta:
