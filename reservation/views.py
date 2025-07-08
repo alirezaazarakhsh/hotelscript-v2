@@ -377,94 +377,85 @@ class RoomServiceListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
+
 # ای پی ای اتاق ها بر اساس اسلاگ 
-class RoomDetailListByHotelSlugView(ListAPIView):
+class HotelRoomsView(RetrieveAPIView):
+    permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
-    permission_classes = [AllowAny]
-    pagination_class = None
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context.update({
-            "request": self.request,
-        })
-        return context
-
-    def get_queryset(self):
-        hotel = get_object_or_404(Hotel, slug=self.kwargs['slug'])
-        rooms = Room.objects.filter(hotel=hotel)
-
-        start_date_str = self.request.GET.get("start_date")
-        end_date_str = self.request.GET.get("end_date")
-        passenger_count = int(self.request.GET.get("passenger_count", 1))
-        room_count = int(self.request.GET.get("room_count", 1))
-
-        if start_date_str and end_date_str:
-            try:
-                start_jdate = JalaliDate(*map(int, start_date_str.split("-")))
-                end_jdate = JalaliDate(*map(int, end_date_str.split("-")))
-                nights = (end_jdate.todate() - start_jdate.todate()).days
-                if nights <= 0:
-                    return Room.objects.none()
-            except Exception:
-                return Room.objects.none()
-
-            show_until = start_jdate + timedelta(days=30)
-
-            valid_rooms = []
-            for room in rooms:
-                matched_prices = []
-                for date_price in room.date_prices.filter(
-                    start_date__lte=show_until,
-                    end_date__gte=start_jdate,
-                    room_capacity__gte=passenger_count,
-                ).prefetch_related('closed_dates'):
-                    closed_dates = {cd.date for cd in date_price.closed_dates.all()}
-                    valid = True
-                    current = start_jdate
-                    while current < end_jdate:
-                        if current in closed_dates:
-                            valid = False
-                            break
-                        current += timedelta(days=1)
-                    if valid:
-                        matched_prices.append(date_price)
-
-                if matched_prices:
-                    room._matched_prices = matched_prices
-                    min_price_obj = min(matched_prices, key=lambda p: p.price)
-                    base_price = min_price_obj.price
-                    extra = max(passenger_count - min_price_obj.room_capacity, 0)
-                    room._final_price = (base_price + extra * min_price_obj.extra_passenger_price) * nights
-                    valid_rooms.append(room)
-
-            sorted_rooms = sorted(valid_rooms, key=lambda r: r._final_price)
-            return sorted_rooms
-
-        return rooms.order_by('id')
+    queryset = Hotel.objects.all()
+    lookup_field = 'slug'
+    lookup_url_kwarg = 'slug'
 
     @swagger_auto_schema(
-        operation_summary="لیست اتاق‌های یک هتل (فیلتر شده و گروه‌بندی شده)",
-        operation_description="""
-        دریافت اتاق‌های یک هتل با فیلتر تاریخ، ظرفیت، و تعداد اتاق.
-        - فیلتر بر اساس تعداد مسافر، تاریخ، روزهای بسته‌شده.
-        - نمایش بازه ۳۰ روزه از تاریخ ورود.
-        - محاسبه قیمت نهایی بر اساس تعداد شب، ظرفیت، و قیمت پایه.
-        - سورت بر اساس قیمت نهایی از کم به زیاد.
-        """,
+        operation_summary="دریافت لیست اتاق‌های هتل",
+        operation_description=(
+            "این API لیست کامل اتاق‌های یک هتل را بر اساس slug هتل باز می‌گرداند "
+            "و شامل جزییات اتاق‌ها و بازه‌های زمانی قیمت آن‌ها می‌باشد."
+        ),
+        tags=['hotel-room'],  # تگ تغییر داده شده
         manual_parameters=[
-            openapi.Parameter('start_date', openapi.IN_QUERY, description="تاریخ ورود (مثلاً 1403-04-15)", type=openapi.TYPE_STRING),
-            openapi.Parameter('end_date', openapi.IN_QUERY, description="تاریخ خروج (مثلاً 1403-04-17)", type=openapi.TYPE_STRING),
-            openapi.Parameter('passenger_count', openapi.IN_QUERY, description="تعداد نفرات", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('room_count', openapi.IN_QUERY, description="تعداد اتاق درخواستی", type=openapi.TYPE_INTEGER),
+            openapi.Parameter(
+                name='slug',
+                in_=openapi.IN_PATH,
+                description='شناسه slug هتل',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                name='start_date',
+                in_=openapi.IN_QUERY,
+                description='تاریخ شروع بازه جلالی (yyyy-mm-dd)',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                name='end_date',
+                in_=openapi.IN_QUERY,
+                description='تاریخ پایان بازه جلالی (yyyy-mm-dd)',
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
         ],
-        tags=["hotel-room"],
         responses={
-            200: openapi.Response("اتاق‌ها", RoomSerializer(many=True))
+            200: RoomSerializer(many=True),
+            404: 'هتل پیدا نشد.'
         }
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        if not start_date or not end_date:
+            return Response(
+                {'detail': 'پارامترهای start_date و end_date الزامی هستند.'},
+                status=400
+            )
+        try:
+            from khayyam import JalaliDate
+            start_date_obj = JalaliDate.strptime(start_date, '%Y-%m-%d')
+            end_date_obj = JalaliDate.strptime(end_date, '%Y-%m-%d')
+        except Exception:
+            return Response(
+                {'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'},
+                status=400
+            )
+        if start_date_obj > end_date_obj:
+            return Response(
+                {'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'},
+                status=400
+            )
+
+        hotel = self.get_object()
+        rooms_qs = hotel.rooms.all()
+
+        serializer = RoomSerializer(
+            rooms_qs,
+            many=True,
+            context={'start_date': start_date_obj, 'end_date': end_date_obj}
+        )
+        return Response(serializer.data)
+
 
 
 

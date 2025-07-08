@@ -10,13 +10,13 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
+    Room,
     RoomDatePrice,
     RoomFacilities,
     RoomService,
     HotelTag,
     HotelFAQ,
     NearbyPlace,
-    Room,
     Passenger,
     SuggestedCommentItem,
     Comment,
@@ -182,122 +182,10 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
             'title', 'distance', 'driving_time', 'walking_time', 'image', 'latitude', 'longitude'
         )
 
-class RoomDatePriceSerializer(serializers.ModelSerializer):
-    closed_dates = serializers.SerializerMethodField()
-    jalali_start_date = serializers.SerializerMethodField()
-    jalali_end_date = serializers.SerializerMethodField()
-
-    class Meta:
-        model = RoomDatePrice
-        fields = [
-            'id',
-            'jalali_start_date',
-            'jalali_end_date',
-            'price',
-            'extra_passenger_price',
-            'foreign_passenger_price',
-            'discount_type',
-            'discount_value',
-            'discount_start',
-            'discount_end',
-            'is_fixed_discount_one_time',
-            'room_capacity',
-            'extra_capacity',
-            'closed_dates',
-        ]
-
-    def get_jalali_start_date(self, obj):
-        try:
-            if isinstance(obj.start_date, jdatetime.date):
-                return obj.start_date.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=obj.start_date).strftime('%Y/%m/%d')
-        except Exception:
-            return None
-
-    def get_jalali_end_date(self, obj):
-        try:
-            if isinstance(obj.end_date, jdatetime.date):
-                return obj.end_date.strftime('%Y/%m/%d')
-            return jdatetime.date.fromgregorian(date=obj.end_date).strftime('%Y/%m/%d')
-        except Exception:
-            return None
-
-    def get_closed_dates(self, obj):
-        closed_dates = obj.closed_dates.all()
-        return ClosedDateSerializer(closed_dates, many=True).data
-
-
-class ClosedDateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ClosedDate
-        fields = ['id', 'date', 'reason']
-
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomService
         fields = ['id', 'title']
-
-class RoomFacilitiesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RoomFacilities
-        fields = ['id', 'title']
-
-
-class RoomSerializer(serializers.ModelSerializer):
-    services = RoomServiceSerializer(many=True, read_only=True)
-    facilities = RoomFacilitiesSerializer(many=True, read_only=True)
-    date_prices = RoomDatePriceSerializer(many=True, read_only=True)
-    final_price = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Room
-        fields = [
-            'id', 'title', 'description', 'inventory', 'count', 'auto_approved_count',
-            'customer_club_points', 'services', 'facilities', 'date_prices', 'final_price',
-        ]
-
-    def get_final_price(self, obj):
-        if hasattr(obj, '_final_price'):
-            return obj._final_price
-
-        request = self.context.get('request')
-        if not request:
-            return None
-
-        start_date = request.GET.get("start_date")
-        end_date = request.GET.get("end_date")
-        passenger_count = int(request.GET.get("passenger_count", 1))
-
-        if not start_date or not end_date or not hasattr(obj, '_matched_prices'):
-            return None
-
-        try:
-            start = JalaliDate(*map(int, start_date.split("-"))).todate()
-            end = JalaliDate(*map(int, end_date.split("-"))).todate()
-            nights = (end - start).days
-        except Exception:
-            return None
-
-        if nights <= 0:
-            return None
-
-        min_price_obj = min(obj._matched_prices, key=lambda p: p.price)
-        extra = max(passenger_count - min_price_obj.room_capacity, 0)
-        base_price = min_price_obj.price + extra * min_price_obj.extra_passenger_price
-
-        # محاسبه تخفیف اگر هست
-        discount = 0
-        if min_price_obj.discount_type == 'fixed':
-            if min_price_obj.is_fixed_discount_one_time:
-                discount = min_price_obj.discount_value
-            else:
-                discount = min_price_obj.discount_value * nights
-        elif min_price_obj.discount_type == 'percentage':
-            discount = base_price * (min_price_obj.discount_value / 100) * nights
-
-        final_price = base_price * nights - discount
-        return max(final_price, 0)
-
 
 
 class PassengerSerializer(serializers.ModelSerializer):
@@ -482,3 +370,92 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
         if obj.created_jalali and " ساعت " in obj.created_jalali:
             return obj.created_jalali.split(" ساعت ")[1]
         return None
+
+
+
+class ClosedDateSerializer(serializers.ModelSerializer):
+    month = serializers.SerializerMethodField()
+    class Meta:
+        model = ClosedDate
+        fields = ['date', 'reason', 'user_level', 'month']
+
+    def get_month(self, obj):
+        # برگرداندن نام ماه جلالی
+        return obj.date.strftime('%B')  # اگر بخواهید نام ماه فارسی
+
+class RoomDatePriceSerializer(serializers.ModelSerializer):
+    closed_dates = serializers.SerializerMethodField()
+    month = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RoomDatePrice
+        fields = [
+            'start_date', 'end_date', 'price', 'extra_passenger_price', 'foreign_passenger_price',
+            'discount_type', 'discount_value', 'discount_start', 'discount_end',
+            'room_capacity', 'extra_capacity', 'closed_dates', 'month'
+        ]
+
+    def get_closed_dates(self, obj):
+        # بازگرداندن تاریخ های بسته شده در این بازه زمانی
+        # فقط روزهایی که در بازه start_date تا end_date هستند
+        closed_qs = obj.closed_dates.filter(date__gte=obj.start_date, date__lte=obj.end_date)
+        return ClosedDateSerializer(closed_qs, many=True).data
+    
+    def get_month(self, obj):
+        # برگرداندن ماه شروع بازه
+        return obj.start_date.strftime('%B')
+
+class RoomSerializer(serializers.ModelSerializer):
+    date_prices = serializers.SerializerMethodField()
+    min_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Room
+        fields = ['id', 'hotel', 'title', 'description', 'inventory', 'count', 'auto_approved_count',
+                  'customer_club_points', 'services', 'date_prices', 'min_price']
+
+    def get_date_prices(self, obj):
+        # فیلتر کردن بر اساس تاریخ ورودی کاربر
+        start_date = self.context.get('start_date')
+        end_date = self.context.get('end_date')
+        if not start_date or not end_date:
+            prices = obj.date_prices.all()
+        else:
+            # برگرداندن بازه‌هایی که حداقل با یکی از روزهای انتخاب شده کاربر همپوشانی دارند
+            prices = obj.date_prices.filter(
+                start_date__lte=end_date,
+                end_date__gte=start_date
+            )
+        # مرتب سازی قیمت کم به زیاد (قیمت نهایی بعد از تخفیف)
+        def final_price(price_obj):
+            price = price_obj.price
+            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
+                price = price * (100 - price_obj.discount_value) / 100
+            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
+                price = price - price_obj.discount_value
+            return price
+
+        prices = sorted(prices, key=final_price)
+        return RoomDatePriceSerializer(prices, many=True).data
+
+    def get_min_price(self, obj):
+        prices = obj.date_prices.all()
+        if not prices:
+            return None
+        def final_price(price_obj):
+            price = price_obj.price
+            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
+                price = price * (100 - price_obj.discount_value) / 100
+            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
+                price = price - price_obj.discount_value
+            return price
+
+        min_p = min(prices, key=final_price)
+        return final_price(min_p)
+    
+    
+    
+class RoomFacilitiesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoomFacilities
+        fields = ['id', 'title']
