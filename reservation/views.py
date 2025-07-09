@@ -395,7 +395,8 @@ class HotelRoomsView(RetrieveAPIView):
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
             "و وضعیت دسترسی (availability) باز می‌گرداند.\n"
             "قیمت‌ها بر اساس بازه زمانی انتخاب شده (start_date و end_date) و ظرفیت مسافران محاسبه می‌شود.\n"
-            "اگر تعداد اتاق (room_count) بیشتر از 1 باشد، اتاق‌ها به صورت بسته‌های (پک) ترکیبی با قیمت کل بازگردانده می‌شوند.\n\n"
+            "اگر تعداد اتاق (room_count) بیشتر از 1 باشد، اتاق‌ها به صورت بسته‌های (پک) ترکیبی با قیمت کل بازگردانده می‌شوند.\n"
+            "بازه معکوس (از end_date به start_date) نیز نمایش داده می‌شود و برای تاریخ‌هایی که بازه قیمتی ندارند، وضعیت 'موجود نیست' بازگردانده می‌شود.\n\n"
             "پارامترهای ورودی:\n"
             "- start_date (اجباری): تاریخ شروع به فرمت yyyy-mm-dd\n"
             "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd، در صورت عدم ارسال ۳۰ روز پس از start_date در نظر گرفته می‌شود\n"
@@ -482,13 +483,16 @@ class HotelRoomsView(RetrieveAPIView):
             Q(date_prices__room_capacity__gte=passenger_count_int) |
             Q(
                 date_prices__room_capacity__lt=passenger_count_int,
-                date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
+                date_prices__room_capacity + F('date_prices__extra_capacity') >= passenger_count_int
             )
         ).order_by('date_prices__price')
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
+        # اضافه کردن بازه معکوس
+        reverse_date_range = [end_date_obj - jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
+        all_dates = sorted(list(set(date_range + reverse_date_range)))  # حذف تکرارها و مرتب‌سازی
         night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
 
         room_data = []
@@ -500,31 +504,31 @@ class HotelRoomsView(RetrieveAPIView):
             closed = ClosedDate.objects.filter(room_date__room=room, date__range=(start_date_obj, end_date_obj)).values_list('date', flat=True)
             room_availability = []
 
-            for date in date_range:
+            for date in all_dates:
                 price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).first()
-                if not price_data:
-                    continue
+                if price_data:
+                    discount_amount = 0
+                    if price_data.discount_type == 'percentage':
+                        discount_amount = price_data.price * price_data.discount_value / 100
+                    elif price_data.discount_type == 'fixed':
+                        discount_amount = price_data.discount_value
 
-                discount_amount = 0
-                if price_data.discount_type == 'percentage':
-                    discount_amount = price_data.price * price_data.discount_value / 100
-                elif price_data.discount_type == 'fixed':
-                    discount_amount = price_data.discount_value
-
-                price_after_discount = max(price_data.price - discount_amount, 0)
-
-                status = "available" if date not in closed else "unavailable"
+                    price_after_discount = max(price_data.price - discount_amount, 0)
+                    status = "available" if date not in closed else "unavailable"
+                else:
+                    price_after_discount = 0
+                    status = "unavailable"  # برای تاریخ‌هایی که بازه قیمتی ندارن
 
                 price = {
-                    "price": price_data.price,
+                    "price": price_data.price if price_data else 0,
                     "price_after_discount": price_after_discount,
-                    "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
-                    "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
-                    "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data.discount_end else None,
-                    "capacity": price_data.room_capacity,
-                    "extra_capacity": price_data.extra_capacity,
-                    "extra_capacity_price": price_data.extra_passenger_price,
-                    "tourist_price": price_data.foreign_passenger_price or 0
+                    "discount_percentage": price_data.discount_value if price_data and price_data.discount_type == 'percentage' else None,
+                    "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                    "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data and price_data.discount_end else None,
+                    "capacity": price_data.room_capacity if price_data else 0,
+                    "extra_capacity": price_data.extra_capacity if price_data else 0,
+                    "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
+                    "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
                 }
 
                 room_availability.append({
@@ -595,7 +599,7 @@ class HotelRoomsView(RetrieveAPIView):
                 continue
 
             pack_availability = []
-            for day_index, date in enumerate(date_range):
+            for day_index, date in enumerate(all_dates):  # استفاده از all_dates برای نمایش معکوس
                 pack_price = 0
                 pack_discount = 0
                 pack_capacity = 0
@@ -605,22 +609,25 @@ class HotelRoomsView(RetrieveAPIView):
                 pack_status = "available"
 
                 for r in pack_rooms:
-                    day_avail = r['room_availability'][day_index]
-                    pack_price += day_avail['price']['price']
+                    day_avail = next((d for d in r['room_availability'] if d['date'] == date.strftime('%Y/%m/%d')), None)
+                    if day_avail:
+                        pack_price += day_avail['price']['price']
 
-                    discount_val = 0
-                    if day_avail['price']['discount_percentage']:
-                        discount_val = day_avail['price']['price'] * day_avail['price']['discount_percentage'] / 100
-                    elif day_avail['price']['discount_amount']:
-                        discount_val = day_avail['price']['discount_amount']
-                    pack_discount += discount_val
+                        discount_val = 0
+                        if day_avail['price']['discount_percentage']:
+                            discount_val = day_avail['price']['price'] * day_avail['price']['discount_percentage'] / 100
+                        elif day_avail['price']['discount_amount']:
+                            discount_val = day_avail['price']['discount_amount']
+                        pack_discount += discount_val
 
-                    pack_capacity += day_avail['price']['capacity']
-                    pack_extra_capacity += day_avail['price']['extra_capacity']
-                    pack_extra_capacity_price += day_avail['price']['extra_capacity_price']
-                    pack_tourist_price += day_avail['price']['tourist_price']
+                        pack_capacity += day_avail['price']['capacity']
+                        pack_extra_capacity += day_avail['price']['extra_capacity']
+                        pack_extra_capacity_price += day_avail['price']['extra_capacity_price']
+                        pack_tourist_price += day_avail['price']['tourist_price']
 
-                    if day_avail['status'] == "unavailable":
+                        if day_avail['status'] == "unavailable":
+                            pack_status = "unavailable"
+                    else:
                         pack_status = "unavailable"
 
                 pack_availability.append({
@@ -629,15 +636,15 @@ class HotelRoomsView(RetrieveAPIView):
                     "day": persian_days[date.weekday()],
                     "status": pack_status,
                     "price": {
-                        "price": pack_price,
-                        "price_after_discount": max(pack_price - pack_discount, 0),
+                        "price": pack_price if pack_status == "available" else 0,
+                        "price_after_discount": max(pack_price - pack_discount, 0) if pack_status == "available" else 0,
                         "discount_percentage": None,
-                        "discount_amount": pack_discount if pack_discount > 0 else None,
+                        "discount_amount": pack_discount if pack_status == "available" and pack_discount > 0 else None,
                         "discount_end_day": None,
-                        "capacity": pack_capacity,
-                        "extra_capacity": pack_extra_capacity,
-                        "extra_capacity_price": pack_extra_capacity_price,
-                        "tourist_price": pack_tourist_price,
+                        "capacity": pack_capacity if pack_status == "available" else 0,
+                        "extra_capacity": pack_extra_capacity if pack_status == "available" else 0,
+                        "extra_capacity_price": pack_extra_capacity_price if pack_status == "available" else 0,
+                        "tourist_price": pack_tourist_price if pack_status == "available" else 0,
                     }
                 })
 
@@ -653,7 +660,6 @@ class HotelRoomsView(RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
