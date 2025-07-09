@@ -418,7 +418,10 @@ class HotelRoomsView(RetrieveAPIView):
 
         try:
             passenger_count_int = int(passenger_count) if passenger_count else 1
+            if passenger_count_int > 10:  # محدودیت حداکثر 10 مسافر
+                return Response({'detail': 'تعداد مسافران نمی‌تواند بیشتر از 10 نفر باشد.'}, status=400)
             room_count_int = int(room_count) if room_count else 1
+            room_count_int = min(max(1, room_count_int), 5)  # محدود کردن به 1 تا 5 اتاق
         except:
             return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
@@ -452,9 +455,11 @@ class HotelRoomsView(RetrieveAPIView):
 
         rooms_list = list(rooms_qs)
 
-        # روزهای هفته به فارسی
+        # روزهای هفته و نام ماه‌ها به فارسی
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+        persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
+        night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
         room_data = []
 
         for room in rooms_qs:
@@ -478,6 +483,7 @@ class HotelRoomsView(RetrieveAPIView):
                     status = "available" if date not in closed else "unavailable"
                     room_availability.append({
                         "date": date.strftime('%Y/%m/%d'),
+                        "month": persian_months[date.month - 1],  # نام ماه فارسی
                         "day": persian_days[date.weekday()],
                         "status": status,
                         "price": price
@@ -509,11 +515,12 @@ class HotelRoomsView(RetrieveAPIView):
         if room_count_int == 1 or len(rooms_list) < 2:
             return Response(room_data)
 
-        # پک‌بندی اتاق‌ها
+        # پک‌بندی اتاق‌ها با تعداد متغیر (تا 5 اتاق)
         packs = []
-        for i in range(0, len(rooms_list) - 1, 2):
-            if i + 1 < len(rooms_list):
-                pack = rooms_list[i:i + 2]
+        max_rooms_per_pack = min(room_count_int, 5)  # حداکثر 5 اتاق
+        for i in range(0, len(rooms_list) - max_rooms_per_pack + 1):
+            pack = rooms_list[i:i + max_rooms_per_pack]
+            if len(pack) == max_rooms_per_pack:  # فقط پک‌های کامل
                 total_capacity = sum(
                     dp.room_capacity + (dp.extra_capacity or 0)
                     for r in pack
@@ -539,6 +546,7 @@ class HotelRoomsView(RetrieveAPIView):
                         is_closed = any(date in ClosedDate.objects.filter(room_date__room=r).values_list('date', flat=True) for r in pack)
                         pack_availability.append({
                             "date": date.strftime('%Y/%m/%d'),
+                            "month": persian_months[date.month - 1],  # نام ماه فارسی
                             "day": persian_days[date.weekday()],
                             "status": "available" if not is_closed else "unavailable",
                             "price": {
@@ -557,6 +565,7 @@ class HotelRoomsView(RetrieveAPIView):
                         "pack_rooms": [{"id": r.id, "name": r.title} for r in pack],
                         "total_capacity": total_capacity,
                         "total_price": pack_total_price,
+                        "night_count": night_count,  # تعداد شب‌های اقامت
                         "room_availability": pack_availability
                     })
 
