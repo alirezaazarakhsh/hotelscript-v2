@@ -394,15 +394,15 @@ class HotelRoomsView(RetrieveAPIView):
         from django.db.models import Q, F
 
         start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date') or None  # اختیاری می‌کنیم
+        end_date = request.query_params.get('end_date') or None
         passenger_count = request.query_params.get('passenger_count')
         room_count = request.query_params.get('room_count')
 
-        # اگر start_date وجود داشته باشد ولی end_date خالی باشد، 30 روز اضافه کن
+        # تنظیم بازه 30 روزه یا استفاده از end_date
         if start_date and not end_date:
             try:
                 start_date_obj = jdatetime.date(*[int(i) for i in start_date.split('-')])
-                end_date_obj = start_date_obj + jdatetime.timedelta(days=29)  # 30 روز
+                end_date_obj = start_date_obj + jdatetime.timedelta(days=29)
             except Exception:
                 return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
         elif start_date and end_date:
@@ -433,7 +433,7 @@ class HotelRoomsView(RetrieveAPIView):
 
         # بررسی تاریخ‌های بسته‌شده
         closed_dates = ClosedDate.objects.filter(
-            room_date__room__hotel=hotel,
+            room_date__room__in=rooms_qs,
             date__range=(start_date_obj, end_date_obj)
         ).values_list('room_date__room__id', flat=True)
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
@@ -452,44 +452,64 @@ class HotelRoomsView(RetrieveAPIView):
 
         rooms_list = list(rooms_qs)
 
-        # تولید تقویم قیمتی برای 30 روز با نام ماه فارسی
-        date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range(30)]
+        # روزهای هفته به فارسی
+        persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+        date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
         room_data = []
-        persian_months = [
-            'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-            'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
-        ]
+
         for room in rooms_qs:
-            closed = ClosedDate.objects.filter(
-                room_date__room=room,
-                date__range=(start_date_obj, end_date_obj)
-            ).values_list('date', flat=True)
-            calendar = []
+            room_services = ", ".join([service.title for service in room.services.all()]) or "خدمات ندارد"
+            closed = ClosedDate.objects.filter(room_date__room=room, date__range=(start_date_obj, end_date_obj)).values_list('date', flat=True)
+            room_availability = []
             for date in date_range:
-                # پیدا کردن قیمت برای این تاریخ
-                price_data = room.date_prices.filter(
-                    start_date__lte=date,
-                    end_date__gte=date
-                ).first()
-                price = price_data.price if price_data else None
-                discount = price_data.discount_value if price_data and price_data.discount_type != 'none' else 0
-                is_closed = date in closed
-                calendar.append({
-                    'date': date.strftime('%Y-%m-%d'),
-                    'month': persian_months[date.month - 1],  # نام ماه فارسی
-                    'price': price,
-                    'discount': discount,
-                    'is_closed': is_closed
-                })
+                price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).first()
+                if price_data:
+                    price = {
+                        "price": price_data.price,
+                        "price_after_discount": price_data.price - (price_data.discount_value if price_data.discount_type != 'none' else 0),
+                        "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
+                        "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
+                        "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data.discount_end else None,
+                        "capacity": price_data.room_capacity,
+                        "extra_capacity": price_data.extra_capacity,
+                        "extra_capacity_price": price_data.extra_passenger_price,
+                        "tourist_price": price_data.foreign_passenger_price or 0
+                    }
+                    status = "available" if date not in closed else "unavailable"
+                    room_availability.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "day": persian_days[date.weekday()],
+                        "status": status,
+                        "price": price
+                    })
             room_data.append({
-                'room': room.title,
-                'calendar': calendar
+                "id": room.id,
+                "name": room.title or "",
+                "descriptions": room.description or "",
+                "room_number": room.inventory or 0,
+                "customer_club_points": room.customer_club_points or 0,
+                "room_services": room_services,
+                "accept_need": room.count or 0,
+                "dont_accept_need": room.auto_approved_count or 0,
+                "hotel": hotel.id,
+                "price": {
+                    "price": price_data.price if price_data else 0,
+                    "price_after_discount": (price_data.price - (price_data.discount_value if price_data and price_data.discount_type != 'none' else 0)) if price_data else None,
+                    "discount_percentage": price_data.discount_value if price_data and price_data.discount_type == 'percentage' else None,
+                    "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                    "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data and price_data.discount_end else None,
+                    "capacity": price_data.room_capacity if price_data else 0,
+                    "extra_capacity": price_data.extra_capacity if price_data else 0,
+                    "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
+                    "tourist_price": price_data.foreign_passenger_price if price_data else 0
+                },
+                "room_availability": room_availability
             })
 
         if room_count_int == 1 or len(rooms_list) < 2:
             return Response(room_data)
 
-        # پک‌بندی اتاق‌ها بر اساس قیمت کمتر
+        # پک‌بندی اتاق‌ها
         packs = []
         for i in range(0, len(rooms_list) - 1, 2):
             if i + 1 < len(rooms_list):
@@ -497,51 +517,50 @@ class HotelRoomsView(RetrieveAPIView):
                 total_capacity = sum(
                     dp.room_capacity + (dp.extra_capacity or 0)
                     for r in pack
-                    for dp in r.date_prices.filter(
-                        start_date__lte=end_date_obj,
-                        end_date__gte=start_date_obj
-                    )[:1]
+                    for dp in r.date_prices.filter(start_date__lte=end_date_obj, end_date__gte=start_date_obj)[:1]
                 )
                 if total_capacity >= passenger_count_int:
                     pack_total_price = sum(
-                        r.date_prices.filter(
-                            start_date__lte=start_date_obj,
-                            end_date__gte=start_date_obj
-                        ).first().price or 0
+                        r.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).first().price or 0
                         for r in pack
                     )
-                    pack_calendar = []
+                    pack_availability = []
                     for date in date_range:
                         pack_price = sum(
-                            r.date_prices.filter(
-                                start_date__lte=date,
-                                end_date__gte=date
-                            ).first().price or 0
+                            r.date_prices.filter(start_date__lte=date, end_date__gte=date).first().price or 0
                             for r in pack
                         )
                         pack_discount = sum(
-                            r.date_prices.filter(
-                                start_date__lte=date,
-                                end_date__gte=date
-                            ).first().discount_value or 0
-                            for r in pack if r.date_prices.filter(start_date__lte=date, end_date__gte=date).first() and r.date_prices.filter(start_date__lte=date, end_date__gte=date).first().discount_type != 'none'
+                            r.date_prices.filter(start_date__lte=date, end_date__gte=date).first().discount_value or 0
+                            for r in pack
+                            if r.date_prices.filter(start_date__lte=date, end_date__gte=date).first() and
+                            r.date_prices.filter(start_date__lte=date, end_date__gte=date).first().discount_type != 'none'
                         )
                         is_closed = any(date in ClosedDate.objects.filter(room_date__room=r).values_list('date', flat=True) for r in pack)
-                        pack_calendar.append({
-                            'date': date.strftime('%Y-%m-%d'),
-                            'month': persian_months[date.month - 1],
-                            'price': pack_price,
-                            'discount': pack_discount,
-                            'is_closed': is_closed
+                        pack_availability.append({
+                            "date": date.strftime('%Y/%m/%d'),
+                            "day": persian_days[date.weekday()],
+                            "status": "available" if not is_closed else "unavailable",
+                            "price": {
+                                "price": pack_price,
+                                "price_after_discount": pack_price - pack_discount,
+                                "discount_percentage": None,  # می‌توانید منطق تخفیف پک را اضافه کنید
+                                "discount_amount": pack_discount if pack_discount > 0 else None,
+                                "discount_end_day": None,
+                                "capacity": total_capacity,
+                                "extra_capacity": sum(dp.extra_capacity or 0 for dp in (r.date_prices.filter(start_date__lte=date, end_date__gte=date).first() for r in pack) if dp),
+                                "extra_capacity_price": sum(dp.extra_passenger_price or 0 for dp in (r.date_prices.filter(start_date__lte=date, end_date__gte=date).first() for r in pack) if dp),
+                                "tourist_price": sum(dp.foreign_passenger_price or 0 for dp in (r.date_prices.filter(start_date__lte=date, end_date__gte=date).first() for r in pack) if dp)
+                            }
                         })
                     packs.append({
-                        'pack_rooms': [r.title for r in pack],
-                        'calendar': pack_calendar,
-                        'total_capacity': total_capacity,
-                        'total_price': pack_total_price
+                        "pack_rooms": [{"id": r.id, "name": r.title} for r in pack],
+                        "total_capacity": total_capacity,
+                        "total_price": pack_total_price,
+                        "room_availability": pack_availability
                     })
 
-        # مرتب‌سازی پک‌ها بر اساس قیمت کل (از کم به زیاد)
+        # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
 
