@@ -391,18 +391,21 @@ class HotelRoomsView(RetrieveAPIView):
 
     def get_user_level(self, request):
         user = request.user
-        if user.is_authenticated and hasattr(user, 'level'):
+        if user.is_authenticated and hasattr(user, 'level') and user.level:
             return user.level
         return None
 
     def get_price_data(self, room, date, user_level):
         qs = room.date_prices.filter(start_date__lte=date, end_date__gte=date)
+        # اگر سطح کاربری هست، اول سعی می‌کنیم قیمت مخصوص آن سطح را بگیریم،
+        # اگر نبود قیمت بدون سطح کاربری را برمی‌گردانیم
         if user_level:
-            qs = qs.filter(Q(user_level=user_level) | Q(user_level__isnull=True))
+            price = qs.filter(user_level=user_level).order_by('-user_level__id').first()
+            if not price:
+                price = qs.filter(user_level__isnull=True).order_by('-start_date').first()
+            return price
         else:
-            qs = qs.filter(user_level__isnull=True)
-        qs = qs.order_by('-user_level__id')
-        return qs.first()
+            return qs.filter(user_level__isnull=True).order_by('-start_date').first()
 
     def get_closed_dates(self, rooms, date_range, user_level):
         q = Q(room_date__room__in=rooms, date__in=date_range)
@@ -499,12 +502,15 @@ class HotelRoomsView(RetrieveAPIView):
 
         hotel = self.get_object()
 
+        # فیلتر اتاق‌ها که حداقل یک بازه قیمت در تاریخ مشخص دارند و موجودی دارند
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
         ).distinct()
 
+        # فیلتر بر اساس ظرفیت اتاق‌ها
+        # اگر تعداد مسافر بیشتر از ظرفیت پایه بود، باید ظرفیت اضافه رو هم لحاظ کنیم
         rooms_qs = rooms_qs.filter(
             Q(date_prices__room_capacity__gte=passenger_count_int) |
             Q(
@@ -541,9 +547,19 @@ class HotelRoomsView(RetrieveAPIView):
                 is_closed = closed_dates_dict.get(room.id, {}).get(date, None)
                 status = "unavailable" if is_closed is not None else "available"
 
+                # محاسبه قیمت نهایی با توجه به نوع تخفیف
+                if price_data.discount_type == 'percentage':
+                    discount_amount = price_data.price * price_data.discount_value / 100
+                elif price_data.discount_type == 'fixed':
+                    discount_amount = price_data.discount_value
+                else:
+                    discount_amount = 0
+
+                price_after_discount = max(price_data.price - discount_amount, 0)
+
                 price = {
                     "price": price_data.price,
-                    "price_after_discount": price_data.price - (price_data.discount_value if price_data.discount_type != 'none' else 0),
+                    "price_after_discount": price_after_discount,
                     "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
                     "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
                     "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data.discount_end else None,
@@ -563,6 +579,18 @@ class HotelRoomsView(RetrieveAPIView):
 
             price_data_first = self.get_price_data(room, start_date_obj, user_level)
 
+            if price_data_first:
+                if price_data_first.discount_type == 'percentage':
+                    discount_amount_first = price_data_first.price * price_data_first.discount_value / 100
+                elif price_data_first.discount_type == 'fixed':
+                    discount_amount_first = price_data_first.discount_value
+                else:
+                    discount_amount_first = 0
+
+                price_after_discount_first = max(price_data_first.price - discount_amount_first, 0)
+            else:
+                price_after_discount_first = 0
+
             room_data.append({
                 "id": room.id,
                 "name": room.title or "",
@@ -575,7 +603,7 @@ class HotelRoomsView(RetrieveAPIView):
                 "hotel": hotel.id,
                 "price": {
                     "price": price_data_first.price if price_data_first else 0,
-                    "price_after_discount": (price_data_first.price - (price_data_first.discount_value if price_data_first and price_data_first.discount_type != 'none' else 0)) if price_data_first else 0,
+                    "price_after_discount": price_after_discount_first,
                     "discount_percentage": price_data_first.discount_value if price_data_first and price_data_first.discount_type == 'percentage' else None,
                     "discount_amount": price_data_first.discount_value if price_data_first and price_data_first.discount_type == 'fixed' else None,
                     "discount_end_day": price_data_first.discount_end.strftime('%Y-%m-%d') if price_data_first and price_data_first.discount_end else None,
@@ -590,6 +618,7 @@ class HotelRoomsView(RetrieveAPIView):
         if room_count_int == 1 or len(room_data) < 2:
             return Response(room_data)
 
+        # ساخت بسته‌های اتاق
         packs = []
         max_rooms_per_pack = min(room_count_int, 5)
         for i in range(0, len(room_data) - max_rooms_per_pack + 1):
@@ -658,6 +687,7 @@ class HotelRoomsView(RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
+
 
 
 
