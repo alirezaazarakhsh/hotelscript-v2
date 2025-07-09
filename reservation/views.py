@@ -397,8 +397,6 @@ class HotelRoomsView(RetrieveAPIView):
 
     def get_price_data(self, room, date, user_level):
         qs = room.date_prices.filter(start_date__lte=date, end_date__gte=date)
-        # اگر سطح کاربری هست، اول سعی می‌کنیم قیمت مخصوص آن سطح را بگیریم،
-        # اگر نبود قیمت بدون سطح کاربری را برمی‌گردانیم
         if user_level:
             price = qs.filter(user_level=user_level).order_by('-user_level__id').first()
             if not price:
@@ -502,15 +500,12 @@ class HotelRoomsView(RetrieveAPIView):
 
         hotel = self.get_object()
 
-        # فیلتر اتاق‌ها که حداقل یک بازه قیمت در تاریخ مشخص دارند و موجودی دارند
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
         ).distinct()
 
-        # فیلتر بر اساس ظرفیت اتاق‌ها
-        # اگر تعداد مسافر بیشتر از ظرفیت پایه بود، باید ظرفیت اضافه رو هم لحاظ کنیم
         rooms_qs = rooms_qs.filter(
             Q(date_prices__room_capacity__gte=passenger_count_int) |
             Q(
@@ -542,12 +537,11 @@ class HotelRoomsView(RetrieveAPIView):
             for date in date_range:
                 price_data = self.get_price_data(room, date, user_level)
                 if not price_data:
-                    continue
+                    continue  # حذف روزهایی که قیمت ندارند
 
                 is_closed = closed_dates_dict.get(room.id, {}).get(date, None)
                 status = "unavailable" if is_closed is not None else "available"
 
-                # محاسبه قیمت نهایی با توجه به نوع تخفیف
                 if price_data.discount_type == 'percentage':
                     discount_amount = price_data.price * price_data.discount_value / 100
                 elif price_data.discount_type == 'fixed':
@@ -618,7 +612,6 @@ class HotelRoomsView(RetrieveAPIView):
         if room_count_int == 1 or len(room_data) < 2:
             return Response(room_data)
 
-        # ساخت بسته‌های اتاق
         packs = []
         max_rooms_per_pack = min(room_count_int, 5)
         for i in range(0, len(room_data) - max_rooms_per_pack + 1):
@@ -687,7 +680,6 @@ class HotelRoomsView(RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 
