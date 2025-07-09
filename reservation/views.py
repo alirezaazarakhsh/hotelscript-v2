@@ -494,7 +494,7 @@ class HotelRoomsView(RetrieveAPIView):
                 "hotel": hotel.id,
                 "price": {
                     "price": price_data.price if price_data else 0,
-                    "price_after_discount": (price_data.price - (price_data.discount_value if price_data and price_data.discount_type != 'none' else 0)) if price_data else None,
+                    "price_after_discount": (price_data.price - (price_data.discount_value if price_data and price_data.discount_type != 'none' else 0)) if price_data else 0,
                     "discount_percentage": price_data.discount_value if price_data and price_data.discount_type == 'percentage' else None,
                     "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
                     "discount_end_day": price_data.discount_end.strftime('%Y-%m-%d') if price_data and price_data.discount_end else None,
@@ -544,7 +544,7 @@ class HotelRoomsView(RetrieveAPIView):
                             "price": {
                                 "price": pack_price,
                                 "price_after_discount": pack_price - pack_discount,
-                                "discount_percentage": None,  # می‌توانید منطق تخفیف پک را اضافه کنید
+                                "discount_percentage": None,
                                 "discount_amount": pack_discount if pack_discount > 0 else None,
                                 "discount_end_day": None,
                                 "capacity": total_capacity,
@@ -563,7 +563,6 @@ class HotelRoomsView(RetrieveAPIView):
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 
