@@ -461,12 +461,14 @@ class HotelRoomsView(RetrieveAPIView):
 
         hotel = self.get_object()
 
-        # فیلتر اتاق‌ها بر اساس تاریخ و موجودی
-        rooms_qs = hotel.rooms.filter(
+        # *** اصلاح شده: گرفتن distinct آی‌دی اتاق‌ها ***
+        rooms_ids = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
-        ).distinct()
+        ).values_list('id', flat=True).distinct()
+
+        rooms_qs = hotel.rooms.filter(id__in=rooms_ids)
 
         # حذف اتاق‌های بسته در بازه زمانی
         closed_dates = ClosedDate.objects.filter(
@@ -499,7 +501,7 @@ class HotelRoomsView(RetrieveAPIView):
             for date in date_range:
                 price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).first()
                 if not price_data:
-                    continue  # اگر قیمت ندارد این روز را نشان نده
+                    continue
 
                 discount_amount = 0
                 if price_data.discount_type == 'percentage':
@@ -532,9 +534,8 @@ class HotelRoomsView(RetrieveAPIView):
                 })
 
             if not room_availability:
-                continue  # اگر روزی با قیمت وجود ندارد، اتاق را نشان نده
+                continue
 
-            # برای خلاصه قیمت اتاق، قیمت اولین روز را در نظر می‌گیریم
             first_price_data = room.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).first()
             if first_price_data:
                 discount_amount = 0
