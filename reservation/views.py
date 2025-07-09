@@ -489,7 +489,7 @@ class HotelRoomsView(RetrieveAPIView):
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
-        night_count = (end_date_obj - start_date_obj).days
+        night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
 
         room_data = []
 
@@ -549,7 +549,9 @@ class HotelRoomsView(RetrieveAPIView):
             else:
                 price_after_discount_first = 0
 
-            # ذخیره در دیکشنری برای جلوگیری از تکرار
+            # اضافه کردن total_price برای هر اتاق
+            total_price = sum(day['price']['price'] for day in room_availability[:night_count])  # قیمت کل بر اساس شب‌ها
+
             room_dict[room.id] = {
                 "id": room.id,
                 "name": room.title or "",
@@ -571,12 +573,16 @@ class HotelRoomsView(RetrieveAPIView):
                     "extra_capacity_price": first_price_data.extra_passenger_price if first_price_data else 0,
                     "tourist_price": first_price_data.foreign_passenger_price if first_price_data else 0
                 },
+                "total_price": total_price,  # قیمت کل بر اساس شب‌ها
                 "room_availability": room_availability
             }
 
-        room_data = list(room_dict.values())  # تبدیل دیکشنری به لیست بدون تکرار
+        room_data = list(room_dict.values())
 
         if room_count_int == 1 or len(room_data) < 2:
+            # نمایش اتاق‌ها به صورت جداگانه با قیمت کل
+            for room in room_data:
+                room['total_price'] = sum(day['price']['price'] for day in room['room_availability'][:night_count])
             return Response(room_data)
 
         # پک‌بندی اتاق‌ها (تا 5 اتاق)
@@ -635,7 +641,8 @@ class HotelRoomsView(RetrieveAPIView):
                     }
                 })
 
-            pack_total_price = sum(day['price']['price'] for day in pack_availability)
+            # محاسبه total_price بر اساس شب‌ها
+            pack_total_price = sum(day['price']['price'] for day in pack_availability[:night_count])
             packs.append({
                 "pack_rooms": [{"id": r['id'], "name": r['name']} for r in pack_rooms],
                 "total_capacity": total_capacity,
@@ -646,7 +653,6 @@ class HotelRoomsView(RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 
