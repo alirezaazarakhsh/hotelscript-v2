@@ -461,7 +461,7 @@ class HotelRoomsView(RetrieveAPIView):
 
         hotel = self.get_object()
 
-        # *** اصلاح شده: گرفتن distinct آی‌دی اتاق‌ها ***
+        # گرفتن آی‌دی‌های منحصربه‌فرد اتاق‌ها
         rooms_ids = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
@@ -493,6 +493,8 @@ class HotelRoomsView(RetrieveAPIView):
 
         room_data = []
 
+        # حذف تکرارها با استفاده از دیکشنری
+        room_dict = {}
         for room in rooms_qs:
             room_services = ", ".join([service.title for service in room.services.all()]) or "خدمات ندارد"
             closed = ClosedDate.objects.filter(room_date__room=room, date__range=(start_date_obj, end_date_obj)).values_list('date', flat=True)
@@ -547,7 +549,8 @@ class HotelRoomsView(RetrieveAPIView):
             else:
                 price_after_discount_first = 0
 
-            room_data.append({
+            # ذخیره در دیکشنری برای جلوگیری از تکرار
+            room_dict[room.id] = {
                 "id": room.id,
                 "name": room.title or "",
                 "descriptions": room.description or "",
@@ -569,7 +572,9 @@ class HotelRoomsView(RetrieveAPIView):
                     "tourist_price": first_price_data.foreign_passenger_price if first_price_data else 0
                 },
                 "room_availability": room_availability
-            })
+            }
+
+        room_data = list(room_dict.values())  # تبدیل دیکشنری به لیست بدون تکرار
 
         if room_count_int == 1 or len(room_data) < 2:
             return Response(room_data)
