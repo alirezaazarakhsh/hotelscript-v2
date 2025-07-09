@@ -391,23 +391,30 @@ class HotelRoomsView(RetrieveAPIView):
 
     def get(self, request, *args, **kwargs):
         import jdatetime
-        from django.db.models import Q, F, Min
+        from django.db.models import Q, F
 
         start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
+        end_date = request.query_params.get('end_date') or None  # اختیاری می‌کنیم
         passenger_count = request.query_params.get('passenger_count')
         room_count = request.query_params.get('room_count')
 
-        if not start_date or not end_date:
-            return Response({'detail': 'پارامترهای start_date و end_date الزامی هستند.'}, status=400)
-        try:
-            start_date_obj = jdatetime.date(*[int(i) for i in start_date.split('-')])
-            end_date_obj = jdatetime.date(*[int(i) for i in end_date.split('-')])
-        except Exception:
-            return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
-
-        if start_date_obj > end_date_obj:
-            return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+        # اگر start_date وجود داشته باشد ولی end_date خالی باشد، 30 روز اضافه کن
+        if start_date and not end_date:
+            try:
+                start_date_obj = jdatetime.date(*[int(i) for i in start_date.split('-')])
+                end_date_obj = start_date_obj + jdatetime.timedelta(days=29)  # 30 روز
+            except Exception:
+                return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
+        elif start_date and end_date:
+            try:
+                start_date_obj = jdatetime.date(*[int(i) for i in start_date.split('-')])
+                end_date_obj = jdatetime.date(*[int(i) for i in end_date.split('-')])
+                if start_date_obj > end_date_obj:
+                    return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+            except Exception:
+                return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
+        else:
+            return Response({'detail': 'پارامتر start_date الزامی است.'}, status=400)
 
         try:
             passenger_count_int = int(passenger_count) if passenger_count else 1
@@ -440,38 +447,48 @@ class HotelRoomsView(RetrieveAPIView):
             )
         )
 
-        # محاسبه حداقل قیمت با در نظر گرفتن تخفیف
-        user_level = request.user.user_level if request.user.is_authenticated else None
-        rooms_qs = rooms_qs.annotate(
-            min_price_in_range=Min(
-                'date_prices__price',
-                filter=Q(
-                    date_prices__start_date__lte=end_date_obj,
-                    date_prices__end_date__gte=start_date_obj,
-                ) & (Q(date_prices__user_level=user_level) | Q(date_prices__user_level__isnull=True))
-            )
-        ).order_by('min_price_in_range')
+        # مرتب‌سازی بر اساس قیمت (بدون استفاده از annotate min_price)
+        rooms_qs = rooms_qs.order_by('date_prices__price')
 
         rooms_list = list(rooms_qs)
 
-        if room_count_int == 1 or len(rooms_list) < 2:
-            serializer = RoomSerializer(
-                rooms_list,
-                many=True,
-                context={
-                    'start_date': start_date_obj,
-                    'end_date': end_date_obj,
-                    'user_level': user_level,
-                    'passenger_count': passenger_count_int,
-                    'room_count': room_count_int,
-                }
-            )
-            return Response(serializer.data)
+        # تولید تقویم قیمتی برای 30 روز با نام ماه فارسی
+        date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range(30)]
+        room_data = []
+        persian_months = [
+            'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+            'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+        ]
+        for room in rooms_qs:
+            prices = room.date_prices.filter(
+                start_date__lte=end_date_obj,
+                end_date__gte=start_date_obj
+            ).values('start_date', 'end_date', 'price', 'discount_value', 'discount_type')
+            closed = ClosedDate.objects.filter(
+                room_date__room=room,
+                date__range=(start_date_obj, end_date_obj)
+            ).values_list('date', flat=True)
+            calendar = [
+                {
+                    'date': date.strftime('%Y-%m-%d'),
+                    'month': persian_months[date.month - 1],  # نام ماه فارسی
+                    'price': next((p['price'] for p in prices if date >= p['start_date'] and date <= p['end_date']), None),
+                    'discount': next((p['discount_value'] for p in prices if date >= p['start_date'] and date <= p['end_date'] and p['discount_type'] != 'none'), 0),
+                    'is_closed': date in closed
+                } for date in date_range
+            ]
+            room_data.append({
+                'room': room.title,
+                'calendar': calendar
+            })
 
-        # پک‌بندی اتاق‌ها (به صورت ۲ تایی یا بیشتر اگر تعداد اتاق‌ها کافی باشد)
+        if room_count_int == 1 or len(rooms_list) < 2:
+            return Response(room_data)
+
+        # پک‌بندی اتاق‌ها بر اساس قیمت کمتر
         packs = []
-        for i in range(0, len(rooms_list) - 1, 2):  # گام 2 برای پک 2 تایی
-            if i + 1 < len(rooms_list):  # مطمئن شو که پک کامل است
+        for i in range(0, len(rooms_list) - 1, 2):
+            if i + 1 < len(rooms_list):
                 pack = rooms_list[i:i + 2]
                 total_capacity = sum(
                     dp.room_capacity + (dp.extra_capacity or 0)
@@ -479,35 +496,41 @@ class HotelRoomsView(RetrieveAPIView):
                     for dp in r.date_prices.filter(
                         start_date__lte=end_date_obj,
                         end_date__gte=start_date_obj
-                    )[:1]  # اولین بازه زمانی
+                    )[:1]
                 )
-                if total_capacity >= passenger_count_int:  # بررسی ظرفیت کل پک
+                if total_capacity >= passenger_count_int:
                     pack_total_price = sum(
-                        r.min_price_in_range or 0
+                        next((p['price'] for p in r.date_prices.filter(
+                            start_date__lte=end_date_obj,
+                            end_date__gte=start_date_obj
+                        ).values('price') if start_date_obj >= p['start_date'] and start_date_obj <= p['end_date']), 0)
                         for r in pack
                     )
-                    serializer = RoomSerializer(
-                        pack,
-                        many=True,
-                        context={
-                            'start_date': start_date_obj,
-                            'end_date': end_date_obj,
-                            'user_level': user_level,
-                            'passenger_count': passenger_count_int,
-                            'room_count': room_count_int,
-                        }
-                    )
+                    pack_calendar = [
+                        {
+                            'date': date.strftime('%Y-%m-%d'),
+                            'month': persian_months[date.month - 1],  # نام ماه فارسی
+                            'price': sum(next((p['price'] for p in r.date_prices.filter(
+                                start_date__lte=end_date_obj,
+                                end_date__gte=start_date_obj
+                            ).values('price') if date >= p['start_date'] and date <= p['end_date']), 0) for r in pack),
+                            'discount': sum(next((p['discount_value'] for p in r.date_prices.filter(
+                                start_date__lte=end_date_obj,
+                                end_date__gte=start_date_obj
+                            ).values('discount_value', 'discount_type') if date >= p['start_date'] and date <= p['end_date'] and p['discount_type'] != 'none'), 0) for r in pack),
+                            'is_closed': any(date in ClosedDate.objects.filter(room_date__room=r).values_list('date', flat=True) for r in pack)
+                        } for date in date_range
+                    ]
                     packs.append({
-                        'pack_rooms': serializer.data,
+                        'pack_rooms': [r.title for r in pack],
+                        'calendar': pack_calendar,
                         'total_capacity': total_capacity,
-                        'total_price': pack_total_price,
+                        'total_price': pack_total_price
                     })
 
         # مرتب‌سازی پک‌ها بر اساس قیمت کل (از کم به زیاد)
         packs.sort(key=lambda x: x['total_price'])
-
         return Response(packs)
-
 
 
 
