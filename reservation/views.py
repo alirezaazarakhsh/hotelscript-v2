@@ -395,9 +395,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
-            "و وضعیت دسترسی (availability) باز می‌گرداند.\n"
-            "قیمت‌ها بر اساس بازه زمانی انتخاب شده (start_date و end_date) و ظرفیت مسافران محاسبه می‌شود.\n"
-            "اگر تعداد اتاق (room_count) بیشتر از 1 باشد، اتاق‌ها به صورت بسته‌های (پک) ترکیبی تا حداکثر ۳ اتاق بازگردانده می‌شوند.\n"
+            "و وضعیت دسترسی (availability) باز می‌گرداند. "
+            "اتاق‌ها یا پک‌های اتاق فقط برای تعداد مسافران مشخص‌شده (passenger_count) نمایش داده می‌شوند، "
+            "به‌طوری که ظرفیت اصلی یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
             "تمام پارامترها به جز slug اختیاری هستند.\n\n"
             "پارامترهای ورودی:\n"
@@ -483,13 +483,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ).values_list('room_date__room__id', flat=True)
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
 
-        # فیلتر ظرفیت (با احتساب ظرفیت اضافه)
+        # فیلتر دقیق ظرفیت: ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران
         rooms_qs = rooms_qs.filter(
+            date_prices__room_capacity__in=[passenger_count_int, passenger_count_int - 1]
+        ).filter(
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
         ).order_by('date_prices__price')
 
         if not rooms_qs.exists():
-            return Response({'detail': 'اتاقی در بازه انتخابی شما یافت نشد.'}, status=404)
+            return Response({'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.'}, status=404)
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
@@ -618,7 +620,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         room_data = list(room_dict.values())
 
         if not room_data:
-            return Response({'detail': 'اتاقی در بازه انتخابی شما یافت نشد.'}, status=404)
+            return Response({'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.'}, status=404)
 
         if room_count_int == 1 or len(room_data) < 2:
             return Response(room_data)
@@ -630,36 +632,35 @@ class HotelRoomsView(generics.RetrieveAPIView):
         for r in range(1, max_rooms_per_pack + 1):
             for combo in combinations(room_data, r):
                 pack_rooms = list(combo)
-                total_capacity = sum(r['capacity'] + r['extra_capacity'] for r in pack_rooms)
-                if total_capacity < passenger_count_int:
-                    continue
-
-                pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
-
-                packs.append({
-                    "pack_rooms": [
-                        {
-                            "id": r['id'],
-                            "name": r['name'],
-                            "descriptions": r['descriptions'],
-                            "room_number": r['room_number'],
-                            "customer_club_points": r['customer_club_points'],
-                            "room_services": r['room_services'],
-                            "accept_need": r['accept_need'],
-                            "dont_accept_need": r['dont_accept_need'],
-                            "hotel": r['hotel'],
-                            "hotel_name": r['hotel_name'],
-                            "capacity": r['capacity'],
-                            "extra_capacity": r['extra_capacity'],
-                            "price": r['price'],
-                            "night_count": r['night_count'],
-                            "closed_dates": r['closed_dates']
-                        } for r in pack_rooms
-                    ],
-                    "total_price": pack_total_price,
-                    "night_count": night_count,
-                    "room_count": len(pack_rooms)
-                })
+                total_capacity = sum(r['capacity'] for r in pack_rooms)
+                total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
+                # فقط پک‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران باشد
+                if total_capacity == passenger_count_int or total_capacity + total_extra_capacity == passenger_count_int:
+                    pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
+                    packs.append({
+                        "pack_rooms": [
+                            {
+                                "id": r['id'],
+                                "name": r['name'],
+                                "descriptions": r['descriptions'],
+                                "room_number": r['room_number'],
+                                "customer_club_points": r['customer_club_points'],
+                                "room_services": r['room_services'],
+                                "accept_need": r['accept_need'],
+                                "dont_accept_need": r['dont_accept_need'],
+                                "hotel": r['hotel'],
+                                "hotel_name": r['hotel_name'],
+                                "capacity": r['capacity'],
+                                "extra_capacity": r['extra_capacity'],
+                                "price": r['price'],
+                                "night_count": r['night_count'],
+                                "closed_dates": r['closed_dates']
+                            } for r in pack_rooms
+                        ],
+                        "total_price": pack_total_price,
+                        "night_count": night_count,
+                        "room_count": len(pack_rooms)
+                    })
 
         if not packs and room_count_int > 1:
             return Response({'detail': 'پک مناسب برای تعداد مسافران و اتاق‌ها یافت نشد.'}, status=404)
@@ -670,7 +671,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
     
     
     
-
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
