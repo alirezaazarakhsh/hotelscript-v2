@@ -10,6 +10,7 @@ from .utils import Round
 from rest_framework.generics import CreateAPIView
 from rest_framework.generics import ListCreateAPIView
 from rest_framework import generics
+from itertools import combinations
 
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
