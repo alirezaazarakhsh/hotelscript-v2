@@ -450,7 +450,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if (end_date_obj - start_date_obj).days > 30:
                     return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
             else:
-                end_date_obj = start_date_obj + jdatetime.timedelta(days=29)
+                end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
         except Exception:
             return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
