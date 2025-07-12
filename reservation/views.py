@@ -398,7 +398,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "و وضعیت دسترسی (availability) باز می‌گرداند. "
             "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی آن‌ها دقیقاً برابر با تعداد مسافران "
             "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد. "
-            "اتاق‌ها یا پک‌های با ظرفیت کمتر یا بیشتر نمایش داده نمی‌شوند.\n"
+            "در حالت پک‌بندی، فقط پک‌هایی با تعداد اتاق‌های دقیقاً برابر با room_count نمایش داده می‌شوند.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
             "تمام پارامترها به جز slug اختیاری هستند.\n\n"
             "پارامترهای ورودی:\n"
@@ -408,9 +408,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- passenger_count (اختیاری): تعداد مسافران، پیش‌فرض ۱، حداکثر ۸\n"
             "- room_count (اختیاری): تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳\n\n"
             "خروجی:\n"
-            "- لیست اتاق‌ها با جزئیات قیمت، تقویم قیمتی، و وضعیت روزانه یا\n"
-            "- لیست بسته‌های اتاق‌ها (پک) با قیمت کل و جزئیات هر اتاق\n"
-            "- در صورت عدم وجود اتاق: پیام خطا"
+            "- لیست اتاق‌ها با جزئیات قیمت، تقویم قیمتی، و وضعیت روزانه (برای room_count=1) یا\n"
+            "- لیست بسته‌های اتاق‌ها (پک) با تعداد اتاق‌های دقیقاً برابر با room_count و ظرفیت متناسب\n"
+            "- در صورت عدم وجود اتاق یا پک: پیام خطا"
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -433,7 +433,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         responses={
             200: "لیست اتاق‌ها یا پک‌های اتاق با قیمت و تقویم قیمتی",
             400: "خطا در پارامترهای ورودی",
-            404: "اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد"
+            404: "اتاق یا پک مناسب با ظرفیت و تعداد اتاق‌های درخواستی یافت نشد"
         }
     )
     def get(self, request, *args, **kwargs):
@@ -629,49 +629,46 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.'
             }, status=404)
 
-        if room_count_int == 1 or len(room_data) < 2:
+        if room_count_int == 1:
             return Response(room_data)
 
-        # پک‌بندی هوشمند اتاق‌ها (تا ۳ اتاق)
+        # پک‌بندی هوشمند اتاق‌ها (فقط با تعداد اتاق‌های دقیقاً برابر با room_count)
         packs = []
-        max_rooms_per_pack = min(room_count_int, 3)
-        # تولید ترکیب‌های ممکن از اتاق‌ها (اتاق‌های متفاوت)
-        for r in range(1, max_rooms_per_pack + 1):
-            for combo in combinations(room_data, r):
-                pack_rooms = list(combo)
-                total_capacity = sum(r['capacity'] for r in pack_rooms)
-                total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
-                # فقط پک‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران باشد
-                if total_capacity == passenger_count_int or (total_capacity < passenger_count_int and total_capacity + total_extra_capacity >= passenger_count_int):
-                    pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
-                    packs.append({
-                        "pack_rooms": [
-                            {
-                                "id": r['id'],
-                                "name": r['name'],
-                                "descriptions": r['descriptions'],
-                                "room_number": r['room_number'],
-                                "customer_club_points": r['customer_club_points'],
-                                "room_services": r['room_services'],
-                                "accept_need": r['accept_need'],
-                                "dont_accept_need": r['dont_accept_need'],
-                                "hotel": r['hotel'],
-                                "hotel_name": r['hotel_name'],
-                                "capacity": r['capacity'],
-                                "extra_capacity": r['extra_capacity'],
-                                "price": r['price'],
-                                "night_count": r['night_count'],
-                                "closed_dates": r['closed_dates']
-                            } for r in pack_rooms
-                        ],
-                        "total_price": pack_total_price,
-                        "night_count": night_count,
-                        "room_count": len(pack_rooms)
-                    })
+        for combo in combinations(room_data, room_count_int):  # فقط پک‌هایی با room_count_int اتاق
+            pack_rooms = list(combo)
+            total_capacity = sum(r['capacity'] for r in pack_rooms)
+            total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
+            # فقط پک‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران باشد
+            if total_capacity == passenger_count_int or (total_capacity < passenger_count_int and total_capacity + total_extra_capacity >= passenger_count_int):
+                pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
+                packs.append({
+                    "pack_rooms": [
+                        {
+                            "id": r['id'],
+                            "name": r['name'],
+                            "descriptions": r['descriptions'],
+                            "room_number": r['room_number'],
+                            "customer_club_points": r['customer_club_points'],
+                            "room_services": r['room_services'],
+                            "accept_need": r['accept_need'],
+                            "dont_accept_need": r['dont_accept_need'],
+                            "hotel": r['hotel'],
+                            "hotel_name": r['hotel_name'],
+                            "capacity": r['capacity'],
+                            "extra_capacity": r['extra_capacity'],
+                            "price": r['price'],
+                            "night_count": r['night_count'],
+                            "closed_dates": r['closed_dates']
+                        } for r in pack_rooms
+                    ],
+                    "total_price": pack_total_price,
+                    "night_count": night_count,
+                    "room_count": len(pack_rooms)
+                })
 
-        if not packs and room_count_int > 1:
+        if not packs:
             return Response({
-                'detail': 'پک مناسب برای تعداد مسافران و اتاق‌ها یافت نشد.'
+                'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.'
             }, status=404)
 
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
