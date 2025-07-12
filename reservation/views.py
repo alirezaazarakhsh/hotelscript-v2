@@ -462,6 +462,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': 'تعداد مسافران نمی‌تواند بیشتر از ۸ نفر باشد.'}, status=400)
             room_count_int = int(room_count) if room_count else 1
             room_count_int = min(max(1, room_count_int), 3)  # حداکثر ۳ اتاق
+            
+            # محاسبه حداقل ظرفیت مورد نیاز برای هر اتاق
+            min_capacity_per_room = passenger_count_int / room_count_int
+            if not min_capacity_per_room.is_integer():
+                return Response({'detail': 'تعداد مسافران باید بر تعداد اتاق‌ها بخش‌پذیر باشد.'}, status=400)
+            min_capacity_per_room = int(min_capacity_per_room)
+            
         except Exception:
             return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
@@ -483,13 +490,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ).values_list('room_date__room__id', flat=True)
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
 
-        # فیلتر ظرفیت (با احتساب ظرفیت اضافه)
+        # فیلتر ظرفیت - فقط اتاق‌هایی که دقیقاً ظرفیت مورد نیاز را دارند
         rooms_qs = rooms_qs.filter(
-            date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
+            date_prices__room_capacity=min_capacity_per_room,
+            date_prices__extra_capacity=0
         ).order_by('date_prices__price')
 
         if not rooms_qs.exists():
-            return Response({'detail': 'اتاقی در بازه انتخابی شما یافت نشد.'}, status=404)
+            return Response({'detail': 'اتاقی با ظرفیت مناسب در بازه انتخابی شما یافت نشد.'}, status=404)
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
@@ -612,28 +620,28 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 },
                 "night_count": night_count,
                 "closed_dates": closed_dates_info,
-                "price_calendar": price_calendar
+                "price_calendar": price_calendar,
+                "is_exact_capacity": True  # نشان می‌دهد این اتاق دقیقاً برای تعداد مسافران درخواستی مناسب است
             }
 
         room_data = list(room_dict.values())
 
         if not room_data:
-            return Response({'detail': 'اتاقی در بازه انتخابی شما یافت نشد.'}, status=404)
+            return Response({'detail': 'اتاقی با ظرفیت مناسب در بازه انتخابی شما یافت نشد.'}, status=404)
 
-        if room_count_int == 1 or len(room_data) < 2:
+        if room_count_int == 1:
             return Response(room_data)
 
         # پک‌بندی هوشمند اتاق‌ها (تا ۳ اتاق)
         packs = []
         max_rooms_per_pack = min(room_count_int, 3)
-        # تولید ترکیب‌های ممکن از اتاق‌ها (اتاق‌های متفاوت)
-        for r in range(1, max_rooms_per_pack + 1):
-            for combo in combinations(room_data, r):
-                pack_rooms = list(combo)
-                total_capacity = sum(r['capacity'] + r['extra_capacity'] for r in pack_rooms)
-                if total_capacity < passenger_count_int:
-                    continue
-
+        
+        # فقط ترکیب‌هایی که دقیقاً تعداد اتاق‌های درخواستی را دارند
+        for combo in combinations(room_data, room_count_int):
+            pack_rooms = list(combo)
+            
+            # بررسی اینکه همه اتاق‌ها در پک دقیقاً ظرفیت مورد نیاز را دارند
+            if all(r['capacity'] == min_capacity_per_room for r in pack_rooms):
                 pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
 
                 packs.append({
@@ -653,16 +661,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "extra_capacity": r['extra_capacity'],
                             "price": r['price'],
                             "night_count": r['night_count'],
-                            "closed_dates": r['closed_dates']
+                            "closed_dates": r['closed_dates'],
+                            "is_exact_capacity": True
                         } for r in pack_rooms
                     ],
                     "total_price": pack_total_price,
                     "night_count": night_count,
-                    "room_count": len(pack_rooms)
+                    "room_count": len(pack_rooms),
+                    "is_exact_capacity_pack": True
                 })
 
-        if not packs and room_count_int > 1:
-            return Response({'detail': 'پک مناسب برای تعداد مسافران و اتاق‌ها یافت نشد.'}, status=404)
+        if not packs:
+            return Response({'detail': 'پک مناسب برای تعداد مسافران و اتاق‌های درخواستی یافت نشد.'}, status=404)
 
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
