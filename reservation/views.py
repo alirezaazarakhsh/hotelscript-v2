@@ -463,7 +463,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
             end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
             passenger_count_int = 1  # پیش‌فرض برای محاسبه قیمت
             room_count_int = 1
-            # فقط اتاق‌هایی که حداقل یک داده قیمتی دارند
             rooms_qs = hotel.rooms.filter(date_prices__isnull=False).distinct()
             logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data, using default range {start_date_obj} to {end_date_obj}")
 
@@ -488,17 +487,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
                     closed_date = closed.filter(date=date).first()
                     status = "available"
-                    status_reason = None
 
                     if not price_data:
                         status = "ظرفیت تکمیل"
-                        status_reason = "داده قیمتی معتبر وجود ندارد"
                     elif closed_date:
                         status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
-                        status_reason = status
                     elif room.inventory == 0:
                         status = "ظرفیت تکمیل"
-                        status_reason = "موجودی اتاق صفر است"
 
                     discount_amount = 0
                     if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
@@ -514,7 +509,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "month": persian_months[date.month - 1],
                         "day": persian_days[date.weekday()],
                         "status": status,
-                        "reason": status_reason,
                         "price": {
                             "price": price_data.price if price_data else None,
                             "price_after_discount": price_after_discount,
@@ -530,7 +524,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         } if status == "available" else None
                     })
 
-                # بررسی وجود حداقل یک داده قیمتی معتبر در بازه پیش‌فرض
                 first_price_data = room.date_prices.filter(
                     start_date__lte=start_date_obj,
                     end_date__gte=start_date_obj
@@ -589,7 +582,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     'detail': 'هیچ اتاقی با داده قیمتی برای این هتل یافت نشد.',
                     'rooms': [],
                     'price_calendar': [
-                        {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با داده قیمتی یافت نشد"}
+                        {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
                         for i in range((end_date_obj - start_date_obj).days)
                     ]
                 }, status=200)
@@ -619,20 +612,21 @@ class HotelRoomsView(generics.RetrieveAPIView):
         except Exception:
             return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
-        logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}")
+        logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}, start_date={start_date}, end_date={end_date}")
 
         rooms_ids = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
         ).values_list('id', flat=True).distinct()
+        logger.info(f"Found {len(rooms_ids)} rooms with inventory >= 1 and valid price data")
         rooms_qs = hotel.rooms.filter(id__in=rooms_ids)
-        logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1")
 
         closed_dates = ClosedDate.objects.filter(
             room_date__room__in=rooms_qs,
             date__range=(start_date_obj, end_date_obj)
         ).values_list('room_date__room__id', flat=True)
+        logger.info(f"Found {len(closed_dates)} closed dates, excluding rooms: {list(closed_dates)}")
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
         logger.info(f"After excluding closed dates, {rooms_qs.count()} rooms remain")
 
@@ -643,11 +637,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date_prices__room_capacity__in=capacity_filter,
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
         )
-        logger.info(f"After capacity filter, {rooms_qs.count()} rooms remain")
+        logger.info(f"After capacity filter (capacity in {capacity_filter}), {rooms_qs.count()} rooms remain")
 
         if not rooms_qs.exists():
             price_calendar = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
@@ -682,20 +676,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
                 closed_date = closed.filter(date=date).first()
                 status = "available"
-                status_reason = None
 
                 if not price_data or not (
                     price_data.room_capacity in capacity_filter and
                     price_data.room_capacity >= passenger_count_int - price_data.extra_capacity
                 ):
                     status = "ظرفیت تکمیل"
-                    status_reason = "داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد"
                 elif closed_date:
                     status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
-                    status_reason = status
                 elif room.inventory == 0:
                     status = "ظرفیت تکمیل"
-                    status_reason = "موجودی اتاق صفر است"
 
                 discount_amount = 0
                 if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
@@ -711,7 +701,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "month": persian_months[date.month - 1],
                     "day": persian_days[date.weekday()],
                     "status": status,
-                    "reason": status_reason,
                     "price": {
                         "price": price_data.price if price_data else None,
                         "price_after_discount": price_after_discount,
@@ -787,7 +776,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not room_data:
             price_calendar = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
@@ -804,6 +793,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             pack_rooms = list(combo)
             total_capacity = sum(r['capacity'] for r in pack_rooms)
             total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
+            logger.info(f"Evaluating pack: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
             if total_capacity >= passenger_count_int or (total_capacity + total_extra_capacity >= passenger_count_int):
                 pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
                 packs.append({
@@ -835,7 +825,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not packs:
             price_calendar = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No packs formed for hotel {hotel.slug}, passenger_count={passenger_count_int}, room_count={room_count_int}")
