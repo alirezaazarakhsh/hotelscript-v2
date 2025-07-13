@@ -398,7 +398,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "و وضعیت دسترسی (availability) باز می‌گرداند. "
             "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی آن‌ها دقیقاً برابر با تعداد مسافران "
             "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد. "
-            "در صورت همپوشانی بازه‌های قیمتی، جدیدترین بازه (بر اساس created_at) اولویت دارد. "
+            "در صورت همپوشانی بازه‌های قیمتی، بازه با id بالاتر (جدیدتر) اولویت دارد. "
             "سطح کاربری پیش‌فرض 'میهمان' است.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
             "تمام پارامترها به جز slug اختیاری هستند.\n\n"
@@ -411,7 +411,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "خروجی:\n"
             "- لیست اتاق‌ها با جزئیات قیمت، تقویم قیمتی، و وضعیت روزانه (برای room_count=1) یا\n"
             "- لیست بسته‌های اتاق‌ها (پک) با تعداد اتاق‌های دقیقاً برابر با room_count و ظرفیت متناسب\n"
-            "- در صورت عدم وجود اتاق یا پک: پیام خطا"
+            "- در صورت عدم وجود اتاق یا پک: پیام خطا با جزئیات روزهای غیرقابل دسترس"
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -495,8 +495,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         )
 
         if not rooms_qs.exists():
+            unavailable_dates = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+                for i in range((end_date_obj - start_date_obj).days + 1)
+            ]
             return Response({
-                'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.'
+                'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
+                'unavailable_dates': unavailable_dates
             }, status=404)
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
@@ -533,11 +538,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
             price_calendar = []
             unavailable_dates = []  # برای ذخیره روزهایی که در دسترس نیستن
             for date in date_range:
-                # گرفتن جدیدترین price_data برای تاریخ موردنظر
+                # گرفتن جدیدترین price_data برای تاریخ موردنظر بر اساس id
                 price_data = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
-                ).order_by('-created_at').select_related('user_level').first()
+                ).order_by('-id').select_related('user_level').first()
 
                 if not price_data or not (
                     price_data.room_capacity in capacity_filter and
@@ -608,7 +613,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             first_price_data = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
-            ).order_by('-created_at').select_related('user_level').first()
+            ).order_by('-id').select_related('user_level').first()
             if not first_price_data or not (
                 first_price_data.room_capacity in capacity_filter and
                 first_price_data.room_capacity >= passenger_count_int - first_price_data.extra_capacity
@@ -661,9 +666,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         room_data = list(room_dict.values())
 
         if not room_data:
+            unavailable_dates = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+                for i in range((end_date_obj - start_date_obj).days + 1)
+            ]
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
-                'unavailable_dates': unavailable_dates if 'unavailable_dates' in locals() else []
+                'unavailable_dates': unavailable_dates
             }, status=404)
 
         if room_count_int == 1:
@@ -705,14 +714,23 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 })
 
         if not packs:
+            unavailable_dates = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
+                for i in range((end_date_obj - start_date_obj).days + 1)
+            ]
             return Response({
                 'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.',
-                'unavailable_dates': unavailable_dates if 'unavailable_dates' in locals() else []
+                'unavailable_dates': unavailable_dates
             }, status=404)
 
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
+
+
+
+
+
     
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
