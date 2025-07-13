@@ -393,7 +393,7 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback})()
-    
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -404,11 +404,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
         operation_description=(
-            "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
-            "و وضعیت دسترسی باز می‌گرداند. در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر "
-            "دارند نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
-            "در حالت فیلترشده، فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت مناسب با تعداد مسافران "
-            "دارند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
+            "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، و وضعیت دسترسی باز می‌گرداند. "
+            "در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر دارند نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
+            "در حالت فیلترشده، فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت مناسب با تعداد مسافران دارند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
             "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
@@ -481,77 +479,54 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     date__range=(start_date_obj, end_date_obj)
                 ).select_related('room_date')
 
-                closed_dates_info = [
-                    {
-                        "date": closed_date.date.strftime('%Y/%m/%d'),
-                        "reason": closed_date.get_reason_display() if closed_date.reason else "بدون علت",
-                        "user_level": closed_date.user_level.title if closed_date.user_level else default_user_level
-                    }
-                    for closed_date in closed
-                ]
-
                 price_calendar = []
-                unavailable_dates = []
                 for date in date_range:
                     price_data = room.date_prices.filter(
                         start_date__lte=date,
                         end_date__gte=date
                     ).order_by('-id').select_related('user_level').first()
 
+                    closed_date = closed.filter(date=date).first()
+                    status = "available"
+                    status_reason = None
+
                     if not price_data:
-                        unavailable_dates.append({
-                            "date": date.strftime('%Y/%m/%d'),
-                            "reason": "داده قیمتی معتبر وجود ندارد"
-                        })
-                        price_calendar.append({
-                            "date": date.strftime('%Y/%m/%d'),
-                            "month": persian_months[date.month - 1],
-                            "day": persian_days[date.weekday()],
-                            "status": "unavailable",
-                            "price": None
-                        })
-                        continue
+                        status = "ظرفیت تکمیل"
+                        status_reason = "داده قیمتی معتبر وجود ندارد"
+                    elif closed_date:
+                        status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
+                        status_reason = status
+                    elif room.inventory == 0:
+                        status = "ظرفیت تکمیل"
+                        status_reason = "موجودی اتاق صفر است"
 
                     discount_amount = 0
-                    if price_data.discount_type == 'percentage':
-                        discount_amount = price_data.price * price_data.discount_value / 100
-                    elif price_data.discount_type == 'fixed':
-                        discount_amount = price_data.discount_value
+                    if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
+                        if price_data.discount_type == 'percentage':
+                            discount_amount = price_data.price * price_data.discount_value / 100
+                        elif price_data.discount_type == 'fixed':
+                            discount_amount = price_data.discount_value
 
-                    price_after_discount = max(price_data.price - discount_amount, 0)
-
-                    status = "available"
-                    if date in [c.date for c in closed]:
-                        status = "unavailable"
-                        unavailable_dates.append({
-                            "date": date.strftime('%Y/%m/%d'),
-                            "reason": "اتاق در این تاریخ بسته است"
-                        })
-                    elif room.inventory == 0:
-                        status = "full_capacity"
-                        unavailable_dates.append({
-                            "date": date.strftime('%Y/%m/%d'),
-                            "reason": "موجودی اتاق صفر است"
-                        })
+                    price_after_discount = max(price_data.price - discount_amount, 0) if price_data else None
 
                     price_calendar.append({
                         "date": date.strftime('%Y/%m/%d'),
                         "month": persian_months[date.month - 1],
                         "day": persian_days[date.weekday()],
                         "status": status,
+                        "reason": status_reason,
                         "price": {
-                            "price": price_data.price,
+                            "price": price_data.price if price_data else None,
                             "price_after_discount": price_after_discount,
-                            "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
-                            "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
-                            "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
-                            "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
-                            "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
-                            "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
-                            "capacity": price_data.room_capacity,
-                            "extra_capacity": price_data.extra_capacity,
-                            "extra_capacity_price": price_data.extra_passenger_price,
-                            "tourist_price": price_data.foreign_passenger_price or 0
+                            "discount_percentage": price_data.discount_value if price_data and price_data.discount_type == 'percentage' else None,
+                            "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                            "discount_date": price_data.discount_date.strftime('%Y/%m/%d') if price_data and price_data.discount_date else None,
+                            "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
+                            "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
+                            "capacity": price_data.room_capacity if price_data else 0,
+                            "extra_capacity": price_data.extra_capacity if price_data else 0,
+                            "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
+                            "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
                         } if status == "available" else None
                     })
 
@@ -566,10 +541,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     continue
 
                 discount_amount = 0
-                if first_price_data.discount_type == 'percentage':
-                    discount_amount = first_price_data.price * first_price_data.discount_value / 100
-                elif first_price_data.discount_type == 'fixed':
-                    discount_amount = first_price_data.discount_value
+                if first_price_data.discount_type != 'none' and first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
+                    if first_price_data.discount_type == 'percentage':
+                        discount_amount = first_price_data.price * first_price_data.discount_value / 100
+                    elif first_price_data.discount_type == 'fixed':
+                        discount_amount = first_price_data.discount_value
                 price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
                 total_price = sum(
@@ -595,16 +571,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "total_price": total_price,
                         "discount_percentage": first_price_data.discount_value if first_price_data.discount_type == 'percentage' else None,
                         "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
-                        "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data.discount_start else None,
-                        "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data.discount_end else None,
+                        "discount_date": first_price_data.discount_date.strftime('%Y/%m/%d') if first_price_data.discount_date else None,
                         "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                         "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
                         "extra_capacity_price": first_price_data.extra_passenger_price,
                         "tourist_price": first_price_data.foreign_passenger_price or 0
                     },
                     "night_count": night_count,
-                    "closed_dates": closed_dates_info,
-                    "unavailable_dates": unavailable_dates,
                     "price_calendar": price_calendar
                 }
 
@@ -615,7 +588,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({
                     'detail': 'هیچ اتاقی با داده قیمتی برای این هتل یافت نشد.',
                     'rooms': [],
-                    'unavailable_dates': []
+                    'price_calendar': [
+                        {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با داده قیمتی یافت نشد"}
+                        for i in range((end_date_obj - start_date_obj).days)
+                    ]
                 }, status=200)
 
             return Response(room_data)
@@ -670,14 +646,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
         logger.info(f"After capacity filter, {rooms_qs.count()} rooms remain")
 
         if not rooms_qs.exists():
-            unavailable_dates = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
-                for i in range((end_date_obj - start_date_obj).days + 1)
+            price_calendar = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+                for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
-                'unavailable_dates': unavailable_dates
+                'price_calendar': price_calendar
             }, status=404)
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -697,81 +673,57 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 date__range=(start_date_obj, end_date_obj)
             ).select_related('room_date')
 
-            closed_dates_info = [
-                {
-                    "date": closed_date.date.strftime('%Y/%m/%d'),
-                    "reason": closed_date.get_reason_display() if closed_date.reason else "بدون علت",
-                    "user_level": closed_date.user_level.title if closed_date.user_level else default_user_level
-                }
-                for closed_date in closed
-            ]
-
             price_calendar = []
-            unavailable_dates = []
             for date in date_range:
                 price_data = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 ).order_by('-id').select_related('user_level').first()
 
+                closed_date = closed.filter(date=date).first()
+                status = "available"
+                status_reason = None
+
                 if not price_data or not (
                     price_data.room_capacity in capacity_filter and
                     price_data.room_capacity >= passenger_count_int - price_data.extra_capacity
                 ):
-                    unavailable_dates.append({
-                        "date": date.strftime('%Y/%m/%d'),
-                        "reason": "داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد"
-                    })
-                    price_calendar.append({
-                        "date": date.strftime('%Y/%m/%d'),
-                        "month": persian_months[date.month - 1],
-                        "day": persian_days[date.weekday()],
-                        "status": "unavailable",
-                        "price": None
-                    })
-                    logger.info(f"Room {room.id}, Date {date}: No valid price data or capacity mismatch")
-                    continue
+                    status = "ظرفیت تکمیل"
+                    status_reason = "داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد"
+                elif closed_date:
+                    status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
+                    status_reason = status
+                elif room.inventory == 0:
+                    status = "ظرفیت تکمیل"
+                    status_reason = "موجودی اتاق صفر است"
 
                 discount_amount = 0
-                if price_data.discount_type == 'percentage':
-                    discount_amount = price_data.price * price_data.discount_value / 100
-                elif price_data.discount_type == 'fixed':
-                    discount_amount = price_data.discount_value
+                if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
+                    if price_data.discount_type == 'percentage':
+                        discount_amount = price_data.price * price_data.discount_value / 100
+                    elif price_data.discount_type == 'fixed':
+                        discount_amount = price_data.discount_value
 
-                price_after_discount = max(price_data.price - discount_amount, 0)
-
-                status = "available"
-                if date in [c.date for c in closed]:
-                    status = "unavailable"
-                    unavailable_dates.append({
-                        "date": date.strftime('%Y/%m/%d'),
-                        "reason": "اتاق در این تاریخ بسته است"
-                    })
-                elif room.inventory == 0:
-                    status = "full_capacity"
-                    unavailable_dates.append({
-                        "date": date.strftime('%Y/%m/%d'),
-                        "reason": "موجودی اتاق صفر است"
-                    })
+                price_after_discount = max(price_data.price - discount_amount, 0) if price_data else None
 
                 price_calendar.append({
                     "date": date.strftime('%Y/%m/%d'),
                     "month": persian_months[date.month - 1],
                     "day": persian_days[date.weekday()],
                     "status": status,
+                    "reason": status_reason,
                     "price": {
-                        "price": price_data.price,
+                        "price": price_data.price if price_data else None,
                         "price_after_discount": price_after_discount,
-                        "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
-                        "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
-                        "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
-                        "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
-                        "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
-                        "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
-                        "capacity": price_data.room_capacity,
-                        "extra_capacity": price_data.extra_capacity,
-                        "extra_capacity_price": price_data.extra_passenger_price,
-                        "tourist_price": price_data.foreign_passenger_price or 0
+                        "discount_percentage": price_data.discount_value if price_data and price_data.discount_type == 'percentage' else None,
+                        "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                        "discount_date": price_data.discount_date.strftime('%Y/%m/%d') if price_data and price_data.discount_date else None,
+                        "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
+                        "capacity": price_data.room_capacity if price_data else 0,
+                        "extra_capacity": price_data.extra_capacity if price_data else 0,
+                        "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
+                        "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
                     } if status == "available" else None
                 })
 
@@ -791,10 +743,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 continue
 
             discount_amount = 0
-            if first_price_data.discount_type == 'percentage':
-                discount_amount = first_price_data.price * first_price_data.discount_value / 100
-            elif first_price_data.discount_type == 'fixed':
-                discount_amount = first_price_data.discount_value
+            if first_price_data.discount_type != 'none' and first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
+                if first_price_data.discount_type == 'percentage':
+                    discount_amount = first_price_data.price * first_price_data.discount_value / 100
+                elif first_price_data.discount_type == 'fixed':
+                    discount_amount = first_price_data.discount_value
             price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
             total_price = sum(
@@ -820,30 +773,27 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "total_price": total_price,
                     "discount_percentage": first_price_data.discount_value if first_price_data.discount_type == 'percentage' else None,
                     "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
-                    "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data.discount_start else None,
-                    "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data.discount_end else None,
+                    "discount_date": first_price_data.discount_date.strftime('%Y/%m/%d') if first_price_data.discount_date else None,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                     "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
                     "extra_capacity_price": first_price_data.extra_passenger_price,
                     "tourist_price": first_price_data.foreign_passenger_price or 0
                 },
                 "night_count": night_count,
-                "closed_dates": closed_dates_info,
-                "unavailable_dates": unavailable_dates,
                 "price_calendar": price_calendar
             }
 
         room_data = list(room_dict.values())
 
         if not room_data:
-            unavailable_dates = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
+            price_calendar = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
-                'unavailable_dates': unavailable_dates
+                'price_calendar': price_calendar
             }, status=404)
 
         if room_count_int == 1:
@@ -873,8 +823,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "extra_capacity": r['extra_capacity'],
                             "price": r['price'],
                             "night_count": r['night_count'],
-                            "closed_dates": r['closed_dates'],
-                            "unavailable_dates": r['unavailable_dates'],
                             "price_calendar": r['price_calendar']
                         } for r in pack_rooms
                     ],
@@ -886,19 +834,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 logger.info(f"Pack skipped: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
         if not packs:
-            unavailable_dates = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
+            price_calendar = [
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل", "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No packs formed for hotel {hotel.slug}, passenger_count={passenger_count_int}, room_count={room_count_int}")
             return Response({
                 'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.',
-                'unavailable_dates': unavailable_dates
+                'price_calendar': price_calendar
             }, status=404)
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 

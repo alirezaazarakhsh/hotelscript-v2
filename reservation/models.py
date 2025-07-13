@@ -847,13 +847,8 @@ class RoomDatePrice(models.Model):
         blank=True,
     )
 
-    discount_start = jmodels.jDateField(
-        verbose_name=_('شروع تخفیف'),
-        null=True,
-        blank=True,
-    )
-    discount_end = jmodels.jDateField(
-        verbose_name=_('پایان تخفیف'),
+    discount_date = jmodels.jDateField(
+        verbose_name=_('تاریخ تخفیف'),
         null=True,
         blank=True,
     )
@@ -900,9 +895,6 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
-
-
-
 
 
 #مدل بستن یه روز از بازه خواستی 

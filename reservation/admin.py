@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
-    ClosedDate,  # 🔥 اضافه شده
+    ClosedDate,
     Province,
     City,
     HotelType,
@@ -353,21 +353,19 @@ class RoomDateInline(admin.TabularInline):
         'user_level',
         'start_date',
         'end_date',
-        'room_capacity',  
+        'room_capacity',
         'extra_capacity',
         'price',
         'extra_passenger_price',
         'foreign_passenger_price',
         'discount_type',
         'discount_value',
-        'discount_start',
-        'discount_end',
+        'discount_date',
         'is_fixed_discount_one_time',
     )
     ordering = ('start_date',)
 
 
-# 🔥 اضافه شده: Inline برای ClosedDate
 class ClosedDateInline(admin.TabularInline):
     model = ClosedDate
     extra = 1
@@ -389,7 +387,7 @@ class RoomAdmin(admin.ModelAdmin):
     )
     search_fields = ('title',)
     autocomplete_fields = ('hotel',)
-    inlines = [RoomDateInline]
+    inlines = [RoomDateInline]  # Removed ClosedDateInline
 
 
 @admin.register(RoomDatePrice)
@@ -400,12 +398,11 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         'start_date',
         'end_date',
         'price',
-        'room_capacity',           # ← اضافه شد
-        'extra_capacity',          # ← اضافه شد
+        'room_capacity',
+        'extra_capacity',
         'discount_type',
         'discount_value',
-        'discount_start',
-        'discount_end',
+        'discount_date',
         'is_fixed_discount_one_time',
     )
 
@@ -432,8 +429,8 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
                 'user_level',
                 'start_date',
                 'end_date',
-                'room_capacity',       
-                'extra_capacity',      
+                'room_capacity',
+                'extra_capacity',
             )
         }),
         (_('قیمت‌گذاری'), {
@@ -447,15 +444,13 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             'fields': (
                 'discount_type',
                 'discount_value',
-                'discount_start',
-                'discount_end',
+                'discount_date',
                 'is_fixed_discount_one_time',
             )
         }),
     )
 
-    inlines = [ClosedDateInline]  # ← باقی ماند
-
+    inlines = [ClosedDateInline]  # Moved ClosedDateInline here
 
 
 @admin.register(ClosedDate)
@@ -516,8 +511,6 @@ class BestHotelsAdmin(admin.ModelAdmin):
     list_filter = (
         'order',
     )
-
-
 
 
 @admin.register(ReservationApprovalDuration)
