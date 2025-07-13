@@ -397,8 +397,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
             "و وضعیت دسترسی (availability) باز می‌گرداند. "
             "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی آن‌ها دقیقاً برابر با تعداد مسافران "
-            "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد. "
-            "در حالت پک‌بندی، فقط پک‌هایی با تعداد اتاق‌های دقیقاً برابر با room_count نمایش داده می‌شوند.\n"
+            "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد و برای کل بازه زمانی در دسترس باشند. "
+            "در صورت همپوشانی بازه‌های قیمتی، جدیدترین بازه (بر اساس created_at) اولویت دارد. "
+            "سطح کاربری پیش‌فرض 'میهمان' است.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
             "تمام پارامترها به جز slug اختیاری هستند.\n\n"
             "پارامترهای ورودی:\n"
@@ -491,7 +492,17 @@ class HotelRoomsView(generics.RetrieveAPIView):
         rooms_qs = rooms_qs.filter(
             date_prices__room_capacity__in=capacity_filter,
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
-        ).order_by('date_prices__price')
+        ).annotate(
+            valid_date_count=Count(
+                'date_prices',
+                filter=Q(
+                    date_prices__start_date__lte=end_date_obj,
+                    date_prices__end_date__gte=start_date_obj,
+                    date_prices__room_capacity__in=capacity_filter,
+                    date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
+                )
+            )
+        ).filter(valid_date_count=(end_date_obj - start_date_obj).days + 1)
 
         if not rooms_qs.exists():
             return Response({
@@ -504,6 +515,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
         night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
 
         room_data = []
+
+        # فرض می‌کنیم سطح کاربری پیش‌فرض "میهمان" است
+        default_user_level = "میهمان"
 
         # حذف تکرارها با استفاده از دیکشنری
         room_dict = {}
@@ -521,17 +535,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 {
                     "date": closed_date.date.strftime('%Y/%m/%d'),
                     "reason": closed_date.get_reason_display() if closed_date.reason else "بدون علت",
-                    "user_level": closed_date.user_level.title if closed_date.user_level else "همه سطوح"
+                    "user_level": closed_date.user_level.title if closed_date.user_level else default_user_level
                 }
                 for closed_date in closed
             ]
 
             price_calendar = []
             for date in date_range:
+                # گرفتن جدیدترین price_data برای تاریخ موردنظر
                 price_data = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
-                ).select_related('user_level').first()
+                ).order_by('-created_at').select_related('user_level').first()
                 if not price_data:
                     continue
 
@@ -557,7 +572,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
                     "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
                     "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
-                    "user_level": price_data.user_level.title if price_data.user_level else "همه سطوح",
+                    "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
                     "capacity": price_data.room_capacity,
                     "extra_capacity": price_data.extra_capacity,
                     "extra_capacity_price": price_data.extra_passenger_price,
@@ -572,13 +587,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "price": price
                 })
 
-            if not price_calendar:
-                continue
+            if len(price_calendar) != len(date_range):
+                continue  # اگر تقویم قیمتی برای همه روزها پر نشده، اتاق را رد کن
 
             first_price_data = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
-            ).select_related('user_level').first()
+            ).order_by('-created_at').select_related('user_level').first()
             if not first_price_data:
                 continue  # اگر برای تاریخ شروع داده قیمتی وجود ندارد، اتاق را رد کن
 
@@ -613,7 +628,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data.discount_start else None,
                     "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data.discount_end else None,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
-                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "همه سطوح",
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
                     "extra_capacity_price": first_price_data.extra_passenger_price,
                     "tourist_price": first_price_data.foreign_passenger_price or 0
                 },
