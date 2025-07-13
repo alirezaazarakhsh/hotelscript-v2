@@ -520,7 +520,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
-        date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
+        date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
 
         # فرض می‌کنیم سطح کاربری پیش‌فرض "میهمان" است
@@ -684,7 +684,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if not room_data:
             unavailable_dates = [
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
-                for i in range((end_date_obj - start_date_obj).days + 1)
+                for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
             return Response({
@@ -722,7 +722,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "price": r['price'],
                             "night_count": r['night_count'],
                             "closed_dates": r['closed_dates'],
-                            "unavailable_dates": r['unavailable_dates']
+                            "unavailable_dates": r['unavailable_dates'],
+                            "price_calendar": r['price_calendar']
                         } for r in pack_rooms
                     ],
                     "total_price": pack_total_price,
@@ -735,7 +736,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if not packs:
             unavailable_dates = [
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
-                for i in range((end_date_obj - start_date_obj).days + 1)
+                for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No packs formed for hotel {hotel.slug}, passenger_count={passenger_count_int}, room_count={room_count_int}")
             return Response({
