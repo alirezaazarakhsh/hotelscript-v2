@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import product
 from datetime import datetime, timedelta
+import logging
 import jdatetime
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
@@ -384,6 +385,15 @@ class RoomServiceListView(ListAPIView):
 
 
 # ای پی ای اتاق ها بر اساس اسلاگ 
+# تنظیم لاگ برای دیباگ (با fallback برای جلوگیری از خطا)
+try:
+    logger = logging.getLogger(__name__)
+except Exception:
+    import sys
+    def logger_fallback(*args, **kwargs):
+        print(*args, file=sys.stderr)
+    logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback})()
+    
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -468,6 +478,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
         hotel = self.get_object()
+        logger.info(f"Processing request for hotel {hotel.slug} with passenger_count={passenger_count_int}, room_count={room_count_int}")
 
         # گرفتن آی‌دی‌های منحصربه‌فرد اتاق‌ها
         rooms_ids = hotel.rooms.filter(
@@ -475,9 +486,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
         ).values_list('id', flat=True).distinct()
-
         rooms_qs = hotel.rooms.filter(id__in=rooms_ids)
-        logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1 for hotel {hotel.slug}")
+        logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1")
 
         # حذف اتاق‌های بسته در بازه زمانی
         closed_dates = ClosedDate.objects.filter(
@@ -487,7 +497,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
         logger.info(f"After excluding closed dates, {rooms_qs.count()} rooms remain")
 
-        # فیلتر ظرفیت: فقط اتاق‌هایی با ظرفیت اصلی یا ظرفیت اصلی + ظرفیت اضافی مناسب
+        # فیلتر ظرفیت: اتاق‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ظرفیت اضافی مناسب باشه
         capacity_filter = [passenger_count_int]
         if passenger_count_int > 1:
             capacity_filter.append(passenger_count_int - 1)
@@ -502,6 +512,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days + 1)
             ]
+            logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
                 'unavailable_dates': unavailable_dates
@@ -675,7 +686,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days + 1)
             ]
-            logger.info("No rooms available after filtering")
+            logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
                 'unavailable_dates': unavailable_dates
@@ -726,7 +737,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days + 1)
             ]
-            logger.info("No packs formed after filtering")
+            logger.warning(f"No packs formed for hotel {hotel.slug}, passenger_count={passenger_count_int}, room_count={room_count_int}")
             return Response({
                 'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.',
                 'unavailable_dates': unavailable_dates
