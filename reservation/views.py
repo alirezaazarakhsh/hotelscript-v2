@@ -397,7 +397,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
             "و وضعیت دسترسی (availability) باز می‌گرداند. "
             "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی آن‌ها دقیقاً برابر با تعداد مسافران "
-            "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد و برای کل بازه زمانی در دسترس باشند. "
+            "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد. "
             "در صورت همپوشانی بازه‌های قیمتی، جدیدترین بازه (بر اساس created_at) اولویت دارد. "
             "سطح کاربری پیش‌فرض 'میهمان' است.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
@@ -485,24 +485,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ).values_list('room_date__room__id', flat=True)
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
 
-        # فیلتر دقیق ظرفیت: فقط اتاق‌هایی با ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران
+        # فیلتر ظرفیت: فقط اتاق‌هایی با ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران
         capacity_filter = [passenger_count_int]
         if passenger_count_int > 1:
             capacity_filter.append(passenger_count_int - 1)
         rooms_qs = rooms_qs.filter(
             date_prices__room_capacity__in=capacity_filter,
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
-        ).annotate(
-            valid_date_count=Count(
-                'date_prices',
-                filter=Q(
-                    date_prices__start_date__lte=end_date_obj,
-                    date_prices__end_date__gte=start_date_obj,
-                    date_prices__room_capacity__in=capacity_filter,
-                    date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
-                )
-            )
-        ).filter(valid_date_count=(end_date_obj - start_date_obj).days + 1)
+        )
 
         if not rooms_qs.exists():
             return Response({
@@ -514,10 +504,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days + 1)]
         night_count = (end_date_obj - start_date_obj).days  # تعداد شب‌ها
 
-        room_data = []
-
         # فرض می‌کنیم سطح کاربری پیش‌فرض "میهمان" است
         default_user_level = "میهمان"
+
+        room_data = []
 
         # حذف تکرارها با استفاده از دیکشنری
         room_dict = {}
@@ -541,13 +531,29 @@ class HotelRoomsView(generics.RetrieveAPIView):
             ]
 
             price_calendar = []
+            unavailable_dates = []  # برای ذخیره روزهایی که در دسترس نیستن
             for date in date_range:
                 # گرفتن جدیدترین price_data برای تاریخ موردنظر
                 price_data = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 ).order_by('-created_at').select_related('user_level').first()
-                if not price_data:
+
+                if not price_data or not (
+                    price_data.room_capacity in capacity_filter and
+                    price_data.room_capacity >= passenger_count_int - price_data.extra_capacity
+                ):
+                    unavailable_dates.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "reason": "داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد"
+                    })
+                    price_calendar.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "month": persian_months[date.month - 1],
+                        "day": persian_days[date.weekday()],
+                        "status": "unavailable",
+                        "price": None
+                    })
                     continue
 
                 discount_amount = 0
@@ -561,8 +567,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 status = "available"
                 if date in [c.date for c in closed]:
                     status = "unavailable"
+                    unavailable_dates.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "reason": "اتاق در این تاریخ بسته است"
+                    })
                 elif room.inventory == 0:
                     status = "full_capacity"
+                    unavailable_dates.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "reason": "موجودی اتاق صفر است"
+                    })
 
                 price = {
                     "price": price_data.price,
@@ -584,18 +598,22 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "month": persian_months[date.month - 1],
                     "day": persian_days[date.weekday()],
                     "status": status,
-                    "price": price
+                    "price": price if status == "available" else None
                 })
 
-            if len(price_calendar) != len(date_range):
-                continue  # اگر تقویم قیمتی برای همه روزها پر نشده، اتاق را رد کن
+            # اگر هیچ روزی در دسترس نباشد، اتاق را رد کن
+            if all(day['status'] != "available" for day in price_calendar):
+                continue
 
             first_price_data = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
             ).order_by('-created_at').select_related('user_level').first()
-            if not first_price_data:
-                continue  # اگر برای تاریخ شروع داده قیمتی وجود ندارد، اتاق را رد کن
+            if not first_price_data or not (
+                first_price_data.room_capacity in capacity_filter and
+                first_price_data.room_capacity >= passenger_count_int - first_price_data.extra_capacity
+            ):
+                continue  # اگر برای تاریخ شروع داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد، اتاق را رد کن
 
             discount_amount = 0
             if first_price_data.discount_type == 'percentage':
@@ -604,7 +622,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 discount_amount = first_price_data.discount_value
             price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
-            total_price = sum(day['price']['price'] for day in price_calendar[:night_count])
+            total_price = sum(
+                day['price']['price'] for day in price_calendar if day['status'] == "available" and day['price']
+            )
 
             room_dict[room.id] = {
                 "id": room.id,
@@ -634,6 +654,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 },
                 "night_count": night_count,
                 "closed_dates": closed_dates_info,
+                "unavailable_dates": unavailable_dates,  # روزهای غیرقابل دسترس
                 "price_calendar": price_calendar
             }
 
@@ -641,7 +662,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not room_data:
             return Response({
-                'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.'
+                'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
+                'unavailable_dates': unavailable_dates if 'unavailable_dates' in locals() else []
             }, status=404)
 
         if room_count_int == 1:
@@ -673,7 +695,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "extra_capacity": r['extra_capacity'],
                             "price": r['price'],
                             "night_count": r['night_count'],
-                            "closed_dates": r['closed_dates']
+                            "closed_dates": r['closed_dates'],
+                            "unavailable_dates": r['unavailable_dates']
                         } for r in pack_rooms
                     ],
                     "total_price": pack_total_price,
@@ -683,13 +706,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not packs:
             return Response({
-                'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.'
+                'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.',
+                'unavailable_dates': unavailable_dates if 'unavailable_dates' in locals() else []
             }, status=404)
 
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-    
     
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
