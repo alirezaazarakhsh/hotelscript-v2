@@ -405,11 +405,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
-            "و وضعیت دسترسی باز می‌گرداند. اگر پارامترهای فیلتر (start_date, end_date, passenger_count, room_count) "
-            "ارائه نشوند، تمام اتاق‌های هتل بدون فیلتر برگردانده می‌شوند. "
-            "در غیر این صورت، فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی یا ظرفیت اصلی به علاوه ظرفیت اضافی "
-            "آن‌ها بزرگ‌تر یا مساوی با تعداد مسافران باشد. "
-            "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
+            "و وضعیت دسترسی باز می‌گرداند. در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر "
+            "دارند نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
+            "در حالت فیلترشده، فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت مناسب با تعداد مسافران "
+            "دارند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
             "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
@@ -417,9 +416,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- passenger_count (اختیاری): تعداد مسافران، پیش‌فرض ۱، حداکثر ۸\n"
             "- room_count (اختیاری): تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳\n\n"
             "خروجی:\n"
-            "- بدون فیلتر: لیست تمام اتاق‌ها\n"
+            "- بدون فیلتر: لیست اتاق‌هایی که حداقل یک بازه قیمتی دارند با تقویم قیمتی\n"
             "- با فیلتر: لیست اتاق‌ها یا پک‌های اتاق با قیمت و تقویم قیمتی\n"
-            "- در صورت عدم وجود اتاق یا پک: پیام خطا با جزئیات روزهای غیرقابل دسترس"
+            "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس"
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -454,18 +453,129 @@ class HotelRoomsView(generics.RetrieveAPIView):
         hotel = self.get_object()
         logger.info(f"Processing request for hotel {hotel.slug}")
 
-        # بررسی وجود پارامترهای فیلتر
         has_filters = any([start_date, end_date, passenger_count, room_count])
 
+        persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+        persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
+        default_user_level = "میهمان"
+
         if not has_filters:
-            # بدون فیلتر: بازگشت تمام اتاق‌ها
-            rooms_qs = hotel.rooms.all()
-            logger.info(f"No filters applied, found {rooms_qs.count()} rooms")
+            # حالت بدون فیلتر: فقط اتاق‌هایی با حداقل یک داده قیمتی
+            start_date_obj = jdatetime.date.today()
+            end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
+            passenger_count_int = 1  # پیش‌فرض برای محاسبه قیمت
+            room_count_int = 1
+            # فقط اتاق‌هایی که حداقل یک داده قیمتی دارند
+            rooms_qs = hotel.rooms.filter(date_prices__isnull=False).distinct()
+            logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data, using default range {start_date_obj} to {end_date_obj}")
+
+            date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
+            night_count = (end_date_obj - start_date_obj).days
 
             room_data = []
             room_dict = {}
             for room in rooms_qs:
                 room_services = ", ".join([service.title for service in room.services.all()]) or "خدمات ندارد"
+                closed = ClosedDate.objects.filter(
+                    room_date__room=room,
+                    date__range=(start_date_obj, end_date_obj)
+                ).select_related('room_date')
+
+                closed_dates_info = [
+                    {
+                        "date": closed_date.date.strftime('%Y/%m/%d'),
+                        "reason": closed_date.get_reason_display() if closed_date.reason else "بدون علت",
+                        "user_level": closed_date.user_level.title if closed_date.user_level else default_user_level
+                    }
+                    for closed_date in closed
+                ]
+
+                price_calendar = []
+                unavailable_dates = []
+                for date in date_range:
+                    price_data = room.date_prices.filter(
+                        start_date__lte=date,
+                        end_date__gte=date
+                    ).order_by('-id').select_related('user_level').first()
+
+                    if not price_data:
+                        unavailable_dates.append({
+                            "date": date.strftime('%Y/%m/%d'),
+                            "reason": "داده قیمتی معتبر وجود ندارد"
+                        })
+                        price_calendar.append({
+                            "date": date.strftime('%Y/%m/%d'),
+                            "month": persian_months[date.month - 1],
+                            "day": persian_days[date.weekday()],
+                            "status": "unavailable",
+                            "price": None
+                        })
+                        continue
+
+                    discount_amount = 0
+                    if price_data.discount_type == 'percentage':
+                        discount_amount = price_data.price * price_data.discount_value / 100
+                    elif price_data.discount_type == 'fixed':
+                        discount_amount = price_data.discount_value
+
+                    price_after_discount = max(price_data.price - discount_amount, 0)
+
+                    status = "available"
+                    if date in [c.date for c in closed]:
+                        status = "unavailable"
+                        unavailable_dates.append({
+                            "date": date.strftime('%Y/%m/%d'),
+                            "reason": "اتاق در این تاریخ بسته است"
+                        })
+                    elif room.inventory == 0:
+                        status = "full_capacity"
+                        unavailable_dates.append({
+                            "date": date.strftime('%Y/%m/%d'),
+                            "reason": "موجودی اتاق صفر است"
+                        })
+
+                    price_calendar.append({
+                        "date": date.strftime('%Y/%m/%d'),
+                        "month": persian_months[date.month - 1],
+                        "day": persian_days[date.weekday()],
+                        "status": status,
+                        "price": {
+                            "price": price_data.price,
+                            "price_after_discount": price_after_discount,
+                            "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
+                            "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
+                            "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
+                            "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
+                            "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
+                            "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
+                            "capacity": price_data.room_capacity,
+                            "extra_capacity": price_data.extra_capacity,
+                            "extra_capacity_price": price_data.extra_passenger_price,
+                            "tourist_price": price_data.foreign_passenger_price or 0
+                        } if status == "available" else None
+                    })
+
+                # بررسی وجود حداقل یک داده قیمتی معتبر در بازه پیش‌فرض
+                first_price_data = room.date_prices.filter(
+                    start_date__lte=start_date_obj,
+                    end_date__gte=start_date_obj
+                ).order_by('-id').select_related('user_level').first()
+
+                if not first_price_data:
+                    logger.info(f"Room {room.id} skipped: No valid price data in default range")
+                    continue
+
+                discount_amount = 0
+                if first_price_data.discount_type == 'percentage':
+                    discount_amount = first_price_data.price * first_price_data.discount_value / 100
+                elif first_price_data.discount_type == 'fixed':
+                    discount_amount = first_price_data.discount_value
+                price_after_discount_first = max(first_price_data.price - discount_amount, 0)
+
+                total_price = sum(
+                    day['price']['price'] for day in price_calendar if day['status'] == "available" and day['price']
+                )
+
                 room_dict[room.id] = {
                     "id": room.id,
                     "name": room.title or "",
@@ -477,27 +587,40 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "dont_accept_need": room.auto_approved_count or 0,
                     "hotel": room.hotel.id,
                     "hotel_name": str(room.hotel) or "",
-                    "capacity": None,  # اطلاعات ظرفیت در حالت بدون فیلتر اختیاری است
-                    "extra_capacity": None,
-                    "price": None,
-                    "night_count": 0,
-                    "closed_dates": [],
-                    "unavailable_dates": [],
-                    "price_calendar": []
+                    "capacity": first_price_data.room_capacity,
+                    "extra_capacity": first_price_data.extra_capacity,
+                    "price": {
+                        "price": first_price_data.price,
+                        "price_after_discount": price_after_discount_first,
+                        "total_price": total_price,
+                        "discount_percentage": first_price_data.discount_value if first_price_data.discount_type == 'percentage' else None,
+                        "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
+                        "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data.discount_start else None,
+                        "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data.discount_end else None,
+                        "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
+                        "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
+                        "extra_capacity_price": first_price_data.extra_passenger_price,
+                        "tourist_price": first_price_data.foreign_passenger_price or 0
+                    },
+                    "night_count": night_count,
+                    "closed_dates": closed_dates_info,
+                    "unavailable_dates": unavailable_dates,
+                    "price_calendar": price_calendar
                 }
+
             room_data = list(room_dict.values())
 
             if not room_data:
-                logger.warning(f"No rooms found for hotel {hotel.slug}")
+                logger.warning(f"No rooms with price data found for hotel {hotel.slug}")
                 return Response({
-                    'detail': 'هیچ اتاقی برای این هتل یافت نشد.',
+                    'detail': 'هیچ اتاقی با داده قیمتی برای این هتل یافت نشد.',
                     'rooms': [],
                     'unavailable_dates': []
                 }, status=200)
 
             return Response(room_data)
 
-        # اعمال فیلترها (منطق فعلی)
+        # حالت فیلترشده
         try:
             start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
             if end_date:
@@ -557,11 +680,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'unavailable_dates': unavailable_dates
             }, status=404)
 
-        persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
-        persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
-        default_user_level = "میهمان"
 
         room_data = []
         room_dict = {}
