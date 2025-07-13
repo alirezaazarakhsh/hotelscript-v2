@@ -579,15 +579,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
             ).select_related('user_level').first()
-            if first_price_data:
-                discount_amount = 0
-                if first_price_data.discount_type == 'percentage':
-                    discount_amount = first_price_data.price * first_price_data.discount_value / 100
-                elif first_price_data.discount_type == 'fixed':
-                    discount_amount = first_price_data.discount_value
-                price_after_discount_first = max(first_price_data.price - discount_amount, 0)
-            else:
-                price_after_discount_first = 0
+            if not first_price_data:
+                continue  # اگر برای تاریخ شروع داده قیمتی وجود ندارد، اتاق را رد کن
+
+            discount_amount = 0
+            if first_price_data.discount_type == 'percentage':
+                discount_amount = first_price_data.price * first_price_data.discount_value / 100
+            elif first_price_data.discount_type == 'fixed':
+                discount_amount = first_price_data.discount_value
+            price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
             total_price = sum(day['price']['price'] for day in price_calendar[:night_count])
 
@@ -602,20 +602,20 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 "dont_accept_need": room.auto_approved_count or 0,
                 "hotel": room.hotel.id,
                 "hotel_name": str(room.hotel) or "",
-                "capacity": first_price_data.room_capacity if first_price_data else 0,
-                "extra_capacity": first_price_data.extra_capacity if first_price_data else 0,
+                "capacity": first_price_data.room_capacity,
+                "extra_capacity": first_price_data.extra_capacity,
                 "price": {
-                    "price": first_price_data.price if first_price_data else 0,
+                    "price": first_price_data.price,
                     "price_after_discount": price_after_discount_first,
                     "total_price": total_price,
-                    "discount_percentage": first_price_data.discount_value if first_price_data and first_price_data.discount_type == 'percentage' else None,
-                    "discount_amount": first_price_data.discount_value if first_price_data and first_price_data.discount_type == 'fixed' else None,
-                    "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data and first_price_data.discount_start else None,
-                    "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data and first_price_data.discount_end else None,
-                    "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time if first_price_data else False,
-                    "user_level": first_price_data.user_level.title if first_price_data and first_price_data.user_level else "همه سطوح",
-                    "extra_capacity_price": first_price_data.extra_passenger_price if first_price_data else 0,
-                    "tourist_price": first_price_data.foreign_passenger_price if first_price_data else 0
+                    "discount_percentage": first_price_data.discount_value if first_price_data.discount_type == 'percentage' else None,
+                    "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
+                    "discount_start": first_price_data.discount_start.strftime('%Y/%m/%d') if first_price_data.discount_start else None,
+                    "discount_end": first_price_data.discount_end.strftime('%Y/%m/%d') if first_price_data.discount_end else None,
+                    "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "همه سطوح",
+                    "extra_capacity_price": first_price_data.extra_passenger_price,
+                    "tourist_price": first_price_data.foreign_passenger_price or 0
                 },
                 "night_count": night_count,
                 "closed_dates": closed_dates_info,
@@ -674,7 +674,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # مرتب‌سازی پک‌ها بر اساس قیمت کل
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-    
     
     
 
