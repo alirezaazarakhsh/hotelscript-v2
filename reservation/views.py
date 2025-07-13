@@ -396,8 +396,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، "
             "و وضعیت دسترسی (availability) باز می‌گرداند. "
-            "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی آن‌ها دقیقاً برابر با تعداد مسافران "
-            "یا ظرفیت اصلی به علاوه یک نفر اضافه برابر با تعداد مسافران باشد. "
+            "فقط اتاق‌ها یا پک‌هایی نمایش داده می‌شوند که ظرفیت اصلی یا ظرفیت اصلی به علاوه ظرفیت اضافی "
+            "آن‌ها بزرگ‌تر یا مساوی با تعداد مسافران باشد. "
             "در صورت همپوشانی بازه‌های قیمتی، بازه با id بالاتر (جدیدتر) اولویت دارد. "
             "سطح کاربری پیش‌فرض 'میهمان' است.\n"
             "بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n"
@@ -477,6 +477,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ).values_list('id', flat=True).distinct()
 
         rooms_qs = hotel.rooms.filter(id__in=rooms_ids)
+        logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1 for hotel {hotel.slug}")
 
         # حذف اتاق‌های بسته در بازه زمانی
         closed_dates = ClosedDate.objects.filter(
@@ -484,8 +485,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date__range=(start_date_obj, end_date_obj)
         ).values_list('room_date__room__id', flat=True)
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
+        logger.info(f"After excluding closed dates, {rooms_qs.count()} rooms remain")
 
-        # فیلتر ظرفیت: فقط اتاق‌هایی با ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران
+        # فیلتر ظرفیت: فقط اتاق‌هایی با ظرفیت اصلی یا ظرفیت اصلی + ظرفیت اضافی مناسب
         capacity_filter = [passenger_count_int]
         if passenger_count_int > 1:
             capacity_filter.append(passenger_count_int - 1)
@@ -493,6 +495,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date_prices__room_capacity__in=capacity_filter,
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
         )
+        logger.info(f"After capacity filter, {rooms_qs.count()} rooms remain")
 
         if not rooms_qs.exists():
             unavailable_dates = [
@@ -518,7 +521,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         room_dict = {}
         for room in rooms_qs:
             if room.inventory == 0:
-                continue  # اگر موجودی صفر است، اتاق را رد کن
+                logger.info(f"Room {room.id} skipped: inventory=0")
+                continue
 
             room_services = ", ".join([service.title for service in room.services.all()]) or "خدمات ندارد"
             closed = ClosedDate.objects.filter(
@@ -559,6 +563,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "status": "unavailable",
                         "price": None
                     })
+                    logger.info(f"Room {room.id}, Date {date}: No valid price data or capacity mismatch")
                     continue
 
                 discount_amount = 0
@@ -583,31 +588,30 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "reason": "موجودی اتاق صفر است"
                     })
 
-                price = {
-                    "price": price_data.price,
-                    "price_after_discount": price_after_discount,
-                    "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
-                    "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
-                    "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
-                    "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
-                    "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
-                    "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
-                    "capacity": price_data.room_capacity,
-                    "extra_capacity": price_data.extra_capacity,
-                    "extra_capacity_price": price_data.extra_passenger_price,
-                    "tourist_price": price_data.foreign_passenger_price or 0
-                }
-
                 price_calendar.append({
                     "date": date.strftime('%Y/%m/%d'),
                     "month": persian_months[date.month - 1],
                     "day": persian_days[date.weekday()],
                     "status": status,
-                    "price": price if status == "available" else None
+                    "price": {
+                        "price": price_data.price,
+                        "price_after_discount": price_after_discount,
+                        "discount_percentage": price_data.discount_value if price_data.discount_type == 'percentage' else None,
+                        "discount_amount": price_data.discount_value if price_data.discount_type == 'fixed' else None,
+                        "discount_start": price_data.discount_start.strftime('%Y/%m/%d') if price_data.discount_start else None,
+                        "discount_end": price_data.discount_end.strftime('%Y/%m/%d') if price_data.discount_end else None,
+                        "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
+                        "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
+                        "capacity": price_data.room_capacity,
+                        "extra_capacity": price_data.extra_capacity,
+                        "extra_capacity_price": price_data.extra_passenger_price,
+                        "tourist_price": price_data.foreign_passenger_price or 0
+                    } if status == "available" else None
                 })
 
             # اگر هیچ روزی در دسترس نباشد، اتاق را رد کن
             if all(day['status'] != "available" for day in price_calendar):
+                logger.info(f"Room {room.id} skipped: No available days")
                 continue
 
             first_price_data = room.date_prices.filter(
@@ -618,7 +622,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 first_price_data.room_capacity in capacity_filter and
                 first_price_data.room_capacity >= passenger_count_int - first_price_data.extra_capacity
             ):
-                continue  # اگر برای تاریخ شروع داده قیمتی معتبر یا ظرفیت مناسب وجود ندارد، اتاق را رد کن
+                logger.info(f"Room {room.id} skipped: No valid first_price_data or capacity mismatch")
+                continue
 
             discount_amount = 0
             if first_price_data.discount_type == 'percentage':
@@ -659,7 +664,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 },
                 "night_count": night_count,
                 "closed_dates": closed_dates_info,
-                "unavailable_dates": unavailable_dates,  # روزهای غیرقابل دسترس
+                "unavailable_dates": unavailable_dates,
                 "price_calendar": price_calendar
             }
 
@@ -670,6 +675,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ اتاقی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days + 1)
             ]
+            logger.info("No rooms available after filtering")
             return Response({
                 'detail': 'اتاقی با ظرفیت متناسب با تعداد مسافران در بازه انتخابی یافت نشد.',
                 'unavailable_dates': unavailable_dates
@@ -684,8 +690,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             pack_rooms = list(combo)
             total_capacity = sum(r['capacity'] for r in pack_rooms)
             total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
-            # فقط پک‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ۱ نفر اضافه برابر با تعداد مسافران باشد
-            if total_capacity == passenger_count_int or (total_capacity < passenger_count_int and total_capacity + total_extra_capacity >= passenger_count_int):
+            # پکیج‌هایی که ظرفیت اصلی یا ظرفیت اصلی + ظرفیت اضافی بزرگ‌تر یا مساوی passenger_count باشه
+            if total_capacity >= passenger_count_int or (total_capacity + total_extra_capacity >= passenger_count_int):
                 pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
                 packs.append({
                     "pack_rooms": [
@@ -712,12 +718,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "night_count": night_count,
                     "room_count": len(pack_rooms)
                 })
+            else:
+                logger.info(f"Pack skipped: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
         if not packs:
             unavailable_dates = [
                 {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "reason": "هیچ پکیجی با ظرفیت مناسب یافت نشد"}
                 for i in range((end_date_obj - start_date_obj).days + 1)
             ]
+            logger.info("No packs formed after filtering")
             return Response({
                 'detail': 'پک مناسب با تعداد مسافران و تعداد اتاق‌های درخواستی یافت نشد.',
                 'unavailable_dates': unavailable_dates
