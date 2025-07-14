@@ -313,7 +313,7 @@ class CommentAdmin(admin.ModelAdmin):
     show_weaknesses.short_description = 'نقاط ضعف'
 
     def created_jalali(self, obj):
-        return obj.created_jalali
+        return obj.current_jalali
     created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
@@ -355,6 +355,7 @@ class RoomDateInline(admin.TabularInline):
         'end_date',
         'price',
         'extra_passenger_price',
+       'show_closed_dates',
         'foreign_passenger_price',
         'discount_type',
         'discount_value',
@@ -367,7 +368,7 @@ class RoomDateInline(admin.TabularInline):
 class ClosedDateInline(admin.TabularInline):
     model = ClosedDate
     extra = 1
-    fields = ('date', 'user_level', 'reason')
+    fields = ('date', 'user_level')
     autocomplete_fields = ('user_level',)
     ordering = ('date',)
 
@@ -457,7 +458,7 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
 
 @admin.register(ClosedDate)
 class ClosedDateAdmin(admin.ModelAdmin):
-    list_display = ('room_date', 'date', 'user_level', 'reason')
+    list_display = ('room_date', 'date', 'user_level')
     list_filter = ('room_date', 'user_level')
     search_fields = ('room_date__room__name',)
     autocomplete_fields = ('room_date', 'user_level')

@@ -486,14 +486,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     ).order_by('-id').select_related('user_level').first()
 
                     closed_date = closed.filter(date=date).first()
-                    status = "available"
+                    status = "open"
 
                     if not price_data:
-                        status = "ظرفیت تکمیل"
+                        status = "close"
                     elif closed_date:
-                        status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
+                        status = "complate"
                     elif room.inventory == 0:
-                        status = "ظرفیت تکمیل"
+                        status = "close"
 
                     discount_amount = 0
                     if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
@@ -519,7 +519,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
                             "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
                             "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
-                        } if status == "available" else None
+                        } if status == "open" else None
                     })
 
                 first_price_data = room.date_prices.filter(
@@ -540,7 +540,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
                 total_price = sum(
-                    day['price']['price'] for day in price_calendar if day['status'] == "available" and day['price']
+                    day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
                 )
 
                 room_dict[room.id] = {
@@ -580,7 +580,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     'detail': 'هیچ اتاقی با داده قیمتی برای این هتل یافت نشد.',
                     'rooms': [],
                     'price_calendar': [
-                        {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
+                        {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"}
                         for i in range((end_date_obj - start_date_obj).days)
                     ]
                 }, status=200)
@@ -644,16 +644,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ).order_by('-id').select_related('user_level').first()
 
                 closed_date = closed.filter(date=date).first()
-                status = "available"
+                status = "open"
 
                 if not price_data:
-                    status = "ظرفیت تکمیل"
+                    status = "close"
                     logger.debug(f"Room {room.id} on {date}: No price data")
                 elif closed_date:
-                    status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
+                    status = "complate"
                     logger.debug(f"Room {room.id} on {date}: Closed")
                 elif room.inventory == 0:
-                    status = "ظرفیت تکمیل"
+                    status = "close"
                     logger.debug(f"Room {room.id} on {date}: Inventory=0")
 
                 discount_amount = 0
@@ -680,7 +680,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
                         "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
-                    } if status == "available" else None
+                    } if status == "open" else None
                 })
 
             first_price_data = room.date_prices.filter(
@@ -700,7 +700,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
             total_price = sum(
-                day['price']['price'] for day in price_calendar if day['status'] == "available" and day['price']
+                day['price']['price'] for Coupe in price_calendar if day['status'] == "open" and day['price']
             )
 
             room_dict[room.id] = {
@@ -736,7 +736,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not room_data:
             price_calendar = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No rooms found after filtering for hotel {hotel.slug}")
@@ -785,7 +785,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if not packs:
             price_calendar = [
-                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "ظرفیت تکمیل"}
+                {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"}
                 for i in range((end_date_obj - start_date_obj).days)
             ]
             logger.warning(f"No packs formed for hotel {hotel.slug}, passenger_count={passenger_count_int}, room_count={room_count_int}")

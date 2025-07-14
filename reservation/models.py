@@ -893,14 +893,7 @@ class RoomDatePrice(models.Model):
     
 
 #مدل بستن یه روز از بازه خواستی 
-
 class ClosedDate(models.Model):
-    REASON_CHOICES = (
-        ('', 'هیچ‌کدام'),  # مقدار پیش‌فرض و نمایشی برای حالت خالی
-        ('full_capacity', 'ظرفیت تکمیل می‌باشد'),
-        ('reserved', 'رزرو شده'),
-    )
-
     room_date = models.ForeignKey(
         'RoomDatePrice',
         on_delete=models.CASCADE,
@@ -921,16 +914,6 @@ class ClosedDate(models.Model):
         help_text=_('اگر انتخاب شود، فقط برای این سطح کاربر غیرفعال است')
     )
 
-    reason = models.CharField(
-        max_length=32,
-        choices=REASON_CHOICES,
-        verbose_name=_('علت بسته بودن'),
-        blank=True,
-        null=True,
-        default='',
-        help_text=_('علت اختیاری است. اگر انتخاب نشود، "هیچ‌کدام" در نظر گرفته می‌شود.')
-    )
-
     class Meta:
         verbose_name = _('تاریخ بستن بازه')
         verbose_name_plural = _('تاریخ‌های بستن بازه')
@@ -938,10 +921,11 @@ class ClosedDate(models.Model):
         ordering = ['date']
 
     def __str__(self):
-        reason_display = self.get_reason_display() if self.reason else 'بدون علت'
         user_level_display = self.user_level if self.user_level else 'همه سطوح'
-        return f'{self.room_date} - {self.date} - {reason_display} - {user_level_display}'
-
+        return f'{self.room_date} - {self.date} - {user_level_display}'
+    
+    
+    
     
 
 #مدت زمان تایید رزرو 
