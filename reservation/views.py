@@ -443,6 +443,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         }
     )
     def get(self, request, *args, **kwargs):
+        from itertools import combinations
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         passenger_count = request.query_params.get('passenger_count')
@@ -532,11 +533,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     continue
 
                 discount_amount = 0
-                if first_price_data.discount_type != 'none' and first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
-                    if first_price_data.discount_type == 'percentage':
-                        discount_amount = first_price_data.price * first_price_data.discount_value / 100
-                    elif first_price_data.discount_type == 'fixed':
-                        discount_amount = first_price_data.discount_value
+                if first_price_data.discount_type != 'none':
+                    if first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
+                        if first_price_data.discount_type == 'percentage':
+                            discount_amount = first_price_data.price * first_price_data.discount_value / 100
+                        elif first_price_data.discount_type == 'fixed':
+                            discount_amount = first_price_data.discount_value
                 price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
                 total_price = sum(
@@ -692,15 +694,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 continue
 
             discount_amount = 0
-            if first_price_data.discount_type != 'none' and first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
-                if first_price_data.discount_type == 'percentage':
-                    discount_amount = first_price_data.price * first_price_data.discount_value / 100
-                elif first_price_data.discount_type == 'fixed':
-                    discount_amount = first_price_data.discount_value
+            if first_price_data.discount_type != 'none':
+                if first_price_data.discount_date and first_price_data.discount_date >= start_date_obj:
+                    if first_price_data.discount_type == 'percentage':
+                        discount_amount = first_price_data.price * first_price_data.discount_value / 100
+                    elif first_price_data.discount_type == 'fixed':
+                        discount_amount = first_price_data.discount_value
             price_after_discount_first = max(first_price_data.price - discount_amount, 0)
 
             total_price = sum(
-                day['price']['price'] for Coupe in price_calendar if day['status'] == "open" and day['price']
+                day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
             )
 
             room_dict[room.id] = {
