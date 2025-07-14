@@ -453,34 +453,46 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         operation_summary="آپلود مدرک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={201: JuridicalProfileDocumentSerializer()}
+        responses={
+            201: JuridicalProfileDocumentSerializer(),
+            400: "خطا در داده‌های ورودی",
+            404: "پروفایل حقوقی یافت نشد"
+        }
     )
     def post(self, request):
-        # ✅ چاپ کردن فایل‌ها برای تست
+        # چاپ برای دیباگ
         print("request.FILES:", request.FILES)
         print("request.data:", request.data)
 
-        # بررسی پروفایل حقوقی
+        # بررسی وجود پروفایل حقوقی
         try:
             natural_profile = request.user.natural_profile
             profile = natural_profile.juridical_profile
         except AttributeError:
-            return Response({'detail': 'پروفایل حقوقی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'detail': 'پروفایل حقوقی یافت نشد.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # بررسی فایل
+        # بررسی وجود فایل
         uploaded_file = request.FILES.get('file')
         if not uploaded_file:
-            return Response({'detail': 'فایل آپلود نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': 'فایل آپلود نشده است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        # کپی داده‌ها و افزودن فایل
         data = request.data.copy()
         data['file'] = uploaded_file
 
+        # سریالایزر با داده‌ها و context
         serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
         if serializer.is_valid():
+            # ذخیره با تخصیص پروفایل از کاربر احرازشده
             serializer.save(profile=profile)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 # 🧾 جزئیات، ویرایش و حذف

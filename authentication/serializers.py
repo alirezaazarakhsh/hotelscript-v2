@@ -153,13 +153,14 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
     file_url = serializers.SerializerMethodField(read_only=True)
     profile = serializers.PrimaryKeyRelatedField(
-        read_only=True,  
+        read_only=True,
         label='پروفایل حقوقی'
     )
 
     class Meta:
         model = JuridicalProfileDocument
         fields = ['id', 'file', 'file_url', 'profile']
+        read_only_fields = ['id', 'profile', 'file_url']
 
     def get_file_url(self, obj):
         if not obj.file:
@@ -175,6 +176,17 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(url)
         return url
 
+    def validate(self, data):
+        # Reject 'id' and 'profile' if included in the input data
+        if 'id' in data:
+            raise serializers.ValidationError(
+                {'id': 'فیلد id نباید در بدنه درخواست ارسال شود.'}
+            )
+        if 'profile' in data:
+            raise serializers.ValidationError(
+                {'profile': 'فیلد profile نباید در بدنه درخواست ارسال شود.'}
+            )
+        return data
 
 
 
