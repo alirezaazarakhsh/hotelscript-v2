@@ -353,8 +353,6 @@ class RoomDateInline(admin.TabularInline):
         'user_level',
         'start_date',
         'end_date',
-        'room_capacity',
-        'extra_capacity',
         'price',
         'extra_passenger_price',
         'foreign_passenger_price',
@@ -384,10 +382,24 @@ class RoomAdmin(admin.ModelAdmin):
         'inventory',
         'count',
         'auto_approved_count',
+        'room_capacity',
+        'extra_capacity',
     )
     search_fields = ('title',)
     autocomplete_fields = ('hotel',)
-    inlines = [RoomDateInline]  # Removed ClosedDateInline
+    fields = (
+        'hotel',
+        'title',
+        'description',
+        'inventory',
+        'count',
+        'auto_approved_count',
+        'customer_club_points',
+        'room_capacity',
+        'extra_capacity',
+        'services',
+    )
+    inlines = [RoomDateInline]
 
 
 @admin.register(RoomDatePrice)
@@ -398,30 +410,23 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         'start_date',
         'end_date',
         'price',
-        'room_capacity',
-        'extra_capacity',
         'discount_type',
         'discount_value',
         'discount_date',
         'is_fixed_discount_one_time',
     )
-
     list_filter = (
         'room',
         'user_level',
         'discount_type',
         'is_fixed_discount_one_time',
     )
-
     search_fields = (
         'room__title',
         'user_level__title',
     )
-
     autocomplete_fields = ('room', 'user_level')
-
     ordering = ('room', 'start_date', 'user_level')
-
     fieldsets = (
         (_('اطلاعات بازه و اتاق'), {
             'fields': (
@@ -429,8 +434,6 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
                 'user_level',
                 'start_date',
                 'end_date',
-                'room_capacity',
-                'extra_capacity',
             )
         }),
         (_('قیمت‌گذاری'), {
@@ -449,8 +452,7 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             )
         }),
     )
-
-    inlines = [ClosedDateInline]  # Moved ClosedDateInline here
+    inlines = [ClosedDateInline]
 
 
 @admin.register(ClosedDate)

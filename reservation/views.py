@@ -517,8 +517,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "discount_date": price_data.discount_date.strftime('%Y/%m/%d') if price_data and price_data.discount_date else None,
                             "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                             "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
-                            "capacity": price_data.room_capacity if price_data else 0,
-                            "extra_capacity": price_data.extra_capacity if price_data else 0,
                             "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
                             "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
                         } if status == "available" else None
@@ -556,8 +554,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "dont_accept_need": room.auto_approved_count or 0,
                     "hotel": room.hotel.id,
                     "hotel_name": str(room.hotel) or "",
-                    "capacity": first_price_data.room_capacity,
-                    "extra_capacity": first_price_data.extra_capacity,
+                    "capacity": room.room_capacity,
+                    "extra_capacity": room.extra_capacity,
                     "price": {
                         "price": first_price_data.price,
                         "price_after_discount": price_after_discount_first,
@@ -635,9 +633,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if passenger_count_int > 1:
             capacity_filter.extend([passenger_count_int - i for i in range(1, passenger_count_int)])
         rooms_qs = rooms_qs.filter(
-            date_prices__room_capacity__in=capacity_filter
+            room_capacity__in=capacity_filter
         ) | rooms_qs.filter(
-            date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
+            room_capacity__gte=passenger_count_int - F('extra_capacity')
         )
         logger.info(f"After capacity filter (capacity in {capacity_filter} or with extra_capacity), {rooms_qs.count()} rooms remain")
 
@@ -711,8 +709,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_date": price_data.discount_date.strftime('%Y/%m/%d') if price_data and price_data.discount_date else None,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
-                        "capacity": price_data.room_capacity if price_data else 0,
-                        "extra_capacity": price_data.extra_capacity if price_data else 0,
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
                         "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
                     } if status == "available" else None
@@ -753,8 +749,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 "dont_accept_need": room.auto_approved_count or 0,
                 "hotel": room.hotel.id,
                 "hotel_name": str(room.hotel) or "",
-                "capacity": first_price_data.room_capacity,
-                "extra_capacity": first_price_data.extra_capacity,
+                "capacity": room.room_capacity,
+                "extra_capacity": room.extra_capacity,
                 "price": {
                     "price": first_price_data.price,
                     "price_after_discount": price_after_discount_first,
@@ -836,7 +832,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
 
 

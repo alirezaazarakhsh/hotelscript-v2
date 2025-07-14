@@ -681,7 +681,7 @@ class RoomService(models.Model):
 #مدل اتاق ها 
 class Room(models.Model):
     hotel = models.ForeignKey(
-        'Hotel',
+        Hotel,  # استفاده از کلاس مدل
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='rooms',
@@ -727,8 +727,22 @@ class Room(models.Model):
         null=True,
         blank=True,
     )
+    room_capacity = models.PositiveIntegerField(
+        verbose_name=_('ظرفیت اتاق'),
+        help_text=_('تعداد نفرات پایه قابل اقامت'),
+        null=False,
+        blank=False,
+        default=0,
+    )
+    extra_capacity = models.PositiveIntegerField(
+        verbose_name=_('ظرفیت نفر اضافه'),
+        help_text=_('تعداد نفرات اضافی مجاز'),
+        null=False,
+        blank=False,
+        default=0,
+    )
     services = models.ManyToManyField(
-        'RoomService',
+        RoomService,  # استفاده از کلاس مدل
         verbose_name=_('خدمات'),
         related_name='rooms',
         blank=True,
@@ -768,7 +782,6 @@ class Room(models.Model):
         return f'{self.title} - {self.hotel}' if self.hotel else self.title
 
     def is_closed(self, target_date=None):
-        from khayyam import JalaliDate
         if target_date is None:
             target_date = JalaliDate.today()
         active_prices = self.date_prices.filter(
@@ -776,6 +789,7 @@ class Room(models.Model):
             end_date__gte=target_date
         )
         return not active_prices.exists()
+
 
     
     
@@ -790,14 +804,13 @@ class RoomDatePrice(models.Model):
     )
 
     room = models.ForeignKey(
-        'Room',
+        Room,  # استفاده از کلاس مدل
         on_delete=models.CASCADE,
         verbose_name=_('اتاق'),
         related_name='date_prices',
     )
-
     user_level = models.ForeignKey(
-        UserLevel,
+        UserLevel if UserLevel else 'accounts.UserLevel',  # مدیریت موقت برای UserLevel
         on_delete=models.CASCADE,
         verbose_name=_('سطح کاربری'),
         related_name='room_date_prices',
@@ -805,7 +818,6 @@ class RoomDatePrice(models.Model):
         blank=True,
         null=True,
     )
-
     start_date = jmodels.jDateField(
         verbose_name=_('تاریخ شروع بازه'),
         null=False,
@@ -816,7 +828,6 @@ class RoomDatePrice(models.Model):
         null=False,
         blank=False,
     )
-
     price = models.PositiveBigIntegerField(
         verbose_name=_('قیمت هر شب (تومان)'),
         null=False,
@@ -832,7 +843,6 @@ class RoomDatePrice(models.Model):
         null=True,
         blank=True,
     )
-
     discount_type = models.CharField(
         verbose_name=_('نوع تخفیف'),
         max_length=16,
@@ -846,32 +856,14 @@ class RoomDatePrice(models.Model):
         default=0,
         blank=True,
     )
-
     discount_date = jmodels.jDateField(
         verbose_name=_('تاریخ تخفیف'),
         null=True,
         blank=True,
     )
-
     is_fixed_discount_one_time = models.BooleanField(
         verbose_name=_('تخفیف اولین خرید'),
         default=False,
-    )
-
-    room_capacity = models.PositiveIntegerField(
-        verbose_name=_('ظرفیت اتاق'),
-        help_text=_('تعداد نفرات پایه قابل اقامت در این بازه'),
-        null=False,
-        blank=False,
-        default=0,
-    )
-
-    extra_capacity = models.PositiveIntegerField(
-        verbose_name=_('ظرفیت نفر اضافه'),
-        help_text=_('تعداد نفرات اضافی مجاز در این بازه'),
-        null=False,
-        blank=False,
-        default=0,
     )
 
     class Meta:
@@ -895,7 +887,10 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
-
+    
+    
+    
+    
 
 #مدل بستن یه روز از بازه خواستی 
 
