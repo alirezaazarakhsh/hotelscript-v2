@@ -630,14 +630,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
         rooms_qs = rooms_qs.exclude(id__in=closed_dates)
         logger.info(f"After excluding closed dates, {rooms_qs.count()} rooms remain")
 
+        # بهبود فیلتر ظرفیت برای جلوگیری از حذف غیرضروری
         capacity_filter = [passenger_count_int]
         if passenger_count_int > 1:
-            capacity_filter.append(passenger_count_int - 1)
+            capacity_filter.extend([passenger_count_int - i for i in range(1, passenger_count_int)])
         rooms_qs = rooms_qs.filter(
-            date_prices__room_capacity__in=capacity_filter,
+            date_prices__room_capacity__in=capacity_filter
+        ) | rooms_qs.filter(
             date_prices__room_capacity__gte=passenger_count_int - F('date_prices__extra_capacity')
         )
-        logger.info(f"After capacity filter (capacity in {capacity_filter}), {rooms_qs.count()} rooms remain")
+        logger.info(f"After capacity filter (capacity in {capacity_filter} or with extra_capacity), {rooms_qs.count()} rooms remain")
 
         if not rooms_qs.exists():
             price_calendar = [
@@ -677,15 +679,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 closed_date = closed.filter(date=date).first()
                 status = "available"
 
-                if not price_data or not (
-                    price_data.room_capacity in capacity_filter and
-                    price_data.room_capacity >= passenger_count_int - price_data.extra_capacity
-                ):
+                if not price_data:
                     status = "ظرفیت تکمیل"
+                    logger.debug(f"Room {room.id} on {date}: No price data")
                 elif closed_date:
                     status = closed_date.get_reason_display() if closed_date.reason else "اتاق بسته شده است"
+                    logger.debug(f"Room {room.id} on {date}: Closed")
                 elif room.inventory == 0:
                     status = "ظرفیت تکمیل"
+                    logger.debug(f"Room {room.id} on {date}: Inventory=0")
 
                 discount_amount = 0
                 if price_data and price_data.discount_type != 'none' and price_data.discount_date and price_data.discount_date >= date:
@@ -724,11 +726,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
             ).order_by('-id').select_related('user_level').first()
-            if not first_price_data or not (
-                first_price_data.room_capacity in capacity_filter and
-                first_price_data.room_capacity >= passenger_count_int - first_price_data.extra_capacity
-            ):
-                logger.info(f"Room {room.id} skipped: No valid first_price_data or capacity mismatch")
+            if not first_price_data:
+                logger.info(f"Room {room.id} skipped: No valid first_price_data")
                 continue
 
             discount_amount = 0
@@ -793,7 +792,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             pack_rooms = list(combo)
             total_capacity = sum(r['capacity'] for r in pack_rooms)
             total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
-            logger.info(f"Evaluating pack: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
+            room_ids = [r['id'] for r in pack_rooms]
+            logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
             if total_capacity >= passenger_count_int or (total_capacity + total_extra_capacity >= passenger_count_int):
                 pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
                 packs.append({
@@ -821,7 +821,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "room_count": len(pack_rooms)
                 })
             else:
-                logger.info(f"Pack skipped: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
+                logger.info(f"Pack skipped with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
         if not packs:
             price_calendar = [
