@@ -7,6 +7,8 @@ from django.contrib.auth.hashers import (
     check_password,
     make_password,
 )
+
+from setting_sms.models import SMSPattern
 from .managers import UserManager
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -149,10 +151,12 @@ class SuperUser(models.Model):
         ).hexdigest()
     
     
- #مدل پروفایل ادمین ها 
+    
+
+#مدل پروفایل ادمین ها 
 class Admin(models.Model):
     base_user = models.OneToOneField(
-        BaseUser,
+        BaseUser,  
         on_delete=models.CASCADE,
         related_name='admin',
     )
@@ -174,7 +178,7 @@ class Admin(models.Model):
         null=True,
         blank=True,
         validators=[
-            FileSizeValidator(10),
+            FileSizeValidator(10),  
         ],
     )
     signature = models.CharField(
@@ -183,14 +187,22 @@ class Admin(models.Model):
         null=True,
         blank=True,
     )
+    sms_patterns = models.ManyToManyField(
+        SMSPattern,
+        verbose_name="پترن‌های پیامکی فعال",
+        blank=True,
+        help_text="پترن‌های پیامکی که برای این ادمین فعال هستند را انتخاب کنید."
+    )
 
     class Meta:
         verbose_name = "ادمین"
         verbose_name_plural = "ادمین‌ها"
-    
-    def __str__(self):
-        return f'{self.base_user}'
 
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+    
+    
+    
 
 
 #پروفایل حقیقی کاربران

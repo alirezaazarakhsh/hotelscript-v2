@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django import forms
 from .models import (
     BaseUser,
     Admin,
@@ -7,30 +8,34 @@ from .models import (
     JuridicalProfile,
     JuridicalProfileDocument,
     OTP,
+    SMSPattern,
 )
 from .forms import (
     AdminForm,
     NaturalProfileForm,
 )
 
-# # Register your models here.
-@admin.register(BaseUser)
-class BaseUserAdmin(admin.ModelAdmin):
-    exclude = (
-        'is_superuser',
-    )
-    list_display = (
-        'id',
-        'phone_number',
-        'date_joined',
-    )
-    search_fields = (
-        'phone_number',
-    )
-    ordering = (
-        '-id',
+# فرم سفارشی برای اینلاین پترن‌های پیامکی
+class AdminSMSPatternInlineForm(forms.ModelForm):
+    class Meta:
+        model = Admin.sms_patterns.through
+        fields = ('smspattern',)  # استفاده از نام فیلد صحیح در جدول واسطه
+
+    smspattern = forms.ModelChoiceField(
+        queryset=SMSPattern.objects.all(),
+        label="پترن پیامکی",
+        to_field_name="id",
     )
 
+# اینلاین برای نمایش و ویرایش پترن‌های پیامکی
+class AdminSMSPatternInline(admin.TabularInline):
+    model = Admin.sms_patterns.through
+    form = AdminSMSPatternInlineForm
+    verbose_name = "پترن پیامکی"
+    verbose_name_plural = "پترن‌های پیامکی"
+    extra = 1
+
+# به‌روزرسانی AdminAdmin برای اضافه کردن اینلاین
 @admin.register(Admin)
 class AdminAdmin(admin.ModelAdmin):
     form = AdminForm
@@ -48,10 +53,29 @@ class AdminAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
+    inlines = [AdminSMSPatternInline]
 
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
+
+# بقیه کدهای admin.py بدون تغییر
+@admin.register(BaseUser)
+class BaseUserAdmin(admin.ModelAdmin):
+    exclude = (
+        'is_superuser',
+    )
+    list_display = (
+        'id',
+        'phone_number',
+        'date_joined',
+    )
+    search_fields = (
+        'phone_number',
+    )
+    ordering = (
+        '-id',
+    )
 
 @admin.register(SuperUser)
 class SuperUserAdmin(admin.ModelAdmin):
@@ -98,11 +122,10 @@ class NaturalProfileAdmin(admin.ModelAdmin):
 
 class JuridicalProfileDocumentInline(admin.TabularInline):
     model = JuridicalProfileDocument
-    extra = 3  # تعداد فرم‌های خالی اضافه برای آپلود مدارک جدید
+    extra = 3
     fields = ['file']
     verbose_name = 'مدرک پروفایل حقوقی'
     verbose_name_plural = 'مدارک پروفایل حقوقی'
-
 
 @admin.register(JuridicalProfile)
 class JuridicalProfileAdmin(admin.ModelAdmin):
@@ -129,9 +152,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'economical_code',
         'phone_number',
     )
-    # list_filter = ('status',)
     ordering = ('-id',)
-
     inlines = [JuridicalProfileDocumentInline]
 
     def base_user__phone_number(self, obj):
@@ -145,7 +166,6 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     def natural_profile__last_name(self, obj):
         return obj.natural_profile.last_name
     natural_profile__last_name.short_description = 'نام خانوادگی'
-
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
