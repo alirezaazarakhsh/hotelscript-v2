@@ -804,8 +804,10 @@ class Room(models.Model):
                 old_instance = Room.objects.get(pk=self.pk)
                 old_inventory = old_instance.inventory or 0
                 logger.debug(f"Room {self.pk}: Old inventory = {old_inventory}")
+                print(f"Room {self.pk}: Old inventory = {old_inventory}")
             except Room.DoesNotExist:
                 logger.error(f"Room with pk {self.pk} not found during save")
+                print(f"Room with pk {self.pk} not found during save")
 
         # ذخیره نمونه
         super().save(*args, **kwargs)
@@ -813,18 +815,23 @@ class Room(models.Model):
         # بررسی تغییر موجودی به صفر
         current_inventory = self.inventory if self.inventory is not None else 0
         logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}")
+        print(f"Room {self.pk}: Current inventory = {current_inventory}")
         if old_instance and old_inventory != 0 and current_inventory == 0:
             room_name = self.title or "اتاق بدون نام"
             status = "اتمام موجودی"
             logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
+            print(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
             try:
                 success = send_room_availability_sms(room_name, status)
                 if success:
                     logger.info(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
+                    print(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
                 else:
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_name}'")
+                    print(f"Room {self.pk}: Failed to send SMS for '{room_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
+                print(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
     
     
 
@@ -837,13 +844,13 @@ class RoomDatePrice(models.Model):
     )
 
     room = models.ForeignKey(
-        Room,  # استفاده از کلاس مدل
+        Room,
         on_delete=models.CASCADE,
         verbose_name=_('اتاق'),
         related_name='date_prices',
     )
     user_level = models.ForeignKey(
-        UserLevel if UserLevel else 'accounts.UserLevel',  # مدیریت موقت برای UserLevel
+        UserLevel if UserLevel else 'accounts.UserLevel',
         on_delete=models.CASCADE,
         verbose_name=_('سطح کاربری'),
         related_name='room_date_prices',
@@ -883,14 +890,14 @@ class RoomDatePrice(models.Model):
         default='none',
         blank=True,
     )
-    discount_value = models.PositiveIntegerField(
+    discount_value = models.PositiveBigIntegerField(
         verbose_name=_('مقدار تخفیف'),
         help_text=_('در صورت درصدی بودن، عدد بین 1 تا 100؛ در صورت ثابت بودن، مبلغ به تومان'),
         default=0,
         blank=True,
     )
     discount_date = jmodels.jDateField(
-        verbose_name=_('تاریخ تخفیف'),
+        verbose_name=_('تاریخ انقضای تخفیف'),
         null=True,
         blank=True,
     )
@@ -901,7 +908,7 @@ class RoomDatePrice(models.Model):
 
     class Meta:
         verbose_name = _('قیمت اتاق بر اساس سطح و بازه')
-        verbose_name_plural = _('بازه زمانی اتاقها')
+        verbose_name_plural = _('بازه زمانی اتاق‌ها')
         ordering = ['room', 'start_date', 'user_level']
         constraints = [
             models.UniqueConstraint(
@@ -913,14 +920,39 @@ class RoomDatePrice(models.Model):
                 name='check_start_date_before_end_date',
             ),
             models.CheckConstraint(
-                check=models.Q(discount_type='percentage', discount_value__lte=100) | ~models.Q(discount_type='percentage'),
-                name='check_percentage_discount_max_100'
-            )
+                check=models.Q(discount_type='percentage', discount_value__gte=1, discount_value__lte=100) |
+                      models.Q(discount_type='fixed', discount_value__gte=0) |
+                      models.Q(discount_type='none', discount_value=0),
+                name='check_discount_value_validity'
+            ),
+            models.CheckConstraint(
+                check=models.Q(discount_type='fixed', is_fixed_discount_one_time=True) |
+                      models.Q(discount_type__in=['none', 'percentage'], is_fixed_discount_one_time=False),
+                name='check_fixed_discount_one_time'
+            ),
+            models.CheckConstraint(
+                check=models.Q(discount_date__gte=models.F('start_date')) | models.Q(discount_date__isnull=True),
+                name='check_discount_date_after_start_date'
+            ),
         ]
+
+    def clean(self):
+        """اعتبارسنجی‌های اضافی در سطح مدل"""
+        if self.discount_type == 'percentage' and (self.discount_value < 1 or self.discount_value > 100):
+            raise ValidationError(_('مقدار تخفیف درصدی باید بین 1 تا 100 باشد.'))
+        if self.discount_type == 'fixed' and not self.is_fixed_discount_one_time:
+            raise ValidationError(_('برای تخفیف ثابت، باید گزینه "تخفیف اولین خرید" فعال باشد.'))
+        if self.discount_type == 'percentage' and self.is_fixed_discount_one_time:
+            raise ValidationError(_('گزینه "تخفیف اولین خرید" فقط برای تخفیف ثابت قابل استفاده است.'))
+        if self.discount_date and self.discount_date < self.start_date:
+            raise ValidationError(_('تاریخ انقضای تخفیف نمی‌تواند قبل از تاریخ شروع بازه باشد.'))
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # اجرای اعتبارسنجی‌ها قبل از ذخیره
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
-    
     
     
     
