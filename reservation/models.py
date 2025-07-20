@@ -37,6 +37,7 @@ from authentication.validators import (
     validate_national_code,
     validate_passport_code
 )
+from reservation.sms.sms import send_room_availability_sms
 
 # اگر RoomDate در همین فایل نیست و نیاز است ایمپورت شود:
 try:
@@ -681,7 +682,7 @@ class RoomService(models.Model):
 #مدل اتاق ها 
 class Room(models.Model):
     hotel = models.ForeignKey(
-        Hotel,  # استفاده از کلاس مدل
+        'Hotel',  # فرض می‌کنیم مدل Hotel در همان اپ تعریف شده
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='rooms',
@@ -742,7 +743,7 @@ class Room(models.Model):
         default=0,
     )
     services = models.ManyToManyField(
-        RoomService,  # استفاده از کلاس مدل
+        'RoomService',  # فرض می‌کنیم مدل RoomService در همان اپ تعریف شده
         verbose_name=_('خدمات'),
         related_name='rooms',
         blank=True,
@@ -779,7 +780,7 @@ class Room(models.Model):
             })
 
     def __str__(self):
-        return f'{self.title} - {self.hotel}' if self.hotel else self.title
+        return f'{self.title} - {self.hotel}' if self.hotel else self.title or 'اتاق بدون نام'
 
     def is_closed(self, target_date=None):
         if target_date is None:
@@ -790,6 +791,20 @@ class Room(models.Model):
         )
         return not active_prices.exists()
 
+    def save(self, *args, **kwargs):
+        # بررسی اینکه آیا نمونه در دیتابیس وجود دارد
+        old_instance = None
+        if self.pk:
+            old_instance = Room.objects.filter(pk=self.pk).first()
+
+        # ذخیره نمونه
+        super().save(*args, **kwargs)
+
+        # بررسی تغییر موجودی به صفر
+        if old_instance and old_instance.inventory != 0 and (self.inventory == 0 or self.inventory is None):
+            room_name = self.title or "اتاق بدون نام"
+            status = "اتمام موجودی"
+            send_room_availability_sms(room_name, status)
 
     
     
