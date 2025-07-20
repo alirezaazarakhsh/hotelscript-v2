@@ -403,14 +403,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
     def calculate_discount(self, price_data, date):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
         discount_amount = 0
+        price_after_discount = price_data.price if price_data else None
         if price_data and price_data.discount_type != 'none':
-            # تخفیف اعمال می‌شود مگر اینکه discount_date وجود داشته باشد و تاریخ آن گذشته باشد
+            # تخفیف اعمال می‌شود مگر اینکه discount_date وجود داشته باشد و منقضی شده باشد
             if not price_data.discount_date or price_data.discount_date >= date:
                 if price_data.discount_type == 'percentage':
                     discount_amount = price_data.price * price_data.discount_value / 100
-                elif price_data.discount_type == 'fixed':
+                elif price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time:
                     discount_amount = price_data.discount_value
-        price_after_discount = max(price_data.price - discount_amount, 0) if price_data else None
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
+            else:
+                logger.warning(f"Room {price_data.room.id} on {date}: Discount ignored due to expired discount_date {price_data.discount_date}")
+                price_after_discount = int(price_data.price)  # بدون تخفیف
         return discount_amount, price_after_discount
 
     @swagger_auto_schema(
@@ -455,6 +459,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         }
     )
     def get(self, request, *args, **kwargs):
+        from itertools import combinations
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         passenger_count = request.query_params.get('passenger_count')
