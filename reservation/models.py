@@ -931,8 +931,9 @@ class RoomDatePrice(models.Model):
                 name='check_fixed_discount_one_time'
             ),
             models.CheckConstraint(
-                check=models.Q(discount_date__gte=models.F('start_date')) | models.Q(discount_date__isnull=True),
-                name='check_discount_date_after_start_date'
+                check=models.Q(discount_date__gte=models.F('start_date'), discount_date__lte=models.F('end_date')) |
+                      models.Q(discount_date__isnull=True),
+                name='check_discount_date_within_range'
             ),
         ]
 
@@ -944,8 +945,11 @@ class RoomDatePrice(models.Model):
             raise ValidationError(_('برای تخفیف ثابت، باید گزینه "تخفیف اولین خرید" فعال باشد.'))
         if self.discount_type == 'percentage' and self.is_fixed_discount_one_time:
             raise ValidationError(_('گزینه "تخفیف اولین خرید" فقط برای تخفیف ثابت قابل استفاده است.'))
-        if self.discount_date and self.discount_date < self.start_date:
-            raise ValidationError(_('تاریخ انقضای تخفیف نمی‌تواند قبل از تاریخ شروع بازه باشد.'))
+        if self.discount_date:
+            if self.discount_date < self.start_date:
+                raise ValidationError(_('تاریخ انقضای تخفیف نمی‌تواند قبل از تاریخ شروع بازه باشد.'))
+            if self.discount_date > self.end_date:
+                raise ValidationError(_('تاریخ انقضای تخفیف نمی‌تواند بعد از تاریخ پایان بازه باشد.'))
 
     def save(self, *args, **kwargs):
         self.full_clean()  # اجرای اعتبارسنجی‌ها قبل از ذخیره
