@@ -1,8 +1,9 @@
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
-from authentication.models import Admin  # فرض بر این است که مدل Admin در اپ authentication است
+from authentication.models import Admin
 
 def send_room_availability_sms(room_name, status, pattern_section='room_availability'):
+  
     try:
         # گرفتن تنظیمات سامانه فعال
         api_setting = KavenegarSMSSetting.objects.first()
@@ -10,7 +11,7 @@ def send_room_availability_sms(room_name, status, pattern_section='room_availabi
             print("KavenegarSMSSetting not found")
             return False
 
-        # پیدا کردن پترن متناسب با بخش موردنظر و تنظیمات پیامکی
+        # پیدا کردن پترن متناسب با بخش موردنظر
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
@@ -35,11 +36,15 @@ def send_room_availability_sms(room_name, status, pattern_section='room_availabi
                 print(f"No phone number found for admin {admin}")
                 continue
 
+            # ترکیب نام و نام خانوادگی ادمین
+            admin_name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "ادمین"
+
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': room_name,  # توکن اول: نام اتاق
-                'token2': status,    # توکن دوم: وضعیت اتاق
+                'token': admin_name,    # توکن اول: نام ادمین
+                'token2': room_name,    # توکن دوم: نام اتاق
+                'token3': status,       # توکن سوم: وضعیت اتاق
                 'type': 'sms',
             }
 
