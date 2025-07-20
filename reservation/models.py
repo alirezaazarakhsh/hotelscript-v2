@@ -682,7 +682,6 @@ class RoomService(models.Model):
 
 #مدل اتاق ها 
 # تنظیم logging
-# تنظیم logging
 logger = logging.getLogger(__name__)
 
 class Room(models.Model):
