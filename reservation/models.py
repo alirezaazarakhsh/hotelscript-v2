@@ -1,4 +1,5 @@
 # 📦 استاندارد کتابخانه‌های پایتون
+import logging
 import os
 import uuid
 import jdatetime
@@ -680,9 +681,13 @@ class RoomService(models.Model):
 
 
 #مدل اتاق ها 
+# تنظیم logging
+# تنظیم logging
+logger = logging.getLogger(__name__)
+
 class Room(models.Model):
     hotel = models.ForeignKey(
-        'Hotel',  # فرض می‌کنیم مدل Hotel در همان اپ تعریف شده
+        'Hotel',
         on_delete=models.CASCADE,
         verbose_name=_('هتل'),
         related_name='rooms',
@@ -743,7 +748,7 @@ class Room(models.Model):
         default=0,
     )
     services = models.ManyToManyField(
-        'RoomService',  # فرض می‌کنیم مدل RoomService در همان اپ تعریف شده
+        'RoomService',
         verbose_name=_('خدمات'),
         related_name='rooms',
         blank=True,
@@ -792,21 +797,35 @@ class Room(models.Model):
         return not active_prices.exists()
 
     def save(self, *args, **kwargs):
-        # بررسی اینکه آیا نمونه در دیتابیس وجود دارد
+        # ذخیره مقدار قبلی موجودی
         old_instance = None
+        old_inventory = None
         if self.pk:
-            old_instance = Room.objects.filter(pk=self.pk).first()
+            try:
+                old_instance = Room.objects.get(pk=self.pk)
+                old_inventory = old_instance.inventory or 0
+                logger.debug(f"Room {self.pk}: Old inventory = {old_inventory}")
+            except Room.DoesNotExist:
+                logger.error(f"Room with pk {self.pk} not found during save")
 
         # ذخیره نمونه
         super().save(*args, **kwargs)
 
         # بررسی تغییر موجودی به صفر
-        if old_instance and old_instance.inventory != 0 and (self.inventory == 0 or self.inventory is None):
+        current_inventory = self.inventory if self.inventory is not None else 0
+        logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}")
+        if old_instance and old_inventory != 0 and current_inventory == 0:
             room_name = self.title or "اتاق بدون نام"
             status = "اتمام موجودی"
-            send_room_availability_sms(room_name, status)
-
-    
+            logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
+            try:
+                success = send_room_availability_sms(room_name, status)
+                if success:
+                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
+                else:
+                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_name}'")
+            except Exception as e:
+                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
     
     
 
