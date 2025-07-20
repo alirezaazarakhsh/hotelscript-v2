@@ -512,7 +512,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     price_calendar.append({
                         "date": date.strftime('%Y/%m/%d'),
                         "month": persian_months[date.month - 1],
-                        "day":~~persian_days[date.weekday()],
+                        "day": persian_days[date.weekday()],
                         "status": status,
                         "price": {
                             "price": price_data.price if price_data else None,
