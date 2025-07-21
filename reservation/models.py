@@ -777,7 +777,10 @@ class Room(models.Model):
 
     def clean(self):
         super().clean()
-        if (self.count or 0) + (self.auto_approved_count or 0) > (self.inventory or 0):
+        current_inventory = self.inventory or 0
+        current_count = self.count or 0
+        current_auto_approved_count = self.auto_approved_count or 0
+        if current_count + current_auto_approved_count > current_inventory:
             raise ValidationError({
                 'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
                 'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
@@ -798,43 +801,58 @@ class Room(models.Model):
     def save(self, *args, **kwargs):
         old_instance = None
         old_inventory = None
+        old_count = None
+        old_auto_approved_count = None
+
         if self.pk:
             try:
                 old_instance = Room.objects.get(pk=self.pk)
                 old_inventory = old_instance.inventory or 0
-                logger.debug(f"Room {self.pk}: Old inventory = {old_inventory}")
-                print(f"Room {self.pk}: Old inventory = {old_inventory}")
+                old_count = old_instance.count or 0
+                old_auto_approved_count = old_instance.auto_approved_count or 0
+                logger.debug(f"Room {self.pk}: Old inventory = {old_inventory}, Old count = {old_count}, Old auto_approved_count = {old_auto_approved_count}")
             except Room.DoesNotExist:
                 logger.error(f"Room with pk {self.pk} not found during save")
-                print(f"Room with pk {self.pk} not found during save")
 
         super().save(*args, **kwargs)
 
-        current_inventory = self.inventory if self.inventory is not None else 0
-        logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}")
-        print(f"Room {self.pk}: Current inventory = {current_inventory}")
+        current_inventory = self.inventory or 0
+        current_count = self.count or 0
+        current_auto_approved_count = self.auto_approved_count or 0
+        logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}, Current count = {current_count}, Current auto_approved_count = {current_auto_approved_count}")
 
+        # Calculate differences
+        count_diff = old_count - current_count if old_count is not None else 0
+        auto_approved_diff = old_auto_approved_count - current_auto_approved_count if old_auto_approved_count is not None else 0
+
+        # If count or auto_approved_count decreased, reduce inventory accordingly
+        if count_diff > 0 or auto_approved_diff > 0:
+            total_reduction = count_diff + auto_approved_diff
+            if total_reduction > 0:
+                if current_inventory >= total_reduction:
+                    self.inventory = current_inventory - total_reduction
+                    logger.info(f"Room {self.pk}: Reduced inventory by {total_reduction} (count_diff={count_diff}, auto_approved_diff={auto_approved_diff}) to {self.inventory}")
+                    super().save(update_fields=['inventory'])  # Save the updated inventory
+                else:
+                    logger.error(f"Room {self.pk}: Cannot reduce inventory by {total_reduction} as it would result in negative inventory")
+                    raise ValidationError(_('نمی‌توان موجودی را کاهش داد زیرا کمتر از مجموع کسر رزروها می‌شود.'))
+
+        # Handle inventory reaching zero
         if old_instance and old_inventory != 0 and current_inventory == 0:
             room_name = self.title.strip() if self.title else "اتاق"
             room_full_name = f"{room_name} - آیدی {self.pk}"
             status = "تکمیل"
 
             logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
-            print(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
-
             try:
                 from reservation.sms.sms import send_room_availability_sms
                 success = send_room_availability_sms(room_full_name, status)
                 if success:
                     logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
-                    print(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
                 else:
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
-                    print(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-                print(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
 
 
 # مدل بازه زمانی اتاق ها 
