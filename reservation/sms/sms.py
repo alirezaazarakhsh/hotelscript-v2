@@ -6,61 +6,71 @@ from authentication.models import Admin
 logger = logging.getLogger(__name__)
 
 def send_room_availability_sms(room_name, status, pattern_section='roomavailability'):
+    """
+    ارسال پیامک وضعیت موجودی اتاق به ادمین‌هایی که پترن مربوطه را فعال کرده‌اند.
+    پارامترها:
+        room_name: نام اتاق
+        status: وضعیت موجودی (مثلاً "اتمام موجودی" یا "موجود")
+        pattern_section: کلید بخش پترن در مدل SMSPattern (پیش‌فرض 'roomavailability')
+    """
     try:
-        # گرفتن تنظیمات سامانه فعال
+        # گرفتن تنظیمات سامانه پیامکی کاوه نگار (اولین نمونه)
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            logger.error("KavenegarSMSSetting not found")
+            logger.error("KavenegarSMSSetting not found.")
             return False
 
-        # پیدا کردن پترن متناسب با بخش موردنظر
+        # پیدا کردن پترن پیامک مطابق بخش درخواست شده
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            logger.error(f"SMSPattern for section '{pattern_section}' not found")
+            logger.error(f"SMSPattern for section '{pattern_section}' not found.")
             return False
 
-        # پیدا کردن ادمین‌هایی که پترن room_availability را فعال کرده‌اند
+        # پیدا کردن ادمین‌هایی که این پترن برای آن‌ها فعال است
         admins = Admin.objects.filter(sms_patterns=template_obj).select_related('base_user')
-        if not admins:
-            logger.error("No admins found with pattern 'room_availability' activated")
+        if not admins.exists():
+            logger.error(f"No admins found with pattern '{pattern_section}' activated.")
             return False
 
         api = KavenegarAPI(api_setting.api_token)
-        success = False
+        any_success = False
 
         # ارسال پیامک به هر ادمین
         for admin in admins:
-            phone_number = admin.base_user.phone_number
+            phone_number = getattr(admin.base_user, 'phone_number', None)
             if not phone_number:
-                logger.warning(f"No phone number found for admin {admin}")
+                logger.warning(f"No phone number found for admin {admin}. Skipping.")
                 continue
 
-            # محدود کردن طول نام ادمین برای جلوگیری از خطای طول
+            # محدود کردن طول رشته‌ها به 20 کاراکتر (مطابق محدودیت کاوه نگار)
             admin_name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "ادمین"
-            admin_name = admin_name[:20]  # محدود کردن به 20 کاراکتر
+            admin_name = admin_name[:20]
+            room_name_trimmed = room_name[:20]
+            status_trimmed = status[:20]
 
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': admin_name,    # توکن اول: نام ادمین (محدود شده)
-                'token2': room_name[:20],  # توکن دوم: نام اتاق (محدود شده)
-                'token3': status[:20],     # توکن سوم: وضعیت (محدود شده)
+                'token': admin_name,
+                'token2': room_name_trimmed,
+                'token3': status_trimmed,
                 'type': 'sms',
             }
 
             try:
                 response = api.verify_lookup(params)
-                logger.info(f"Response from Kavenegar for {phone_number}: {response.describe() if hasattr(response, 'describe') else str(response)}")
-                success = True
+                logger.info(f"SMS sent to {phone_number}. Response: {response.describe() if hasattr(response, 'describe') else str(response)}")
+                any_success = True
             except APIException as e:
-                logger.error(f"APIException for {phone_number}: {str(e)} - Response: {e.response.text if hasattr(e, 'response') else 'No response'}")
+                response_text = e.response.text if hasattr(e, 'response') else 'No response'
+                logger.error(f"APIException for {phone_number}: {str(e)} - Response: {response_text}")
             except HTTPException as e:
                 logger.error(f"HTTPException for {phone_number}: {str(e)}")
 
-        return success
+        return any_success
 
     except Exception as e:
         logger.error(f"Unexpected error in send_room_availability_sms: {str(e)}", exc_info=True)
