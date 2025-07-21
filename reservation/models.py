@@ -819,12 +819,8 @@ class Room(models.Model):
             room_name = self.title or "اتاق"
             room_name = ''.join(room_name.split())[:4]  # حذف فاصله‌ها و محدود به 4 کاراکتر
 
-            # تبدیل و محدود کردن hotel_name (بدون فاصله، حداکثر 4 کاراکتر)
-            hotel_name = self.hotel.name if self.hotel else "هتل"
-            hotel_name = ''.join(hotel_name.split())[:4]  # حذف فاصله‌ها و محدود به 4 کاراکتر
-
-            # ترکیب room_full_name برای token10 (حداکثر 9 کاراکتر با "-")
-            room_full_name = f"{room_name}-{hotel_name}"[:9]
+            # ترکیب room_full_name فقط با room_name (بدون hotel_name)
+            room_full_name = room_name
 
             status = "تکمیل"
 
@@ -843,7 +839,9 @@ class Room(models.Model):
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
                 print(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-    
+
+
+
 
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
