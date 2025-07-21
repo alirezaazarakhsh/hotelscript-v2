@@ -816,7 +816,7 @@ class Room(models.Model):
 
         if old_instance and old_inventory != 0 and current_inventory == 0:
             room_name = self.title or "اتاق_بانام"
-            status = "اتمام_موجودی"
+            status = "تکمیل"
             hotel_name = self.hotel.name if self.hotel else None
 
             logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
