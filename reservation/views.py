@@ -433,6 +433,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     discount_amount = price_data.discount_value
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
+        else:
+            discount_amount = 0  # در صورت عدم وجود تخفیف، مقدار صفر برگردانده شود
+
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
     @swagger_auto_schema(
@@ -480,14 +483,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         }
     )
     def get(self, request, *args, **kwargs):
-        from itertools import combinations
+        hotel = self.get_object()
+        logger.info(f"Processing request for hotel {hotel.slug}")
+
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         passenger_count = request.query_params.get('passenger_count')
         room_count = request.query_params.get('room_count')
-
-        hotel = self.get_object()
-        logger.info(f"Processing request for hotel {hotel.slug}")
 
         has_filters = any([start_date, end_date, passenger_count, room_count])
 
@@ -548,7 +550,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "price": price_data.price if price_data else None,
                             "price_after_discount": price_after_discount,
                             "discount_percentage": discount_percentage,
-                            "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                            "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                             "discount_date": discount_date,
                             "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                             "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
@@ -594,7 +596,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "price_after_discount": price_after_discount_first,
                         "total_price": total_price,
                         "discount_percentage": discount_percentage_first,
-                        "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
+                        "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                         "discount_date": discount_date_first,
                         "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                         "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
@@ -704,7 +706,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "price": price_data.price if price_data else None,
                         "price_after_discount": price_after_discount,
                         "discount_percentage": discount_percentage,
-                        "discount_amount": price_data.discount_value if price_data and price_data.discount_type == 'fixed' else None,
+                        "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
@@ -749,7 +751,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "price_after_discount": price_after_discount_first,
                     "total_price": total_price,
                     "discount_percentage": discount_percentage_first,
-                    "discount_amount": first_price_data.discount_value if first_price_data.discount_type == 'fixed' else None,
+                    "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                     "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
