@@ -8,6 +8,10 @@ logger = logging.getLogger(__name__)
 
 def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_increase'):
     try:
+        if amount_increased <= 0:
+            logger.warning("Amount increased is zero or negative. Skipping SMS.")
+            return False
+
         api_setting = KavenegarSMSSetting.objects.first()
         logger.debug(f"API Setting: {api_setting}")
         if not api_setting:
@@ -19,8 +23,8 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_inc
             name_fa=pattern_section
         ).first()
         logger.debug(f"SMSPattern: {template_obj}")
-        if not template_obj:
-            logger.error(f"SMSPattern for section '{pattern_section}' not found.")
+        if not template_obj or not template_obj.pattern_code:
+            logger.error(f"Invalid SMSPattern for section '{pattern_section}'.")
             return False
 
         admins = Admin.objects.filter(sms_patterns=template_obj).select_related('base_user')
@@ -30,7 +34,7 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_inc
             return False
 
         wallet = Wallet.objects.get(user=user)
-        new_balance = wallet.balance + amount_increased
+        new_balance = wallet.balance
 
         api = KavenegarAPI(api_setting.api_token)
         any_success = False
@@ -50,9 +54,9 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_inc
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': user_name,         # نام کاربر
-                'token2': amount_str,       # مبلغ افزایش
-                'token3': balance_str,      # موجودی کلی پس از افزایش
+                'token': user_name,
+                'token2': amount_str,
+                'token3': balance_str,
                 'type': 'sms',
             }
             logger.debug(f"Sending SMS to {phone_number} with params: {params}")
@@ -65,6 +69,11 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_inc
                 logger.error(f"APIException for {phone_number}: {str(e)}")
             except HTTPException as e:
                 logger.error(f"HTTPException for {phone_number}: {str(e)}")
+
+        if any_success:
+            logger.info("At least one SMS sent successfully.")
+        else:
+            logger.warning("No SMS sent.")
 
         return any_success
 
