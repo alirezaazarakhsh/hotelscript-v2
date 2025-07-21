@@ -933,6 +933,12 @@ class RoomDatePrice(models.Model):
                 name='check_fixed_discount_one_time'
             ),
             models.CheckConstraint(
+                check=models.Q(discount_type='percentage', discount_date__isnull=False) |
+                      models.Q(discount_type='fixed', discount_date__isnull=True) |
+                      models.Q(discount_type='none', discount_date__isnull=True),
+                name='check_discount_date_required'
+            ),
+            models.CheckConstraint(
                 check=models.Q(discount_date__gte=models.F('start_date'), discount_date__lte=models.F('end_date')) |
                       models.Q(discount_date__isnull=True),
                 name='check_discount_date_within_range'
@@ -941,12 +947,23 @@ class RoomDatePrice(models.Model):
 
     def clean(self):
         """اعتبارسنجی‌های اضافی در سطح مدل"""
+        # اعتبارسنجی مقدار تخفیف درصدی
         if self.discount_type == 'percentage' and (self.discount_value < 1 or self.discount_value > 100):
             raise ValidationError(_('مقدار تخفیف درصدی باید بین 1 تا 100 باشد.'))
+
+        # اعتبارسنجی تخفیف ثابت و گزینه اولین خرید
         if self.discount_type == 'fixed' and not self.is_fixed_discount_one_time:
             raise ValidationError(_('برای تخفیف ثابت، باید گزینه "تخفیف اولین خرید" فعال باشد.'))
         if self.discount_type == 'percentage' and self.is_fixed_discount_one_time:
             raise ValidationError(_('گزینه "تخفیف اولین خرید" فقط برای تخفیف ثابت قابل استفاده است.'))
+
+        # اعتبارسنجی تاریخ تخفیف
+        if self.discount_type == 'percentage' and not self.discount_date:
+            raise ValidationError(_('برای تخفیف درصدی، باید تاریخ انقضای تخفیف مشخص شود.'))
+        if self.discount_type == 'fixed' and self.discount_date:
+            raise ValidationError(_('برای تخفیف ثابت، نباید تاریخ انقضای تخفیف مشخص شود.'))
+
+        # اعتبارسنجی بازه تاریخ تخفیف
         if self.discount_date:
             if self.discount_date < self.start_date:
                 raise ValidationError(_('تاریخ انقضای تخفیف نمی‌تواند قبل از تاریخ شروع بازه باشد.'))
