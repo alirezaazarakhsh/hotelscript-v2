@@ -796,7 +796,6 @@ class Room(models.Model):
         return not active_prices.exists()
 
     def save(self, *args, **kwargs):
-        # ذخیره مقدار قبلی موجودی
         old_instance = None
         old_inventory = None
         if self.pk:
@@ -809,20 +808,23 @@ class Room(models.Model):
                 logger.error(f"Room with pk {self.pk} not found during save")
                 print(f"Room with pk {self.pk} not found during save")
 
-        # ذخیره نمونه
         super().save(*args, **kwargs)
 
-        # بررسی تغییر موجودی به صفر
         current_inventory = self.inventory if self.inventory is not None else 0
         logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}")
         print(f"Room {self.pk}: Current inventory = {current_inventory}")
+
         if old_instance and old_inventory != 0 and current_inventory == 0:
             room_name = self.title or "اتاق بدون نام"
             status = "اتمام موجودی"
+            hotel_name = self.hotel.name if self.hotel else None
+
             logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
             print(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
+
             try:
-                success = send_room_availability_sms(room_name, status)
+                from reservation.sms.sms import send_room_availability_sms
+                success = send_room_availability_sms(room_name, status, hotel_name=hotel_name)
                 if success:
                     logger.info(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
                     print(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
@@ -832,7 +834,6 @@ class Room(models.Model):
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
                 print(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
-    
     
     
 

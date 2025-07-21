@@ -5,7 +5,7 @@ from authentication.models import Admin
 
 logger = logging.getLogger(__name__)
 
-def send_room_availability_sms(room_name, status, pattern_section='roomavailability'):
+def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='roomavailability'):
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
@@ -37,14 +37,21 @@ def send_room_availability_sms(room_name, status, pattern_section='roomavailabil
             # حذف فاصله بین نام و نام خانوادگی
             admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
-            room_name_trimmed = room_name[:20]
+
+            # ترکیب نام اتاق و هتل (اگر هتل موجود است)
+            if hotel_name:
+                room_full_name = f"{room_name} - {hotel_name}"
+            else:
+                room_full_name = room_name
+            room_full_name = room_full_name[:20]
+
             status_trimmed = status[:20]
 
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
                 'token': admin_name,
-                'token2': room_name_trimmed,
+                'token2': room_full_name,
                 'token3': status_trimmed,
                 'type': 'sms',
             }
