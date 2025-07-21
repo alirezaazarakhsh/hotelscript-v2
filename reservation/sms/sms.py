@@ -3,6 +3,7 @@ from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from authentication.models import Admin
 
+
 logger = logging.getLogger(__name__)
 
 def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='roomavailability'):
