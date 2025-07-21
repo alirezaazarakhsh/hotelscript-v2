@@ -5,7 +5,7 @@ from authentication.models import Admin
 
 logger = logging.getLogger(__name__)
 
-def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='mojodiotaghadmin'):
+def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='roomavailability'):
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         logger.debug(f"API Setting: {api_setting}")
