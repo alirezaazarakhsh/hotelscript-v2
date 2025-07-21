@@ -814,8 +814,6 @@ class Room(models.Model):
             except Room.DoesNotExist:
                 logger.error(f"Room with pk {self.pk} not found during save")
 
-        super().save(*args, **kwargs)
-
         current_inventory = self.inventory or 0
         current_count = self.count or 0
         current_auto_approved_count = self.auto_approved_count or 0
@@ -825,25 +823,29 @@ class Room(models.Model):
         count_diff = old_count - current_count if old_count is not None else 0
         auto_approved_diff = old_auto_approved_count - current_auto_approved_count if old_auto_approved_count is not None else 0
 
-        # If count or auto_approved_count decreased, reduce inventory accordingly
+        # Check if inventory will be zero after reduction
+        will_inventory_be_zero = False
         if count_diff > 0 or auto_approved_diff > 0:
             total_reduction = count_diff + auto_approved_diff
             if total_reduction > 0:
                 if current_inventory >= total_reduction:
                     self.inventory = current_inventory - total_reduction
                     logger.info(f"Room {self.pk}: Reduced inventory by {total_reduction} (count_diff={count_diff}, auto_approved_diff={auto_approved_diff}) to {self.inventory}")
-                    super().save(update_fields=['inventory'])  # Save the updated inventory
+                    if self.inventory == 0:
+                        will_inventory_be_zero = True
                 else:
                     logger.error(f"Room {self.pk}: Cannot reduce inventory by {total_reduction} as it would result in negative inventory")
                     raise ValidationError(_('نمی‌توان موجودی را کاهش داد زیرا کمتر از مجموع کسر رزروها می‌شود.'))
 
-        # Handle inventory reaching zero
-        if old_instance and old_inventory != 0 and current_inventory == 0:
+        super().save(*args, **kwargs)
+
+        # Handle inventory reaching zero (either manually or due to count/auto_approved_count reduction)
+        if (old_instance and old_inventory != 0 and self.inventory == 0) or will_inventory_be_zero:
             room_name = self.title.strip() if self.title else "اتاق"
             room_full_name = f"{room_name} - آیدی {self.pk}"
             status = "تکمیل"
 
-            logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
+            logger.info(f"Room {self.pk}: Inventory changed to 0 for '{room_full_name}', attempting to send SMS")
             try:
                 from reservation.sms.sms import send_room_availability_sms
                 success = send_room_availability_sms(room_full_name, status)
@@ -853,6 +855,8 @@ class Room(models.Model):
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+
+
 
 
 # مدل بازه زمانی اتاق ها 
