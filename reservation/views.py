@@ -442,8 +442,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، و وضعیت دسترسی باز می‌گرداند. "
-            "در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر دارند نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
-            "در حالت فیلترشده، همه اتاق‌ها یا پک‌هایی که موجودی دارند نمایش داده می‌شوند، حتی اگر برخی روزها بسته یا تکمیل باشند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
+            "در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر دارند و موجودی آنها بیشتر از صفر است نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
+            "در حالت فیلترشده، همه اتاق‌ها یا پک‌هایی که موجودی دارند نمایش داده می‌شوند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
             "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
@@ -456,7 +456,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
             "- تخفیف‌های درصدی باید تاریخ انقضا (discount_date) داشته باشند.\n"
-            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند."
+            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند.\n"
+            "- اتاق‌هایی با موجودی صفر در نتایج نمایش داده نمی‌شوند.\n"
+            "- وضعیت‌ها فقط شامل 'open' یا 'close' هستند."
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -470,7 +472,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، Juno 1, حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
+                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، پیش‌فرض ۱، حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
             ),
             openapi.Parameter(
                 name='room_count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳', type=openapi.TYPE_INTEGER, required=False
@@ -502,8 +504,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
             passenger_count_int = 1
             room_count_int = 1
-            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gte=1).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-            logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data, using default range {start_date_obj} to {end_date_obj}")
+            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+            logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data and inventory > 0, using default range {start_date_obj} to {end_date_obj}")
 
             date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
             night_count = (end_date_obj - start_date_obj).days
@@ -529,11 +531,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     closed_date = closed.filter(date=date).first()
                     status = "open"
 
-                    if not price_data:
-                        status = "close"
-                    elif closed_date:
-                        status = "complate"
-                    elif room.inventory == 0:
+                    if not price_data or closed_date:
                         status = "close"
 
                     try:
@@ -613,9 +611,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             room_data = list(room_dict.values())
 
             if not room_data:
-                logger.warning(f"No rooms with price data found for hotel {hotel.slug}")
+                logger.warning(f"No rooms with price data and inventory > 0 found for hotel {hotel.slug}")
                 return Response({
-                    'detail': 'هیچ اتاقی با داده قیمتی برای این هتل یافت نشد.',
+                    'detail': 'هیچ اتاقی با داده قیمتی و موجودی برای این هتل یافت نشد.',
                     'rooms': [],
                     'price_calendar': [
                         {"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"}
@@ -652,9 +650,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
-            inventory__gte=1,
+            inventory__gt=0,
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-        logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1 and valid price data")
+        logger.info(f"Found {rooms_qs.count()} rooms with inventory > 0 and valid price data")
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
@@ -663,10 +661,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         room_dict = {}
 
         for room in rooms_qs:
-            if room.inventory == 0:
-                logger.info(f"Room {room.id} skipped: inventory=0")
-                continue
-
             room_services = ", ".join([service.title for service in room.services.all()]) or "خدمات ندارد"
             closed = ClosedDate.objects.filter(
                 room_date__room=room,
@@ -685,15 +679,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 closed_date = closed.filter(date=date).first()
                 status = "open"
 
-                if not price_data:
+                if not price_data or closed_date:
                     status = "close"
-                    logger.debug(f"Room {room.id} on {date}: No price data")
-                elif closed_date:
-                    status = "complate"
-                    logger.debug(f"Room {room.id} on {date}: Closed")
-                elif room.inventory == 0:
-                    status = "close"
-                    logger.debug(f"Room {room.id} on {date}: Inventory=0")
+                    logger.debug(f"Room {room.id} on {date}: {'No price data' if not price_data else 'Closed by admin'}")
 
                 try:
                     discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
