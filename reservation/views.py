@@ -6,7 +6,6 @@ import jdatetime
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
-from authentication import permissions
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from .utils import Round
 from rest_framework.generics import CreateAPIView
@@ -395,7 +394,7 @@ except Exception:
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
 class HotelRoomsView(generics.RetrieveAPIView):
-    permission_classes = (permissions.AllowAny,)
+    permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
     queryset = Hotel.objects.all()
     lookup_field = 'slug'
@@ -403,7 +402,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
-        # (این بخش بدون تغییر باقی می‌ماند)
         discount_amount = 0
         price_after_discount = price_data.price if price_data else None
         discount_percentage = None
@@ -415,7 +413,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
                     raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را مشخص کنید.")
                 if price_data.discount_date >= date:
-                    discount_amount = int(price_data.price * price_data.discount_value / 100)
+                    discount_amount = int(price_data.price * price_data.discount_value / 100)  # تبدیل به عدد صحیح
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
@@ -428,15 +426,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
                     raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را برای تخفیف ثابت حذف کنید.")
-                if price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                    discount_amount = 0
-                    price_after_discount = int(price_data.price)
-                else:
-                    discount_amount = int(price_data.discount_value)
-                    price_after_discount = int(max(price_data.price - discount_amount, 0))
-                    fixed_discount_applied = price_data.is_fixed_discount_one_time
+                # اعمال تخفیف ثابت برای هر شب
+                discount_amount = int(price_data.discount_value)  # اطمینان از عدد صحیح
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
+                fixed_discount_applied = price_data.is_fixed_discount_one_time  # برای سازگاری
         else:
-            discount_amount
+            discount_amount = 0
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
@@ -448,8 +443,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "در حالت فیلترشده، همه اتاق‌ها یا پک‌هایی که موجودی دارند نمایش داده می‌شوند، حتی اگر برخی روزها بسته یا تکمیل باشند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
-            "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)\n"
-            "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)\n"
+            "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
+            "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd\n"
             "- passenger_count (اختیاری): تعداد مسافران، پیش‌فرض ۱، حداکثر ۸\n"
             "- room_count (اختیاری): تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳\n\n"
             "خروجی:\n"
@@ -458,8 +453,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
             "- تخفیف‌های درصدی باید تاریخ انقضا (discount_date) داشته باشند.\n"
-            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند.\n"
-            "- تاریخ‌های ورودی می‌توانند به فرمت شمسی (yyyy/mm/dd) یا میلادی (yyyy-mm-dd) باشند."
+            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند."
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -467,13 +461,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 name='slug', in_=openapi.IN_PATH, description='شناسه slug هتل', type=openapi.TYPE_STRING, required=True
             ),
             openapi.Parameter(
-                name='start_date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)', type=openapi.TYPE_STRING, required=False
+                name='start_date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)', type=openapi.TYPE_STRING, required=False
+                name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، پیش‌فرض ۱، حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
+                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، Juno 1, حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
             ),
             openapi.Parameter(
                 name='room_count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳', type=openapi.TYPE_INTEGER, required=False
@@ -500,22 +494,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = "میهمان"
 
-        def parse_date(date_str, is_jalali=False):
-            """پارس کردن تاریخ به فرمت شمسی یا میلادی و تبدیل به jdatetime.date"""
-            try:
-                if is_jalali:
-                    # فرمت شمسی: yyyy/mm/dd
-                    year, month, day = map(int, date_str.split('/'))
-                    return jdatetime.date(year, month, day)
-                else:
-                    # فرمت میلادی: yyyy-mm-dd
-                    year, month, day = map(int, date_str.split('-'))
-                    gregorian_date = datetime(year, month, day)
-                    jalali_date = jdatetime.date.fromgregorian(date=gregorian_date)
-                    return jalali_date
-            except (ValueError, TypeError):
-                raise ValueError("فرمت تاریخ باید yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی) باشد.")
-
         if not has_filters:
             start_date_obj = jdatetime.date.today()
             end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
@@ -537,7 +515,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ).select_related('room_date')
 
                 price_calendar = []
-                fixed_discount_applied = False
+                fixed_discount_applied = False  # برای مدیریت تخفیف ثابت یک‌بارمصرف
 
                 for date in date_range:
                     price_data = room.date_prices.filter(
@@ -569,7 +547,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "price": price_data.price if price_data else None,
                             "price_after_discount": price_after_discount,
                             "discount_percentage": discount_percentage,
-                            "discount_amount": discount_amount,
+                            "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                             "discount_date": discount_date,
                             "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                             "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
@@ -593,10 +571,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     return Response({'detail': str(e)}, status=400)
 
                 total_price = sum(
-                    day['price']['price'] for day in price_calendar 
-                    if day['status'] == "open" and day['price'] and day['price']['price'] is not None
-                )
-                total_price_discount = sum(
                     day['price']['price_after_discount'] for day in price_calendar 
                     if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
                 )
@@ -615,10 +589,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "capacity": room.room_capacity,
                     "extra_capacity": room.extra_capacity,
                     "price": {
+                        "price": first_price_data.price,
+                        "price_after_discount": price_after_discount_first,
                         "total_price": total_price,
-                        "total_price_discount": total_price_discount,
                         "discount_percentage": discount_percentage_first,
-                        "discount_amount": discount_amount,
+                        "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                         "discount_date": discount_date_first,
                         "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                         "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
@@ -644,33 +619,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
             return Response(room_data)
 
-        # پردازش تاریخ‌های ورودی (شمسی یا میلادی)
         try:
-            # بررسی فرمت تاریخ
-            if start_date:
-                if '/' in start_date:
-                    start_date_obj = parse_date(start_date, is_jalali=True)
-                else:
-                    start_date_obj = parse_date(start_date, is_jalali=False)
-            else:
-                start_date_obj = jdatetime.date.today()
-
+            start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
             if end_date:
-                if '/' in end_date:
-                    end_date_obj = parse_date(end_date, is_jalali=True)
-                else:
-                    end_date_obj = parse_date(end_date, is_jalali=False)
+                end_date_obj = jdatetime.date(*map(int, end_date.split('-')))
+                if start_date_obj > end_date_obj:
+                    return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+                if (end_date_obj - start_date_obj).days > 30:
+                    return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
             else:
                 end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
-
-            # اعتبارسنجی بازه تاریخ
-            if start_date_obj > end_date_obj:
-                return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
-            if (end_date_obj - start_date_obj).days > 30:
-                return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
-
-        except ValueError as e:
-            return Response({'detail': str(e)}, status=400)
+        except Exception:
+            return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
         try:
             passenger_count_int = int(passenger_count) if passenger_count else 1
@@ -708,7 +668,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             ).select_related('room_date')
 
             price_calendar = []
-            fixed_discount_applied = False
+            fixed_discount_applied = False  # برای مدیریت تخفیف ثابت یک‌بارمصرف
 
             for date in date_range:
                 price_data = room.date_prices.filter(
@@ -743,7 +703,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "price": price_data.price if price_data else None,
                         "price_after_discount": price_after_discount,
                         "discount_percentage": discount_percentage,
-                        "discount_amount": discount_amount,
+                        "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
@@ -766,10 +726,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(
-                day['price']['price'] for day in price_calendar 
-                if day['status'] == "open" and day['price'] and day['price']['price'] is not None
-            )
-            total_price_discount = sum(
                 day['price']['price_after_discount'] for day in price_calendar 
                 if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
             )
@@ -788,10 +744,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 "capacity": room.room_capacity,
                 "extra_capacity": room.extra_capacity,
                 "price": {
+                    "price": first_price_data.price,
+                    "price_after_discount": price_after_discount_first,
                     "total_price": total_price,
-                    "total_price_discount": total_price_discount,
                     "discount_percentage": discount_percentage_first,
-                    "discount_amount": discount_amount,
+                    "discount_amount": discount_amount,  # استفاده از مقدار محاسبه‌شده
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                     "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
@@ -831,7 +788,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 continue
 
             if all(r['room_number'] > 0 for r in pack_rooms):
-                pack_total_price = sum(r['price']['total_price_discount'] for r in pack_rooms)
+                pack_total_price = sum(r['price']['total_price'] for r in pack_rooms)
                 packs.append({
                     "pack_rooms": [
                         {
