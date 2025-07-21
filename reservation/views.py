@@ -394,7 +394,7 @@ except Exception:
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
 class HotelRoomsView(generics.RetrieveAPIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (permissions.AllowAny,)
     serializer_class = RoomSerializer
     queryset = Hotel.objects.all()
     lookup_field = 'slug'
@@ -402,6 +402,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
+        # (این بخش بدون تغییر باقی می‌ماند)
         discount_amount = 0
         price_after_discount = price_data.price if price_data else None
         discount_percentage = None
@@ -434,7 +435,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
         else:
-            discount_amount = 0
+            discount_amount
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
@@ -446,8 +447,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "در حالت فیلترشده، همه اتاق‌ها یا پک‌هایی که موجودی دارند نمایش داده می‌شوند، حتی اگر برخی روزها بسته یا تکمیل باشند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
-            "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
-            "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd\n"
+            "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)\n"
+            "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)\n"
             "- passenger_count (اختیاری): تعداد مسافران، پیش‌فرض ۱، حداکثر ۸\n"
             "- room_count (اختیاری): تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳\n\n"
             "خروجی:\n"
@@ -456,7 +457,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
             "- تخفیف‌های درصدی باید تاریخ انقضا (discount_date) داشته باشند.\n"
-            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند."
+            "- تخفیف‌های ثابت نباید تاریخ انقضا داشته باشند.\n"
+            "- تاریخ‌های ورودی می‌توانند به فرمت شمسی (yyyy/mm/dd) یا میلادی (yyyy-mm-dd) باشند."
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -464,13 +466,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 name='slug', in_=openapi.IN_PATH, description='شناسه slug هتل', type=openapi.TYPE_STRING, required=True
             ),
             openapi.Parameter(
-                name='start_date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
+                name='start_date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
+                name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، Juno 1, حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
+                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، پیش‌فرض ۱، حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
             ),
             openapi.Parameter(
                 name='room_count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳', type=openapi.TYPE_INTEGER, required=False
@@ -496,6 +498,22 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = "میهمان"
+
+        def parse_date(date_str, is_jalali=False):
+            """پارس کردن تاریخ به فرمت شمسی یا میلادی و تبدیل به jdatetime.date"""
+            try:
+                if is_jalali:
+                    # فرمت شمسی: yyyy/mm/dd
+                    year, month, day = map(int, date_str.split('/'))
+                    return jdatetime.date(year, month, day)
+                else:
+                    # فرمت میلادی: yyyy-mm-dd
+                    year, month, day = map(int, date_str.split('-'))
+                    gregorian_date = datetime(year, month, day)
+                    jalali_date = jdatetime.date.fromgregorian(date=gregorian_date)
+                    return jalali_date
+            except (ValueError, TypeError):
+                raise ValueError("فرمت تاریخ باید yyyy-mm-dd (میلادی) یا yyyy/mm/dd (شمسی) باشد.")
 
         if not has_filters:
             start_date_obj = jdatetime.date.today()
@@ -625,18 +643,33 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
             return Response(room_data)
 
+        # پردازش تاریخ‌های ورودی (شمسی یا میلادی)
         try:
-            start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
+            # بررسی فرمت تاریخ
+            if start_date:
+                if '/' in start_date:
+                    start_date_obj = parse_date(start_date, is_jalali=True)
+                else:
+                    start_date_obj = parse_date(start_date, is_jalali=False)
+            else:
+                start_date_obj = jdatetime.date.today()
+
             if end_date:
-                end_date_obj = jdatetime.date(*map(int, end_date.split('-')))
-                if start_date_obj > end_date_obj:
-                    return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
-                if (end_date_obj - start_date_obj).days > 30:
-                    return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
+                if '/' in end_date:
+                    end_date_obj = parse_date(end_date, is_jalali=True)
+                else:
+                    end_date_obj = parse_date(end_date, is_jalali=False)
             else:
                 end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
-        except Exception:
-            return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
+
+            # اعتبارسنجی بازه تاریخ
+            if start_date_obj > end_date_obj:
+                return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+            if (end_date_obj - start_date_obj).days > 30:
+                return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
+
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=400)
 
         try:
             passenger_count_int = int(passenger_count) if passenger_count else 1
