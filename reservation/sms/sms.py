@@ -3,12 +3,12 @@ from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from authentication.models import Admin
 
-
 logger = logging.getLogger(__name__)
 
-def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='roomavailability'):
+def send_room_availability_sms(room_name, status, hotel_name=None, pattern_section='mojodiotaghadmin'):
     try:
         api_setting = KavenegarSMSSetting.objects.first()
+        logger.debug(f"API Setting: {api_setting}")
         if not api_setting:
             logger.error("KavenegarSMSSetting not found.")
             return False
@@ -17,11 +17,13 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
+        logger.debug(f"SMSPattern: {template_obj}")
         if not template_obj:
             logger.error(f"SMSPattern for section '{pattern_section}' not found.")
             return False
 
         admins = Admin.objects.filter(sms_patterns=template_obj).select_related('base_user')
+        logger.debug(f"Admins: {list(admins)}")
         if not admins.exists():
             logger.error(f"No admins found with pattern '{pattern_section}' activated.")
             return False
@@ -31,39 +33,33 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
 
         for admin in admins:
             phone_number = getattr(admin.base_user, 'phone_number', None)
+            logger.debug(f"Admin: {admin}, Phone: {phone_number}")
             if not phone_number:
                 logger.warning(f"No phone number found for admin {admin}. Skipping.")
                 continue
 
-            # حذف فاصله بین نام و نام خانوادگی
             admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
-
-            # ترکیب نام اتاق و هتل (اگر هتل موجود است)
-            if hotel_name:
-                room_full_name = f"{room_name} - {hotel_name}"
-            else:
-                room_full_name = room_name
+            room_full_name = f"{room_name} - {hotel_name}" if hotel_name else room_name
             room_full_name = room_full_name[:20]
-
             status_trimmed = status[:20]
 
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': admin_name,
-                'token2': room_full_name,
-                'token3': status_trimmed,
+                'token': admin_name,  # برای %token
+                'token10': room_full_name,  # برای %token10
+                'token3': status_trimmed,  # برای %token3
                 'type': 'sms',
             }
+            logger.debug(f"Sending SMS to {phone_number} with params: {params}")
 
             try:
                 response = api.verify_lookup(params)
-                logger.info(f"SMS sent to {phone_number}. Response: {response.describe() if hasattr(response, 'describe') else str(response)}")
+                logger.info(f"SMS sent to {phone_number}. Response: {response}")
                 any_success = True
             except APIException as e:
-                response_text = e.response.text if hasattr(e, 'response') else 'No response'
-                logger.error(f"APIException for {phone_number}: {str(e)} - Response: {response_text}")
+                logger.error(f"APIException for {phone_number}: {str(e)}")
             except HTTPException as e:
                 logger.error(f"HTTPException for {phone_number}: {str(e)}")
 
