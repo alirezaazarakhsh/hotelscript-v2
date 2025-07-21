@@ -815,7 +815,7 @@ class Room(models.Model):
         print(f"Room {self.pk}: Current inventory = {current_inventory}")
 
         if old_instance and old_inventory != 0 and current_inventory == 0:
-            room_name = self.title or "اتاق_بانام"
+            room_name = self.title or "اتاق بانام"
             status = "تکمیل"
             hotel_name = self.hotel.name if self.hotel else None
 
