@@ -40,9 +40,7 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
 
             admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
-            room_name_clean = ''.join(room_name.split())[:4]  # محدود به 4 کاراکتر
-            # فقط از room_name_clean استفاده می‌کنیم، hotel_name نادیده گرفته می‌شود
-            room_full_name = room_name_clean
+            room_full_name = room_name[:20]  # اسم کامل + ایدی، محدود به 20 کاراکتر
             status_trimmed = status[:20]
 
             params = {

@@ -815,12 +815,10 @@ class Room(models.Model):
         print(f"Room {self.pk}: Current inventory = {current_inventory}")
 
         if old_instance and old_inventory != 0 and current_inventory == 0:
-            # تبدیل و محدود کردن room_name (بدون فاصله، حداکثر 4 کاراکتر)
+            # استفاده از اسم کامل اتاق بدون محدودیت طول و اضافه کردن ایدی
             room_name = self.title or "اتاق"
-            room_name = ''.join(room_name.split())[:4]  # حذف فاصله‌ها و محدود به 4 کاراکتر
-
-            # ترکیب room_full_name فقط با room_name (بدون hotel_name)
-            room_full_name = room_name
+            room_name = ''.join(room_name.split())  # حذف فاصله‌ها
+            room_full_name = f"{room_name} - {self.pk}"  # اسم کامل + ایدی
 
             status = "تکمیل"
 
@@ -839,7 +837,6 @@ class Room(models.Model):
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
                 print(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
 
 
 
