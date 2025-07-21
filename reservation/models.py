@@ -815,26 +815,34 @@ class Room(models.Model):
         print(f"Room {self.pk}: Current inventory = {current_inventory}")
 
         if old_instance and old_inventory != 0 and current_inventory == 0:
-            room_name = self.title or "اتاق بانام"
-            status = "تکمیل"
-            hotel_name = self.hotel.name if self.hotel else None
+            # تبدیل و محدود کردن room_name (بدون فاصله، حداکثر 4 کاراکتر)
+            room_name = self.title or "اتاق"
+            room_name = ''.join(room_name.split())[:4]  # حذف فاصله‌ها و محدود به 4 کاراکتر
 
-            logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
-            print(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_name}', attempting to send SMS")
+            # تبدیل و محدود کردن hotel_name (بدون فاصله، حداکثر 4 کاراکتر)
+            hotel_name = self.hotel.name if self.hotel else "هتل"
+            hotel_name = ''.join(hotel_name.split())[:4]  # حذف فاصله‌ها و محدود به 4 کاراکتر
+
+            # ترکیب room_full_name برای token10 (حداکثر 9 کاراکتر با "-")
+            room_full_name = f"{room_name}-{hotel_name}"[:9]
+
+            status = "تکمیل"
+
+            logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
+            print(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
 
             try:
                 from reservation.sms.sms import send_room_availability_sms
-                success = send_room_availability_sms(room_name, status, hotel_name=hotel_name)
+                success = send_room_availability_sms(room_full_name, status)
                 if success:
-                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
-                    print(f"Room {self.pk}: SMS sent successfully for '{room_name}'")
+                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
+                    print(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
                 else:
-                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_name}'")
-                    print(f"Room {self.pk}: Failed to send SMS for '{room_name}'")
+                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
+                    print(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
-                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
-                print(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
-    
+                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+                print(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
     
 
 # مدل بازه زمانی اتاق ها 
