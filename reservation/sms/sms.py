@@ -40,22 +40,7 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
 
             admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
-
-            # جدا کردن نام اتاق و ایدی (فرض: room_name به شکل "اتاق VIP 123" است)
-            try:
-                room_parts = room_name.rsplit(' ', 1)  # جدا کردن از آخرین فاصله
-                if len(room_parts) == 2:
-                    room_base_name, room_id = room_parts
-                    # کوتاه کردن نام اتاق تا 10 کاراکتر و ایدی تا 5 کاراکتر
-                    room_base_name = room_base_name[:10]
-                    room_id = room_id[:5]
-                    room_full_name = f"{room_base_name} - {room_id}"[:20]  # ترکیب و محدود کردن به 20 کاراکتر
-                else:
-                    room_full_name = room_name[:20]  # در صورت عدم وجود ایدی، همان نام اصلی
-            except Exception as e:
-                logger.warning(f"Error parsing room_name '{room_name}': {str(e)}. Using original name.")
-                room_full_name = room_name[:20]
-
+            room_full_name = room_name[:20]  # اسم کامل + ایدی، محدود به 20 کاراکتر
             status_trimmed = status[:20]
 
             params = {

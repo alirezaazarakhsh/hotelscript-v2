@@ -815,11 +815,8 @@ class Room(models.Model):
         print(f"Room {self.pk}: Current inventory = {current_inventory}")
 
         if old_instance and old_inventory != 0 and current_inventory == 0:
-            # استفاده از اسم کامل اتاق بدون محدودیت طول و اضافه کردن ایدی
-            room_name = self.title or "اتاق"
-            room_name = ''.join(room_name.split())  # حذف فاصله‌ها
-            room_full_name = f"{room_name} - {self.pk}"  # اسم کامل + ایدی
-
+            room_name = self.title.strip() if self.title else "اتاق"
+            room_full_name = f"{room_name} - آیدی {self.pk}"
             status = "تکمیل"
 
             logger.info(f"Room {self.pk}: Inventory changed from {old_inventory} to 0 for '{room_full_name}', attempting to send SMS")
