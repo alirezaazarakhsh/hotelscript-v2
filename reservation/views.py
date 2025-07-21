@@ -413,7 +413,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
                     raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را مشخص کنید.")
                 if price_data.discount_date >= date:
-                    discount_amount = price_data.price * price_data.discount_value / 100
+                    discount_amount = int(price_data.price * price_data.discount_value / 100)  # تبدیل به عدد صحیح
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
@@ -426,15 +426,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
                     raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را برای تخفیف ثابت حذف کنید.")
-                if price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                    discount_amount = 0
-                    price_after_discount = price_data.price
-                else:
-                    discount_amount = price_data.discount_value
-                    price_after_discount = int(max(price_data.price - discount_amount, 0))
-                    fixed_discount_applied = price_data.is_fixed_discount_one_time
+                # اعمال تخفیف ثابت برای هر شب
+                discount_amount = int(price_data.discount_value)  # اطمینان از عدد صحیح
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
+                fixed_discount_applied = price_data.is_fixed_discount_one_time  # برای سازگاری
         else:
-            discount_amount = 0  # در صورت عدم وجود تخفیف، مقدار صفر برگردانده شود
+            discount_amount = 0
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
@@ -470,7 +467,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False
             ),
             openapi.Parameter(
-                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، پیش‌فرض ۱، حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
+                name='passenger_count', in_=openapi.IN_QUERY, description='تعداد مسافران، Juno 1, حداکثر ۸', type=openapi.TYPE_INTEGER, required=False
             ),
             openapi.Parameter(
                 name='room_count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳', type=openapi.TYPE_INTEGER, required=False
