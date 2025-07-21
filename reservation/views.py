@@ -408,26 +408,19 @@ class HotelRoomsView(generics.RetrieveAPIView):
         discount_date = None
 
         if price_data and price_data.discount_type != 'none':
-            if price_data.discount_type == 'percentage':
-                if not price_data.discount_date:
-                    logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
-                    raise ValueError("تخفیف درصدی باید تاریخ پایان داشته باشد.")
-                if price_data.discount_date >= date:
+            if not price_data.discount_date or price_data.discount_date >= date:
+                if price_data.discount_type == 'percentage':
                     discount_amount = price_data.price * price_data.discount_value / 100
                     discount_percentage = price_data.discount_value
-                    discount_date = price_data.discount_date.strftime('%Y/%m/%d')
-                    price_after_discount = int(max(price_data.price - discount_amount, 0))
-                else:
-                    logger.warning(f"Room {price_data.room.id} on {date}: Discount ignored due to expired discount_date {price_data.discount_date}")
-                    price_after_discount = int(price_data.price)
-                    discount_percentage = None
-                    discount_date = None
-            elif price_data.discount_type == 'fixed':
-                if price_data.discount_date:
-                    logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
-                    raise ValueError("تخفیف ثابت نباید تاریخ پایان داشته باشد.")
-                discount_amount = price_data.discount_value
+                    discount_date = price_data.discount_date.strftime('%Y/%m/%d') if price_data.discount_date else None
+                elif price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time:
+                    discount_amount = price_data.discount_value
+                    discount_date = price_data.discount_date.strftime('%Y/%m/%d') if price_data.discount_date else None
                 price_after_discount = int(max(price_data.price - discount_amount, 0))
+            else:
+                logger.warning(f"Room {price_data.room.id} on {date}: Discount ignored due to expired discount_date {price_data.discount_date}")
+                price_after_discount = int(price_data.price)
+                discount_percentage = None
                 discount_date = None
 
         return discount_amount, price_after_discount, discount_percentage, discount_date
@@ -447,10 +440,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "خروجی:\n"
             "- بدون فیلتر: لیست اتاق‌هایی که حداقل یک بازه قیمتی دارند با تقویم قیمتی\n"
             "- با فیلتر: لیست اتاق‌ها یا پک‌های اتاق با قیمت و تقویم قیمتی برای تمام روزها\n"
-            "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
-            "نکات:\n"
-            "- تخفیف‌های درصدی باید تاریخ پایان (discount_date) داشته باشند.\n"
-            "- تخفیف‌های ثابت نباید تاریخ پایان داشته باشند."
+            "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس"
         ),
         tags=['hotel-room'],
         manual_parameters=[
@@ -472,11 +462,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ],
         responses={
             200: "لیست اتاق‌ها یا پک‌های اتاق با یا بدون فیلتر",
-            400: "خطا در پارامترهای ورودی یا تنظیمات تخفیف",
+            400: "خطا در پارامترهای ورودی",
             404: "هیچ اتاق یا پکی با موجودی یافت نشد"
         }
     )
     def get(self, request, *args, **kwargs):
+        from itertools import combinations
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         passenger_count = request.query_params.get('passenger_count')
@@ -496,7 +487,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
             passenger_count_int = 1
             room_count_int = 1
-            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gte=1).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gte=1).distinct()
             logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data, using default range {start_date_obj} to {end_date_obj}")
 
             date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -512,8 +503,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ).select_related('room_date')
 
                 price_calendar = []
-                fixed_discount_applied = False  # برای مدیریت تخفیف ثابت یک‌بارمصرف
-
                 for date in date_range:
                     price_data = room.date_prices.filter(
                         start_date__lte=date,
@@ -530,17 +519,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     elif room.inventory == 0:
                         status = "close"
 
-                    try:
-                        discount_amount, price_after_discount, discount_percentage, discount_date = self.calculate_discount(price_data, date)
-                        # مدیریت تخفیف ثابت یک‌بارمصرف
-                        if price_data and price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                            discount_amount = 0
-                            price_after_discount = price_data.price
-                            discount_date = None
-                        elif price_data and price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time:
-                            fixed_discount_applied = True
-                    except ValueError as e:
-                        return Response({'detail': str(e)}, status=400)
+                    discount_amount, price_after_discount, discount_percentage, discount_date = self.calculate_discount(price_data, date)
 
                     price_calendar.append({
                         "date": date.strftime('%Y/%m/%d'),
@@ -569,14 +548,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     logger.info(f"Room {room.id} skipped: No valid price data in default range")
                     continue
 
-                try:
-                    discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first = self.calculate_discount(first_price_data, start_date_obj)
-                except ValueError as e:
-                    return Response({'detail': str(e)}, status=400)
+                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first = self.calculate_discount(first_price_data, start_date_obj)
 
                 total_price = sum(
-                    day['price']['price_after_discount'] for day in price_calendar 
-                    if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
+                    day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
                 )
 
                 room_dict[room.id] = {
@@ -651,7 +626,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gte=1,
-        ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+        ).distinct()
         logger.info(f"Found {rooms_qs.count()} rooms with inventory >= 1 and valid price data")
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -672,8 +647,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
             ).select_related('room_date')
 
             price_calendar = []
-            fixed_discount_applied = False  # برای مدیریت تخفیف ثابت یک‌بارمصرف
-
             for date in date_range:
                 price_data = room.date_prices.filter(
                     start_date__lte=date,
@@ -693,17 +666,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     status = "close"
                     logger.debug(f"Room {room.id} on {date}: Inventory=0")
 
-                try:
-                    discount_amount, price_after_discount, discount_percentage, discount_date = self.calculate_discount(price_data, date)
-                    # مدیریت تخفیف ثابت یک‌بارمصرف
-                    if price_data and price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                        discount_amount = 0
-                        price_after_discount = price_data.price
-                        discount_date = None
-                    elif price_data and price_data.discount_type == 'fixed' and price_data.is_fixed_discount_one_time:
-                        fixed_discount_applied = True
-                except ValueError as e:
-                    return Response({'detail': str(e)}, status=400)
+                discount_amount, price_after_discount, discount_percentage, discount_date = self.calculate_discount(price_data, date)
 
                 price_calendar.append({
                     "date": date.strftime('%Y/%m/%d'),
@@ -731,14 +694,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 logger.info(f"Room {room.id} skipped: No valid first_price_data")
                 continue
 
-            try:
-                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first = self.calculate_discount(first_price_data, start_date_obj)
-            except ValueError as e:
-                return Response({'detail': str(e)}, status=400)
+            discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first = self.calculate_discount(first_price_data, start_date_obj)
 
             total_price = sum(
-                day['price']['price_after_discount'] for day in price_calendar 
-                if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
+                day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
             )
 
             room_dict[room.id] = {
@@ -838,6 +797,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
+    
     
 
 
