@@ -7,13 +7,11 @@ logger = logging.getLogger(__name__)
 
 def send_room_availability_sms(room_name, status, pattern_section='roomavailability'):
     try:
-        # گرفتن تنظیمات سامانه پیامکی کاوه نگار (اولین نمونه)
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
             logger.error("KavenegarSMSSetting not found.")
             return False
 
-        # پیدا کردن پترن پیامک مطابق بخش درخواست شده
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
@@ -22,7 +20,6 @@ def send_room_availability_sms(room_name, status, pattern_section='roomavailabil
             logger.error(f"SMSPattern for section '{pattern_section}' not found.")
             return False
 
-        # پیدا کردن ادمین‌هایی که این پترن برای آن‌ها فعال است
         admins = Admin.objects.filter(sms_patterns=template_obj).select_related('base_user')
         if not admins.exists():
             logger.error(f"No admins found with pattern '{pattern_section}' activated.")
@@ -31,15 +28,14 @@ def send_room_availability_sms(room_name, status, pattern_section='roomavailabil
         api = KavenegarAPI(api_setting.api_token)
         any_success = False
 
-        # ارسال پیامک به هر ادمین
         for admin in admins:
             phone_number = getattr(admin.base_user, 'phone_number', None)
             if not phone_number:
                 logger.warning(f"No phone number found for admin {admin}. Skipping.")
                 continue
 
-            # محدود کردن طول رشته‌ها به 20 کاراکتر (مطابق محدودیت کاوه نگار)
-            admin_name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "ادمین"
+            # حذف فاصله بین نام و نام خانوادگی
+            admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
             room_name_trimmed = room_name[:20]
             status_trimmed = status[:20]
