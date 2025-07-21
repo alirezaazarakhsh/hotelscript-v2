@@ -1,123 +1,68 @@
+import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
+from finance.models import Wallet
 
+logger = logging.getLogger(__name__)
 
-#ارسال otp به شماره تلفن همراه با استفاده از پترن‌های سامانه کاوه نگار
-def send_otp_sms(phone_number, code, pattern_section='otp'):
+def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_increase'):
     try:
-        # گرفتن تنظیمات سامانه فعال
-        api_setting = KavenegarSMSSetting.objects.first()
-        if not api_setting:
-            print("KavenegarSMSSetting not found")
+        if amount_increased <= 0:
+            logger.warning("Amount increased is zero or negative. Skipping SMS.")
             return False
 
-        # پیدا کردن پترن متناسب با بخش موردنظر و تنظیمات پیامکی
-        template_obj = SMSPattern.objects.filter(
-            sms_setting=api_setting,
-            name_fa=pattern_section
-        ).first()
-        if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
-            return False
-
-        api = KavenegarAPI(api_setting.api_token)
-
-        params = {
-            'receptor': phone_number,
-            'template': template_obj.pattern_code,
-            'token': code,
-            'type': 'sms',
-        }
-
-        api.verify_lookup(params)
-        return True
-
-    except APIException as e:
-        print(f'APIException: {e}')
-    except HTTPException as e:
-        print(f'HTTPException: {e}')
-    
-    return False
-
-
-
-
-
-# ارسال پیامک خوش‌آمدگویی پس از لاگین کاربر به شماره تلفن همراه با استفاده از پترن‌های سامانه کاوه نگار
-def send_welcome_sms(phone_number, full_name, pattern_section='welcome'):
-    try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            print("KavenegarSMSSetting not found")
+            logger.error("KavenegarSMSSetting not found.")
             return False
 
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
-        if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
+        if not template_obj or not template_obj.pattern_code:
+            logger.error(f"Invalid SMSPattern for section '{pattern_section}'.")
             return False
 
+        wallet = Wallet.objects.get(user=user)
+        new_balance = wallet.balance
+
         api = KavenegarAPI(api_setting.api_token)
+
+        phone_number = getattr(user, 'phone_number', None)
+        if not phone_number:
+            logger.error("User phone number not found.")
+            return False
+
+        # نام کاربر را بساز (20 کاراکتر اول)
+        user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
+        user_name = user_name[:20]
+
+        amount_str = str(amount_increased)[:20]
+        balance_str = str(new_balance)[:20]
 
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': full_name,
+            'token': user_name,
+            'token2': amount_str,
+            'token3': balance_str,
             'type': 'sms',
         }
 
-        response = api.verify_lookup(params)
-        print("Response from Kavenegar:", response)
+        logger.debug(f"Sending SMS to {phone_number} with params: {params}")
 
-        return True
+        try:
+            response = api.verify_lookup(params)
+            logger.info(f"SMS sent to {phone_number}. Response: {response}")
+            return True
+        except APIException as e:
+            logger.error(f"APIException for {phone_number}: {str(e)}")
+        except HTTPException as e:
+            logger.error(f"HTTPException for {phone_number}: {str(e)}")
 
-    except APIException as e:
-        print(f'APIException: {e}')
-    except HTTPException as e:
-        print(f'HTTPException: {e}')
+        return False
 
-    return False
-
-
-
-
-
-
-# ارسال پیامک خروج از اکانت کاربری به شماره تلفن همراه با استفاده از پترن‌های سامانه کاوه نگار
-def send_logout_sms(phone_number, full_name, pattern_section='logout'):
-    try:
-        api_setting = KavenegarSMSSetting.objects.first()
-        if not api_setting:
-            print("KavenegarSMSSetting not found")
-            return False
-
-        template_obj = SMSPattern.objects.filter(
-            sms_setting=api_setting,
-            name_fa=pattern_section
-        ).first()
-        if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
-            return False
-
-        api = KavenegarAPI(api_setting.api_token)
-
-        params = {
-            'receptor': phone_number,
-            'template': template_obj.pattern_code,
-            'token': full_name,
-            'type': 'sms',
-        }
-
-        response = api.verify_lookup(params)
-        print("Response from Kavenegar:", response)
-
-        return True
-
-    except APIException as e:
-        print(f'APIException: {e}')
-    except HTTPException as e:
-        print(f'HTTPException: {e}')
-
-    return False
+    except Exception as e:
+        logger.error(f"Unexpected error in send_wallet_increase_sms: {str(e)}", exc_info=True)
+        return False
