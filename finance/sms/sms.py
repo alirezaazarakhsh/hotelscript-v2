@@ -34,8 +34,10 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_inc
             logger.error("User phone number not found.")
             return False
 
-        user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or user.phone_number[:20]
+        # نام کاربر را بساز (20 کاراکتر اول)
+        user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
         user_name = user_name[:20]
+
         amount_str = str(amount_increased)[:20]
         balance_str = str(new_balance)[:20]
 
