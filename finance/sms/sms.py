@@ -5,7 +5,7 @@ from finance.models import Wallet
 
 logger = logging.getLogger(__name__)
 
-def send_wallet_increase_sms(user, amount_increased, pattern_section='wallet_increase'):
+def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincrease'):
     try:
         if amount_increased <= 0:
             logger.warning("Amount increased is zero or negative. Skipping SMS.")
