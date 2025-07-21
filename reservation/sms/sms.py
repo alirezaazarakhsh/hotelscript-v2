@@ -40,16 +40,17 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
 
             admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
-            room_full_name = f"{room_name} - {hotel_name}" if hotel_name else room_name
-            room_full_name = room_full_name[:20]
+            room_name_clean = ''.join(room_name.split())[:4]  # محدود به 4 کاراکتر
+            hotel_name_clean = ''.join(hotel_name.split())[:4] if hotel_name else "هتل"[:4]  # محدود به 4 کاراکتر
+            room_full_name = f"{room_name_clean}-{hotel_name_clean}"[:9]  # حداکثر 9 کاراکتر
             status_trimmed = status[:20]
 
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': admin_name,  # برای %token
-                'token10': room_full_name,  # برای %token10
-                'token3': status_trimmed,  # برای %token3
+                'token': admin_name,
+                'token10': room_full_name,
+                'token3': status_trimmed,
                 'type': 'sms',
             }
             logger.debug(f"Sending SMS to {phone_number} with params: {params}")
