@@ -6,13 +6,6 @@ from authentication.models import Admin
 logger = logging.getLogger(__name__)
 
 def send_room_availability_sms(room_name, status, pattern_section='roomavailability'):
-    """
-    ارسال پیامک وضعیت موجودی اتاق به ادمین‌هایی که پترن مربوطه را فعال کرده‌اند.
-    پارامترها:
-        room_name: نام اتاق
-        status: وضعیت موجودی (مثلاً "اتمام موجودی" یا "موجود")
-        pattern_section: کلید بخش پترن در مدل SMSPattern (پیش‌فرض 'roomavailability')
-    """
     try:
         # گرفتن تنظیمات سامانه پیامکی کاوه نگار (اولین نمونه)
         api_setting = KavenegarSMSSetting.objects.first()
