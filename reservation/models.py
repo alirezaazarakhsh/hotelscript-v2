@@ -834,6 +834,7 @@ class Room(models.Model):
                 print(f"Room {self.pk}: Exception while sending SMS for '{room_name}': {str(e)}")
     
     
+    
 
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
