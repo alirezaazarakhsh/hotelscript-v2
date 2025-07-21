@@ -904,7 +904,7 @@ class RoomDatePrice(models.Model):
         blank=True,
     )
     is_fixed_discount_one_time = models.BooleanField(
-        verbose_name=_('تخفیف اولین خرید'),
+        verbose_name=_('تخفیف هنگام خرید'),
         default=False,
     )
 
