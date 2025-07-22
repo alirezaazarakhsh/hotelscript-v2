@@ -260,6 +260,6 @@ LOGGING = {
 
 # payment_project/settings.py
 ZARINPAL_CONFIG = {
-    'SANDBOX': True,  # برای تست، True کنید؛ در محیط واقعی False کنید
+    'SANDBOX': False,  # برای تست، True کنید؛ در محیط واقعی False کنید
     'CALLBACK_URL': 'https://safarnameh24.com/gateways/verify/',  # URL بازگشت برای زرین‌پال
 }
