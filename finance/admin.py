@@ -16,6 +16,11 @@ from .models import WalletPack
 
 
 
+from django.contrib import admin
+from django.utils.html import format_html
+from django import forms
+from .models import WalletPack
+
 @admin.register(WalletPack)
 class WalletPackAdmin(admin.ModelAdmin):
     list_display = ('id', 'formatted_amount_1', 'formatted_amount_2', 'formatted_amount_3', 'formatted_amount_4')
@@ -49,7 +54,14 @@ class WalletPackAdmin(admin.ModelAdmin):
     def formatted_amount_4(self, obj):
         return format_html(f'{obj.amount_4:,.0f} تومان')
     formatted_amount_4.short_description = 'مبلغ پکیج چهارم'
-    
+
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        field = super().formfield_for_dbfield(db_field, **kwargs)
+        if db_field.name in ['amount_1', 'amount_2', 'amount_3', 'amount_4']:
+            field.widget.attrs['step'] = '0.01'  # اجازه ورود اعشار
+            field.localize = True  # برای فرمت‌دهی محلی
+            # سفارشی‌سازی نمایش (هرچند این بخش به تنهایی کافی نیست، نیاز به جاوااسکریپت دارد)
+        return field    
     
 
 
