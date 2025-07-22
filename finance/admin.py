@@ -18,7 +18,7 @@ from .models import WalletPack
 
 @admin.register(WalletPack)
 class WalletPackAdmin(admin.ModelAdmin):
-    list_display = ('id', 'amount_1', 'amount_2', 'amount_3', 'amount_4')
+    list_display = ('id', 'formatted_amount_1', 'formatted_amount_2', 'formatted_amount_3', 'formatted_amount_4')
     search_fields = ('amount_1', 'amount_2', 'amount_3', 'amount_4')
 
     def has_add_permission(self, request):
@@ -33,6 +33,22 @@ class WalletPackAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         extra_context['show_save_and_add_another'] = False
         return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def formatted_amount_1(self, obj):
+        return format_html(f'{obj.amount_1:,.0f} تومان')
+    formatted_amount_1.short_description = 'مبلغ پکیج یک'
+
+    def formatted_amount_2(self, obj):
+        return format_html(f'{obj.amount_2:,.0f} تومان')
+    formatted_amount_2.short_description = 'مبلغ پکیج دوم'
+
+    def formatted_amount_3(self, obj):
+        return format_html(f'{obj.amount_3:,.0f} تومان')
+    formatted_amount_3.short_description = 'مبلغ پکیج سوم'
+
+    def formatted_amount_4(self, obj):
+        return format_html(f'{obj.amount_4:,.0f} تومان')
+    formatted_amount_4.short_description = 'مبلغ پکیج چهارم'
     
     
 
