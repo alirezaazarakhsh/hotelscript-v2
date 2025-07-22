@@ -17,17 +17,18 @@ from authentication.models import (
 #مبلغ انتخابی برای کیف پول 
 class WalletPack(models.Model):
     id = models.AutoField(primary_key=True)
-    amount_1 = models.DecimalField(max_digits=10, decimal_places=0, verbose_name='مبلغ پکیج یک', help_text='مبلغ پیش‌فرض برای پکیج اول')
-    amount_2 = models.DecimalField(max_digits=10, decimal_places=0, verbose_name='مبلغ پکیج دوم', help_text='مبلغ پیش‌فرض برای پکیج دوم')
-    amount_3 = models.DecimalField(max_digits=10, decimal_places=0, verbose_name='مبلغ پکیج سوم', help_text='مبلغ پیش‌فرض برای پکیج سوم')
-    amount_4 = models.DecimalField(max_digits=10, decimal_places=0, verbose_name='مبلغ پکیج چهارم', help_text='مبلغ پیش‌فرض برای پکیج چهارم')
+    amount_1 = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='مبلغ پکیج یک', help_text='مبلغ پیش‌فرض برای پکیج اول')
+    amount_2 = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='مبلغ پکیج دوم', help_text='مبلغ پیش‌فرض برای پکیج دوم')
+    amount_3 = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='مبلغ پکیج سوم', help_text='مبلغ پیش‌فرض برای پکیج سوم')
+    amount_4 = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='مبلغ پکیج چهارم', help_text='مبلغ پیش‌فرض برای پکیج چهارم')
 
     class Meta:
         verbose_name = 'اضافه کردن سقف کیف پول'
         verbose_name_plural = 'تنظیم سقف شارژ کیف پول'
 
     def __str__(self):
-        return f'پکیج {self.id} با مبالغ: {int(self.amount_1)}, {int(self.amount_2)}, {int(self.amount_3)}, {int(self.amount_4)} تومان'
+        return f'پکیج {self.id} با مبالغ: {self.amount_1:,.0f}, {self.amount_2:,.0f}, {self.amount_3:,.0f}, {self.amount_4:,.0f} تومان'
+
 
 
 

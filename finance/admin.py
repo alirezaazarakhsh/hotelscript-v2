@@ -11,6 +11,11 @@ from .models import (
 from django.contrib import admin
 from .models import WalletPack
 
+from django.contrib import admin
+from .models import WalletPack
+
+
+
 @admin.register(WalletPack)
 class WalletPackAdmin(admin.ModelAdmin):
     list_display = ('id', 'amount_1', 'amount_2', 'amount_3', 'amount_4')
