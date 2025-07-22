@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'icons',
     'setting_sms',
     'notification',
+    'setting_payment',
 
     # اضافه‌شده برای Channels
     'channels',
@@ -253,4 +254,12 @@ LOGGING = {
             'propagate': True,
         },
     },
+}
+
+
+
+# payment_project/settings.py
+ZARINPAL_CONFIG = {
+    'SANDBOX': True,  # برای تست، True کنید؛ در محیط واقعی False کنید
+    'CALLBACK_URL': 'https://safarnameh24.com/gateways/verify/',  # URL بازگشت برای زرین‌پال
 }
