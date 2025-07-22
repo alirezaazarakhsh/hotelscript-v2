@@ -24,29 +24,22 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
             logger.error(f"Invalid SMSPattern for section '{pattern_section}'.")
             return False
 
-        try:
-            wallet = Wallet.objects.get(user=user)
-            new_balance = wallet.balance
-        except Wallet.DoesNotExist:
-            logger.error("Wallet not found for user.")
-            return False
+        wallet = Wallet.objects.get(user=user)
+        new_balance = wallet.balance
+
+        api = KavenegarAPI(api_setting.api_token)
 
         phone_number = getattr(user, 'phone_number', None)
         if not phone_number:
             logger.error("User phone number not found.")
             return False
 
-        # ساخت نام کاربر با کنترل خطا و محدودیت طول
-        try:
-            full_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
-        except Exception:
-            full_name = ''
-        user_name = full_name if full_name else phone_number
-        user_name = user_name.strip()[:20]
+        user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
+        user_name = user_name[:20]
 
-        # اطمینان از رشته بودن مقادیر و محدود کردن طول
-        amount_str = str(int(amount_increased))[:20]
-        balance_str = str(int(new_balance))[:20]
+        # ✅ اضافه‌کردن کاما به مبالغ
+        amount_str = f"{amount_increased:,}"[:20]
+        balance_str = f"{new_balance:,}"[:20]
 
         params = {
             'receptor': phone_number,
@@ -60,14 +53,13 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
         logger.debug(f"Sending SMS to {phone_number} with params: {params}")
 
         try:
-            api = KavenegarAPI(api_setting.api_token)
             response = api.verify_lookup(params)
             logger.info(f"SMS sent to {phone_number}. Response: {response}")
             return True
         except APIException as e:
-            logger.error(f"Kavenegar APIException for {phone_number}: {str(e)}")
+            logger.error(f"APIException for {phone_number}: {str(e)}")
         except HTTPException as e:
-            logger.error(f"Kavenegar HTTPException for {phone_number}: {str(e)}")
+            logger.error(f"HTTPException for {phone_number}: {str(e)}")
 
         return False
 
