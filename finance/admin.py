@@ -8,25 +8,28 @@ from .models import (
     WalletPack,
 )
 
+from django.contrib import admin
+from .models import WalletPack
+
 @admin.register(WalletPack)
 class WalletPackAdmin(admin.ModelAdmin):
-    list_display = ('amount_1', 'amount_2', 'amount_3', 'amount_4')
+    list_display = ('id', 'amount_1', 'amount_2', 'amount_3', 'amount_4')
     search_fields = ('amount_1', 'amount_2', 'amount_3', 'amount_4')
 
     def has_add_permission(self, request):
-        # بررسی می‌کند که آیا قبلاً آیتمی وجود دارد یا نه
         if WalletPack.objects.exists():
             return False
         return True
 
     def has_delete_permission(self, request, obj=None):
-        # اجازه حذف فقط وقتی داده وجود داشته باشد
         return WalletPack.objects.exists()
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
         extra_context = extra_context or {}
         extra_context['show_save_and_add_another'] = False
         return super().changeform_view(request, object_id, form_url, extra_context)
+    
+    
 
 
 @admin.register(Wallet)
