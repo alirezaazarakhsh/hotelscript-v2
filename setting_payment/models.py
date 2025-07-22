@@ -7,4 +7,4 @@ class ZarinpalGateway(models.Model):
 
     class Meta:
         verbose_name = "تنظیمات درگاه زرین‌پال"
-        verbose_name_plural = "تنظیمات درگاه‌های زرین‌پال"
+        verbose_name_plural = "تنظیمات درگاه‌ زرین‌پال"
