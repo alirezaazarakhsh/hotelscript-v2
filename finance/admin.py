@@ -5,7 +5,29 @@ from finance.sms.sms import send_wallet_increase_sms
 from .models import (
     Wallet,
     BankCard,
+    WalletPack,
 )
+
+@admin.register(WalletPack)
+class WalletPackAdmin(admin.ModelAdmin):
+    list_display = ('amount_1', 'amount_2', 'amount_3', 'amount_4')
+    search_fields = ('amount_1', 'amount_2', 'amount_3', 'amount_4')
+
+    def has_add_permission(self, request):
+        # بررسی می‌کند که آیا قبلاً آیتمی وجود دارد یا نه
+        if WalletPack.objects.exists():
+            return False
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        # اجازه حذف فقط وقتی داده وجود داشته باشد
+        return WalletPack.objects.exists()
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['show_save_and_add_another'] = False
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
 
 @admin.register(Wallet)
 class WalletAdmin(admin.ModelAdmin):
