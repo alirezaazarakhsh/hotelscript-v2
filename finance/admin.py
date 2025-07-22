@@ -8,18 +8,6 @@ from .models import (
     WalletPack,
 )
 
-from django.contrib import admin
-from .models import WalletPack
-
-from django.contrib import admin
-from .models import WalletPack
-
-
-
-from django.contrib import admin
-from django.utils.html import format_html
-from django import forms
-from .models import WalletPack
 
 @admin.register(WalletPack)
 class WalletPackAdmin(admin.ModelAdmin):
