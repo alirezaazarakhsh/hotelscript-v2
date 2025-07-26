@@ -1,7 +1,6 @@
 import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
-from finance.models import Wallet
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,8 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
             return False
         logger.debug(f"Template found: {template_obj.pattern_code}")
 
+        # وارد کردن Wallet در داخل تابع برای جلوگیری از حلقه وارداتی
+        from finance.models import Wallet
         if not Wallet.objects.filter(user=user).exists():
             logger.error(f"No wallet found for user {user}.")
             return False
@@ -38,7 +39,11 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
         if not phone_number:
             logger.error("User phone number not found.")
             return False
-        logger.debug(f"Phone number: {phone_number}")
+        
+        # اصلاح فرمت شماره تلفن
+        if not phone_number.startswith('+98'):
+            phone_number = '+98' + phone_number.lstrip('0')
+        logger.debug(f"Formatted phone number: {phone_number}")
 
         user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
         user_name = user_name[:20]

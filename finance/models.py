@@ -12,6 +12,7 @@ from authentication.models import (
     BaseUser,
     NaturalProfile,
 )
+from finance.sms.sms import send_wallet_increase_sms
 
 
 #مبلغ انتخابی برای کیف پول 
@@ -54,6 +55,24 @@ class Wallet(models.Model):
             return f'{natural_profile.first_name or ""} {natural_profile.last_name or ""}'.strip()
         except NaturalProfile.DoesNotExist:
             return f'{self.user.phone_number} (بدون پروفایل)'
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            try:
+                old_wallet = Wallet.objects.get(pk=self.pk)
+                old_balance = old_wallet.balance
+            except Wallet.DoesNotExist:
+                old_balance = 0
+        else:
+            old_balance = 0
+
+        super().save(*args, **kwargs)
+
+        if self.balance != old_balance:
+            amount_increased = self.balance - old_balance
+            send_wallet_increase_sms(self.user, amount_increased)
+            
+            
 
 
 
