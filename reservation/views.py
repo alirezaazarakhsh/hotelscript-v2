@@ -552,8 +552,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             "discount_date": discount_date,
                             "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                             "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
-                            "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
-                            "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
+                            "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                         } if status == "open" else None
                     })
 
@@ -601,8 +600,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_date": discount_date_first,
                         "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                         "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
-                        "extra_capacity_price": first_price_data.extra_passenger_price,
-                        "tourist_price": first_price_data.foreign_passenger_price or 0
+                        "extra_capacity_price": first_price_data.extra_passenger_price
                     },
                     "night_count": night_count,
                     "price_calendar": price_calendar
@@ -701,8 +699,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
-                        "extra_capacity_price": price_data.extra_passenger_price if price_data else 0,
-                        "tourist_price": price_data.foreign_passenger_price or 0 if price_data else 0
+                        "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
 
@@ -749,8 +746,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                     "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
-                    "extra_capacity_price": first_price_data.extra_passenger_price,
-                    "tourist_price": first_price_data.foreign_passenger_price or 0
+                    "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "night_count": night_count,
                 "price_calendar": price_calendar
@@ -824,7 +820,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-    
 
     
 

@@ -683,7 +683,6 @@ class RoomService(models.Model):
 #مدل اتاق ها 
 # تنظیم logging
 logger = logging.getLogger(__name__)
-
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -902,11 +901,6 @@ class RoomDatePrice(models.Model):
         null=False,
         blank=False,
     )
-    foreign_passenger_price = models.PositiveBigIntegerField(
-        verbose_name=_('قیمت مسافر خارجی (تومان)'),
-        null=True,
-        blank=True,
-    )
     discount_type = models.CharField(
         verbose_name=_('نوع تخفیف'),
         max_length=16,
@@ -998,7 +992,6 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
-    
     
     
 
