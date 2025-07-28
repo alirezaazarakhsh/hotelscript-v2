@@ -355,8 +355,6 @@ class RoomDateInline(admin.TabularInline):
         'end_date',
         'price',
         'extra_passenger_price',
-    #    'show_closed_dates',
-        'foreign_passenger_price',
         'discount_type',
         'discount_value',
         'discount_date',
@@ -441,7 +439,6 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             'fields': (
                 'price',
                 'extra_passenger_price',
-                'foreign_passenger_price',
             )
         }),
         (_('تخفیف'), {
