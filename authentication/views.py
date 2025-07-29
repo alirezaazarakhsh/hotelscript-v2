@@ -89,34 +89,37 @@ class AuthView(APIView):
         """,
         request_body=AuthSerializer,
         responses={
-            200: 'کد تایید ارسال شد',
-            429: 'لطفاً چند دقیقه صبر کنید و مجدداً تلاش کنید'
+            200: 'کد تایید با موفقیت ارسال شد',
+            400: 'فرمت شماره صحیح نیست',
+            403: 'شما قبل اًبا موفقیت  وارد شده‌اید',
+            429: 'لطفاً یک دقیقه صبر کنید',
+            500: 'ارسال کد ناموفق بود'
         }
     )
     def post(self, request):
         if request.user.is_authenticated:
             return Response(
-                {"detail": _("شما قبلاً وارد شده‌اید.")},
+                {"detail": "شما قبلاً  با موفقیت وارد شده‌اید."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         serializer = AuthSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data.get('phone')
+        if not serializer.is_valid():
+            return Response(
+                {"detail": "فرمت شماره صحیح نیست. شماره را با فرمت درست وارد کنید."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        phone = serializer.validated_data.get('phone')
         user = BaseUser.objects.get_by_phone_or_create(phone)
 
-        # جلوگیری از ارسال بیش از حد OTP در بازه زمانی منقضی نشده
+        # جلوگیری از ارسال بیش از حد OTP
         try:
             last_otp = user.otps.latest('created')
             remaining_time = (last_otp.expired - timezone.now()).total_seconds()
             if remaining_time > 0:
                 return Response(
-                    {
-                        "detail": _(
-                            "لطفاً %(minute)d دقیقه صبر کنید تا کد جدید دریافت کنید."
-                        ) % {"minute": int(remaining_time // 60) + 1}
-                    },
+                    {"detail": "جهت دریافت کد جدید لطفا یک دقیقه صبر کنید"},
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
         except OTP.DoesNotExist:
@@ -131,11 +134,12 @@ class AuthView(APIView):
         sent = send_otp_sms(phone, code)
         if not sent:
             return Response(
-                {"detail": _("ارسال کد با خطا مواجه شد، لطفاً دوباره تلاش کنید.")},
+                {"detail": "ارسال کد ناموفق بود. دوباره تلاش کنید."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return Response({"detail": _("کد تایید با موفقیت ارسال شد.")}, status=status.HTTP_200_OK)
+        return Response({"detail": "کد تایید ارسال شد."}, status=status.HTTP_200_OK)
+
 
 
 
