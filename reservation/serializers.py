@@ -198,7 +198,6 @@ class PassengerSerializer(serializers.ModelSerializer):
             'id',
             'first_name',
             'last_name',
-            'is_foreign',
             'identification_code',
             'phone_number',
         )

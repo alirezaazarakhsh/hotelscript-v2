@@ -1135,10 +1135,7 @@ class Passenger(models.Model):
         verbose_name=_('نام خانوادگی'),
         max_length=32,
     )
-    is_foreign = models.BooleanField(
-        verbose_name=_('مسافر خارجی'),
-        default=False,
-    )
+  
     identification_code = models.CharField(
         verbose_name=_('کد شناسایی (کد ملی/پاسپورت)'),
         max_length=10,

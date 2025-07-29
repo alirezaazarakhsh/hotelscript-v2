@@ -475,7 +475,6 @@ class PassengerAdmin(admin.ModelAdmin):
         'first_name',
         'last_name',
         'identification_code',
-        'is_foreign',
         'phone_number',
     )
     search_fields = (
