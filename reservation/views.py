@@ -1358,7 +1358,7 @@ class HomeHotelListView(APIView):
         return hotel_min_price_map
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست هتل‌های صفحه اصلی",
+        operation_summary="دریافت لیست هتل‌های پیشنهادی + شگفت انگیز + پرفروش ترین در صفحه اصلی ",
         operation_description="این API لیستی از هتل‌های پیشنهادی ویژه، شگفت‌انگیز و پرفروش را بدون صفحه‌بندی باز می‌گرداند.",
         tags=['hotel-home'],
         responses={
