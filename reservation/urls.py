@@ -24,6 +24,7 @@ urlpatterns = [
 
     # ==== Hotel Listings ====
     path('hotels/search/', views.HotelListView.as_view(), name='hotel-list'),
+    path('hotels/search/query/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
     path('hotels/home/', views.HomeHotelListView.as_view(), name='home-hotel-list'),
 

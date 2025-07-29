@@ -1413,6 +1413,74 @@ class HomeHotelListView(APIView):
         return Response(response_data)
     
     
+
+
+#ای پی ای لیست هتل برای سرچ صفحه اول 
+class HotelSearchAPI(ListCreateAPIView):
+    permission_classes = [AllowAny]  # تغییر به AllowAny برای دسترسی بدون لاگین
+    serializer_class = HotelSearchSerializer
+
+    def get_queryset(self):
+        query = self.request.query_params.get('query', '').lower()
+        hotels = Hotel.objects.filter(name__icontains=query).select_related('city__province')
+        cities = City.objects.filter(name__icontains=query).select_related('province')
+        return {"hotels": hotels, "cities": cities}
+
+    def perform_create(self, serializer):
+        # No create operation for search, this can be left empty or removed
+        pass
+
+    @swagger_auto_schema(
+        operation_summary="جستجوی هتل و شهر",
+        operation_description="جستجوی هتل‌ها و شهرها بر اساس نام واردشده در پارامتر query. این API برای همه کاربران (بدون نیاز به لاگین) قابل دسترسی است.",
+        tags=["hotel-home"],
+        manual_parameters=[
+            openapi.Parameter(
+                name='query',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='نام هتل یا شهر برای جستجو',
+                required=False
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="نتایج جستجوی هتل‌ها و شهرها",
+                schema=HotelSearchSerializer
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        hotels_data = [
+            {
+                "id": hotel.id,
+                "name": hotel.name,
+                "city": {
+                    "id": hotel.city.id,
+                    "name": hotel.city.name,
+                    "province": {"name": hotel.city.province.name},
+                    "slug": hotel.city.slug
+                },
+                "slug": hotel.slug,
+                "stars": ""
+            }
+            for hotel in queryset["hotels"]
+        ]
+        cities_data = [
+            {
+                "id": city.id,
+                "name": city.name,
+                "province": {"name": city.province.name},
+                "slug": city.slug,
+                "hotels_number": city.hotels.count()
+            }
+            for city in queryset["cities"]
+        ]
+        return Response({"cities": cities_data, "hotels": hotels_data})
+
+
+    
     
     
 # مدل برچسب های هتل بر اساس اسلاگ هتل 

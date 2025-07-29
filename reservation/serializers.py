@@ -70,18 +70,15 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
         return obj.type.title if obj.type else None
 
     def get_main_image(self, obj):
-        # افزودن دامنه کامل به لینک تصویر
         request = self.context.get('request')
         image_url = obj.main_image.url if obj.main_image else ''
         return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
 
     def get_total_price(self, obj):
-        # کمترین قیمت با تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         return price_data.get('total_price', None)
 
     def get_original_total_price(self, obj):
-        # کمترین قیمت بدون تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         return price_data.get('original_total_price', None)
 
@@ -89,7 +86,6 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
         return getattr(obj, 'rating', None)
 
     def get_discount_percentage(self, obj):
-        # درصد یا مقدار تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         discount_type = price_data.get('discount_type', 'none')
         discount_value = price_data.get('discount_value', 0)
@@ -102,7 +98,6 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
         return 0
 
     def get_discount_expiry(self, obj):
-        # تاریخ انقضای تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
@@ -130,18 +125,15 @@ class HotelListSerializer(serializers.ModelSerializer):
         return obj.type.title if obj.type else None
 
     def get_main_image(self, obj):
-        # افزودن دامنه کامل به لینک تصویر
         request = self.context.get('request')
         image_url = obj.main_image.url if obj.main_image else ''
         return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
 
     def get_total_price(self, obj):
-        # کمترین قیمت با تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         return price_data.get('total_price', None)
 
     def get_original_total_price(self, obj):
-        # کمترین قیمت بدون تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         return price_data.get('original_total_price', None)
 
@@ -149,7 +141,6 @@ class HotelListSerializer(serializers.ModelSerializer):
         return getattr(obj, 'rating', None)
 
     def get_discount_percentage(self, obj):
-        # درصد یا مقدار تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         discount_type = price_data.get('discount_type', 'none')
         discount_value = price_data.get('discount_value', 0)
@@ -162,7 +153,6 @@ class HotelListSerializer(serializers.ModelSerializer):
         return 0
 
     def get_discount_expiry(self, obj):
-        # تاریخ انقضای تخفیف
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
@@ -450,13 +440,12 @@ class ClosedDateSerializer(serializers.ModelSerializer):
         fields = ['date', 'reason', 'user_level', 'month']
 
     def get_month(self, obj):
-        # برگرداندن نام ماه جلالی
-        return obj.date.strftime('%B')  # اگر بخواهید نام ماه فارسی
+        return obj.date.strftime('%B')
 
 class RoomDatePriceSerializer(serializers.ModelSerializer):
     closed_dates = serializers.SerializerMethodField()
     month = serializers.SerializerMethodField()
-    user_level = serializers.StringRelatedField()  # نمایش نام سطح کاربری
+    user_level = serializers.StringRelatedField()
 
     class Meta:
         model = RoomDatePrice
@@ -501,7 +490,6 @@ class RoomSerializer(serializers.ModelSerializer):
 
         prices = obj.date_prices.all()
 
-        # فیلتر بازه زمانی: فقط بازه‌هایی که با بازه انتخابی همپوشانی دارند
         if start_date and end_date:
             prices = prices.filter(
                 start_date__lte=end_date,
@@ -560,3 +548,41 @@ class RoomFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomFacilities
         fields = ['id', 'title']
+
+class HotelSearchSerializer(serializers.Serializer):
+    hotels = serializers.SerializerMethodField()
+    cities = serializers.SerializerMethodField()
+
+    class Meta:
+        fields = ('hotels', 'cities')
+
+    def get_hotels(self, obj):
+        hotels = obj.get('hotels', [])
+        return [
+            {
+                'id': hotel.id,
+                'name': hotel.name,
+                'city': {
+                    'id': hotel.city.id,
+                    'name': hotel.city.name,
+                    'province': {'name': hotel.city.province.name},
+                    'slug': hotel.city.slug
+                },
+                'slug': hotel.slug,
+                'stars': hotel.stars or ''
+            }
+            for hotel in hotels
+        ]
+
+    def get_cities(self, obj):
+        cities = obj.get('cities', [])
+        return [
+            {
+                'id': city.id,
+                'name': city.name,
+                'province': {'name': city.province.name},
+                'slug': city.slug,
+                'hotels_number': city.hotels.count()
+            }
+            for city in cities
+        ]
