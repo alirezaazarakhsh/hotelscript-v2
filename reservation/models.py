@@ -50,7 +50,6 @@ except ImportError:
 
 
 
-
 # مدل اضافه کردن استان ها
 class Province(models.Model):
     name = models.CharField(
@@ -70,6 +69,8 @@ class Province(models.Model):
         
     def __str__(self):
         return self.name
+
+
 
 
 
@@ -122,6 +123,8 @@ class City(models.Model):
 
 
 
+
+
 #مدل نوع اقامتگاه
 class HotelType(models.Model):
     title = models.CharField(
@@ -136,6 +139,8 @@ class HotelType(models.Model):
 
     def __str__(self):
         return self.title
+
+
 
 
 
@@ -158,6 +163,8 @@ class HotelTag(models.Model):
 
 
 
+
+
 #مدل لمکانات رفاهی و تفریحی هتل 
 class Facilities(models.Model):
     title = models.CharField(
@@ -176,6 +183,8 @@ class Facilities(models.Model):
 
 
 
+
+
 # مدل امکانات داخلی اتاق 
 class RoomFacilities(models.Model):
     title = models.CharField(
@@ -190,6 +199,9 @@ class RoomFacilities(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
 
 
 
@@ -246,11 +258,20 @@ class Hotel(models.Model):
         null=True,
         blank=True,
         related_name='hotels',
-
     )
     
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد ستاره'),
+    )
+    rating = models.DecimalField(
+        verbose_name=_('امتیاز هتل'),
+        max_digits=3,
+        decimal_places=1,
+        validators=[
+            MinValueValidator(Decimal('0.0')),
+            MaxValueValidator(Decimal('5.0')),
+        ],
+        default=0.0,
     )
     type = models.ForeignKey(
         'HotelType',
@@ -349,6 +370,7 @@ class Hotel(models.Model):
 
 
 
+
 #مدل گالری های هتل 
 class HotelGallery(models.Model):
     title = models.CharField(
@@ -368,6 +390,9 @@ class HotelGallery(models.Model):
 
     def __str__(self):
         return f'{self.title} ({self.hotel})'
+
+
+
 
 
 #مدل عکس های گالری تصاویر هتل
@@ -400,6 +425,9 @@ class HotelGalleryImage(models.Model):
     def __str__(self):
         return f'تصویر #{self.id} از گالری {self.gallery}'
         return self.title
+
+
+
 
 
 
@@ -463,6 +491,8 @@ class NearbyPlace(models.Model):
 
 
 
+
+
 # مدل سوالات متداول برای هر هتل
 class HotelFAQ(models.Model):
     question = models.TextField(
@@ -497,8 +527,10 @@ class HotelFAQ(models.Model):
 
 
 
-#مدل نظرات هتل ها 
 
+
+
+#مدل نظرات هتل ها 
 class Comment(models.Model):
     user = models.ForeignKey(
         'authentication.BaseUser',
@@ -582,6 +614,9 @@ class Comment(models.Model):
     
     
     
+    
+    
+    
 #مدل معیار امتیاز دهی
 class CommentPointItem(models.Model):
     title = models.CharField(
@@ -607,6 +642,9 @@ class CommentPointItem(models.Model):
     
     
     
+    
+
+    
 # مدل اضافه کردن نظر پیشنهادی برای هر هتل 
 class SuggestedCommentItem(models.Model):
     title = models.CharField(max_length=255,verbose_name='عنوان')
@@ -617,6 +655,9 @@ class SuggestedCommentItem(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
 
 
 
@@ -662,6 +703,8 @@ class CommentPoint(models.Model):
 
 
 
+
+
 #مدل خدمات اتاق ها
 class RoomService(models.Model):
     title = models.CharField(
@@ -677,6 +720,7 @@ class RoomService(models.Model):
         return self.title
     
     
+
 
 
 
@@ -858,6 +902,9 @@ class Room(models.Model):
 
 
 
+
+
+
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
     DISCOUNT_TYPES = (
@@ -994,6 +1041,10 @@ class RoomDatePrice(models.Model):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
     
     
+    
+    
+    
+    
 
 #مدل بستن یه روز از بازه خواستی 
 class ClosedDate(models.Model):
@@ -1031,6 +1082,7 @@ class ClosedDate(models.Model):
     
     
 
+
 #مدت زمان تایید رزرو 
 class ReservationApprovalDuration(models.Model):
     duration_minutes = models.PositiveIntegerField(
@@ -1047,6 +1099,7 @@ class ReservationApprovalDuration(models.Model):
         return f'{self.duration_minutes} دقیقه'
     
 
+    
     
     
 #مدل مسافران اشخاص در هتل 
@@ -1103,6 +1156,8 @@ class Passenger(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.first_name} {self.last_name}'
+
+
 
 
 
@@ -1250,6 +1305,9 @@ class Reservation(models.Model):
 
     def __str__(self):
         return str(self.uuid)
+
+
+
 
 
 # مدل لوگو های هتل در صفحه اصلی 

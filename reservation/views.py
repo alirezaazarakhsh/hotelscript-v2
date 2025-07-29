@@ -274,7 +274,7 @@ class HotelListView(ListAPIView):
 class CityListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = CitySerializer
-    pagination_class = None  # اگر پجینیشن نمی‌خواهی
+    pagination_class = None  
 
     def get_queryset(self):
         queryset = City.objects.select_related('province')
@@ -313,7 +313,7 @@ class CityListView(ListAPIView):
 class HomePageCityListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = CitySerializer
-    pagination_class = None  # اگر پجینیشن نمی‌خوای
+    pagination_class = None  
 
     def get_queryset(self):
         return City.objects.filter(show_in_homepage=True).select_related('province')
@@ -954,6 +954,8 @@ class HotelFurtherDescriptionView(RetrieveAPIView):
 
 
 
+
+
 #ای پی ای نکات ضروری و قوانین هتل در صفحه جزئیات
 class HotelRulesView(RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -984,6 +986,8 @@ class HotelRulesView(RetrieveAPIView):
         return super().get(request, *args, **kwargs)
 
 
+    
+    
     
     
 # ای پی ای سوالات متداول هتل 
@@ -1017,6 +1021,9 @@ class HotelFAQListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
     
     
     
@@ -1055,6 +1062,9 @@ class HotelFacilitiesListView(ListAPIView):
     
     
 
+
+
+
 # ای پی ای دریافت امکانات اتاق های هتل
 class HotelRoomFacilitiesListView(ListAPIView):
     permission_classes = (AllowAny,)
@@ -1085,6 +1095,9 @@ class HotelRoomFacilitiesListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
     
     
     
@@ -1124,6 +1137,9 @@ class HotelNearbyPlaceListView(ListAPIView):
         return super().get(request, *args, **kwargs)
     
         
+    
+    
+    
     
     
 # ای پی ای ثبت مسافر جدید 
@@ -1167,8 +1183,10 @@ class PassengerListCreateView(ListCreateAPIView):
 
 
 
-# ای پی ای حذف و ویرایش مسافران
 
+
+
+# ای پی ای حذف و ویرایش مسافران
 class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PassengerSerializer
@@ -1237,6 +1255,9 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
 
 
+
+
+
 # ای پی ای اضافه کردن لوگوی برترین هتل های صفجه اصلی 
 class BestHotelsListCreateView(ListCreateAPIView):
     permission_classes = (AllowAny,)
@@ -1278,6 +1299,10 @@ class BestHotelsListCreateView(ListCreateAPIView):
         
 
 
+
+
+
+#ای پی ای هتل های پیشنهادی صفحه اول 
 class SpecialOfferHotelListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelListSerializer
@@ -1293,6 +1318,10 @@ class SpecialOfferHotelListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
+
+# ای پی ای هتل های شگفت انگیز صفحه اصلی 
 class FlashSaleHotelListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelListSerializer
@@ -1308,6 +1337,11 @@ class FlashSaleHotelListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+
+
+
+
+#ای پی ای هتل های پرفروش صفحه اصلی 
 class BestSellerHotelListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelListSerializer
@@ -1321,6 +1355,10 @@ class BestSellerHotelListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+    
+    
     
     
     
@@ -1359,6 +1397,10 @@ class HotelTagsView(RetrieveAPIView):
     
     
     
+    
+
+    
+    
 #ای پی ای گالری تصاویر هتل 
 class HotelGalleryView(RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -1394,6 +1436,10 @@ class HotelGalleryView(RetrieveAPIView):
     
     
     
+    
+    
+    
+    
 #دریافت لیست نظرات کاربران بر اساس اسلاگ هتل 
 class HotelCommentsBySlugView(ListAPIView):
     permission_classes = (AllowAny,)
@@ -1421,6 +1467,9 @@ class HotelCommentsBySlugView(ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+    
+    
+    
     
     
     
@@ -1453,6 +1502,10 @@ class HotelCommentsBySlugView(ListAPIView):
 #             })
 
 #         return Response(data)
+
+
+
+
 
 
 #محاسبه میانگین معیار های امتیاز دهی کامنت ها بر اساس هر هتل 
@@ -1503,6 +1556,10 @@ class HotelCommentPointSummaryView(APIView):
         return Response(data)
 
         
+    
+    
+    
+    
     
 
 # ای پی ای لیست های پیشنهاد ها و نظرات منفی و مثبت 
