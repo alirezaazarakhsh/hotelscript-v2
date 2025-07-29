@@ -569,7 +569,7 @@ class HotelSearchSerializer(serializers.Serializer):
                     'slug': hotel.city.slug
                 },
                 'slug': hotel.slug,
-                'stars': hotel.stars or ''
+                'stars': hotel.stars  # حذف شرط or ''
             }
             for hotel in hotels
         ]

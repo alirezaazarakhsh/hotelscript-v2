@@ -1418,22 +1418,27 @@ class HomeHotelListView(APIView):
 
 #ای پی ای لیست هتل برای سرچ صفحه اول 
 class HotelSearchAPI(ListCreateAPIView):
-    permission_classes = [AllowAny]  # تغییر به AllowAny برای دسترسی بدون لاگین
+    permission_classes = [AllowAny]
     serializer_class = HotelSearchSerializer
 
     def get_queryset(self):
         query = self.request.query_params.get('query', '').lower()
-        hotels = Hotel.objects.filter(name__icontains=query).select_related('city__province')
-        cities = City.objects.filter(name__icontains=query).select_related('province')
+        if query:
+            # وقتی کوئری وجود دارد، هم هتل‌ها و هم شهرها جستجو می‌شوند
+            hotels = Hotel.objects.filter(name__icontains=query).select_related('city__province')
+            cities = City.objects.filter(name__icontains=query).select_related('province')
+        else:
+            # در حالت دیفالت، فقط ۱۰ شهر اول (بر اساس ID) و هیچ هتلی
+            hotels = Hotel.objects.none()  # هیچ هتلی برنمی‌گرداند
+            cities = City.objects.all().select_related('province')[:10]  # فقط ۱۰ شهر
         return {"hotels": hotels, "cities": cities}
 
     def perform_create(self, serializer):
-        # No create operation for search, this can be left empty or removed
         pass
 
     @swagger_auto_schema(
         operation_summary="جستجوی هتل و شهر",
-        operation_description="جستجوی هتل‌ها و شهرها بر اساس نام واردشده در پارامتر query. این API برای همه کاربران (بدون نیاز به لاگین) قابل دسترسی است.",
+        operation_description="جستجوی هتل‌ها و شهرها بر اساس نام واردشده در پارامتر query. در حالت دیفالت (بدون کوئری)، فقط ۱۰ شهر اول نمایش داده می‌شود.",
         tags=["hotel-home"],
         manual_parameters=[
             openapi.Parameter(
@@ -1464,7 +1469,7 @@ class HotelSearchAPI(ListCreateAPIView):
                     "slug": hotel.city.slug
                 },
                 "slug": hotel.slug,
-                "stars": ""
+                "stars": hotel.stars  # تغییر به مقدار واقعی stars
             }
             for hotel in queryset["hotels"]
         ]
@@ -1479,7 +1484,6 @@ class HotelSearchAPI(ListCreateAPIView):
             for city in queryset["cities"]
         ]
         return Response({"cities": cities_data, "hotels": hotels_data})
-
 
     
     
