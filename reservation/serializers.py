@@ -1,5 +1,7 @@
 from rest_framework import serializers
 import jdatetime
+
+from authentication import models
 from .models import (
     BestHotels,
     ClosedDate,
@@ -188,11 +190,17 @@ class RoomServiceSerializer(serializers.ModelSerializer):
         fields = ['id', 'title']
 
 
+
 class PassengerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Passenger
         fields = (
-            'id', 'first_name', 'last_name', 'is_foreign', 'national_code', 'passport_code', 'phone_number'
+            'id',
+            'first_name',
+            'last_name',
+            'is_foreign',
+            'identification_code',
+            'phone_number',
         )
 
 class BestHotelsSerializer(serializers.ModelSerializer):

@@ -464,6 +464,9 @@ class ClosedDateAdmin(admin.ModelAdmin):
     ordering = ('date',)
 
 
+from django.contrib import admin
+from .models import Passenger
+
 @admin.register(Passenger)
 class PassengerAdmin(admin.ModelAdmin):
     list_display = (
@@ -471,16 +474,18 @@ class PassengerAdmin(admin.ModelAdmin):
         'user',
         'first_name',
         'last_name',
-        'national_code',
+        'identification_code',
+        'is_foreign',
         'phone_number',
     )
     search_fields = (
         'first_name',
         'last_name',
-        'national_code',
+        'identification_code',
         'phone_number',
     )
-
+    
+    
 
 @admin.register(Reservation)
 class ReservationAdmin(admin.ModelAdmin):

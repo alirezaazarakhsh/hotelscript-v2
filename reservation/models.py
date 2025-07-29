@@ -1103,9 +1103,25 @@ class ReservationApprovalDuration(models.Model):
     
     
 #مدل مسافران اشخاص در هتل 
+def validate_phone_number(value):
+    if not value:
+        return
+    if not re.match(r'^09\d{9}$', value):
+        raise ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
+
+def validate_identification_code(value, is_foreign):
+    if not value:
+        return
+    if is_foreign:
+        if not re.match(r'^[A-Z0-9]{6,9}$', value):
+            raise ValidationError(_('کد پاسپورت باید بین ۶ تا ۹ کاراکتر (حروف A-Z و اعداد) باشد.'))
+    else:
+        if not re.match(r'^\d{10}$', value):
+            raise ValidationError(_('کد ملی باید ۱۰ رقم باشد. مثال: 1234567890'))
+
 class Passenger(models.Model):
     user = models.ForeignKey(
-        BaseUser,
+        'authentication.BaseUser',  # ارجاع به BaseUser در اپ authentication
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
         related_name='passengers',
@@ -1122,30 +1138,17 @@ class Passenger(models.Model):
         verbose_name=_('مسافر خارجی'),
         default=False,
     )
-    national_code = models.CharField(
-        verbose_name=_('کد ملی'),
+    identification_code = models.CharField(
+        verbose_name=_('کد شناسایی (کد ملی/پاسپورت)'),
         max_length=10,
-        validators=(
-            validate_national_code,
-        ),
-        blank=True,
-        default='',
-    )
-    passport_code = models.CharField(
-        verbose_name=_('کد پاسپورت'),
-        max_length=9,
-        validators=(
-            validate_passport_code,
-        ),
+        validators=(),
         blank=True,
         default='',
     )
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
         max_length=11,
-        validators=(
-            validate_phone_number,
-        ),
+        validators=(validate_phone_number,),
         blank=True,
         default='',
     )
@@ -1156,6 +1159,12 @@ class Passenger(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.first_name} {self.last_name}'
+
+    def clean(self):
+        validate_identification_code(self.identification_code, self.is_foreign)
+        super().clean()
+
+
 
 
 
