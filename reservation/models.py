@@ -1110,19 +1110,21 @@ def validate_phone_number(value):
     if not re.match(r'^09\d{9}$', value):
         raise ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
 
-def validate_identification_code(value, is_foreign):
+def validate_identification_code(value):
     if not value:
         return
-    if is_foreign:
-        if not re.match(r'^[A-Z0-9]{6,9}$', value):
-            raise ValidationError(_('کد پاسپورت باید بین ۶ تا ۹ کاراکتر (حروف A-Z و اعداد) باشد.'))
+    if re.match(r'^\d{10}$', value):
+        # Iranian national ID
+        return
+    elif re.match(r'^[A-Z0-9]{6,9}$', value):
+        # Foreign passport
+        return
     else:
-        if not re.match(r'^\d{10}$', value):
-            raise ValidationError(_('کد ملی باید ۱۰ رقم باشد. مثال: 1234567890'))
+        raise ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
 
 class Passenger(models.Model):
     user = models.ForeignKey(
-        'authentication.BaseUser',  # ارجاع به BaseUser در اپ authentication
+        'authentication.BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
         related_name='passengers',
@@ -1135,7 +1137,6 @@ class Passenger(models.Model):
         verbose_name=_('نام خانوادگی'),
         max_length=32,
     )
-  
     identification_code = models.CharField(
         verbose_name=_('کد شناسایی (کد ملی/پاسپورت)'),
         max_length=10,
@@ -1159,7 +1160,7 @@ class Passenger(models.Model):
         return f'{self.user} - {self.first_name} {self.last_name}'
 
     def clean(self):
-        validate_identification_code(self.identification_code, self.is_foreign)
+        validate_identification_code(self.identification_code)
         super().clean()
 
 
