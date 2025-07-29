@@ -81,6 +81,7 @@ from .serializers import (
     HotelListSerializer,
     CitySerializer,
     HotelRulesSerializer,
+    HotelSearchSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
     RoomFacilitiesSerializer,
