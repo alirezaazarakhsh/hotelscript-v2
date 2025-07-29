@@ -58,6 +58,7 @@ from .models import (
     City,
     HotelType,
     Facilities,
+    RoomDatePrice,
     RoomFacilities,
     RoomService,
     HotelFAQ,
