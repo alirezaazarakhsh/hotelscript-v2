@@ -1437,7 +1437,7 @@ class HotelSearchAPI(ListCreateAPIView):
         pass
 
     @swagger_auto_schema(
-        operation_summary="جستجوی هتل و شهر",
+        operation_summary="جستجوی هتل و شهر در کادر جستجوی هتل در صفحات اول و دیگر صفحات",
         operation_description="جستجوی هتل‌ها و شهرها بر اساس نام واردشده در پارامتر query. در حالت دیفالت (بدون کوئری)، فقط ۱۰ شهر اول نمایش داده می‌شود.",
         tags=["hotel-home"],
         manual_parameters=[
