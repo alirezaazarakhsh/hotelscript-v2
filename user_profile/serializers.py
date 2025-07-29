@@ -8,9 +8,7 @@ from .models import (
 from blog.serializers import (
     FavoriteArticleSerializer,
 )
-from reservation.serializers import (
-    FavoriteHotelSerializer,
-)
+
 
 class FavoriteCollectionListSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField(read_only=True)
