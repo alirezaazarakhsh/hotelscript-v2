@@ -1302,7 +1302,7 @@ class BestHotelsListCreateView(ListCreateAPIView):
 
 
 
-#ای پی ای هتل های پیشنهادی صفحه اول 
+#ای پی ای هتل های پیشنهادی + شگفت انگیز + پرفروش  صفحه اول 
 class HomeHotelListView(APIView):
     permission_classes = (AllowAny,)
 
@@ -1314,6 +1314,51 @@ class HomeHotelListView(APIView):
         all_points = CommentPoint.objects.filter(comment__in=comments)
         overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
         return round(overall_average or 0, 1)
+
+    def get_hotel_min_price_map(self, hotels):
+        """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل"""
+        today = timezone.now().date()
+        hotel_min_price_map = {}
+        
+        for hotel in hotels:
+            # دریافت تمام اتاق‌های هتل
+            rooms = Room.objects.filter(hotel=hotel)
+            min_price = None
+            min_price_data = {}
+
+            for room in rooms:
+                # دریافت قیمت‌های معتبر برای امروز
+                prices = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=today,
+                    end_date__gte=today
+                ).select_related('room')
+
+                for price in prices:
+                    original_price = price.price
+                    total_price = original_price
+
+                    # محاسبه قیمت با تخفیف
+                    if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
+                        total_price = original_price * (1 - price.discount_value / 100)
+                    elif price.discount_type == 'fixed' and price.is_fixed_discount_one_time:
+                        total_price = original_price - price.discount_value
+
+                    # به‌روزرسانی کمترین قیمت
+                    if min_price is None or total_price < min_price:
+                        min_price = total_price
+                        min_price_data = {
+                            'total_price': int(total_price),
+                            'original_total_price': int(original_price),
+                            'discount_type': price.discount_type,
+                            'discount_value': price.discount_value,
+                            'discount_date': price.discount_date
+                        }
+
+            if min_price_data:
+                hotel_min_price_map[hotel.id] = min_price_data
+
+        return hotel_min_price_map
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های صفحه اصلی",
@@ -1335,29 +1380,34 @@ class HomeHotelListView(APIView):
     )
     def get(self, request, *args, **kwargs):
         # دریافت لیست هتل‌ها با بهینه‌سازی کوئری‌ها
-        special_offers = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type')
-        flash_sales = Hotel.objects.filter(is_flash_sale=True).select_related('city', 'type')
-        best_sellers = Hotel.objects.filter(is_best_seller=True).select_related('city', 'type')
+        hotels = Hotel.objects.filter(
+            models.Q(is_special_offer=True) | 
+            models.Q(is_flash_sale=True) | 
+            models.Q(is_best_seller=True)
+        ).select_related('city', 'type').distinct()
+
+        # محاسبه کمترین قیمت‌ها
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
 
         # آماده‌سازی context برای سریالایزر
-        hotel_min_price_map = {}  # باید منطق محاسبه قیمت‌ها را از قبل داشته باشید
-        context = {'hotel_min_price_map': hotel_min_price_map}
+        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
         # سریالایز کردن داده‌ها
         special_offers_data = []
-        for hotel in special_offers:
+        flash_sales_data = []
+        best_sellers_data = []
+
+        for hotel in hotels.filter(is_special_offer=True):
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             special_offers_data.append(serialized)
 
-        flash_sales_data = []
-        for hotel in flash_sales:
+        for hotel in hotels.filter(is_flash_sale=True):
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             flash_sales_data.append(serialized)
 
-        best_sellers_data = []
-        for hotel in best_sellers:
+        for hotel in hotels.filter(is_best_seller=True):
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             best_sellers_data.append(serialized)
@@ -1370,8 +1420,6 @@ class HomeHotelListView(APIView):
         }
 
         return Response(response_data)
-    
-    
     
     
     

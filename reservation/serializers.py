@@ -49,48 +49,65 @@ class HotelTypeSerializer(serializers.ModelSerializer):
 class HotelListSerializer(serializers.ModelSerializer):
     city = CitySerializer()
     type = serializers.SerializerMethodField()
+    main_image = serializers.SerializerMethodField()
     original_total_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_expiry = serializers.SerializerMethodField()
 
     class Meta:
         model = Hotel
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'is_special_offer', 'is_flash_sale', 'is_best_seller',
-            'original_total_price', 'total_price', 'rating'
+            'original_total_price', 'total_price', 'rating',
+            'discount_percentage', 'discount_expiry'
         )
 
     def get_type(self, obj):
         return obj.type.title if obj.type else None
 
+    def get_main_image(self, obj):
+        # افزودن دامنه کامل به لینک تصویر
+        request = self.context.get('request')
+        image_url = obj.main_image.url if obj.main_image else ''
+        return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
+
     def get_total_price(self, obj):
-        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price')
+        # کمترین قیمت با تخفیف
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        return price_data.get('total_price', None)
 
     def get_original_total_price(self, obj):
-        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price')
+        # کمترین قیمت بدون تخفیف
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        return price_data.get('original_total_price', None)
 
     def get_rating(self, obj):
         return getattr(obj, 'rating', None)
 
-class FavoriteHotelSerializer(serializers.ModelSerializer):
-    city = CitySerializer()
-    min_price = serializers.SerializerMethodField()
-    rating = serializers.SerializerMethodField()
+    def get_discount_percentage(self, obj):
+        # درصد یا مقدار تخفیف
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        discount_type = price_data.get('discount_type', 'none')
+        discount_value = price_data.get('discount_value', 0)
+        if discount_type == 'percentage':
+            return discount_value
+        elif discount_type == 'fixed':
+            original_price = price_data.get('original_total_price', 0)
+            if original_price > 0:
+                return round((discount_value / original_price) * 100, 1)
+        return 0
 
-    class Meta:
-        model = Hotel
-        fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars',
-            'is_special_offer', 'is_flash_sale', 'is_best_seller',
-            'min_price', 'rating'
-        )
-
-    def get_min_price(self, obj):
-        return obj.min_price
-
-    def get_rating(self, obj):
-        return obj.rating
+    def get_discount_expiry(self, obj):
+        # تاریخ انقضای تخفیف
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        discount_date = price_data.get('discount_date', None)
+        return discount_date.strftime('%Y-%m-%d') if discount_date else None
+    
+    
+    
 
 class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
