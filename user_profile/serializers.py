@@ -5,10 +5,8 @@ from .models import (
     CustomerClubPrize,
     CustomerReceivedPrize,
 )
-from blog.serializers import (
-    FavoriteArticleSerializer,
-)
-
+from blog.serializers import FavoriteArticleSerializer
+from reservation.serializers import FavoriteHotelSerializer
 
 class FavoriteCollectionListSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField(read_only=True)
@@ -21,9 +19,7 @@ class FavoriteCollectionListSerializer(serializers.ModelSerializer):
             'images',
         )
         extra_kwargs = {
-            'id' : {
-                'read_only': True,
-            },
+            'id': {'read_only': True},
         }
     
     def get_images(self, obj):
@@ -37,9 +33,7 @@ class FavoriteCollectionRetrieveSerializer(serializers.ModelSerializer):
             'title',
         )
         extra_kwargs = {
-            'id' : {
-                'read_only': True,
-            },
+            'id': {'read_only': True},
         }
 
 class FavoriteCreateSerializer(serializers.ModelSerializer):
@@ -86,7 +80,6 @@ class FavoriteSerializer(serializers.ModelSerializer):
         return None
 
 class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = CustomerClubPrize
         fields = (
@@ -98,9 +91,7 @@ class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
             'rules',
         )
 
-
 class CustomerClubPrizeRetrieveSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = CustomerClubPrize
         fields = (
@@ -110,7 +101,7 @@ class CustomerClubPrizeRetrieveSerializer(serializers.ModelSerializer):
             'discount_code',
         )
 
-class CustomerClubPrizeListSerializer(serializers.ModelSerializer):
+class CustomerReceivedPrizeListSerializer(serializers.ModelSerializer):
     prize = CustomerClubPrizeRetrieveSerializer()
 
     class Meta:
