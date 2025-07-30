@@ -124,10 +124,10 @@ class HomePageCityListView(generics.ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست شهرهای مخصوص صفحه اصلی",
-        operation_description="این API فقط شهرهایی را باز می‌گرداند که گزینه 'نمایش در صفحه اصلی' آن‌ها فعال است، همراه با تعداد اقامتگاه‌ها، اسلاگ و تصویر شهر (به صورت مسیر نسبی).",
+        operation_description="این API فقط شهرهایی را باز می‌گرداند که گزینه 'نمایش در صفحه اصلی' آن‌ها فعال است، همراه با تعداد اقامتگاه‌ها، اسلاگ و تصویر شهر (با URL کامل).",
         responses={
             200: openapi.Response(
-                description="لیست شهرهای صفحه اصلی با تعداد اقامتگاه‌ها، اسلاگ و تصویر (به صورت مسیر نسبی)",
+                description="لیست شهرهای صفحه اصلی با تعداد اقامتگاه‌ها، اسلاگ و تصویر (با URL کامل)",
                 schema=CitySerializer(many=True)
             )
         },
@@ -138,15 +138,17 @@ class HomePageCityListView(generics.ListAPIView):
         cities_data = [
             {
                 "id": city.id,
+                 "image": request.build_absolute_uri(city.image.url) if city.image else None,
                 "name": city.name,
                 "province": city.province.name,
                 "slug": city.slug,
                 "hotels_number": city.hotels.count(),
-                "image": city.image.url if city.image else None  
+               
             }
             for city in queryset
         ]
         return Response(cities_data)
+
     
     
     
