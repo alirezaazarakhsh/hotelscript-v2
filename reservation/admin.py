@@ -118,7 +118,7 @@ class HotelAdmin(admin.ModelAdmin):
         'longitude',
         'stars',
         'rating',
-        'reservation_count'
+        'reservation_count',
         'type',
         'floors_count',
         'rooms_count',
