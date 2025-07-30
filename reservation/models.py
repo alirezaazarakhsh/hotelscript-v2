@@ -274,6 +274,11 @@ class Hotel(models.Model):
         ],
         default=0.0,
     )
+    reservation_count = models.PositiveIntegerField(
+        verbose_name=_('تعداد رزرو هتل'),
+        default=0,
+        help_text=_('این مقدار فقط در نمایش هتل در قسمت هتل‌های پرفروش تاثیر دارد و در بخش‌های دیگر تاثیری نخواهد داشت.')
+    )
     type = models.ForeignKey(
         'HotelType',
         on_delete=models.CASCADE,
@@ -349,14 +354,14 @@ class Hotel(models.Model):
         default=False,
     )
     is_best_seller = models.BooleanField(
-        verbose_name=_('پرفروش ترین های صفحه اصلی '),
+        verbose_name=_('پرفروش‌ترین‌های صفحه اصلی'),
         default=False,
     )
     rules = models.TextField(
-        verbose_name=_('قوانین و مقررات هتل '),
+        verbose_name=_('قوانین و مقررات هتل'),
     )
     important_notes = models.TextField(
-        verbose_name=_('نکات ضروری هتل '),
+        verbose_name=_('نکات ضروری هتل'),
         blank=True,
         default='',
     )

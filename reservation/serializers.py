@@ -103,6 +103,7 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
 
+
 class HotelListSerializer(serializers.ModelSerializer):
     city = CitySerializer()
     type = serializers.SerializerMethodField()
@@ -112,6 +113,7 @@ class HotelListSerializer(serializers.ModelSerializer):
     rating = serializers.SerializerMethodField()
     discount_percentage = serializers.SerializerMethodField()
     discount_expiry = serializers.SerializerMethodField()
+    reservation_count = serializers.IntegerField()  
 
     class Meta:
         model = Hotel
@@ -119,7 +121,7 @@ class HotelListSerializer(serializers.ModelSerializer):
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'is_special_offer', 'is_flash_sale', 'is_best_seller',
             'original_total_price', 'total_price', 'rating',
-            'discount_percentage', 'discount_expiry'
+            'discount_percentage', 'discount_expiry', 'reservation_count'  
         )
 
     def get_type(self, obj):
@@ -157,6 +159,7 @@ class HotelListSerializer(serializers.ModelSerializer):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
+
 
 class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
