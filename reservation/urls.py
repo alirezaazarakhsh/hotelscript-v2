@@ -32,7 +32,6 @@ urlpatterns = [
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
 
     # ==== Cities ====
-    path('cities/', views.CityListView.as_view(), name='city-list'),
     path('cities/homepage/', views.HomePageCityListView.as_view(), name='homepage-city-list'),
 
     # ==== Hotel Types ====

@@ -37,7 +37,7 @@ class CitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = City
-        fields = ('name', 'image', 'province', 'show_in_homepage')
+        fields = ('name', 'image', 'province', 'slug', 'hotels_number','show_in_homepage')
 
     def get_province(self, obj):
         return obj.province.name if obj.province else None

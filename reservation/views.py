@@ -111,43 +111,6 @@ from .utils import Round
 from datetime import datetime
 
 
-        
-class CityListView(ListAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = CitySerializer
-    pagination_class = None  
-
-    def get_queryset(self):
-        queryset = City.objects.select_related('province')
-
-        if q := self.request.query_params.get('q'):
-            queryset = queryset.filter(
-                Q(name__icontains=q) | 
-                Q(slug__icontains=q)
-            )
-
-        return queryset
-    
-    @swagger_auto_schema(
-        operation_summary="دریافت لیست شهرها",
-        operation_description="این API لیستی از شهرها را باز می‌گرداند و امکان جستجو بر اساس نام یا slug شهر وجود دارد.",
-        manual_parameters=[
-            openapi.Parameter(
-                'q',
-                openapi.IN_QUERY,
-                description="نام یا slug شهر برای جستجو (فیلتر بر اساس q)",
-                type=openapi.TYPE_STRING,
-                required=False,
-            ),
-        ],
-        responses={},  # ✅ حذف Response samples
-        tags=['hotel']
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-    
-
-
 
 
 # ای پی ای لیست شهر های مربوط یه صفحه اصلی 
