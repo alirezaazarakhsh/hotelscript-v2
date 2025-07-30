@@ -131,7 +131,7 @@ class HomePageCityListView(generics.ListAPIView):
                 schema=CitySerializer(many=True)
             )
         },
-        tags=["home"]
+        tags=["hotel-home"]
     )
     def get(self, request, *args, **kwargs):
         queryset = self.get_queryset()
