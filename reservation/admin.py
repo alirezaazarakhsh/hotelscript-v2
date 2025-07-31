@@ -6,6 +6,7 @@ from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
     ClosedDate,
+    HotelTagPublic,
     Province,
     City,
     HotelType,
@@ -29,154 +30,98 @@ from .models import (
     SuggestedCommentItem,
 )
 
-
+# Province
 @admin.register(Province)
 class ProvinceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'name',
-        'slug',
-    )
-    search_fields = (
-        'name',
-        'slug',
-    )
+    list_display = ('id', 'name', 'slug')
+    search_fields = ('name', 'slug')
 
 
+# City
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
     form = CityAdminForm
-    list_display = (
-        'id',
-        'name',
-        'slug',
-        'image',
-        'province',
-        'show_in_homepage',
-    )
-    search_fields = (
-        'name',
-        'slug',
-    )
+    list_display = ('id', 'name', 'slug', 'image', 'province', 'show_in_homepage')
+    search_fields = ('name', 'slug')
 
 
+# HotelType
 @admin.register(HotelType)
 class HotelTypeAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
+# HotelTag
 @admin.register(HotelTag)
 class HotelTagAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
+# Facilities
 @admin.register(Facilities)
 class FacilitiesAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
+# RoomFacilities
 @admin.register(RoomFacilities)
 class RoomFacilitiesAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
+# HotelTagPublic Inline
+class HotelTagPublicInline(admin.TabularInline):
+    model = HotelTagPublic
+    extra = 0
+    max_num = 5
+    fields = ('title',)
+    verbose_name = _('تگ عمومی')
+    verbose_name_plural = _('تگ‌های عمومی')
+
+
+# Hotel
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
-
     fields = (
-        'name',
-        'slug',
-        'city',
-        'best_logo',
-        'logo_preview',
-        'latitude',
-        'longitude',
-        'stars',
-        'rating',
-        'reservation_count',
-        'type',
-        'floors_count',
-        'rooms_count',
-        'check_in_time',
-        'check_out_time',
-        'has_check_in_half_day_charge',
-        'has_check_out_half_day_charge',
-        'tags',
-        'facilities',
-        'room_facilities',
-        'is_special_offer',
-        'is_flash_sale',
-        'is_best_seller',
-        'main_image',
-        'image1',
-        'image2',
-        'image3',
-        'image4',
-        'address',
-        'description',
-        'further_description',
-        'rules',
-        'important_notes',
+        'name', 'slug', 'city', 'best_logo', 'logo_preview', 'latitude', 'longitude',
+        'stars', 'rating', 'reservation_count', 'type', 'floors_count', 'rooms_count',
+        'check_in_time', 'check_out_time', 'has_check_in_half_day_charge', 'has_check_out_half_day_charge',
+        'tags', 'facilities', 'room_facilities', 'is_special_offer', 'is_flash_sale', 'is_best_seller',
+        'main_image', 'image1', 'image2', 'image3', 'image4', 'address', 'description',
+        'further_description', 'rules', 'important_notes',
     )
-
     list_display = (
-        'id',
-        'name',
-        'slug',
-        'city',
-        'address',
-        'latitude',
-        'longitude',
-        'stars',
-        'rating',
-        'type',
-        'floors_count',
-        'logo_preview',
+        'id', 'name', 'slug', 'city', 'address', 'latitude', 'longitude', 'stars',
+        'rating', 'type', 'floors_count', 'logo_preview', 'show_public_tags',
     )
-    search_fields = (
-        'name',
-        'address',
-    )
+    search_fields = ('name', 'address', 'public_tags__title')
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
     readonly_fields = ('logo_preview',)
+    inlines = [HotelTagPublicInline]
 
     def logo_preview(self, obj):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="100" height="100" style="margin-right:8px; object-fit: contain;" />'
-                '</div>',
+                '<img src="{}" width="100" height="100" style="object-fit: contain;" />',
                 obj.best_logo.image_logo_hotel.url
             )
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
 
+    def show_public_tags(self, obj):
+        qs = obj.public_tags.all()
+        if not qs.exists():
+            return "-"
+        return format_html_join(mark_safe('<br>'), '{}', ((tag.title,) for tag in qs))
+    show_public_tags.short_description = 'تگ‌های عمومی'
 
+
+# HotelGalleryImage Inline
 class HotelGalleryImageInline(admin.TabularInline):
     model = HotelGalleryImage
     extra = 1
@@ -186,14 +131,12 @@ class HotelGalleryImageInline(admin.TabularInline):
 
     def preview(self, obj):
         if obj.image:
-            return format_html(
-                '<img src="{}" width="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />',
-                obj.image.url
-            )
+            return format_html('<img src="{}" width="100" style="object-fit: cover;" />', obj.image.url)
         return "-"
     preview.short_description = 'پیش‌نمایش'
 
 
+# HotelGallery
 @admin.register(HotelGallery)
 class HotelGalleryAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'hotel')
@@ -202,93 +145,50 @@ class HotelGalleryAdmin(admin.ModelAdmin):
     inlines = [HotelGalleryImageInline]
 
 
+# NearbyPlace
 @admin.register(NearbyPlace)
 class NearbyPlaceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'hotel',
-        'distance',
-        'driving_time',
-        'walking_time',
-        'latitude',
-        'longitude',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title', 'hotel', 'distance', 'driving_time', 'walking_time', 'latitude', 'longitude')
+    search_fields = ('title',)
 
 
+# HotelFAQ
 @admin.register(HotelFAQ)
 class HotelFAQAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'question',
-        'hotel',
-        'icon_preview',
-    )
-    search_fields = (
-        'question',
-        'hotel__title',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'question', 'hotel', 'icon_preview')
+    search_fields = ('question', 'hotel__title', 'icon__title_icon')
     autocomplete_fields = ('hotel', 'icon',)
     readonly_fields = ('icon_preview',)
-
     fieldsets = (
-        (None, {
-            'fields': (
-                'question',
-                'answer',
-                'hotel',
-                'icon',
-                'icon_preview',
-            )
-        }),
+        (None, {'fields': ('question', 'answer', 'hotel', 'icon', 'icon_preview')}),
     )
 
     def icon_preview(self, obj):
-        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+        if obj.icon and obj.icon.svg_icon:
             return format_html(
-                '<div style="display:flex; align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+                '<img src="{}" width="30" height="30" style="object-fit: contain;" />',
+                obj.icon.svg_icon.url
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+# CommentPoint Inline
 class CommentPointInline(admin.TabularInline):
     model = CommentPoint
     extra = 1
     autocomplete_fields = ['comment_point_item']
 
 
+# Comment
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
     list_display = (
-        'id',
-        'user',
-        'hotel',
-        'text',
-        'show_strengths',
-        'show_weaknesses',
-        'stars',
-        'is_approved',
-        'created_jalali',
+        'id', 'user', 'hotel', 'text', 'show_strengths', 'show_weaknesses', 'stars',
+        'is_approved', 'created_jalali',
     )
-    search_fields = (
-        'text',
-        'strengths__title',
-        'weaknesses__title',
-    )
-    list_filter = (
-        'is_approved',
-        'stars',
-    )
+    search_fields = ('text', 'strengths__title', 'weaknesses__title')
+    list_filter = ('is_approved', 'stars')
     autocomplete_fields = ['user', 'hotel', 'suggested_items']
     exclude = ['suggested_items']
     inlines = [CommentPointInline]
@@ -297,22 +197,14 @@ class CommentAdmin(admin.ModelAdmin):
         qs = obj.strengths.all()
         if not qs.exists():
             return "-"
-        return format_html_join(
-            mark_safe('<br>'),
-            '{}',
-            ((s.title,) for s in qs)
-        )
+        return format_html_join(mark_safe('<br>'), '{}', ((s.title,) for s in qs))
     show_strengths.short_description = 'نقاط قوت'
 
     def show_weaknesses(self, obj):
         qs = obj.weaknesses.all()
         if not qs.exists():
             return "-"
-        return format_html_join(
-            mark_safe('<br>'),
-            '{}',
-            ((w.title,) for w in qs)
-        )
+        return format_html_join(mark_safe('<br>'), '{}', ((w.title,) for w in qs))
     show_weaknesses.short_description = 'نقاط ضعف'
 
     def created_jalali(self, obj):
@@ -323,13 +215,8 @@ class CommentAdmin(admin.ModelAdmin):
 
 @admin.register(CommentPointItem)
 class CommentPointItemAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
 @admin.register(SuggestedCommentItem)
@@ -340,32 +227,11 @@ class SuggestedCommentItemAdmin(admin.ModelAdmin):
 
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
-class RoomDateInline(admin.TabularInline):
-    model = RoomDatePrice
-    extra = 1
-    fields = (
-        'user_level',
-        'start_date',
-        'end_date',
-        'price',
-        'extra_passenger_price',
-        'discount_type',
-        'discount_value',
-        'discount_date',
-        'is_fixed_discount_one_time',
-    )
-    ordering = ('start_date',)
-
-
+# Inline: ClosedDate (برای استفاده در RoomDatePrice)
 class ClosedDateInline(admin.TabularInline):
     model = ClosedDate
     extra = 1
@@ -374,152 +240,68 @@ class ClosedDateInline(admin.TabularInline):
     ordering = ('date',)
 
 
-@admin.register(Room)
-class RoomAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'hotel',
-        'title',
-        'customer_club_points',
-        'inventory',
-        'count',
-        'auto_approved_count',
-        'room_capacity',
-        'extra_capacity',
-    )
-    search_fields = ('title',)
-    autocomplete_fields = ('hotel',)
-    fields = (
-        'hotel',
-        'title',
-        'description',
-        'inventory',
-        'count',
-        'auto_approved_count',
-        'customer_club_points',
-        'room_capacity',
-        'extra_capacity',
-        'services',
-    )
-    inlines = [RoomDateInline]
-
-
+# RoomDatePrice
 @admin.register(RoomDatePrice)
 class RoomDatePriceAdmin(admin.ModelAdmin):
     list_display = (
-        'room',
-        'user_level',
-        'start_date',
-        'end_date',
-        'price',
-        'discount_type',
-        'discount_value',
-        'discount_date',
-        'is_fixed_discount_one_time',
+        'room', 'user_level', 'start_date', 'end_date',
+        'price', 'discount_type', 'discount_value', 'discount_date', 'is_fixed_discount_one_time',
     )
-    list_filter = (
-        'room',
-        'user_level',
-        'discount_type',
-        'is_fixed_discount_one_time',
-    )
-    search_fields = (
-        'room__title',
-        'user_level__title',
-    )
+    list_filter = ('room', 'user_level', 'discount_type', 'is_fixed_discount_one_time')
+    search_fields = ('room__title', 'user_level__title')
     autocomplete_fields = ('room', 'user_level')
     ordering = ('room', 'start_date', 'user_level')
     fieldsets = (
-        (_('اطلاعات بازه و اتاق'), {
-            'fields': (
-                'room',
-                'user_level',
-                'start_date',
-                'end_date',
-            )
-        }),
-        (_('قیمت‌گذاری'), {
-            'fields': (
-                'price',
-                'extra_passenger_price',
-            )
-        }),
-        (_('تخفیف'), {
-            'fields': (
-                'discount_type',
-                'discount_value',
-                'discount_date',
-                'is_fixed_discount_one_time',
-            )
-        }),
+        (_('اطلاعات بازه و اتاق'), {'fields': ('room', 'user_level', 'start_date', 'end_date')}),
+        (_('قیمت‌گذاری'), {'fields': ('price', 'extra_passenger_price')}),
+        (_('تخفیف'), {'fields': ('discount_type', 'discount_value', 'discount_date', 'is_fixed_discount_one_time')}),
     )
     inlines = [ClosedDateInline]
 
 
-@admin.register(ClosedDate)
-class ClosedDateAdmin(admin.ModelAdmin):
-    list_display = ('room_date', 'date', 'user_level')
-    list_filter = ('room_date', 'user_level')
-    search_fields = ('room_date__room__name',)
-    autocomplete_fields = ('room_date', 'user_level')
-    ordering = ('date',)
+# Room
+@admin.register(Room)
+class RoomAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'hotel', 'title', 'customer_club_points', 'inventory',
+        'count', 'auto_approved_count', 'room_capacity', 'extra_capacity',
+    )
+    search_fields = ('title',)
+    autocomplete_fields = ('hotel',)
+    fields = (
+        'hotel', 'title', 'description', 'inventory', 'count', 'auto_approved_count',
+        'customer_club_points', 'room_capacity', 'extra_capacity', 'services',
+    )
+    inlines = []
 
 
-from django.contrib import admin
-from .models import Passenger
-
+# Passenger
 @admin.register(Passenger)
 class PassengerAdmin(admin.ModelAdmin):
     list_display = (
-        'id',
-        'user',
-        'first_name',
-        'last_name',
-        'identification_code',
-        'phone_number',
+        'id', 'user', 'first_name', 'last_name', 'identification_code', 'phone_number',
     )
-    search_fields = (
-        'first_name',
-        'last_name',
-        'identification_code',
-        'phone_number',
-    )
-    
-    
+    search_fields = ('first_name', 'last_name', 'identification_code', 'phone_number')
 
+
+# Reservation
 @admin.register(Reservation)
 class ReservationAdmin(admin.ModelAdmin):
-    list_display = (
-        'uuid',
-        'user',
-        'status',
-        'created',
-        'updated',
-    )
-    search_fields = (
-        'uuid',
-    )
-    list_filter = (
-        'status',
-    )
+    list_display = ('uuid', 'user', 'status', 'created', 'updated')
+    search_fields = ('uuid',)
+    list_filter = ('status',)
 
 
+# BestHotels
 @admin.register(BestHotels)
 class BestHotelsAdmin(admin.ModelAdmin):
     form = BestHotelsAdminForm
-    list_display = (
-        'order',
-        'title_logo',
-        'image_logo_hotel',
-    )
-    search_fields = (
-        'title_logo',
-    )
-    list_filter = (
-        'order',
-    )
+    list_display = ('order', 'title_logo', 'image_logo_hotel')
+    search_fields = ('title_logo',)
+    list_filter = ('order',)
 
 
+# ReservationApprovalDuration (اجازه‌ی افزودن تنها یک مورد)
 @admin.register(ReservationApprovalDuration)
 class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     list_display = ('duration_minutes',)
@@ -528,7 +310,4 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     ordering = ('duration_minutes',)
 
     def has_add_permission(self, request):
-        count = ReservationApprovalDuration.objects.count()
-        if count >= 1:
-            return False
-        return True
+        return ReservationApprovalDuration.objects.count() < 1

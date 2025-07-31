@@ -146,7 +146,7 @@ class HotelType(models.Model):
 
 
 
-#مدل تگ های هتل
+#مدل تگ های هتل صفحه داخلی 
 class HotelTag(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),
@@ -156,12 +156,31 @@ class HotelTag(models.Model):
 
     class Meta:
         verbose_name = 'برچسب هتل'
-        verbose_name_plural = 'برچسب‌ها'
+        verbose_name_plural = 'برچسب‌ هتل'
 
     def __str__(self):
         return self.title
 
 
+#تگ عمومی برای هتلها
+class HotelTagPublic(models.Model):
+    hotel = models.ForeignKey(
+        'Hotel',
+        on_delete=models.CASCADE,
+        verbose_name=_('هتل'),
+        related_name='public_tags',
+    )
+    title = models.CharField(
+        verbose_name=_('عنوان تگ'),
+        max_length=256,
+    )
+
+    class Meta:
+        verbose_name = _('تگ عمومی هتل')
+        verbose_name_plural = _('تگ‌های عمومی هتل')
+
+    def __str__(self):
+        return f"{self.title} ({self.hotel.name})"
 
 
 
