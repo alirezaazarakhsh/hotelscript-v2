@@ -25,6 +25,9 @@ class FavoriteCollection(models.Model):
         return self.title
 
 
+
+
+
 class Favorite(models.Model):
     list = models.ForeignKey(
         FavoriteCollection,
@@ -54,6 +57,10 @@ class Favorite(models.Model):
 
     def __str__(self):
         return f'{self.item} - {self.list}'
+
+
+
+
 
 
 class CustomerClub(models.Model):
