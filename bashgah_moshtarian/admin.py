@@ -10,7 +10,6 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     list_display = (
         'code',
         'room',
-        'discount_type',
         'discount_value',
         'is_public',
         'user_phone_and_name',
@@ -29,7 +28,6 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ('room', 'user', 'activated_users')
     list_editable = (
-        'discount_type',
         'discount_value',
         'is_public',
         'usage_limit',
@@ -45,7 +43,6 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             'fields': (
                 'room',
                 'code',
-                'discount_type',
                 'discount_value',
                 'is_public',
                 'user',
@@ -98,7 +95,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     list_display = (
         'code',
         'shopping_center_name',
-        'discount_type',
         'discount_value',
         'is_public',
         'user_phone_and_name',
@@ -116,7 +112,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ('user',)
     list_editable = (
-        'discount_type',
         'discount_value',
         'is_public',
         'usage_limit',
@@ -131,7 +126,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
                 'shopping_center_name',
                 'shopping_center_image',
                 'code',
-                'discount_type',
                 'discount_value',
                 'is_public',
                 'user',

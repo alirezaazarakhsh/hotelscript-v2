@@ -8,11 +8,6 @@ from django.utils.translation import gettext_lazy as _
 
 # مدل کد تخفیف باشگاه مشتری برای اتاق ها 
 class RoomDiscountCode(models.Model):
-    DISCOUNT_TYPE_CHOICES = [
-        ('fixed', _('مقدار ثابت')),
-        ('percent', _('درصدی')),
-    ]
-
     room = models.ForeignKey(
         Room,
         on_delete=models.CASCADE,
@@ -20,16 +15,9 @@ class RoomDiscountCode(models.Model):
         verbose_name=_("اتاق")
     )
 
-    discount_type = models.CharField(
-        max_length=10,
-        choices=DISCOUNT_TYPE_CHOICES,
-        default='percent',
-        verbose_name=_("نوع تخفیف")
-    )
-
     discount_value = models.PositiveIntegerField(
         verbose_name=_("مقدار تخفیف"),
-        help_text=_("اگر درصدی باشد عددی مانند ۱۰ وارد کنید. اگر مقدار ثابت باشد، مبلغ را به تومان وارد کنید.")
+        help_text=_("مقدار تخفیف را به تومان وارد کنید.")
     )
 
     is_public = models.BooleanField(
@@ -94,7 +82,7 @@ class RoomDiscountCode(models.Model):
     )
 
     def __str__(self):
-        return f"{self.code} - {self.get_discount_type_display()} - {self.discount_value}"
+        return f"{self.code} - {self.discount_value}"
 
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
@@ -105,11 +93,6 @@ class RoomDiscountCode(models.Model):
 
 # کد تخفیف باشگاه مشتریان برای مراکز خرید 
 class ShoppingCenterDiscountCode(models.Model):
-    DISCOUNT_TYPE_CHOICES = [
-        ('fixed', _('مقدار ثابت')),
-        ('percent', _('درصدی')),
-    ]
-
     shopping_center_name = models.CharField(
         max_length=100,
         verbose_name=_("نام مرکز خرید")
@@ -123,16 +106,9 @@ class ShoppingCenterDiscountCode(models.Model):
         help_text=_("تصویر مرکز خرید را آپلود کنید.")
     )
 
-    discount_type = models.CharField(
-        max_length=10,
-        choices=DISCOUNT_TYPE_CHOICES,
-        default='percent',
-        verbose_name=_("نوع تخفیف")
-    )
-
     discount_value = models.PositiveIntegerField(
         verbose_name=_("مقدار تخفیف"),
-        help_text=_("اگر درصدی باشد عددی مانند ۱۰ وارد کنید. اگر مقدار ثابت باشد، مبلغ را به تومان وارد کنید.")
+        help_text=_("مقدار تخفیف را به تومان وارد کنید.")
     )
 
     is_public = models.BooleanField(
@@ -192,7 +168,7 @@ class ShoppingCenterDiscountCode(models.Model):
     )
 
     def __str__(self):
-        return f"{self.code} - {self.get_discount_type_display()} - {self.discount_value} - {self.shopping_center_name}"
+        return f"{self.code} - {self.discount_value} - {self.shopping_center_name}"
 
     class Meta:
         verbose_name = _("کد تخفیف مرکز خرید")
