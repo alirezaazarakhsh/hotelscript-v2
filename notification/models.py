@@ -1,4 +1,3 @@
-# notification/models.py
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django_jalali.db import models as jmodels
@@ -15,6 +14,12 @@ class Notification(models.Model):
         BaseUser,
         related_name='notifications',
         verbose_name=_("کاربران"),
+        blank=True,
+    )
+    read_by = models.ManyToManyField(
+        BaseUser,
+        related_name='read_notifications',
+        verbose_name=_("خوانده شده توسط"),
         blank=True,
     )
     
@@ -41,6 +46,17 @@ class Notification(models.Model):
     def get_users_with_names(self):
         result = []
         for user in self.users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
+
+    def get_read_by_with_names(self):
+        result = []
+        for user in self.read_by.select_related('natural_profile').all():
             profile = getattr(user, 'natural_profile', None)
             if profile and (profile.first_name or profile.last_name):
                 full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()

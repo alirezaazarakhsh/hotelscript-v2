@@ -10,9 +10,15 @@ class NotificationAdmin(admin.ModelAdmin):
         'created_date_jalali',
         'created_time',
         'send_to_all',
+        'get_users_display',
+        'get_read_by_display',
     )
-    filter_horizontal = ('users',)
+    filter_horizontal = ('users', 'read_by')
 
     def get_users_display(self, obj):
         return ", ".join(obj.get_users_with_names())
     get_users_display.short_description = "کاربران (شماره و نام)"
+
+    def get_read_by_display(self, obj):
+        return ", ".join(obj.get_read_by_with_names())
+    get_read_by_display.short_description = "خوانده شده توسط (شماره و نام)"
