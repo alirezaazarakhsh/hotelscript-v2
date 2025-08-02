@@ -1,8 +1,8 @@
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
-from .models import RoomDiscountCode, ShoppingCenterDiscountCode  # این خط مهم بود
-from .serializers import RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
+from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode  # این خط مهم بود
+from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
 
 
 # ✅ ای‌پی‌آی دریافت کد تخفیف برای اتاق‌ها برای کاربر
@@ -65,6 +65,26 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
 - کدهایی که کاربر آن‌ها را فعال کرده است.
 """,
         tags=['discount-crm']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+#ای پی ای نمایش امتیاز باشگاه مشتریان کاربر 
+class MyCustomerClubPointView(RetrieveAPIView):
+    serializer_class = CustomerClubPointSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return CustomerClubPoint.objects.get(user=self.request.user)
+
+    @swagger_auto_schema(
+        operation_summary="دریافت امتیاز باشگاه مشتریان",
+        operation_description="""
+این API امتیاز فعلی کاربر در باشگاه مشتریان را بازمی‌گرداند.
+        """,
+        tags=["customer-club"]
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)

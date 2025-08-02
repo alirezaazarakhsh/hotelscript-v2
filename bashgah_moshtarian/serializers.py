@@ -3,7 +3,7 @@
 from rest_framework import serializers
 
 from reservation.models import Room
-from .models import RoomDiscountCode, ShoppingCenterDiscountCode
+from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -36,3 +36,10 @@ class ShoppingCenterDiscountCodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ShoppingCenterDiscountCode
         fields = '__all__'
+
+
+
+class CustomerClubPointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerClubPoint
+        fields = ['points']
