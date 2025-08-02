@@ -79,7 +79,8 @@ class MyCustomerClubPointView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        return CustomerClubPoint.objects.get(user=self.request.user)
+        # سعی می‌کنیم رکورد را پیدا کنیم، اگر نبود مقدار None برمی‌گردد
+        return CustomerClubPoint.objects.filter(user=self.request.user).first()
 
     @swagger_auto_schema(
         operation_summary="دریافت امتیاز باشگاه مشتریان",
@@ -89,4 +90,9 @@ class MyCustomerClubPointView(RetrieveAPIView):
         tags=["discount-crm"]
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        instance = self.get_object()
+        if not instance:
+            # مقدار پیش‌فرض در صورت نبود رکورد
+            return Response({'points': 0}, status=status.HTTP_200_OK)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
