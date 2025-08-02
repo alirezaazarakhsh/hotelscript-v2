@@ -170,11 +170,6 @@ class ShoppingCenterDiscountCode(models.Model):
         help_text=_("حداقل امتیازی که کاربر باید داشته باشد تا بتواند از کد استفاده کند")
     )
 
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_("تاریخ ایجاد")
-    )
-
     expires_at = jmodels.jDateField(
         null=True,
         blank=True,
@@ -227,3 +222,68 @@ class CustomerClubPoint(models.Model):
     class Meta:
         verbose_name = _("امتیاز باشگاه مشتریان کاربر")
         verbose_name_plural = _("امتیازهای باشگاه مشتریان کاربران")
+        
+        
+        
+        
+        
+
+
+#لیست جوایز فعال شده کاربران 
+class DiscountActivationRecord(models.Model):
+    DISCOUNT_TYPE_CHOICES = [
+        ('room', _('تخفیف اتاق')),
+        ('shopping_center', _('تخفیف مرکز خرید')),
+    ]
+
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_("کاربر فعال‌کننده"),
+        related_name='discount_activations'
+    )
+
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DISCOUNT_TYPE_CHOICES,
+        verbose_name=_("نوع کد تخفیف"),
+    )
+
+    room_discount_code = models.ForeignKey(
+        RoomDiscountCode,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name=_("کد تخفیف اتاق"),
+        related_name='activation_records'
+    )
+
+    shopping_discount_code = models.ForeignKey(
+        ShoppingCenterDiscountCode,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name=_("کد تخفیف مرکز خرید"),
+        related_name='activation_records'
+    )
+
+    activated_at = jmodels.jDateField(
+        auto_now_add=True,
+        verbose_name=_("تاریخ فعال‌سازی (شمسی)")
+    )
+
+    reward_claimed = models.BooleanField(
+        default=False,
+        verbose_name=_("جایزه دریافت شده؟"),
+        help_text=_("نمایش وضعیت دریافت جایزه توسط کاربر")
+    )
+
+    class Meta:
+        verbose_name = _("جوایز دریافتی")
+        verbose_name_plural = _("لیست دریافت جوایز کاربران")
+        ordering = ['-activated_at']
+
+    def __str__(self):
+        code = self.room_discount_code or self.shopping_discount_code
+        code_str = code.code if code else '—'
+        return f"{self.user} - {self.get_discount_type_display()} - {code_str} - {self.activated_at}"
