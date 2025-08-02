@@ -13,7 +13,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'discount_type',
         'discount_value',
         'is_public',
-        'user',
+        'user_phone_and_name',  # ستون جدید برای نمایش شماره و نام
         'usage_limit',
         'required_points',
         'expires_at',
@@ -29,6 +29,8 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'code',
         'room__title',
         'user__phone_number',
+        'user__natural_profile__first_name',
+        'user__natural_profile__last_name',
     )
     autocomplete_fields = ('room', 'user')
     list_editable = (
@@ -61,10 +63,21 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
+        (_('اطلاعات تکمیلی'), {
+            'fields': ('created_at',),
+            'description': _('اطلاعات خودکار ثبت‌شده.'),
+        }),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('room', 'user')
+        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile')
+
+    def user_phone_and_name(self, obj):
+        if obj.user and obj.user.natural_profile:
+            full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
+            return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
+        return obj.user.phone_number if obj.user else "-"
+    user_phone_and_name.short_description = _('شماره و نام کاربر')
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'room':
