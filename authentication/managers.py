@@ -9,18 +9,17 @@ class UserManager(BaseUserManager):
 
         user = self.model(phone_number=phone_number, **other_fields)
         user.save()
-
         return user
 
     def create_superuser(self, **other_fields):
         raise NotImplementedError('Use the SuperUser model to create superusers.')
-    
+
     def get_by_phone(self, phone):
         return super(UserManager, self).get_queryset().get(phone_number=phone)
-    
+
     def get_by_phone_or_create(self, phone):
         from finance.models import Wallet
-        from user_profile.models import CustomerClub
+        from bashgah_moshtarian.models import CustomerClubPoint
         try:
             return self.get_by_phone(phone)
         except ObjectDoesNotExist:
@@ -33,7 +32,7 @@ class UserManager(BaseUserManager):
                     user=user,
                     balance=0,
                 )
-                CustomerClub.objects.create(
+                CustomerClubPoint.objects.create(
                     user=user,
                     points=0,
                 )
