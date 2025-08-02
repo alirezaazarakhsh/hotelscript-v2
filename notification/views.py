@@ -1,10 +1,14 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework import serializers  # اضافه کردن این خط
+from rest_framework import serializers
 from .models import Notification
 from .serializers import NotificationSerializer
 from django.db import models
+
+# سریالایزر برای بدنه درخواست PUT و PATCH
+class NotificationUpdateStatusSerializer(serializers.Serializer):
+    is_read = serializers.BooleanField()
 
 class NotificationListView(generics.ListAPIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -18,13 +22,12 @@ class NotificationListView(generics.ListAPIView):
         ).distinct().order_by('-created_at')
 
     @swagger_auto_schema(
-        operation_summary="لیست اعلان‌ها",
+        operation_summary="دریافت لیست اعلان‌ها",
         operation_description="""
-        این API لیست اعلان‌های مربوط به کاربر را نمایش می‌دهد.
-        شامل اعلان‌هایی که به صورت فردی برای کاربر ارسال شده‌اند یا برای همه ارسال شده‌اند.
+        این API تمام اعلان‌های مربوط به کاربر فعلی را برمی‌گرداند.
+        اعلان‌هایی که به‌صورت جداگانه برای کاربر ارسال شده‌اند یا برای همه کاربران ارسال شده‌اند نمایش داده می‌شوند.
         """,
-        responses={200: NotificationSerializer(many=True)},
-        tags=["notification-user"]
+        responses={200: NotificationSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -39,16 +42,15 @@ class NotificationDeleteView(generics.DestroyAPIView):
         return Notification.objects.filter(users=user)
 
     @swagger_auto_schema(
-        operation_summary="حذف اعلان",
+        operation_summary="حذف یک اعلان",
         operation_description="""
-        این API به کاربر اجازه می‌دهد تا اعلان‌های خود را حذف کند.
-        فقط اعلان‌هایی که به کاربر تعلق دارند قابل حذف هستند.
+        این API به کاربر اجازه می‌دهد اعلانی که به او تعلق دارد را حذف کند.
+        فقط اعلان‌هایی که کاربر در لیست گیرندگان آن باشد قابل حذف هستند.
         """,
         responses={
-            204: "حذف نوتیفیکیشن موفقیت‌آمیز بود",
+            204: "اعلان با موفقیت حذف شد",
             404: "اعلان یافت نشد یا متعلق به کاربر نیست",
-        },
-        tags=["notification-user"]
+        }
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
@@ -65,20 +67,20 @@ class NotificationUpdateStatusView(generics.UpdateAPIView):
         )
 
     @swagger_auto_schema(
-        operation_summary="به‌روزرسانی وضعیت اعلان",
+        operation_summary="به‌روزرسانی وضعیت اعلان با PUT",
         operation_description="""
-        این API به کاربر اجازه می‌دهد تا وضعیت خوانده شدن اعلان را تغییر دهد.
-        بدنه درخواست باید شامل فیلد is_read با مقدار بولین باشد.
+        این API به کاربر اجازه می‌دهد با استفاده از متد PUT وضعیت خوانده شدن یک اعلان را تغییر دهد.
+        در بدنه درخواست، فیلد is_read باید مقدار بولین (true یا false) داشته باشد.
+        اگر true باشد، اعلان به‌عنوان خوانده شده علامت‌گذاری می‌شود.
+        اگر false باشد، وضعیت خوانده شده حذف می‌شود.
         """,
-        request_body=serializers.SerializerMethodField(
-            method_name='get_request_body_serializer'
-        ),
+        request_body=NotificationUpdateStatusSerializer,
         responses={
             200: NotificationSerializer(),
-            400: "مقدار is_read نامعتبر است",
+            400: "مقدار is_read باید بولین باشد",
             404: "اعلان یافت نشد یا متعلق به کاربر نیست",
         },
-        tags=["notification-user"]
+        operation_id="update_notification_status_put"
     )
     def put(self, request, *args, **kwargs):
         notification = self.get_object()
@@ -87,7 +89,7 @@ class NotificationUpdateStatusView(generics.UpdateAPIView):
         
         if not isinstance(is_read, bool):
             return Response(
-                {"detail": "فیلد is_read باید بولین باشد"},
+                {"detail": "مقدار is_read باید بولین باشد"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -99,7 +101,37 @@ class NotificationUpdateStatusView(generics.UpdateAPIView):
         serializer = self.get_serializer(notification)
         return Response(serializer.data)
 
-    def get_request_body_serializer(self):
-        return serializers.Serializer(
-            fields={'is_read': serializers.BooleanField()}
-        )
+    @swagger_auto_schema(
+        operation_summary="به‌روزرسانی وضعیت اعلان با PATCH",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد با استفاده از متد PATCH وضعیت خوانده شدن یک اعلان را تغییر دهد.
+        در بدنه درخواست، فیلد is_read باید مقدار بولین (true یا false) داشته باشد.
+        اگر true باشد، اعلان به‌عنوان خوانده شده علامت‌گذاری می‌شود.
+        اگر false باشد، وضعیت خوانده شده حذف می‌شود.
+        """,
+        request_body=NotificationUpdateStatusSerializer,
+        responses={
+            200: NotificationSerializer(),
+            400: "مقدار is_read باید بولین باشد",
+            404: "اعلان یافت نشد یا متعلق به کاربر نیست",
+        },
+        operation_id="update_notification_status_patch"
+    )
+    def patch(self, request, *args, **kwargs):
+        notification = self.get_object()
+        user = self.request.user
+        is_read = request.data.get('is_read')
+        
+        if not isinstance(is_read, bool):
+            return Response(
+                {"detail": "مقدار is_read باید بولین باشد"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if is_read:
+            notification.read_by.add(user)
+        else:
+            notification.read_by.remove(user)
+
+        serializer = self.get_serializer(notification)
+        return Response(serializer.data)
