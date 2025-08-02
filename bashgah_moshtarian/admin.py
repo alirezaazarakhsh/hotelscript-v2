@@ -3,6 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
 from reservation.models import Room
 from authentication.models import BaseUser
+from config.models import UserLevel
 
 
 @admin.register(RoomDiscountCode)
