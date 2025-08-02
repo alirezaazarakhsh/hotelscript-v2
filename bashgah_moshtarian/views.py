@@ -1,12 +1,10 @@
-from requests import Response
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
-from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode  # این خط مهم بود
+from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
 from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
-from rest_framework.generics import RetrieveAPIView
-
-
 
 # ✅ ای‌پی‌آی دریافت کد تخفیف برای اتاق‌ها برای کاربر
 class MyRoomDiscountCodeListView(ListAPIView):
@@ -37,9 +35,6 @@ class MyRoomDiscountCodeListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
-    
-    
 
 
 # ✅ ای‌پی‌آی دریافت تخفیفات مراکز خرید کاربر
@@ -73,15 +68,9 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
-
-#ای پی ای نمایش امتیاز باشگاه مشتریان کاربر 
-class MyCustomerClubPointView(RetrieveAPIView):
-    serializer_class = CustomerClubPointSerializer
+# ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
+class MyCustomerClubPointView(APIView):
     permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        # سعی می‌کنیم رکورد را پیدا کنیم، اگر نبود مقدار None برمی‌گردد
-        return CustomerClubPoint.objects.filter(user=self.request.user).first()
 
     @swagger_auto_schema(
         operation_summary="دریافت امتیاز باشگاه مشتریان",
@@ -91,9 +80,9 @@ class MyCustomerClubPointView(RetrieveAPIView):
         tags=["discount-crm"]
     )
     def get(self, request, *args, **kwargs):
-        instance = self.get_object()
-        if not instance:
-            # مقدار پیش‌فرض در صورت نبود رکورد
-            return Response({'points': 0}, status=status.HTTP_200_OK)
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        try:
+            instance = CustomerClubPoint.objects.get(user=request.user)
+            serializer = CustomerClubPointSerializer(instance)
+            return Response(serializer.data)
+        except CustomerClubPoint.DoesNotExist:
+            return Response({'points': 0}, status=200)
