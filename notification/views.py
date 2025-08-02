@@ -1,6 +1,7 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
+from rest_framework import serializers  # اضافه کردن این خط
 from .models import Notification
 from .serializers import NotificationSerializer
 from django.db import models
