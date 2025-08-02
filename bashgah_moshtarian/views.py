@@ -86,7 +86,7 @@ class MyCustomerClubPointView(RetrieveAPIView):
         operation_description="""
 این API امتیاز فعلی کاربر در باشگاه مشتریان را بازمی‌گرداند.
         """,
-        tags=["customer-club"]
+        tags=["discount-crm"]
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
