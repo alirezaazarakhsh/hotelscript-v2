@@ -2,6 +2,7 @@ from django.db import models
 from django.core.validators import RegexValidator
 from reservation.models import Room
 from authentication.models import BaseUser
+from config.models import UserLevel
 from django_jalali.db import models as jmodels
 from django.utils.translation import gettext_lazy as _
 
@@ -15,20 +16,17 @@ class RoomDiscountCode(models.Model):
         related_name='discount_codes',
         verbose_name=_("اتاق")
     )
-
     discount_value = models.CharField(
         max_length=10,
         validators=[RegexValidator(r'^\d+$', message=_("فقط مقادیر عددی مجاز هستند."))],
         verbose_name=_("مقدار تخفیف"),
         help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
-
     is_public = models.BooleanField(
         default=True,
         verbose_name=_("تخفیف عمومی است؟"),
         help_text=_("در صورت غیرفعال بودن، کد فقط برای یک کاربر خاص فعال خواهد بود.")
     )
-
     user = models.ForeignKey(
         BaseUser,
         null=True,
@@ -38,44 +36,46 @@ class RoomDiscountCode(models.Model):
         verbose_name=_("کاربر"),
         help_text=_("در صورت شخصی بودن کد، یک کاربر مشخص انتخاب کنید.")
     )
-
     code = models.CharField(
         max_length=8,
         unique=True,
         verbose_name=_("کد تخفیف"),
         help_text=_("کد تخفیف ۸ رقمی را وارد کنید.")
     )
-
     usage_limit = models.PositiveIntegerField(
         default=1,
         verbose_name=_("حداکثر دفعات استفاده"),
         help_text=_("تعداد دفعات مجاز استفاده از این کد تخفیف")
     )
-
     required_points = models.PositiveIntegerField(
         default=0,
         verbose_name=_("امتیاز مورد نیاز"),
         help_text=_("حداقل امتیازی که کاربر باید داشته باشد تا بتواند از کد استفاده کند")
     )
-
+    user_level = models.ForeignKey(
+        UserLevel,  # Use the imported UserLevel class
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='discount_codes',
+        verbose_name=_("سطح کاربری"),
+        help_text=_("سطح کاربری مورد نیاز برای استفاده از این کد تخفیف (اختیاری).")
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name=_("تاریخ ایجاد")
     )
-
     expires_at = jmodels.jDateField(
         null=True,
         blank=True,
         verbose_name=_("تاریخ انقضا (شمسی)")
     )
-
     activation_rules = models.TextField(
         null=True,
         blank=True,
         verbose_name=_("قوانین فعال‌سازی"),
         help_text=_("می‌توانید قوانینی برای نحوه فعال‌سازی این کد وارد کنید.")
     )
-
     activated_users = models.ManyToManyField(
         BaseUser,
         blank=True,
@@ -100,7 +100,6 @@ class ShoppingCenterDiscountCode(models.Model):
         max_length=100,
         verbose_name=_("نام مرکز خرید")
     )
-
     shopping_center_image = models.ImageField(
         upload_to='shopping_centers/',
         null=True,
@@ -108,22 +107,19 @@ class ShoppingCenterDiscountCode(models.Model):
         verbose_name=_("لوگو مرکز خرید"),
         help_text=_("تصویر مرکز خرید را آپلود کنید.")
     )
-
     discount_value = models.CharField(
         max_length=10,
         validators=[RegexValidator(r'^\d+$', message=_("فقط مقادیر عددی مجاز هستند."))],
         verbose_name=_("مقدار تخفیف"),
         help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
-
     is_public = models.BooleanField(
         default=True,
         verbose_name=_("تخفیف عمومی است؟"),
         help_text=_("در صورت غیرفعال بودن، کد فقط برای یک کاربر خاص فعال خواهد بود.")
     )
-
     user = models.ForeignKey(
-        'authentication.BaseUser',
+        BaseUser,  # Use BaseUser class
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -131,41 +127,44 @@ class ShoppingCenterDiscountCode(models.Model):
         verbose_name=_("کاربر"),
         help_text=_("در صورت شخصی بودن کد، یک کاربر مشخص انتخاب کنید.")
     )
-
     code = models.CharField(
         max_length=8,
         unique=True,
         verbose_name=_("کد تخفیف"),
         help_text=_("کد تخفیف ۸ رقمی را وارد کنید.")
     )
-
     usage_limit = models.PositiveIntegerField(
         default=1,
         verbose_name=_("حداکثر دفعات استفاده"),
         help_text=_("تعداد دفعات مجاز استفاده از این کد تخفیف")
     )
-
     required_points = models.PositiveIntegerField(
         default=0,
         verbose_name=_("امتیاز مورد نیاز"),
         help_text=_("حداقل امتیازی که کاربر باید داشته باشد تا بتواند از کد استفاده کند")
     )
-
+    user_level = models.ForeignKey(
+        UserLevel,  # Use the imported UserLevel class
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='shopping_discount_codes',
+        verbose_name=_("سطح کاربری"),
+        help_text=_("سطح کاربری مورد نیاز برای استفاده از این کد تخفیف (اختیاری).")
+    )
     expires_at = jmodels.jDateField(
         null=True,
         blank=True,
         verbose_name=_("تاریخ انقضا (شمسی)")
     )
-
     activation_rules = models.TextField(
         null=True,
         blank=True,
         verbose_name=_("قوانین فعال‌سازی"),
         help_text=_("می‌توانید قوانینی برای نحوه فعال‌سازی این کد وارد کنید.")
     )
-
     activated_users = models.ManyToManyField(
-        'authentication.BaseUser',
+        BaseUser,
         blank=True,
         related_name='activated_shopping_discount_codes',
         verbose_name=_("کاربران فعال‌کننده"),

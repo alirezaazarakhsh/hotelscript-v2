@@ -15,6 +15,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'user_phone_and_name',
         'usage_limit',
         'required_points',
+        'user_level',  # اضافه کردن سطح کاربری به لیست نمایش
         'expires_at',
         'activated_users_count',
     )
@@ -25,13 +26,15 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'user__phone_number',
         'user__natural_profile__first_name',
         'user__natural_profile__last_name',
+        'user_level__title',  
     )
-    autocomplete_fields = ('room', 'user', 'activated_users')
+    autocomplete_fields = ('room', 'user', 'activated_users', 'user_level')  
     list_editable = (
         'discount_value',
         'is_public',
         'usage_limit',
         'required_points',
+        'user_level',  
         'expires_at',
     )
     list_per_page = 25
@@ -53,6 +56,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             'fields': (
                 'usage_limit',
                 'required_points',
+                'user_level',  
                 'expires_at',
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
@@ -67,7 +71,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile').prefetch_related('activated_users')
+        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile', 'user_level').prefetch_related('activated_users')
 
     def user_phone_and_name(self, obj):
         if obj.user and hasattr(obj.user, 'natural_profile'):
@@ -85,6 +89,8 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = Room.objects.all().order_by('title')
         if db_field.name == 'user':
             kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
+        if db_field.name == 'user_level':
+            kwargs['queryset'] = UserLevel.objects.all().order_by('title')  # ترتیب نمایش سطوح کاربری
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
@@ -100,6 +106,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'user_phone_and_name',
         'usage_limit',
         'required_points',
+        'user_level', 
         'expires_at',
     )
    
@@ -109,13 +116,15 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'user__phone_number',
         'user__natural_profile__first_name',
         'user__natural_profile__last_name',
+        'user_level__title',  
     )
-    autocomplete_fields = ('user',)
+    autocomplete_fields = ('user', 'user_level')  
     list_editable = (
         'discount_value',
         'is_public',
         'usage_limit',
         'required_points',
+        'user_level',  
         'expires_at',
     )
     list_per_page = 25
@@ -136,14 +145,22 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             'fields': (
                 'usage_limit',
                 'required_points',
+                'user_level',  
                 'expires_at',
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
+        (_('اطلاعات تکمیلی'), {
+            'fields': (
+                'activation_rules',
+                'activated_users',
+            ),
+            'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
+        }),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'user__natural_profile')
+        return super().get_queryset(request).select_related('user', 'user__natural_profile', 'user_level').prefetch_related('activated_users')
 
     def user_phone_and_name(self, obj):
         if obj.user and obj.user.natural_profile:
@@ -155,6 +172,8 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'user':
             kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
+        if db_field.name == 'user_level':
+            kwargs['queryset'] = UserLevel.objects.all().order_by('title')  # ترتیب نمایش سطوح کاربری
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
