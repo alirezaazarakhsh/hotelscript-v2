@@ -3,7 +3,6 @@ from django.core.validators import RegexValidator
 from reservation.models import Room
 from authentication.models import BaseUser
 from config.models import UserLevel
-from rest_framework.generics import RetrieveAPIView
 from django_jalali.db import models as jmodels
 from django.utils.translation import gettext_lazy as _
 

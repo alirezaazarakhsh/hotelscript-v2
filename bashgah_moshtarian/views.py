@@ -3,6 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode  # این خط مهم بود
 from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
+from rest_framework.generics import RetrieveAPIView
+
 
 
 # ✅ ای‌پی‌آی دریافت کد تخفیف برای اتاق‌ها برای کاربر
