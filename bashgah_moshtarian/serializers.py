@@ -7,15 +7,16 @@ from .models import RoomDiscountCode, ShoppingCenterDiscountCode
 
 
 class RoomSerializer(serializers.ModelSerializer):
-    hotel_name = serializers.CharField(source='hotel.name', read_only=True)  # نام هتل از مدل Hotel
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)  # نام هتل
+    title = serializers.CharField(read_only=True)  # نام اتاق (title)
 
     class Meta:
         model = Room
-        fields = ('id', 'name', 'hotel_name')
+        fields = ('id', 'title', 'hotel_name')
 
 
 class RoomDiscountCodeSerializer(serializers.ModelSerializer):
-    room = RoomSerializer(read_only=True)  # نمایش نام اتاق و هتل به جای فقط id
+    room = RoomSerializer(read_only=True)  # جایگزین نمایش فقط آیدی
 
     class Meta:
         model = RoomDiscountCode
