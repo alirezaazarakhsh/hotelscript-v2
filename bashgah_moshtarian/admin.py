@@ -5,12 +5,6 @@ from reservation.models import Room
 from authentication.models import BaseUser
 
 
-from django.contrib import admin
-from django.utils.translation import gettext_lazy as _
-from .models import RoomDiscountCode, ShoppingCenterDiscountCode
-from reservation.models import Room
-from authentication.models import BaseUser
-
 @admin.register(RoomDiscountCode)
 class RoomDiscountCodeAdmin(admin.ModelAdmin):
     list_display = (
@@ -54,7 +48,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
                 'discount_type',
                 'discount_value',
                 'is_public',
-                # 'user' به صورت داینامیک اضافه می‌شود در get_fields
+                'user',
             ),
             'description': _('اطلاعات اصلی کد تخفیف را وارد کنید.'),
         }),
@@ -74,26 +68,6 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
         }),
     )
-
-    def get_fields(self, request, obj=None):
-        fields = [
-            'room',
-            'code',
-            'discount_type',
-            'discount_value',
-            'is_public',
-        ]
-        if not obj or (obj and not obj.is_public):
-            fields.append('user')
-
-        fields += [
-            'usage_limit',
-            'required_points',
-            'expires_at',
-            'activation_rules',
-            'activated_users',
-        ]
-        return fields
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile').prefetch_related('activated_users')
@@ -116,10 +90,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def save_model(self, request, obj, form, change):
-        if obj.is_public:
-            obj.user = None
-        super().save_model(request, obj, form, change)
+
 
 
 @admin.register(ShoppingCenterDiscountCode)
@@ -163,7 +134,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
                 'discount_type',
                 'discount_value',
                 'is_public',
-                # 'user' به صورت داینامیک اضافه می‌شود در get_fields
+                'user',
             ),
             'description': _('اطلاعات اصلی کد تخفیف را وارد کنید.'),
         }),
@@ -175,39 +146,13 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
-        (_('اطلاعات تکمیلی'), {
-            'fields': (
-                'activation_rules',
-            ),
-            'description': _('قوانین فعال‌سازی کد تخفیف.'),
-        }),
     )
-
-    def get_fields(self, request, obj=None):
-        fields = [
-            'shopping_center_name',
-            'shopping_center_image',
-            'code',
-            'discount_type',
-            'discount_value',
-            'is_public',
-        ]
-        if not obj or (obj and not obj.is_public):
-            fields.append('user')
-
-        fields += [
-            'usage_limit',
-            'required_points',
-            'expires_at',
-            'activation_rules',
-        ]
-        return fields
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user', 'user__natural_profile')
 
     def user_phone_and_name(self, obj):
-        if obj.user and hasattr(obj.user, 'natural_profile'):
+        if obj.user and obj.user.natural_profile:
             full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
             return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
         return obj.user.phone_number if obj.user else "-"
@@ -217,12 +162,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         if db_field.name == 'user':
             kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def save_model(self, request, obj, form, change):
-        if obj.is_public:
-            obj.user = None
-        super().save_model(request, obj, form, change)
-
 
 
     
