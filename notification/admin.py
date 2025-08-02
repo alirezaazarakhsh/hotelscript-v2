@@ -10,8 +10,6 @@ class NotificationAdmin(admin.ModelAdmin):
         'created_date_jalali',
         'created_time',
         'send_to_all',
-        'get_users_display',
-        'get_read_by_display',
     )
     filter_horizontal = ('users', 'read_by')
 
