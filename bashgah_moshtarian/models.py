@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import RegexValidator
 from reservation.models import Room
 from authentication.models import BaseUser
 from django_jalali.db import models as jmodels
@@ -15,9 +16,11 @@ class RoomDiscountCode(models.Model):
         verbose_name=_("اتاق")
     )
 
-    discount_value = models.PositiveIntegerField(
+    discount_value = models.CharField(
+        max_length=10,
+        validators=[RegexValidator(r'^\d+$', message=_("فقط مقادیر عددی مجاز هستند."))],
         verbose_name=_("مقدار تخفیف"),
-        help_text=_("مقدار تخفیف را به تومان وارد کنید.")
+        help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
 
     is_public = models.BooleanField(
@@ -106,9 +109,11 @@ class ShoppingCenterDiscountCode(models.Model):
         help_text=_("تصویر مرکز خرید را آپلود کنید.")
     )
 
-    discount_value = models.PositiveIntegerField(
+    discount_value = models.CharField(
+        max_length=10,
+        validators=[RegexValidator(r'^\d+$', message=_("فقط مقادیر عددی مجاز هستند."))],
         verbose_name=_("مقدار تخفیف"),
-        help_text=_("مقدار تخفیف را به تومان وارد کنید.")
+        help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
 
     is_public = models.BooleanField(
