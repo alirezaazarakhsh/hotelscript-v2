@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import RoomDiscountCode, ShoppingCenterDiscountCode
+from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
 from reservation.models import Room
 from authentication.models import BaseUser
 
@@ -13,11 +13,12 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'discount_type',
         'discount_value',
         'is_public',
-        'user_phone_and_name',  # ستون جدید برای نمایش شماره و نام
+        'user_phone_and_name',
         'usage_limit',
         'required_points',
         'expires_at',
         'created_at',
+        'activated_users_count',
     )
     list_filter = (
         'discount_type',
@@ -32,7 +33,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'user__natural_profile__first_name',
         'user__natural_profile__last_name',
     )
-    autocomplete_fields = ('room', 'user')
+    autocomplete_fields = ('room', 'user', 'activated_users')
     list_editable = (
         'discount_type',
         'discount_value',
@@ -43,6 +44,8 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     )
     list_per_page = 25
     readonly_fields = ('created_at',)
+    filter_horizontal = ('activated_users',)
+
     fieldsets = (
         (_('اطلاعات اصلی'), {
             'fields': (
@@ -64,20 +67,27 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
         (_('اطلاعات تکمیلی'), {
-            'fields': ('created_at',),
-            'description': _('اطلاعات خودکار ثبت‌شده.'),
+            'fields': (
+                'activation_rules',
+                'activated_users',
+            ),
+            'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
         }),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile')
+        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile').prefetch_related('activated_users')
 
     def user_phone_and_name(self, obj):
-        if obj.user and obj.user.natural_profile:
+        if obj.user and hasattr(obj.user, 'natural_profile'):
             full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
             return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
         return obj.user.phone_number if obj.user else "-"
     user_phone_and_name.short_description = _('شماره و نام کاربر')
+
+    def activated_users_count(self, obj):
+        return obj.activated_users.count()
+    activated_users_count.short_description = _('تعداد فعال‌کنندگان')
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'room':
@@ -102,6 +112,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'required_points',
         'expires_at',
         'created_at',
+        'activated_users_count',
     )
     list_filter = (
         'discount_type',
@@ -116,7 +127,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'user__natural_profile__first_name',
         'user__natural_profile__last_name',
     )
-    autocomplete_fields = ('user',)
+    autocomplete_fields = ('user', 'activated_users')
     list_editable = (
         'discount_type',
         'discount_value',
@@ -127,6 +138,8 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     )
     list_per_page = 25
     readonly_fields = ('created_at',)
+    filter_horizontal = ('activated_users',)
+
     fieldsets = (
         (_('اطلاعات اصلی'), {
             'fields': (
@@ -148,20 +161,41 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
-       
+        (_('اطلاعات تکمیلی'), {
+            'fields': (
+                'activation_rules',
+                'activated_users',
+            ),
+            'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
+        }),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'user__natural_profile')
+        return super().get_queryset(request).select_related('user', 'user__natural_profile').prefetch_related('activated_users')
 
     def user_phone_and_name(self, obj):
-        if obj.user and obj.user.natural_profile:
+        if obj.user and hasattr(obj.user, 'natural_profile'):
             full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
             return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
         return obj.user.phone_number if obj.user else "-"
     user_phone_and_name.short_description = _('شماره و نام کاربر')
 
+    def activated_users_count(self, obj):
+        return obj.activated_users.count()
+    activated_users_count.short_description = _('تعداد فعال‌کنندگان')
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'user':
             kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+
+
+    
+    
+@admin.register(CustomerClubPoint)
+class CustomerClubPointAdmin(admin.ModelAdmin):
+    list_display = ['user', 'points']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name']
+    autocomplete_fields = ['user']  

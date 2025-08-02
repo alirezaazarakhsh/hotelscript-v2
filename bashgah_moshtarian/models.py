@@ -72,10 +72,25 @@ class RoomDiscountCode(models.Model):
         verbose_name=_("تاریخ ایجاد")
     )
 
-    expires_at =  jmodels.jDateField(
+    expires_at = jmodels.jDateField(
         null=True,
         blank=True,
         verbose_name=_("تاریخ انقضا (شمسی)")
+    )
+
+    activation_rules = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name=_("قوانین فعال‌سازی"),
+        help_text=_("می‌توانید قوانینی برای نحوه فعال‌سازی این کد وارد کنید.")
+    )
+
+    activated_users = models.ManyToManyField(
+        BaseUser,
+        blank=True,
+        related_name='activated_room_discount_codes',
+        verbose_name=_("کاربران فعال‌کننده"),
+        help_text=_("کاربرانی که این کد را فعال کرده‌اند.")
     )
 
     def __str__(self):
@@ -84,6 +99,7 @@ class RoomDiscountCode(models.Model):
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
+
 
 
 
@@ -165,9 +181,49 @@ class ShoppingCenterDiscountCode(models.Model):
         verbose_name=_("تاریخ انقضا (شمسی)")
     )
 
+    activation_rules = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name=_("قوانین فعال‌سازی"),
+        help_text=_("می‌توانید قوانینی برای نحوه فعال‌سازی این کد وارد کنید.")
+    )
+
+    activated_users = models.ManyToManyField(
+        'authentication.BaseUser',
+        blank=True,
+        related_name='activated_shopping_discount_codes',
+        verbose_name=_("کاربران فعال‌کننده"),
+        help_text=_("کاربرانی که این کد را فعال کرده‌اند.")
+    )
+
     def __str__(self):
         return f"{self.code} - {self.get_discount_type_display()} - {self.discount_value} - {self.shopping_center_name}"
 
     class Meta:
         verbose_name = _("کد تخفیف مرکز خرید")
         verbose_name_plural = _("کدهای تخفیف باشگاه مشتری برای مراکز خرید")
+
+        
+        
+
+
+# امتیاز باشگاه مشتری کاربران 
+class CustomerClubPoint(models.Model):
+    user = models.OneToOneField(
+        BaseUser,
+        on_delete=models.CASCADE,
+        related_name='customer_points',
+        verbose_name=_("کاربر")
+    )
+
+    points = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("امتیاز فعلی")
+    )
+
+    def __str__(self):
+        return f"{self.user} - {self.points} امتیاز"
+
+    class Meta:
+        verbose_name = _("امتیاز باشگاه مشتریان کاربر")
+        verbose_name_plural = _("امتیازهای باشگاه مشتریان کاربران")
