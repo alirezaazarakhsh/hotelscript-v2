@@ -310,11 +310,12 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
         ref_name = "CommentPointItemSerializer"
 
 class SuggestedItemWithRatingSerializer(serializers.Serializer):
-    id = serializers.PrimaryKeyRelatedField(
+    suggested_item_id = serializers.PrimaryKeyRelatedField(
         queryset=SuggestedCommentItem.objects.all(),
         source='suggested_item'
     )
     rating = serializers.IntegerField(min_value=1, max_value=5)
+
 
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
@@ -339,11 +340,10 @@ class CommentSerializer(serializers.ModelSerializer):
         allow_empty=True,
     )
     suggested_items_with_rating = SuggestedItemWithRatingSerializer(
-        many=True,
-        write_only=True,
-        required=False,
-        source='suggested_items_custom'
-    )
+    many=True,
+    write_only=True,
+    required=False
+   )
 
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
@@ -389,7 +389,7 @@ class CommentSerializer(serializers.ModelSerializer):
         """
         Create a Comment instance and handle suggested_items_with_rating.
         """
-        suggested_items_data = validated_data.pop('suggested_items_custom', [])
+        suggested_items_data = validated_data.pop('suggested_items_with_rating', [])
         comment = super().create(validated_data)
         suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
         comment.suggested_items.set(suggested_item_ids)
