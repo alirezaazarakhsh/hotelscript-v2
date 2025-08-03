@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
+import jdatetime
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
@@ -340,7 +341,8 @@ class CommentAdmin(admin.ModelAdmin):
     show_weaknesses.short_description = 'نقاط ضعف'
 
     def created_jalali(self, obj):
-        return obj.current_jalali
+        return jdatetime.fromgregorian(datetime=obj.created).strftime('%Y/%m/%d %H:%M:%S')
+    
     created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 

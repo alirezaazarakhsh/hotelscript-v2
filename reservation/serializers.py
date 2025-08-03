@@ -462,6 +462,10 @@ class CommentSerializer(serializers.ModelSerializer):
 
         comment.suggested_items.set(suggested_item_ids)
         return comment
+    
+    
+    
+    
 
 class HotelCommentListSerializer(serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()
