@@ -309,14 +309,17 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'is_positive', 'is_negative']
         ref_name = "CommentPointItemSerializer"
 
+
+
 class SuggestedItemWithRatingSerializer(serializers.Serializer):
     suggested_item_id = serializers.PrimaryKeyRelatedField(
         queryset=SuggestedCommentItem.objects.all(),
         source='suggested_item',
-        required=False,      # اینجا اضافه شود
-        allow_null=True      # اینجا اضافه شود
+        required=False,
+        allow_null=True
     )
-    rating = serializers.IntegerField(min_value=1, max_value=5, required=False, allow_null=True)
+    rating = serializers.FloatField(min_value=1.0, max_value=5.0, required=False, allow_null=True)
+
 
 
 
