@@ -9,11 +9,7 @@ from ..models import RoomDiscountCode, ShoppingCenterDiscountCode, CustomerClubP
 logger = logging.getLogger(__name__)
 
 def send_discount_code_sms(discount_code, pattern_section='discountcode'):
-    """
-    ارسال پیامک کد تخفیف برای کاربران (شخصی یا عمومی)
-    discount_code: نمونه‌ای از RoomDiscountCode یا ShoppingCenterDiscountCode
-    pattern_section: بخش پترن پیامک (به طور پیش‌فرض 'discountcode')
-    """
+    
     try:
         # دریافت تنظیمات API کاوه‌نگار
         api_setting = KavenegarSMSSetting.objects.first()
