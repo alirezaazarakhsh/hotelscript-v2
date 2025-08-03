@@ -347,25 +347,21 @@ class CommentSerializer(serializers.ModelSerializer):
         allow_empty=True,
     )
 
-    # write_only فیلد برای گرفتن ورودی
     suggested_items_with_rating = SuggestedItemWithRatingSerializer(
         many=True,
         write_only=True,
         required=False
     )
-
-    # read_only فیلد برای خروجی
     suggested_items_with_rating_read = serializers.SerializerMethodField()
 
-    # نمایش یوزر و هتل
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
 
-    # میانگین امتیاز آیتم‌های پیشنهادی
     average_suggested_rating = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
+        ref_name = "ReservationCommentSerializer"  # 👈 اضافه شده برای حل خطای Swagger
         fields = [
             'id',
             'text',
@@ -398,7 +394,6 @@ class CommentSerializer(serializers.ModelSerializer):
         return result
 
     def get_average_suggested_rating(self, obj):
-        # فقط آیتم‌هایی که rating > 0 دارند رو در نظر بگیر
         points = obj.points.filter(point__gt=0, comment_point_item__in=obj.suggested_items.all())
         if not points.exists():
             return None
@@ -425,7 +420,6 @@ class CommentSerializer(serializers.ModelSerializer):
         suggested_items_data = validated_data.pop('suggested_items_with_rating', [])
         comment = super().create(validated_data)
 
-        # فقط آیتم‌هایی که rating > 0 دارند رو ثبت کن
         valid_items = [item for item in suggested_items_data if item['rating'] > 0]
         suggested_item_ids = [item['suggested_item'].id for item in valid_items]
         comment.suggested_items.set(suggested_item_ids)
@@ -445,6 +439,8 @@ class CommentSerializer(serializers.ModelSerializer):
         if data.get('stars') is None:
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
+
+
 
 
 
