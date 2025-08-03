@@ -318,7 +318,8 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
         required=False,
         allow_null=True
     )
-    rating = serializers.FloatField(min_value=1.0, max_value=5.0, required=False, allow_null=True)
+    rating = serializers.FloatField(min_value=0.0, max_value=5.0, required=False, allow_null=True)
+
 
 
 
