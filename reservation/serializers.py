@@ -318,11 +318,51 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
     )
     rating = serializers.IntegerField(min_value=1, max_value=5)
 
+class SuggestedItemWithRatingSerializer(serializers.Serializer):
+    suggested_item = serializers.PrimaryKeyRelatedField(
+        queryset=CommentPointItem.objects.all(),
+        required=True,
+        error_messages={
+            'does_not_exist': 'آیتم پیشنهادی با آیدی {pk_value} وجود ندارد.',
+            'invalid': 'آیدی آیتم پیشنهادی نامعتبر است.'
+        }
+    )
+    rating = serializers.IntegerField(
+        min_value=1,
+        max_value=5,
+        required=True,
+        error_messages={
+            'min_value': 'امتیاز باید حداقل 1 باشد.',
+            'max_value': 'امتیاز نمی‌تواند بیشتر از 5 باشد.',
+            'invalid': 'امتیاز باید یک عدد صحیح باشد.'
+        }
+    )
+
+    def validate(self, data):
+        if not data.get('suggested_item'):
+            raise serializers.ValidationError({'suggested_item': 'این فیلد الزامی است.'})
+        if not isinstance(data.get('rating'), int):
+            raise serializers.ValidationError({'rating': 'امتیاز باید یک عدد صحیح باشد.'})
+        return data
+
+
+class CommentPointItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CommentPointItem
+        fields = ['id', 'name', 'is_positive', 'is_negative']
+
+
+class CommentPointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CommentPoint
+        fields = ['id', 'comment_point_item', 'point']
+
+
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
     weaknesses = CommentPointItemSerializer(many=True, read_only=True)
     points = CommentPointSerializer(many=True, read_only=True)
-    suggested_items = SuggestedCommentItemSerializer(many=True, read_only=True)
+    suggested_items = CommentPointItemSerializer(many=True, read_only=True)
 
     strength_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -345,7 +385,8 @@ class CommentSerializer(serializers.ModelSerializer):
         many=True,
         write_only=True,
         required=False,
-        source='suggested_items_custom'
+        source='suggested_items_custom',
+        allow_empty=True,
     )
 
     user = serializers.StringRelatedField(read_only=True)
@@ -372,18 +413,21 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
         ref_name = 'CustomCommentSerializer'
 
-    def create(self, validated_data):
-        suggested_items_data = validated_data.pop('suggested_items_custom', [])
-        comment = super().create(validated_data)
-        suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
-        comment.suggested_items.set(suggested_item_ids)
-        for item in suggested_items_data:
-            CommentPoint.objects.create(
-                comment=comment,
-                comment_point_item=item['suggested_item'],
-                point=item['rating']
+    def validate_suggested_items_with_rating(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                {'suggested_items_with_rating': 'این فیلد باید یک لیست باشد.'}
             )
-        return comment
+        for item in value:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError(
+                    {'suggested_items_with_rating': 'هر آیتم باید یک دیکشنری باشد.'}
+                )
+            if 'suggested_item' not in item or 'rating' not in item:
+                raise serializers.ValidationError(
+                    {'suggested_items_with_rating': 'هر آیتم باید شامل suggested_item و rating باشد.'}
+                )
+        return value
 
     def validate(self, data):
         if not data.get('text'):
@@ -391,6 +435,33 @@ class CommentSerializer(serializers.ModelSerializer):
         if not data.get('stars'):
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
+
+    def create(self, validated_data):
+        suggested_items_data = validated_data.pop('suggested_items_custom', [])
+        comment = super().create(validated_data)
+
+        # تنظیم suggested_items و ایجاد CommentPoint
+        suggested_item_ids = []
+        for item in suggested_items_data:
+            suggested_item = item.get('suggested_item')
+            rating = item.get('rating')
+            if suggested_item and isinstance(rating, int):
+                try:
+                    # بررسی وجود suggested_item
+                    CommentPointItem.objects.get(pk=suggested_item.id)
+                    suggested_item_ids.append(suggested_item.id)
+                    CommentPoint.objects.create(
+                        comment=comment,
+                        comment_point_item=suggested_item,
+                        point=rating
+                    )
+                except CommentPointItem.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {'suggested_item': f'آیتم پیشنهادی با آیدی {suggested_item.id} وجود ندارد.'}
+                    )
+
+        comment.suggested_items.set(suggested_item_ids)
+        return comment
 
 class HotelCommentListSerializer(serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()

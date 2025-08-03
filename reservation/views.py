@@ -1572,6 +1572,9 @@ comment_create_manual_params = [
     )
 ]
 
+
+
+#ای پی ای ارسال کامنت توسط کاربر برای هتل
 class CreateCommentView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = CommentSerializer
