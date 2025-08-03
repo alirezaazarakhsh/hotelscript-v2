@@ -703,7 +703,7 @@ class CommentPoint(models.Model):
     point = models.FloatField(
         verbose_name=_('امتیاز'),
         validators=[
-            MinValueValidator(1.0),
+            MinValueValidator(0.0),
             MaxValueValidator(5.0),
         ],
     )
