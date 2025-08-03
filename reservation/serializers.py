@@ -343,11 +343,16 @@ class CommentSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True,
     )
+
+    # فیلد write_only برای دریافت داده‌ها
     suggested_items_with_rating = SuggestedItemWithRatingSerializer(
         many=True,
         write_only=True,
         required=False
     )
+
+    # فیلد read_only برای نمایش داده‌ها در خروجی
+    suggested_items_with_rating_read = serializers.SerializerMethodField()
 
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
@@ -361,6 +366,7 @@ class CommentSerializer(serializers.ModelSerializer):
             'strength_ids',
             'weakness_ids',
             'suggested_items_with_rating',
+            'suggested_items_with_rating_read',
             'strengths',
             'weaknesses',
             'suggested_items',
@@ -371,68 +377,63 @@ class CommentSerializer(serializers.ModelSerializer):
             'created_jalali'
         ]
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
-        ref_name = 'CustomCommentSerializer'
+
+    def get_suggested_items_with_rating_read(self, obj):
+        # گرفتن همه CommentPoint های مربوط به این کامنت
+        points = obj.points.all()
+        result = []
+        for point in points:
+            if isinstance(point.comment_point_item, SuggestedCommentItem):
+                result.append({
+                    'suggested_item': point.comment_point_item.id,
+                    'rating': point.point
+                })
+        return result
 
     def validate_suggested_items_with_rating(self, value):
         """
         Validate that suggested_items_with_rating contains unique IDs and valid ratings.
-        Ignore entries with missing fields.
         """
         if not value:
             return value
         seen_ids = set()
-        filtered_value = []
         for item in value:
             suggested_item = item.get('suggested_item')
             rating = item.get('rating')
             if suggested_item is None or rating is None:
-                # اگر داده ناقص بود نادیده بگیر (می‌تونی این خط را حذف کنی و خطا بده)
-                continue
+                raise serializers.ValidationError(
+                    "فیلد suggested_item و rating در suggested_items_with_rating الزامی است."
+                )
             item_id = suggested_item.id
             if item_id in seen_ids:
                 raise serializers.ValidationError(
                     f"Duplicate suggested_item ID {item_id} in suggested_items_with_rating."
                 )
             seen_ids.add(item_id)
-            filtered_value.append(item)
-        return filtered_value
+        return value
 
     def create(self, validated_data):
-        """
-        Create a Comment instance and handle suggested_items_with_rating.
-        """
         suggested_items_data = validated_data.pop('suggested_items_with_rating', [])
         comment = super().create(validated_data)
 
-        # فقط آیتم‌های معتبر را انتخاب کن
-        valid_suggested_items = [item for item in suggested_items_data if item.get('suggested_item') is not None]
-
-        suggested_item_ids = [item['suggested_item'].id for item in valid_suggested_items]
+        suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
         comment.suggested_items.set(suggested_item_ids)
 
-        for item in valid_suggested_items:
-            try:
-                CommentPoint.objects.get_or_create(
-                    comment=comment,
-                    comment_point_item=item['suggested_item'],
-                    defaults={'point': item['rating']}
-                )
-            except Exception as e:
-                raise serializers.ValidationError(
-                    f"Failed to create CommentPoint for suggested_item {item['suggested_item'].id}: {str(e)}"
-                )
+        for item in suggested_items_data:
+            CommentPoint.objects.get_or_create(
+                comment=comment,
+                comment_point_item=item['suggested_item'],
+                defaults={'point': item['rating']}
+            )
+
         return comment
 
     def validate(self, data):
-        """
-        Validate required fields.
-        """
         if not data.get('text'):
             raise serializers.ValidationError({'text': 'این فیلد الزامی است.'})
         if data.get('stars') is None:
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
-
 
 
 
