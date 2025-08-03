@@ -402,7 +402,7 @@ class CommentSerializer(serializers.ModelSerializer):
             rating = item.get('rating')
             if suggested_item is None or rating is None:
                 raise serializers.ValidationError(
-                    "فیلد suggested_item و rating در suggested_items_with_rating الزامی است."
+                    "فیلد الزامی است ."
                 )
             item_id = suggested_item.id
             if item_id in seen_ids:
