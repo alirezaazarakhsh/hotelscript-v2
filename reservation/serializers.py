@@ -347,18 +347,22 @@ class CommentSerializer(serializers.ModelSerializer):
         allow_empty=True,
     )
 
-    # فیلد write_only برای دریافت داده‌ها
+    # write_only فیلد برای گرفتن ورودی
     suggested_items_with_rating = SuggestedItemWithRatingSerializer(
         many=True,
         write_only=True,
         required=False
     )
 
-    # فیلد read_only برای نمایش داده‌ها در خروجی
+    # read_only فیلد برای خروجی
     suggested_items_with_rating_read = serializers.SerializerMethodField()
 
+    # نمایش یوزر و هتل
     user = serializers.StringRelatedField(read_only=True)
     hotel = serializers.StringRelatedField(read_only=True)
+
+    # میانگین امتیاز آیتم‌های پیشنهادی
+    average_suggested_rating = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
@@ -377,26 +381,30 @@ class CommentSerializer(serializers.ModelSerializer):
             'user',
             'hotel',
             'created',
-            'created_jalali'
+            'created_jalali',
+            'average_suggested_rating'
         ]
         read_only_fields = ['user', 'hotel', 'created', 'created_jalali']
 
     def get_suggested_items_with_rating_read(self, obj):
-        # گرفتن همه CommentPoint های مربوط به این کامنت
         points = obj.points.all()
         result = []
         for point in points:
-            if isinstance(point.comment_point_item, SuggestedCommentItem):
+            if isinstance(point.comment_point_item, SuggestedCommentItem) and point.point > 0:
                 result.append({
                     'suggested_item': point.comment_point_item.id,
                     'rating': point.point
                 })
         return result
 
+    def get_average_suggested_rating(self, obj):
+        # فقط آیتم‌هایی که rating > 0 دارند رو در نظر بگیر
+        points = obj.points.filter(point__gt=0, comment_point_item__in=obj.suggested_items.all())
+        if not points.exists():
+            return None
+        return round(sum(p.point for p in points) / points.count(), 2)
+
     def validate_suggested_items_with_rating(self, value):
-        """
-        Validate that suggested_items_with_rating contains unique IDs and valid ratings.
-        """
         if not value:
             return value
         seen_ids = set()
@@ -404,9 +412,7 @@ class CommentSerializer(serializers.ModelSerializer):
             suggested_item = item.get('suggested_item')
             rating = item.get('rating')
             if suggested_item is None or rating is None:
-                raise serializers.ValidationError(
-                    "فیلد الزامی است ."
-                )
+                raise serializers.ValidationError("فیلد الزامی است.")
             item_id = suggested_item.id
             if item_id in seen_ids:
                 raise serializers.ValidationError(
@@ -419,10 +425,12 @@ class CommentSerializer(serializers.ModelSerializer):
         suggested_items_data = validated_data.pop('suggested_items_with_rating', [])
         comment = super().create(validated_data)
 
-        suggested_item_ids = [item['suggested_item'].id for item in suggested_items_data]
+        # فقط آیتم‌هایی که rating > 0 دارند رو ثبت کن
+        valid_items = [item for item in suggested_items_data if item['rating'] > 0]
+        suggested_item_ids = [item['suggested_item'].id for item in valid_items]
         comment.suggested_items.set(suggested_item_ids)
 
-        for item in suggested_items_data:
+        for item in valid_items:
             CommentPoint.objects.get_or_create(
                 comment=comment,
                 comment_point_item=item['suggested_item'],
@@ -437,6 +445,7 @@ class CommentSerializer(serializers.ModelSerializer):
         if data.get('stars') is None:
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
+
 
 
 

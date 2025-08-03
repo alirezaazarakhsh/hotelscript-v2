@@ -1475,7 +1475,8 @@ class HotelCommentPointSummaryView(APIView):
                 "items": []
             })
 
-        all_points = CommentPoint.objects.filter(comment__in=comments)
+        # فقط امتیازهای بیشتر از ۰ رو بیار
+        all_points = CommentPoint.objects.filter(comment__in=comments, point__gt=0)
 
         items = (
             all_points
@@ -1484,7 +1485,7 @@ class HotelCommentPointSummaryView(APIView):
             .order_by("comment_point_item__id")
         )
 
-        # میانگین کلی از همه امتیازها
+        # میانگین کلی از همه امتیازهای بالاتر از صفر
         overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
 
         data = {
