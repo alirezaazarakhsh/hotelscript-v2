@@ -3,7 +3,7 @@ from kavenegar import KavenegarAPI, APIException, HTTPException
 from django.db.models import Q
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from authentication.models import BaseUser
-from ..models import RoomDiscountCode, ShoppingCenterDiscountCode, CustomerClubPoint
+from ..models import RoomDiscountCode, ShoppingCenterDiscountCode
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def limit_spaces(text, max_spaces=5):
     return limited_text
 
 def send_discount_code_sms(discount_code, pattern_section='discountcode'):
-    
+
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
@@ -34,11 +34,20 @@ def send_discount_code_sms(discount_code, pattern_section='discountcode'):
         api = KavenegarAPI(api_setting.api_token)
         any_success = False
 
+        # بررسی وجود فیلد user_level در مدل BaseUser
+        baseuser_has_user_level = hasattr(BaseUser, 'user_level')
+
         if discount_code.is_public:
-            users = BaseUser.objects.filter(
-                Q(customer_points__points__gte=discount_code.required_points) &
-                (Q(user_level=discount_code.user_level) | Q(user_level__isnull=True))
-            )
+            # اگر فیلد user_level موجود است، فیلتر کن، در غیر این صورت بدون آن فیلتر کن
+            if baseuser_has_user_level and discount_code.user_level is not None:
+                users = BaseUser.objects.filter(
+                    Q(customer_points__points__gte=discount_code.required_points) &
+                    (Q(user_level=discount_code.user_level) | Q(user_level__isnull=True))
+                ).distinct()
+            else:
+                users = BaseUser.objects.filter(
+                    customer_points__points__gte=discount_code.required_points
+                ).distinct()
         else:
             if not discount_code.user:
                 logger.error("No user specified for private discount code.")
@@ -53,7 +62,6 @@ def send_discount_code_sms(discount_code, pattern_section='discountcode'):
         else:
             location_name = f"مرکز خرید {discount_code.shopping_center_name}"[:50]
 
-        # محدود کردن فاصله‌های location_name به حداکثر 5 فاصله
         location_name = limit_spaces(location_name, max_spaces=5)
 
         for user in users:
@@ -69,9 +77,9 @@ def send_discount_code_sms(discount_code, pattern_section='discountcode'):
             params = {
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
-                'token': user_name,  # بدون فاصله
-                'token2': discount_code_str,  # بدون فاصله
-                'token10': location_name,  # تا 5 فاصله مجاز
+                'token': user_name,
+                'token2': discount_code_str,
+                'token10': location_name,
                 'type': 'sms',
             }
 
