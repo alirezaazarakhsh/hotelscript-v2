@@ -700,11 +700,11 @@ class CommentPoint(models.Model):
         verbose_name=_('معیار امتیازدهی پیشنهادها'),
         related_name='points'
     )
-    point = models.PositiveSmallIntegerField(
+    point = models.FloatField(
         verbose_name=_('امتیاز'),
         validators=[
-            MinValueValidator(1),
-            MaxValueValidator(5),
+            MinValueValidator(1.0),
+            MaxValueValidator(5.0),
         ],
     )
     
