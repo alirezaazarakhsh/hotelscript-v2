@@ -341,7 +341,9 @@ class CommentAdmin(admin.ModelAdmin):
     show_weaknesses.short_description = 'نقاط ضعف'
 
     def created_jalali(self, obj):
-        return jdatetime.fromgregorian(datetime=obj.created).strftime('%Y/%m/%d %H:%M:%S')
+        if obj.created:
+            return jdatetime.datetime.fromgregorian(datetime=obj.created).strftime('%Y/%m/%d ساعت %H:%M:%S')
+        return '-'
     
     created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
