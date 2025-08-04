@@ -162,6 +162,9 @@ class HotelTag(models.Model):
         return self.title
 
 
+
+
+
 #تگ عمومی برای هتلها
 class HotelTagPublic(models.Model):
     hotel = models.ForeignKey(
@@ -199,7 +202,6 @@ class Facilities(models.Model):
 
     def __str__(self):
         return self.title
-
 
 
 

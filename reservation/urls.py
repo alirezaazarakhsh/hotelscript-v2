@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import CommentPointsAndSuggestionsView, HotelCommentPointSummaryView, HotelCommentsBySlugView, CreateCommentView
+from .views import CommentPointsAndSuggestionsView, HomeHotelByCityView, HotelCommentPointSummaryView, HotelCommentsBySlugView, CreateCommentView
 
 
 
@@ -26,6 +26,7 @@ urlpatterns = [
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
     path('hotels/home/', views.HomeHotelListView.as_view(), name='home-hotel-list'),
+    path('hotels/by-city/', HomeHotelByCityView.as_view(), name='hotel-by-city'),
 
 
     # ==== Facilities and Services ====

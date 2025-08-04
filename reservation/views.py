@@ -1236,6 +1236,101 @@ class HomeHotelListView(APIView):
     
 
 
+
+# ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس شهر 
+class HomeHotelByCityView(APIView):
+    permission_classes = (AllowAny,)
+
+    def get_average_score(self, hotel):
+        """محاسبه میانگین کل امتیازات یک هتل"""
+        comments = Comment.objects.filter(hotel=hotel, is_approved=True)
+        if not comments.exists():
+            return 0.0
+        all_points = CommentPoint.objects.filter(comment__in=comments)
+        overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
+        return round(overall_average or 0, 1)
+
+    def get_hotel_min_price_map(self, hotels):
+        """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل"""
+        today = timezone.now().date()
+        hotel_min_price_map = {}
+        
+        for hotel in hotels:
+            rooms = Room.objects.filter(hotel=hotel)
+            min_price = None
+            min_price_data = {}
+
+            for room in rooms:
+                prices = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=today,
+                    end_date__gte=today
+                ).select_related('room')
+
+                for price in prices:
+                    original_price = price.price
+                    total_price = original_price
+
+                    if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
+                        total_price = original_price * (1 - price.discount_value / 100)
+                    elif price.discount_type == 'fixed' and price.is_fixed_discount_one_time:
+                        total_price = original_price - price.discount_value
+
+                    if min_price is None or total_price < min_price:
+                        min_price = total_price
+                        min_price_data = {
+                            'total_price': int(total_price),
+                            'original_total_price': int(original_price),
+                            'discount_type': price.discount_type,
+                            'discount_value': price.discount_value,
+                            'discount_date': price.discount_date
+                        }
+
+            if min_price_data:
+                hotel_min_price_map[hotel.id] = min_price_data
+
+        return hotel_min_price_map
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست هتل‌ها بر اساس شهر در صفحه داخلی هتل",
+        operation_description="این API لیستی از تمام هتل‌ها را بدون صفحه‌بندی بر اساس نام شهرها بازمی‌گرداند. هر شهر شامل لیست هتل‌های مربوط به خود است که می‌تواند در صفحه هتل‌های پیشنهادی برای آن شهر نمایش داده شود.",
+        tags=['hotel'],
+        responses={
+            200: openapi.Response(
+                description="لیست هتل‌ها بر اساس شهر",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'city_name': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT)
+                        )
+                    }
+                )
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        hotels = Hotel.objects.all().select_related('city', 'type').distinct()
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
+
+        city_hotels = {}
+        for hotel in hotels:
+            city_name = hotel.city.name
+            serialized = HotelListSerializer(hotel, context=context).data
+            serialized['average_score'] = self.get_average_score(hotel)
+            if city_name not in city_hotels:
+                city_hotels[city_name] = []
+            city_hotels[city_name].append(serialized)
+
+        response_data = city_hotels
+
+        return Response(response_data)
+
+
+
+
 #ای پی ای لیست هتل برای سرچ صفحه اول 
 class HotelSearchAPI(ListCreateAPIView):
     permission_classes = [AllowAny]
@@ -1305,6 +1400,8 @@ class HotelSearchAPI(ListCreateAPIView):
         ]
         return Response({"cities": cities_data, "hotels": hotels_data})
 
+    
+    
     
     
     
