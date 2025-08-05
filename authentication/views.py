@@ -390,13 +390,13 @@ class NaturalProfileListCreateAPIView(APIView):
 
 class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود فایل
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقیقی کاربر جاری",
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
-        from .models import NaturalProfile
         try:
             profile = request.user.natural_profile
         except AttributeError:
@@ -406,10 +406,28 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
-        request_body=NaturalProfileSerializer,
-        responses={200: NaturalProfileSerializer()}
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'image': openapi.Schema(type=openapi.TYPE_FILE, description='فایل عکس پروفایل'),
+                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام'),
+                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی'),
+                'email': openapi.Schema(type=openapi.TYPE_STRING, description='ایمیل'),
+                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کدملی'),
+                'postal_code': openapi.Schema(type=openapi.TYPE_STRING, description='کدپستی'),
+                'address': openapi.Schema(type=openapi.TYPE_STRING, description='آدرس'),
+                'level': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه سطح کاربری'),
+            },
+            required=[]  # هیچ فیلدی اجباری نیست (partial update)
+        ),
+        responses={
+            200: NaturalProfileSerializer(),
+            400: 'خطا در داده‌های ارسالی',
+            404: 'پروفایل یافت نشد'
+        }
     )
     def put(self, request):
+        print(request.data)  # برای دیباگ محتوای درخواست
         try:
             profile = request.user.natural_profile
         except AttributeError:
@@ -423,7 +441,10 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقیقی کاربر جاری",
-        responses={204: "پروفایل حذف شد"}
+        responses={
+            204: "پروفایل حذف شد",
+            404: "پروفایل یافت نشد"
+        }
     )
     def delete(self, request):
         try:

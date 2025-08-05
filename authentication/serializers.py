@@ -93,8 +93,12 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
+from rest_framework import serializers
+from .models import NaturalProfile, UserLevel
+
 class NaturalProfileSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=False, allow_null=True)  # برای آپلود و ویرایش عکس
+    image_url = serializers.SerializerMethodField()  # برای نمایش URL عکس
     level_name = serializers.SerializerMethodField()
     level = serializers.PrimaryKeyRelatedField(
         queryset=UserLevel.objects.all(),
@@ -110,6 +114,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'email',
             'national_code',
             'image',
+            'image_url',  # فیلد جدید برای URL
             'postal_code',
             'address',
             'level',
@@ -123,7 +128,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level': {'required': False, 'allow_null': True},
         }
 
-    def get_image(self, obj):
+    def get_image_url(self, obj):
         request = self.context.get('request')
         if obj.image and hasattr(obj.image, 'url'):
             return request.build_absolute_uri(obj.image.url) if request else obj.image.url
