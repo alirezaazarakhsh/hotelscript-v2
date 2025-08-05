@@ -387,7 +387,6 @@ class NaturalProfileListCreateAPIView(APIView):
 
 
 
-
 class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود فایل
@@ -408,7 +407,7 @@ class NaturalProfileDetailAPIView(APIView):
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
         manual_parameters=[
             openapi.Parameter(
-                'image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE
+                'image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE, required=False
             ),
             openapi.Parameter(
                 'first_name', openapi.IN_FORM, description="نام", type=openapi.TYPE_STRING, required=False
@@ -431,13 +430,17 @@ class NaturalProfileDetailAPIView(APIView):
             openapi.Parameter(
                 'level', openapi.IN_FORM, description="شناسه سطح کاربری", type=openapi.TYPE_INTEGER, required=False
             ),
+            openapi.Parameter(
+                'bank_cards', openapi.IN_FORM, description="لیست کارت‌های بانکی (JSON) با شماره کارت و شبا، مثال: [{\"card_number\": \"1234567890123456\", \"sheba_number\": \"IR1234567890123456789012\"}]", 
+                type=openapi.TYPE_STRING, required=False
+            ),
         ],
         responses={
             200: NaturalProfileSerializer(),
             400: 'خطا در داده‌های ارسالی',
             404: 'پروفایل یافت نشد'
         },
-        consumes=['multipart/form-data']  # مشخص کردن نوع درخواست
+        consumes=['multipart/form-data']
     )
     def put(self, request):
         print(request.data)  # برای دیباگ محتوای درخواست
