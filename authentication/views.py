@@ -20,6 +20,7 @@ from drf_yasg import openapi
 
 from .serializers import (
     AuthSerializer,
+    CardNumberSerializer,
     JuridicalCardNumberSerializer,
     JuridicalProfileDocumentSerializer,
     JuridicalProfileSerializer,
@@ -213,6 +214,7 @@ class JuridicalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
+        operation_description="این API پروفایل حقوقی مرتبط با کاربر جاری را بر اساس پروفایل حقیقی او دریافت می‌کند. اگر پروفایل حقیقی یا حقوقی وجود نداشته باشد، خطای 404 برگردانده می‌شود.",
         responses={
             200: JuridicalProfileSerializer(),
             404: "پروفایل حقوقی یافت نشد"
@@ -242,6 +244,7 @@ class JuridicalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
+        operation_description="این API یک پروفایل حقوقی جدید برای کاربر جاری ایجاد می‌کند، به شرطی که کاربر از قبل پروفایل حقوقی نداشته باشد و پروفایل حقیقی وجود داشته باشد. شماره‌های کارت بانکی تا حداکثر ۲ عدد قابل ثبت هستند.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -320,7 +323,7 @@ class JuridicalProfileListCreateAPIView(APIView):
                                 serializer.save(profile=profile)
                             else:
                                 profile.delete()  # حذف پروفایل در صورت خطا
-                                return Response(serializer.errors, statusstatus.HTTP_400_BAD_REQUEST)
+                                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                     except (json.JSONDecodeError, TypeError):
                         profile.delete()  # حذف پروفایل در صورت خطا
                         return Response(
@@ -347,12 +350,12 @@ class JuridicalProfileListCreateAPIView(APIView):
 
 
 
-
 class JuridicalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
+        operation_description="این API اطلاعات پروفایل حقوقی کاربر جاری را برمی‌گرداند. اگر پروفایل حقیقی یا حقوقی وجود نداشته باشد، یک شیء فیک ایجاد شده و داده‌ها به‌صورت پیش‌فرض برگردانده می‌شود.",
         responses={200: JuridicalProfileSerializer()}
     )
     def get(self, request):
@@ -369,6 +372,7 @@ class JuridicalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
+        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقوقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -423,7 +427,7 @@ class JuridicalProfileDetailAPIView(APIView):
         if serializer.is_valid():
             serializer.save()
 
-            # مدیریت شماره‌های کارت
+            # مدیریت شماره‌های کارت به‌صورت ساده‌تر
             if bank_cards_data:
                 try:
                     bank_cards = bank_cards_data if isinstance(bank_cards_data, list) else json.loads(bank_cards_data)
@@ -433,16 +437,25 @@ class JuridicalProfileDetailAPIView(APIView):
                             status=status.HTTP_400_BAD_REQUEST
                         )
 
-                    # حذف شماره‌های کارت موجود
-                    profile.card_numbers.all().delete()
-
-                    # ایجاد شماره‌های کارت جدید
+                    # به‌جای حذف همه، فقط شماره‌های جدید یا تغییر یافته اضافه می‌شوند
+                    existing_cards = {card.card_number: card for card in profile.card_numbers.all()}
                     for card_data in bank_cards:
-                        serializer = JuridicalCardNumberSerializer(data=card_data, context={'request': request})
-                        if serializer.is_valid():
-                            serializer.save(profile=profile)
+                        card_number = card_data.get('card_number')
+                        if card_number in existing_cards:
+                            # به‌روزرسانی کارت موجود
+                            card = existing_cards[card_number]
+                            card_serializer = JuridicalCardNumberSerializer(card, data=card_data, partial=True, context={'request': request})
+                            if card_serializer.is_valid():
+                                card_serializer.save()
+                            else:
+                                return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                         else:
-                            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                            # ایجاد کارت جدید
+                            card_serializer = JuridicalCardNumberSerializer(data=card_data, context={'request': request})
+                            if card_serializer.is_valid():
+                                card_serializer.save(profile=profile)
+                            else:
+                                return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 except (json.JSONDecodeError, TypeError):
                     return Response(
                         {"detail": "فرمت JSON برای bank_cards نامعتبر است."},
@@ -459,6 +472,7 @@ class JuridicalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقوقی کاربر جاری",
+        operation_description="این API پروفایل حقوقی کاربر جاری را حذف می‌کند. اگر پروفایل حقیقی یا حقوقی وجود نداشته باشد، خطای 404 برگردانده می‌شود.",
         responses={
             204: "پروفایل حذف شد",
             404: "پروفایل یافت نشد"
@@ -472,6 +486,8 @@ class JuridicalProfileDetailAPIView(APIView):
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
         
+        
+
 
 
 
@@ -480,6 +496,7 @@ class NaturalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقیقی کاربر جاری",
+        operation_description="این API اطلاعات پروفایل حقیقی کاربر جاری را برمی‌گرداند. اگر پروفایل وجود نداشته باشد، یک شیء فیک بدون ذخیره‌سازی در دیتابیس ایجاد می‌شود.",
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
@@ -496,6 +513,7 @@ class NaturalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقیقی",
+        operation_description="این API یک پروفایل حقیقی جدید برای کاربر جاری ایجاد می‌کند، به شرطی که کاربر از قبل پروفایل حقیقی نداشته باشد. شماره‌های کارت بانکی تا حداکثر ۲ عدد قابل ثبت هستند.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -585,12 +603,14 @@ class NaturalProfileListCreateAPIView(APIView):
 
 
 
+
 class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود فایل
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقیقی کاربر جاری",
+        operation_description="این API اطلاعات پروفایل حقیقی کاربر جاری را برمی‌گرداند. اگر پروفایل وجود نداشته باشد، یک شیء فیک بدون ذخیره‌سازی در دیتابیس ایجاد می‌شود.",
         responses={200: NaturalProfileSerializer()}
     )
     def get(self, request):
@@ -603,6 +623,7 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
+        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقیقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت.",
         manual_parameters=[
             openapi.Parameter(
                 'image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE, required=False
@@ -655,16 +676,25 @@ class NaturalProfileDetailAPIView(APIView):
                 if len(bank_cards) > 2:
                     return Response({"detail": "حداکثر ۲ شماره کارت مجاز است."}, status=status.HTTP_400_BAD_REQUEST)
 
-                # حذف شماره‌های کارت موجود
-                profile.card_numbers.all().delete()
-
-                # ایجاد شماره‌های کارت جدید
+                # به‌جای حذف همه، فقط شماره‌های جدید یا تغییر یافته اضافه می‌شوند
+                existing_cards = {card.card_number: card for card in profile.card_numbers.all()}
                 for card_data in bank_cards:
-                    serializer = CardNumberSerializer(data=card_data, context={'request': request})
-                    if serializer.is_valid():
-                        serializer.save(profile=profile)
+                    card_number = card_data.get('card_number')
+                    if card_number in existing_cards:
+                        # به‌روزرسانی کارت موجود
+                        card = existing_cards[card_number]
+                        card_serializer = CardNumberSerializer(card, data=card_data, partial=True, context={'request': request})
+                        if card_serializer.is_valid():
+                            card_serializer.save()
+                        else:
+                            return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                     else:
-                        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                        # ایجاد کارت جدید
+                        card_serializer = CardNumberSerializer(data=card_data, context={'request': request})
+                        if card_serializer.is_valid():
+                            card_serializer.save(profile=profile)
+                        else:
+                            return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             except json.JSONDecodeError:
                 return Response({"detail": "فرمت JSON برای bank_cards نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
             except ValidationError as e:
@@ -679,6 +709,7 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقیقی کاربر جاری",
+        operation_description="این API پروفایل حقیقی کاربر جاری را حذف می‌کند. اگر پروفایل وجود نداشته باشد، خطای 404 برگردانده می‌شود.",
         responses={
             204: "پروفایل حذف شد",
             404: "پروفایل یافت نشد"
@@ -691,8 +722,6 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
-
-
 
 
 
