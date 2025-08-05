@@ -1,4 +1,5 @@
 from config.models import UserLevel
+from finance.models import BankCard
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, PasswordField
 from django.contrib.auth import authenticate
 from rest_framework import exceptions, serializers
@@ -6,6 +7,7 @@ from rest_framework_simplejwt.settings import api_settings
 from django.contrib.auth.models import update_last_login
 from django.utils.translation import gettext_lazy as _
 
+from django.contrib.contenttypes.models import ContentType
 from safarname24.serializers import ErrorMessageSerializerMixin
 
 from .validators import validate_phone_number
@@ -93,18 +95,25 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
-from rest_framework import serializers
-from .models import NaturalProfile, UserLevel
+class BankCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BankCard
+        fields = ['card_number', 'sheba_number']
+        extra_kwargs = {
+            'card_number': {'required': True, 'validators': [MinLengthValidator(16), MaxLengthValidator(16)]},
+            'sheba_number': {'required': True, 'validators': [MinLengthValidator(24), MaxLengthValidator(24)]},
+        }
 
 class NaturalProfileSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False, allow_null=True)  # برای آپلود و ویرایش عکس
-    image_url = serializers.SerializerMethodField()  # برای نمایش URL عکس
+    image = serializers.ImageField(required=False, allow_null=True)
+    image_url = serializers.SerializerMethodField()
     level_name = serializers.SerializerMethodField()
     level = serializers.PrimaryKeyRelatedField(
         queryset=UserLevel.objects.all(),
         required=False,
         allow_null=True,
     )
+    bank_cards = serializers.SerializerMethodField()  # فیلد جدید برای کارت‌های بانکی
 
     class Meta:
         model = NaturalProfile
@@ -114,11 +123,12 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'email',
             'national_code',
             'image',
-            'image_url',  # فیلد جدید برای URL
+            'image_url',
             'postal_code',
             'address',
             'level',
             'level_name',
+            'bank_cards',  # اضافه کردن فیلد کارت‌های بانکی
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -140,13 +150,97 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+    def get_bank_cards(self, obj):
+        # دریافت ContentType برای NaturalProfile
+        content_type = ContentType.objects.get_for_model(NaturalProfile)
+        # فیلتر کردن کارت‌های بانکی مرتبط با پروفایل حقیقی
+        bank_cards = BankCard.objects.filter(
+            profile_content_type=content_type,
+            profile_object_id=obj.id
+        )[:2]  # محدودیت به حداکثر دو کارت
+        return BankCardSerializer(bank_cards, many=True).data
+
+    def validate(self, data):
+        # بررسی محدودیت تعداد کارت‌های بانکی هنگام به‌روزرسانی
+        if self.instance:
+            content_type = ContentType.objects.get_for_model(NaturalProfile)
+            bank_cards_count = BankCard.objects.filter(
+                profile_content_type=content_type,
+                profile_object_id=self.instance.id
+            ).count()
+            # اگر داده‌های کارت‌های بانکی در درخواست وجود داشته باشد
+            bank_cards_data = self.context['request'].data.get('bank_cards')
+            if bank_cards_data:
+                try:
+                    import json
+                    bank_cards = json.loads(bank_cards_data)
+                    if len(bank_cards) + bank_cards_count > 2:
+                        raise serializers.ValidationError(
+                            {"bank_cards": "هر پروفایل حقیقی حداکثر می‌تواند دو کارت بانکی داشته باشد."}
+                        )
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError(
+                        {"bank_cards": "فرمت کارت‌های بانکی نامعتبر است."}
+                    )
+        return data
+
     def create(self, validated_data):
-        return NaturalProfile.objects.create(user=self.context['request'].user, **validated_data)
+        # ایجاد پروفایل حقیقی
+        profile = NaturalProfile.objects.create(
+            base_user=self.context['request'].user,
+            **validated_data
+        )
+        # افزودن کارت‌های بانکی در صورت وجود
+        bank_cards_data = self.context['request'].data.get('bank_cards')
+        if bank_cards_data:
+            try:
+                import json
+                bank_cards = json.loads(bank_cards_data)[:2]  # حداکثر دو کارت
+                content_type = ContentType.objects.get_for_model(NaturalProfile)
+                for card_data in bank_cards:
+                    BankCard.objects.create(
+                        profile_content_type=content_type,
+                        profile_object_id=profile.id,
+                        card_number=card_data['card_number'],
+                        sheba_number=card_data['sheba_number']
+                    )
+            except (ValueError, KeyError):
+                raise serializers.ValidationError(
+                    {"bank_cards": "فرمت کارت‌های بانکی نامعتبر است."}
+                )
+        return profile
 
     def update(self, instance, validated_data):
+        # به‌روزرسانی فیلدهای پروفایل
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # مدیریت کارت‌های بانکی
+        bank_cards_data = self.context['request'].data.get('bank_cards')
+        if bank_cards_data:
+            try:
+                import json
+                bank_cards = json.loads(bank_cards_data)[:2]  # حداکثر دو کارت
+                content_type = ContentType.objects.get_for_model(NaturalProfile)
+                # حذف کارت‌های قبلی
+                BankCard.objects.filter(
+                    profile_content_type=content_type,
+                    profile_object_id=instance.id
+                ).delete()
+                # افزودن کارت‌های جدید
+                for card_data in bank_cards:
+                    BankCard.objects.create(
+                        profile_content_type=content_type,
+                        profile_object_id=instance.id,
+                        card_number=card_data['card_number'],
+                        sheba_number=card_data['sheba_number']
+                    )
+            except (ValueError, KeyError):
+                raise serializers.ValidationError(
+                    {"bank_cards": "فرمت کارت‌های بانکی نامعتبر است."}
+                )
+
         return instance
 
 
