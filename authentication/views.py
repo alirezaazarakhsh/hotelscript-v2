@@ -356,23 +356,24 @@ class JuridicalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
-        responses={200: JuridicalProfileSerializer()}
+        operation_description=(
+            "این API اطلاعات پروفایل حقوقی کاربر جاری را برمی‌گرداند. "
+            "اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود."
+        ),
+        responses={200: JuridicalProfileSerializer(), 404: 'پروفایل یافت نشد'}
     )
     def get(self, request):
-        try:
-            profile = request.user.natural_profile.juridical_profile
-        except AttributeError:
-            try:
-                natural_profile = request.user.natural_profile
-            except AttributeError:
-                natural_profile = NaturalProfile(base_user=request.user)
-            profile = JuridicalProfile(natural_profile=natural_profile)
+        natural_profile = get_object_or_404(NaturalProfile, base_user=request.user)
+        profile = get_object_or_404(JuridicalProfile, natural_profile=natural_profile)
         serializer = JuridicalProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
-        operation_description="اطلاعات پروفایل حقوقی کاربر و کارت‌های بانکی را ویرایش می‌کند. حداکثر ۲ کارت بانکی مجاز است.",
+        operation_description=(
+            "این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقوقی خود را ویرایش کند. "
+            "شماره‌های کارت بانکی می‌توانند حداکثر ۲ عدد باشند. کارت‌های حذف‌شده نیز پاک می‌شوند."
+        ),
         manual_parameters=[
             openapi.Parameter('image', openapi.IN_FORM, description="فایل عکس شرکت", type=openapi.TYPE_FILE, required=False),
             openapi.Parameter('organization_name', openapi.IN_FORM, description="نام شرکت", type=openapi.TYPE_STRING, required=False),
@@ -385,13 +386,7 @@ class JuridicalProfileDetailAPIView(APIView):
             openapi.Parameter('email', openapi.IN_FORM, description="ایمیل", type=openapi.TYPE_STRING, required=False),
             openapi.Parameter('status', openapi.IN_FORM, description="وضعیت", type=openapi.TYPE_STRING, required=False),
             openapi.Parameter('reject_reason', openapi.IN_FORM, description="دلیل رد", type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(
-                'bank_cards',
-                openapi.IN_FORM,
-                description="لیست کارت‌ها (JSON string یا آرایه مستقیم در JSON)",
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
+            openapi.Parameter('bank_cards', openapi.IN_FORM, description="لیست کارت‌ها (JSON string یا آرایه)", type=openapi.TYPE_STRING, required=False),
         ],
         responses={
             200: JuridicalProfileSerializer(),
@@ -401,21 +396,13 @@ class JuridicalProfileDetailAPIView(APIView):
         consumes=['multipart/form-data', 'application/json']
     )
     def put(self, request):
-        try:
-            profile = request.user.natural_profile.juridical_profile
-        except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        natural_profile = get_object_or_404(NaturalProfile, base_user=request.user)
+        profile = get_object_or_404(JuridicalProfile, natural_profile=natural_profile)
 
         data = request.data.copy()
         bank_cards_data = data.pop('bank_cards', None)
 
-        serializer = JuridicalProfileSerializer(
-            profile,
-            data=data,
-            partial=True,
-            context={'request': request}
-        )
-
+        serializer = JuridicalProfileSerializer(profile, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
 
@@ -427,13 +414,10 @@ class JuridicalProfileDetailAPIView(APIView):
                         bank_cards = bank_cards_data
 
                     if not isinstance(bank_cards, list):
-                        raise ValueError("bank_cards باید یک لیست باشد.")
+                        return Response({"detail": "bank_cards باید یک لیست باشد."}, status=status.HTTP_400_BAD_REQUEST)
 
                     if len(bank_cards) > 2:
-                        return Response(
-                            {"detail": "حداکثر ۲ کارت بانکی مجاز است."},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
+                        return Response({"detail": "حداکثر ۲ کارت بانکی مجاز است."}, status=status.HTTP_400_BAD_REQUEST)
 
                     existing_cards = {card.card_number: card for card in profile.card_numbers.all()}
                     submitted_card_numbers = set()
@@ -458,7 +442,6 @@ class JuridicalProfileDetailAPIView(APIView):
                             else:
                                 return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                    # حذف کارت‌هایی که دیگر در لیست نیستند
                     for card_number, card_obj in existing_cards.items():
                         if card_number not in submitted_card_numbers:
                             card_obj.delete()
@@ -474,15 +457,14 @@ class JuridicalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقوقی کاربر جاری",
+        operation_description="این API پروفایل حقوقی کاربر جاری را حذف می‌کند. اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود.",
         responses={204: "پروفایل حذف شد", 404: "پروفایل یافت نشد"}
     )
     def delete(self, request):
-        try:
-            profile = request.user.natural_profile.juridical_profile
-            profile.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        natural_profile = get_object_or_404(NaturalProfile, base_user=request.user)
+        profile = get_object_or_404(JuridicalProfile, natural_profile=natural_profile)
+        profile.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
         
 
 
@@ -606,20 +588,24 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقیقی کاربر جاری",
-        operation_description="این API اطلاعات پروفایل حقیقی کاربر جاری را برمی‌گرداند. اگر پروفایل وجود نداشته باشد، یک شیء فیک بدون ذخیره‌سازی در دیتابیس ایجاد می‌شود.",
-        responses={200: NaturalProfileSerializer()}
+        operation_description=(
+            "این API اطلاعات پروفایل حقیقی کاربر جاری را برمی‌گرداند. "
+            "اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود."
+        ),
+        responses={200: NaturalProfileSerializer(), 404: 'پروفایل یافت نشد'}
     )
     def get(self, request):
-        try:
-            profile = request.user.natural_profile
-        except AttributeError:
-            profile = NaturalProfile(base_user=request.user)
+        profile = get_object_or_404(NaturalProfile, base_user=request.user)
         serializer = NaturalProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
-        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقیقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت.",
+        operation_description=(
+            "این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقیقی خود را به‌صورت جزئی یا کامل ویرایش کند. "
+            "شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت. "
+            "کارت‌هایی که حذف شوند، از پایگاه داده پاک می‌شوند."
+        ),
         manual_parameters=[
             openapi.Parameter('image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE, required=False),
             openapi.Parameter('first_name', openapi.IN_FORM, description="نام", type=openapi.TYPE_STRING, required=False),
@@ -629,7 +615,7 @@ class NaturalProfileDetailAPIView(APIView):
             openapi.Parameter('postal_code', openapi.IN_FORM, description="کدپستی", type=openapi.TYPE_STRING, required=False),
             openapi.Parameter('address', openapi.IN_FORM, description="آدرس", type=openapi.TYPE_STRING, required=False),
             openapi.Parameter('level', openapi.IN_FORM, description="شناسه سطح کاربری", type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter('bank_cards', openapi.IN_FORM, description="لیست کارت‌ها (JSON string یا array)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('bank_cards', openapi.IN_FORM, description="لیست کارت‌ها (JSON string یا آرایه)", type=openapi.TYPE_STRING, required=False),
         ],
         responses={
             200: NaturalProfileSerializer(),
@@ -639,12 +625,8 @@ class NaturalProfileDetailAPIView(APIView):
         consumes=['multipart/form-data', 'application/json']
     )
     def put(self, request):
-        try:
-            profile = request.user.natural_profile
-        except AttributeError:
-            profile = NaturalProfile.objects.create(base_user=request.user)
+        profile, created = NaturalProfile.objects.get_or_create(base_user=request.user)
 
-        # مدیریت کارت‌ها
         bank_cards_raw = request.data.get('bank_cards')
         if bank_cards_raw:
             try:
@@ -652,6 +634,9 @@ class NaturalProfileDetailAPIView(APIView):
                     bank_cards = json.loads(bank_cards_raw)
                 else:
                     bank_cards = bank_cards_raw
+
+                if not isinstance(bank_cards, list):
+                    return Response({"detail": "bank_cards باید یک لیست باشد."}, status=status.HTTP_400_BAD_REQUEST)
 
                 if len(bank_cards) > 2:
                     return Response({"detail": "حداکثر ۲ شماره کارت مجاز است."}, status=status.HTTP_400_BAD_REQUEST)
@@ -661,7 +646,10 @@ class NaturalProfileDetailAPIView(APIView):
 
                 for card_data in bank_cards:
                     card_number = card_data.get('card_number')
+                    if not card_number:
+                        return Response({"detail": "شماره کارت الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
                     submitted_card_numbers.add(card_number)
+
                     if card_number in existing_cards:
                         card = existing_cards[card_number]
                         card_serializer = CardNumberSerializer(card, data=card_data, partial=True, context={'request': request})
@@ -676,13 +664,13 @@ class NaturalProfileDetailAPIView(APIView):
                         else:
                             return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                # حذف کارت‌هایی که دیگر در لیست نیستند
+                # حذف کارت‌هایی که حذف شدند
                 for card_number, card_obj in existing_cards.items():
                     if card_number not in submitted_card_numbers:
                         card_obj.delete()
 
-            except (json.JSONDecodeError, TypeError):
-                return Response({"detail": "فرمت bank_cards نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                return Response({"detail": f"فرمت bank_cards نامعتبر است: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
             except ValidationError as e:
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -694,19 +682,15 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقیقی کاربر جاری",
-        operation_description="این API پروفایل حقیقی کاربر جاری را حذف می‌کند. اگر پروفایل وجود نداشته باشد، خطای 404 برگردانده می‌شود.",
-        responses={
-            204: "پروفایل حذف شد",
-            404: "پروفایل یافت نشد"
-        }
+        operation_description="این API پروفایل حقیقی کاربر جاری را حذف می‌کند. اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود.",
+        responses={204: "پروفایل حذف شد", 404: "پروفایل یافت نشد"}
     )
     def delete(self, request):
-        try:
-            profile = request.user.natural_profile
-            profile.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        profile = get_object_or_404(NaturalProfile, base_user=request.user)
+        profile.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
 
 
 
