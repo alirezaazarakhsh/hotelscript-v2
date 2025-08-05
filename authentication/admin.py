@@ -3,6 +3,8 @@ from django import forms
 from .models import (
     BaseUser,
     Admin,
+    CardNumber,
+    JuridicalCardNumber,
     SuperUser,
     NaturalProfile,
     JuridicalProfile,
@@ -94,6 +96,14 @@ class SuperUserAdmin(admin.ModelAdmin):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
 
+class CardNumberInline(admin.TabularInline):
+    model = CardNumber
+    extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
+    max_num = 2  # محدودیت حداکثر ۲ شماره کارت
+    fields = ('card_number', 'iban')  # فیلدهای قابل ویرایش در اینلاین
+    verbose_name = "شماره کارت حقیقی کاربر"
+    verbose_name_plural = "شماره‌های کارت حقیقی کاربر"
+
 @admin.register(NaturalProfile)
 class NaturalProfileAdmin(admin.ModelAdmin):
     form = NaturalProfileForm
@@ -115,10 +125,13 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
+    inlines = [CardNumberInline]  # افزودن اینلاین برای شماره‌های کارت
 
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
+    
+    
 
 class JuridicalProfileDocumentInline(admin.TabularInline):
     model = JuridicalProfileDocument
@@ -126,6 +139,14 @@ class JuridicalProfileDocumentInline(admin.TabularInline):
     fields = ['file']
     verbose_name = 'مدرک پروفایل حقوقی'
     verbose_name_plural = 'مدارک پروفایل حقوقی'
+
+class JuridicalCardNumberInline(admin.TabularInline):
+    model = JuridicalCardNumber
+    extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
+    max_num = 2  # محدودیت حداکثر ۲ شماره کارت
+    fields = ('card_number', 'iban')  # فیلدهای قابل ویرایش در اینلاین
+    verbose_name = "شماره کارت حقوقی"
+    verbose_name_plural = "شماره‌های کارت حقوقی"
 
 @admin.register(JuridicalProfile)
 class JuridicalProfileAdmin(admin.ModelAdmin):
@@ -153,7 +174,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'phone_number',
     )
     ordering = ('-id',)
-    inlines = [JuridicalProfileDocumentInline]
+    inlines = [JuridicalProfileDocumentInline, JuridicalCardNumberInline]  # افزودن اینلاین برای شماره‌های کارت
 
     def base_user__phone_number(self, obj):
         return obj.natural_profile.base_user.phone_number
@@ -167,6 +188,11 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         return obj.natural_profile.last_name
     natural_profile__last_name.short_description = 'نام خانوادگی'
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('natural_profile__base_user')
+    
+    
+    
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
     list_display = (

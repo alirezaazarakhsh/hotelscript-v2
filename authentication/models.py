@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.contrib.auth import password_validation
 from django.utils.crypto import salted_hmac
 from django.contrib.auth.hashers import (
@@ -447,3 +448,110 @@ class JuridicalProfileDocument(models.Model):
     def __str__(self):
         return f'مدرک {self.profile}'
     
+    
+    
+    
+# مدل شماره کارت های حقیقی 
+# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
+validate_card_number = RegexValidator(
+    regex=r'^\d{16}$',
+    message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
+)
+
+# اعتبارسنجی برای شماره شبا (دقیقاً ۲۴ رقم)
+validate_iban = RegexValidator(
+    regex=r'^\d{24}$',
+    message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
+)
+
+class CardNumber(models.Model):
+    profile = models.ForeignKey(
+        NaturalProfile,
+        on_delete=models.CASCADE,
+        related_name='card_numbers',
+        verbose_name=_('پروفایل کاربر'),
+    )
+    card_number = models.CharField(
+        verbose_name=_('شماره کارت'),
+        max_length=16,
+        validators=(validate_card_number,),
+        unique=True,
+    )
+    iban = models.CharField(
+        verbose_name=_('شماره شبا'),
+        max_length=24,
+        validators=(validate_iban,),
+        unique=True,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = _('شماره کارت')
+        verbose_name_plural = _('شماره‌های کارت')
+
+    def clean(self):
+        # بررسی محدودیت تعداد کارت‌ها (حداکثر ۲ کارت)
+        if self.profile.card_numbers.count() >= 2 and not self.pk:
+            raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+
+    def save(self, *args, **kwargs):
+        # اجرای اعتبارسنجی قبل از ذخیره
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.card_number} - {self.profile}'
+    
+    
+# مدل شماره کارت های حقوقی 
+# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
+validate_card_number = RegexValidator(
+    regex=r'^\d{16}$',
+    message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
+)
+
+# اعتبارسنجی برای شماره شبا (دقیقاً ۲۴ رقم)
+validate_iban = RegexValidator(
+    regex=r'^\d{24}$',
+    message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
+)
+
+class JuridicalCardNumber(models.Model):
+    profile = models.ForeignKey(
+        JuridicalProfile,
+        on_delete=models.CASCADE,
+        related_name='card_numbers',
+        verbose_name=_('پروفایل حقوقی'),
+    )
+    card_number = models.CharField(
+        verbose_name=_('شماره کارت'),
+        max_length=16,
+        validators=(validate_card_number,),
+        unique=True,
+    )
+    iban = models.CharField(
+        verbose_name=_('شماره شبا'),
+        max_length=24,
+        validators=(validate_iban,),
+        unique=True,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = _('شماره کارت حقوقی')
+        verbose_name_plural = _('شماره‌های کارت حقوقی')
+
+    def clean(self):
+        # بررسی محدودیت تعداد کارت‌ها (حداکثر ۲ کارت)
+        if self.profile.card_numbers.count() >= 2 and not self.pk:
+            raise ValidationError(_('هر پروفایل حقوقی تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+
+    def save(self, *args, **kwargs):
+        # اجرای اعتبارسنجی قبل از ذخیره
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.card_number} - {self.profile}'
