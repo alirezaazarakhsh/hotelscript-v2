@@ -427,24 +427,28 @@ class JuridicalProfileDetailAPIView(APIView):
         if serializer.is_valid():
             serializer.save()
 
-            # مدیریت شماره‌های کارت به‌صورت ساده‌تر
+            # مدیریت شماره‌های کارت
             if bank_cards_data:
                 try:
                     bank_cards = bank_cards_data if isinstance(bank_cards_data, list) else json.loads(bank_cards_data)
-                    if len(bank_cards) > 2:
+                    existing_cards = list(profile.card_numbers.all())
+                    
+                    # بررسی تعداد کل کارت‌ها (موجود + جدید)
+                    new_card_count = len([card for card in bank_cards if card.get('card_number') not in [c.card_number for c in existing_cards]])
+                    if len(existing_cards) + new_card_count > 2:
                         return Response(
-                            {"detail": "حداکثر ۲ شماره کارت مجاز است."},
+                            {"__all__": ["هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند."]},
                             status=status.HTTP_400_BAD_REQUEST
                         )
 
-                    # به‌جای حذف همه، فقط شماره‌های جدید یا تغییر یافته اضافه می‌شوند
-                    existing_cards = {card.card_number: card for card in profile.card_numbers.all()}
+                    # به‌روزرسانی یا ایجاد کارت‌ها
                     for card_data in bank_cards:
                         card_number = card_data.get('card_number')
-                        if card_number in existing_cards:
+                        existing_card = next((card for card in existing_cards if card.card_number == card_number), None)
+                        
+                        if existing_card:
                             # به‌روزرسانی کارت موجود
-                            card = existing_cards[card_number]
-                            card_serializer = JuridicalCardNumberSerializer(card, data=card_data, partial=True, context={'request': request})
+                            card_serializer = JuridicalCardNumberSerializer(existing_card, data=card_data, partial=True, context={'request': request})
                             if card_serializer.is_valid():
                                 card_serializer.save()
                             else:
@@ -485,9 +489,6 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
-        
-        
-
 
 
 
