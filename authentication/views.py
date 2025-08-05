@@ -406,25 +406,38 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'image': openapi.Schema(type=openapi.TYPE_FILE, description='فایل عکس پروفایل'),
-                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام'),
-                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی'),
-                'email': openapi.Schema(type=openapi.TYPE_STRING, description='ایمیل'),
-                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کدملی'),
-                'postal_code': openapi.Schema(type=openapi.TYPE_STRING, description='کدپستی'),
-                'address': openapi.Schema(type=openapi.TYPE_STRING, description='آدرس'),
-                'level': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه سطح کاربری'),
-            },
-            required=[]  # هیچ فیلدی اجباری نیست (partial update)
-        ),
+        manual_parameters=[
+            openapi.Parameter(
+                'image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE
+            ),
+            openapi.Parameter(
+                'first_name', openapi.IN_FORM, description="نام", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'last_name', openapi.IN_FORM, description="نام خانوادگی", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'email', openapi.IN_FORM, description="ایمیل", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'national_code', openapi.IN_FORM, description="کدملی", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'postal_code', openapi.IN_FORM, description="کدپستی", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'address', openapi.IN_FORM, description="آدرس", type=openapi.TYPE_STRING, required=False
+            ),
+            openapi.Parameter(
+                'level', openapi.IN_FORM, description="شناسه سطح کاربری", type=openapi.TYPE_INTEGER, required=False
+            ),
+        ],
         responses={
             200: NaturalProfileSerializer(),
             400: 'خطا در داده‌های ارسالی',
             404: 'پروفایل یافت نشد'
-        }
+        },
+        consumes=['multipart/form-data']  # مشخص کردن نوع درخواست
     )
     def put(self, request):
         print(request.data)  # برای دیباگ محتوای درخواست
