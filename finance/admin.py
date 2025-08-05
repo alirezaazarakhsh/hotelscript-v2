@@ -4,7 +4,6 @@ from authentication.models import NaturalProfile
 from finance.sms.sms import send_wallet_increase_sms
 from .models import (
     Wallet,
-    BankCard,
     WalletPack,
 )
 
@@ -102,11 +101,3 @@ class WalletAdmin(admin.ModelAdmin):
     
     
 
-@admin.register(BankCard)
-class BankCardAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'profile',
-        'card_number',
-        'sheba_number',
-    )

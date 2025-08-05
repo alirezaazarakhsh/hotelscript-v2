@@ -1,5 +1,4 @@
 from config.models import UserLevel
-from finance.models import BankCard
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, PasswordField
 from django.contrib.auth import authenticate
 from rest_framework import exceptions, serializers
@@ -7,8 +6,6 @@ from rest_framework_simplejwt.settings import api_settings
 from django.contrib.auth.models import update_last_login
 from django.utils.translation import gettext_lazy as _
 
-from django.contrib.contenttypes.models import ContentType
-from django.core.validators import MinLengthValidator, MaxLengthValidator  
 from safarname24.serializers import ErrorMessageSerializerMixin
 
 from .validators import validate_phone_number
@@ -96,27 +93,15 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
-class BankCardSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = BankCard
-        fields = ['card_number', 'sheba_number']
-        extra_kwargs = {
-            'card_number': {'required': True, 'validators': [MinLengthValidator(16), MaxLengthValidator(16)]},
-            'sheba_number': {'required': True, 'validators': [MinLengthValidator(24), MaxLengthValidator(24)]},
-        }
-
 class NaturalProfileSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False, allow_null=True)
-    image_url = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=False, allow_null=True)  # برای آپلود و ویرایش عکس
+    image_url = serializers.SerializerMethodField()  # برای نمایش URL عکس
     level_name = serializers.SerializerMethodField()
     level = serializers.PrimaryKeyRelatedField(
         queryset=UserLevel.objects.all(),
         required=False,
         allow_null=True,
     )
-    bank_cards = serializers.SerializerMethodField()
-    card_number = serializers.CharField(required=False, allow_null=True, max_length=16, validators=[MinLengthValidator(16), MaxLengthValidator(16)])
-    sheba_number = serializers.CharField(required=False, allow_null=True, max_length=24, validators=[MinLengthValidator(24), MaxLengthValidator(24)])
 
     class Meta:
         model = NaturalProfile
@@ -126,14 +111,11 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'email',
             'national_code',
             'image',
-            'image_url',
+            'image_url',  # فیلد جدید برای URL
             'postal_code',
             'address',
             'level',
             'level_name',
-            'bank_cards',
-            'card_number',  # فیلدهای جدید برای پشتیبانی از فرم‌دیتا
-            'sheba_number',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -155,65 +137,14 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
-    def get_bank_cards(self, obj):
-        content_type = ContentType.objects.get_for_model(NaturalProfile)
-        bank_cards = BankCard.objects.filter(
-            profile_content_type=content_type,
-            profile_object_id=obj.id
-        )[:2]
-        return BankCardSerializer(bank_cards, many=True).data
-
-    def validate(self, data):
-        if self.instance and ('card_number' in data or 'sheba_number' in data):
-            content_type = ContentType.objects.get_for_model(NaturalProfile)
-            bank_cards_count = BankCard.objects.filter(
-                profile_content_type=content_type,
-                profile_object_id=self.instance.id
-            ).count()
-            if bank_cards_count >= 2 and not (data.get('card_number') is None and data.get('sheba_number') is None):
-                raise serializers.ValidationError(
-                    {"bank_cards": "هر پروفایل حقیقی حداکثر می‌تواند دو کارت بانکی داشته باشد."}
-                )
-        return data
-
     def create(self, validated_data):
-        profile = NaturalProfile.objects.create(
-            base_user=self.context['request'].user,
-            **{k: v for k, v in validated_data.items() if k not in ['card_number', 'sheba_number']}
-        )
-        if validated_data.get('card_number') and validated_data.get('sheba_number'):
-            content_type = ContentType.objects.get_for_model(NaturalProfile)
-            BankCard.objects.create(
-                profile_content_type=content_type,
-                profile_object_id=profile.id,
-                card_number=validated_data['card_number'],
-                sheba_number=validated_data['sheba_number']
-            )
-        return profile
+        return NaturalProfile.objects.create(user=self.context['request'].user, **validated_data)
 
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():
-            if attr not in ['card_number', 'sheba_number']:
-                setattr(instance, attr, value)
+            setattr(instance, attr, value)
         instance.save()
-
-        if validated_data.get('card_number') and validated_data.get('sheba_number'):
-            content_type = ContentType.objects.get_for_model(NaturalProfile)
-            # حذف تمام کارت‌های قبلی و افزودن کارت جدید
-            BankCard.objects.filter(
-                profile_content_type=content_type,
-                profile_object_id=instance.id
-            ).delete()
-            BankCard.objects.create(
-                profile_content_type=content_type,
-                profile_object_id=instance.id,
-                card_number=validated_data['card_number'],
-                sheba_number=validated_data['sheba_number']
-            )
-
         return instance
-
-
 
 
 # -----------------------------
