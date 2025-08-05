@@ -8,6 +8,7 @@ from django.contrib.auth.models import update_last_login
 from django.utils.translation import gettext_lazy as _
 
 from django.contrib.contenttypes.models import ContentType
+from django.core.validators import MinLengthValidator, MaxLengthValidator  
 from safarname24.serializers import ErrorMessageSerializerMixin
 
 from .validators import validate_phone_number
