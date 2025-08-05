@@ -372,7 +372,7 @@ class JuridicalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
-        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقوقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت.",
+        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقوقی خود را ویرایش کند. شماره‌های کارت بانکی می‌توانند حداکثر ۲ عدد باشند. کارت‌های حذف‌شده نیز پاک می‌شوند.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -393,8 +393,8 @@ class JuridicalProfileDetailAPIView(APIView):
                     items=openapi.Schema(
                         type=openapi.TYPE_OBJECT,
                         properties={
-                            'card_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره کارت (۱۶ رقم)'),
-                            'iban': openapi.Schema(type=openapi.TYPE_STRING, description='شماره شبا (۲۴ رقم)', nullable=True),
+                            'card_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره کارت'),
+                            'iban': openapi.Schema(type=openapi.TYPE_STRING, description='شماره شبا', nullable=True),
                         },
                         required=['card_number']
                     ),
@@ -414,7 +414,7 @@ class JuridicalProfileDetailAPIView(APIView):
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
-        # جدا کردن داده‌های bank_cards از request.data
+        # کپی داده‌ها برای ویرایش امن
         data = request.data.copy()
         bank_cards_data = data.pop('bank_cards', None)
 
@@ -424,31 +424,42 @@ class JuridicalProfileDetailAPIView(APIView):
             partial=True,
             context={'request': request}
         )
+
         if serializer.is_valid():
             serializer.save()
 
-            # مدیریت شماره‌های کارت
+            # مدیریت کارت‌های بانکی
             if bank_cards_data:
                 try:
-                    bank_cards = bank_cards_data if isinstance(bank_cards_data, list) else json.loads(bank_cards_data)
-                    existing_cards = list(profile.card_numbers.all())
-                    
-                    # بررسی تعداد کل کارت‌ها (موجود + جدید)
-                    new_card_count = len([card for card in bank_cards if card.get('card_number') not in [c.card_number for c in existing_cards]])
-                    if len(existing_cards) + new_card_count > 2:
+                    bank_cards = bank_cards_data
+                    if isinstance(bank_cards_data, str):
+                        bank_cards = json.loads(bank_cards_data)
+
+                    if not isinstance(bank_cards, list):
+                        raise ValueError("bank_cards باید یک لیست باشد.")
+
+                    # کارت‌های موجود
+                    existing_cards_qs = profile.card_numbers.all()
+                    existing_cards_dict = {card.card_number: card for card in existing_cards_qs}
+                    new_card_numbers_set = set()
+
+                    # بررسی تعداد کارت‌ها
+                    if len(bank_cards) > 2:
                         return Response(
                             {"__all__": ["هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند."]},
                             status=status.HTTP_400_BAD_REQUEST
                         )
 
-                    # به‌روزرسانی یا ایجاد کارت‌ها
                     for card_data in bank_cards:
-                        card_number = card_data.get('card_number')
-                        existing_card = next((card for card in existing_cards if card.card_number == card_number), None)
-                        
-                        if existing_card:
+                        card_number = card_data.get("card_number")
+                        if not card_number:
+                            return Response({"detail": "شماره کارت الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+                        new_card_numbers_set.add(card_number)
+
+                        if card_number in existing_cards_dict:
                             # به‌روزرسانی کارت موجود
-                            card_serializer = JuridicalCardNumberSerializer(existing_card, data=card_data, partial=True, context={'request': request})
+                            card = existing_cards_dict[card_number]
+                            card_serializer = JuridicalCardNumberSerializer(card, data=card_data, partial=True, context={'request': request})
                             if card_serializer.is_valid():
                                 card_serializer.save()
                             else:
@@ -460,9 +471,15 @@ class JuridicalProfileDetailAPIView(APIView):
                                 card_serializer.save(profile=profile)
                             else:
                                 return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                except (json.JSONDecodeError, TypeError):
+
+                    # حذف کارت‌هایی که دیگر در لیست نیستند
+                    for card_number, card_obj in existing_cards_dict.items():
+                        if card_number not in new_card_numbers_set:
+                            card_obj.delete()
+
+                except (json.JSONDecodeError, ValueError, TypeError) as e:
                     return Response(
-                        {"detail": "فرمت JSON برای bank_cards نامعتبر است."},
+                        {"detail": f"فرمت bank_cards نامعتبر است: {str(e)}"},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 except ValidationError as e:
@@ -472,6 +489,7 @@ class JuridicalProfileDetailAPIView(APIView):
                 JuridicalProfileSerializer(profile, context={'request': request}).data,
                 status=status.HTTP_200_OK
             )
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
@@ -489,6 +507,7 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        
 
 
 
@@ -624,36 +643,20 @@ class NaturalProfileDetailAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
-        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقیقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند به‌صورت انتخابی به‌روزرسانی شوند، با محدودیت حداکثر ۲ کارت.",
+        operation_description="این API به کاربر اجازه می‌دهد اطلاعات پروفایل حقیقی خود را به‌صورت جزئی یا کامل ویرایش کند. شماره‌های کارت بانکی می‌توانند حداکثر ۲ عدد باشند. کارت‌های حذف‌شده نیز پاک خواهند شد.",
         manual_parameters=[
+            openapi.Parameter('image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE, required=False),
+            openapi.Parameter('first_name', openapi.IN_FORM, description="نام", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('last_name', openapi.IN_FORM, description="نام خانوادگی", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('email', openapi.IN_FORM, description="ایمیل", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('national_code', openapi.IN_FORM, description="کدملی", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('postal_code', openapi.IN_FORM, description="کدپستی", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('address', openapi.IN_FORM, description="آدرس", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('level', openapi.IN_FORM, description="شناسه سطح کاربری", type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(
-                'image', openapi.IN_FORM, description="فایل عکس پروفایل", type=openapi.TYPE_FILE, required=False
-            ),
-            openapi.Parameter(
-                'first_name', openapi.IN_FORM, description="نام", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'last_name', openapi.IN_FORM, description="نام خانوادگی", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'email', openapi.IN_FORM, description="ایمیل", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'national_code', openapi.IN_FORM, description="کدملی", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'postal_code', openapi.IN_FORM, description="کدپستی", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'address', openapi.IN_FORM, description="آدرس", type=openapi.TYPE_STRING, required=False
-            ),
-            openapi.Parameter(
-                'level', openapi.IN_FORM, description="شناسه سطح کاربری", type=openapi.TYPE_INTEGER, required=False
-            ),
-            openapi.Parameter(
-                'bank_cards', openapi.IN_FORM, description="لیست کارت‌های بانکی (JSON) با شماره کارت و شبا، مثال: [{\"card_number\": \"1234567890123456\", \"iban\": \"123456789012345678901234\"}]", 
-                type=openapi.TYPE_STRING, required=False
-            ),
+                'bank_cards', openapi.IN_FORM,
+                description='لیست کارت‌های بانکی (JSON)، مثال: [{"card_number": "1234...", "iban": "IR..."}]',
+                type=openapi.TYPE_STRING, required=False),
         ],
         responses={
             200: NaturalProfileSerializer(),
@@ -663,24 +666,28 @@ class NaturalProfileDetailAPIView(APIView):
         consumes=['multipart/form-data']
     )
     def put(self, request):
-        print(request.data)  # برای دیباگ محتوای درخواست
         try:
             profile = request.user.natural_profile
         except AttributeError:
             profile = NaturalProfile.objects.create(base_user=request.user)
 
-        # مدیریت شماره‌های کارت
+        # مدیریت کارت‌های بانکی
         bank_cards_data = request.data.get('bank_cards')
         if bank_cards_data:
             try:
                 bank_cards = json.loads(bank_cards_data)
+                if not isinstance(bank_cards, list):
+                    raise ValueError("bank_cards باید یک آرایه باشد.")
                 if len(bank_cards) > 2:
                     return Response({"detail": "حداکثر ۲ شماره کارت مجاز است."}, status=status.HTTP_400_BAD_REQUEST)
 
-                # به‌جای حذف همه، فقط شماره‌های جدید یا تغییر یافته اضافه می‌شوند
                 existing_cards = {card.card_number: card for card in profile.card_numbers.all()}
+                new_card_numbers = set()
+
                 for card_data in bank_cards:
                     card_number = card_data.get('card_number')
+                    new_card_numbers.add(card_number)
+
                     if card_number in existing_cards:
                         # به‌روزرسانی کارت موجود
                         card = existing_cards[card_number]
@@ -696,12 +703,18 @@ class NaturalProfileDetailAPIView(APIView):
                             card_serializer.save(profile=profile)
                         else:
                             return Response(card_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            except json.JSONDecodeError:
-                return Response({"detail": "فرمت JSON برای bank_cards نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+
+                # حذف کارت‌هایی که دیگر در لیست جدید نیستند
+                for card_number, card in existing_cards.items():
+                    if card_number not in new_card_numbers:
+                        card.delete()
+
+            except (json.JSONDecodeError, ValueError) as e:
+                return Response({"detail": f"فرمت bank_cards نامعتبر است: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
             except ValidationError as e:
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # به‌روزرسانی پروفایل
+        # به‌روزرسانی سایر فیلدهای پروفایل
         serializer = NaturalProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
@@ -723,6 +736,7 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+
 
 
 
