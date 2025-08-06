@@ -140,7 +140,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    card_numbers = CardNumberSerializer(many=True, read_only=True, source='card_numbers')
+    card_numbers = CardNumberSerializer(many=True, read_only=True)  # حذف source='card_numbers'
 
     class Meta:
         model = NaturalProfile
