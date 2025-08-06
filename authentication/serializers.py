@@ -94,7 +94,7 @@ class AuthSerializer(serializers.Serializer):
 # NaturalProfile Serializer
 # -----------------------------
 class NaturalProfileSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=False, allow_null=True)
     level_name = serializers.SerializerMethodField()
     level = serializers.PrimaryKeyRelatedField(
         queryset=UserLevel.objects.all(),
@@ -123,27 +123,31 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level': {'required': False, 'allow_null': True},
         }
 
-    def get_image(self, obj):
-        request = self.context.get('request')
-        if obj.image and hasattr(obj.image, 'url'):
-            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
-        return None
-
     def get_level_name(self, obj):
         try:
             return obj.level.title if obj.level else None
         except Exception:
             return None
 
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+        return None
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['image'] = self.get_image(instance)
+        return representation
+
     def create(self, validated_data):
-        return NaturalProfile.objects.create(user=self.context['request'].user, **validated_data)
+        return NaturalProfile.objects.create(base_user=self.context['request'].user, **validated_data)
 
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         return instance
-
 
 # -----------------------------
 # JuridicalProfileDocument Serializer
