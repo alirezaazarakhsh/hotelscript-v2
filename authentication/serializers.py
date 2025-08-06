@@ -9,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from safarname24.serializers import ErrorMessageSerializerMixin
 
 from .validators import validate_phone_number
-from .models import BaseUser, CardNumber, JuridicalCardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
+from .models import BaseUser, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
 
 
 # -----------------------------
@@ -93,27 +93,14 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
-class CardNumberSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)  # اضافه کردن ID برای هر شماره کارت
-
-    class Meta:
-        model = CardNumber
-        fields = ['id', 'card_number', 'iban']
-        extra_kwargs = {
-            'card_number': {'required': True},
-            'iban': {'required': False, 'allow_null': True},
-        }
-
 class NaturalProfileSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False, allow_null=True)  # برای آپلود و ویرایش عکس
-    image_url = serializers.SerializerMethodField()  # برای نمایش URL عکس
+    image = serializers.SerializerMethodField()
     level_name = serializers.SerializerMethodField()
     level = serializers.PrimaryKeyRelatedField(
         queryset=UserLevel.objects.all(),
         required=False,
         allow_null=True,
     )
-    card_numbers = CardNumberSerializer(many=True, read_only=True)  # اضافه کردن شماره‌های کارت
 
     class Meta:
         model = NaturalProfile
@@ -123,12 +110,10 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'email',
             'national_code',
             'image',
-            'image_url',
             'postal_code',
             'address',
             'level',
             'level_name',
-            'card_numbers',  # فیلد جدید برای شماره‌های کارت
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -138,7 +123,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level': {'required': False, 'allow_null': True},
         }
 
-    def get_image_url(self, obj):
+    def get_image(self, obj):
         request = self.context.get('request')
         if obj.image and hasattr(obj.image, 'url'):
             return request.build_absolute_uri(obj.image.url) if request else obj.image.url
@@ -208,21 +193,9 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
 # -----------------------------
 # JuridicalProfile Serializer
 # -----------------------------
-class JuridicalCardNumberSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)  # اضافه کردن ID برای هر شماره کارت
-
-    class Meta:
-        model = JuridicalCardNumber
-        fields = ['id', 'card_number', 'iban']
-        extra_kwargs = {
-            'card_number': {'required': True},
-            'iban': {'required': False, 'allow_null': True},
-        }
-
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
-    card_numbers = JuridicalCardNumberSerializer(many=True, read_only=True)  # اضافه کردن شماره‌های کارت
 
     class Meta:
         model = JuridicalProfile
@@ -239,7 +212,6 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
             'status',
             'reject_reason',
             'documents',
-            'card_numbers',  # فیلد جدید برای شماره‌های کارت
         ]
         extra_kwargs = {
             'address': {'required': False, 'allow_null': True},
