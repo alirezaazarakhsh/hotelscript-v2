@@ -354,33 +354,6 @@ class NaturalProfileListCreateAPIView(APIView):
         **خروجی‌ها**:
         - **200 OK**: اطلاعات پروفایل شامل نام، نام خانوادگی، ایمیل، کد ملی، تصویر، کد پستی، آدرس، سطح کاربری، نام سطح و لیست شماره‌های کارت (حداکثر ۲ شماره).
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
-
-        **مثال پاسخ**:
-        ```json
-        {
-            "first_name": "علی",
-            "last_name": "احمدی",
-            "email": "ali@example.com",
-            "national_code": "1234567890",
-            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
-            "postal_code": "1234567890",
-            "address": "تهران، خیابان نمونه",
-            "level": 1,
-            "level_name": "کاربر عادی",
-            "card_numbers": [
-                {
-                    "id": 1,
-                    "card_number": "1234567890123456",
-                    "iban": "123456789012345678901234"
-                },
-                {
-                    "id": 2,
-                    "card_number": "9876543210987654",
-                    "iban": null
-                }
-            ]
-        }
-        ```
         """,
         responses={200: NaturalProfileSerializer(), 401: "Unauthorized"}
     )
@@ -411,38 +384,12 @@ class NaturalProfileListCreateAPIView(APIView):
             - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس کاربر (رشته).
             - `level` (اختیاری): شناسه سطح کاربری (عدد صحیح).
+            - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد).
 
         **خروجی‌ها**:
         - **201 Created**: پروفایل با موفقیت ایجاد شد و اطلاعات آن بازگشت داده می‌شود.
         - **400 Bad Request**: در صورت نامعتبر بودن داده‌ها یا وجود پروفایل از قبل.
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
-
-        **مثال درخواست**:
-        ```
-        Content-Type: multipart/form-data
-        Authorization: Bearer <your_token>
-        
-        first_name=علی
-        last_name=احمدی
-        national_code=1234567890
-        image=<file.jpg>
-        ```
-
-        **مثال پاسخ**:
-        ```json
-        {
-            "first_name": "علی",
-            "last_name": "احمدی",
-            "email": null,
-            "national_code": "1234567890",
-            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
-            "postal_code": null,
-            "address": null,
-            "level": null,
-            "level_name": null,
-            "card_numbers": []
-        }
-        ```
         """,
         request_body=NaturalProfileSerializer,
         responses={
@@ -471,7 +418,6 @@ class NaturalProfileListCreateAPIView(APIView):
 
 
 
-
 class NaturalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -487,33 +433,6 @@ class NaturalProfileDetailAPIView(APIView):
         **خروجی‌ها**:
         - **200 OK**: اطلاعات پروفایل شامل نام، نام خانوادگی، ایمیل، کد ملی، تصویر، کد پستی، آدرس، سطح کاربری، نام سطح و لیست شماره‌های کارت (حداکثر ۲ شماره).
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
-
-        **مثال پاسخ**:
-        ```json
-        {
-            "first_name": "علی",
-            "last_name": "احمدی",
-            "email": "ali@example.com",
-            "national_code": "1234567890",
-            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
-            "postal_code": "1234567890",
-            "address": "تهران، خیابان نمونه",
-            "level": 1,
-            "level_name": "کاربر عادی",
-            "card_numbers": [
-                {
-                    "id": 1,
-                    "card_number": "1234567890123456",
-                    "iban": "123456789012345678901234"
-                },
-                {
-                    "id": 2,
-                    "card_number": "9876543210987654",
-                    "iban": null
-                }
-            ]
-        }
-        ```
         """,
         responses={200: NaturalProfileSerializer(), 401: "Unauthorized"}
     )
@@ -531,7 +450,7 @@ class NaturalProfileDetailAPIView(APIView):
         این API امکان ویرایش پروفایل حقیقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
         درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
         تمام فیلدها اختیاری هستند و می‌توانند به صورت جزئی (partial) آپدیت شوند.
-        شماره‌های کارت از طریق APIهای جداگانه مدیریت می‌شوند و در این API قابل ویرایش نیستند.
+        شماره‌های کارت از طریق این API قابل ویرایش هستند.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
@@ -544,45 +463,13 @@ class NaturalProfileDetailAPIView(APIView):
             - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس کاربر (رشته).
             - `level` (اختیاری): شناسه سطح کاربری (عدد صحیح).
+            - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل id برای ویرایش).
 
         **خروجی‌ها**:
         - **200 OK**: در صورت آپدیت موفق پروفایل، اطلاعات به‌روز شده بازگشت داده می‌شود.
         - **201 Created**: در صورت ایجاد پروفایل جدید، اطلاعات پروفایل ایجادشده بازگشت داده می‌شود.
         - **400 Bad Request**: در صورت نامعتبر بودن داده‌های ورودی.
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
-
-        **مثال درخواست**:
-        ```
-        Content-Type: multipart/form-data
-        Authorization: Bearer <your_token>
-        
-        first_name=علی
-        last_name=احمدی
-        national_code=1234567890
-        image=<file.jpg>
-        ```
-
-        **مثال پاسخ**:
-        ```json
-        {
-            "first_name": "علی",
-            "last_name": "احمدی",
-            "email": "ali@example.com",
-            "national_code": "1234567890",
-            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
-            "postal_code": "1234567890",
-            "address": "تهران، خیابان نمونه",
-            "level": 1,
-            "level_name": "کاربر عادی",
-            "card_numbers": [
-                {
-                    "id": 1,
-                    "card_number": "1234567890123456",
-                    "iban": "123456789012345678901234"
-                }
-            ]
-        }
-        ```
         """,
         request_body=NaturalProfileSerializer,
         responses={
@@ -623,11 +510,6 @@ class NaturalProfileDetailAPIView(APIView):
         - **204 No Content**: در صورت حذف موفق پروفایل.
         - **404 Not Found**: در صورت عدم وجود پروفایل.
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
-
-        **مثال پاسخ**:
-        ```json
-        {}
-        ```
         """,
         responses={
             204: "پروفایل حذف شد",
@@ -642,7 +524,6 @@ class NaturalProfileDetailAPIView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
-        
         
         
 
