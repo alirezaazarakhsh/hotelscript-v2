@@ -337,71 +337,22 @@ class JuridicalProfileDetailAPIView(APIView):
 
 
 
+
+
 class NaturalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقیقی کاربر جاری",
-        responses={200: NaturalProfileSerializer()}
-    )
-    def get(self, request):
-        user = request.user
-
-        try:
-            profile = user.natural_profile
-        except NaturalProfile.DoesNotExist:
-            # نمونه‌ی موقت بدون ذخیره‌سازی در دیتابیس
-            profile = NaturalProfile(base_user=user)
-
-        serializer = NaturalProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_summary="ایجاد پروفایل حقیقی",
-        request_body=NaturalProfileSerializer,
-        responses={
-            201: NaturalProfileSerializer(),
-            400: "داده‌های نامعتبر یا پروفایل موجود"
-        }
-    )
-    def post(self, request):
-        user = request.user
-
-        if NaturalProfile.objects.filter(base_user=user).exists():
-            return Response(
-                {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            profile = serializer.save(base_user=user)
-            return Response(
-                NaturalProfileSerializer(profile, context={'request': request}).data,
-                status=status.HTTP_201_CREATED
-            )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-
-class NaturalProfileDetailAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @swagger_auto_schema(
-        operation_summary="دریافت اطلاعات پروفایل حقیقی کاربر جاری",
         operation_description="""
         این API اطلاعات پروفایل حقیقی کاربر احراز هویت‌شده را بازمی‌گرداند.
         اگر پروفایل وجود نداشته باشد، یک پروفایل خالی با اطلاعات پایه کاربر (بدون ذخیره در دیتابیس) بازگشت داده می‌شود.
-        
+
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
 
         **خروجی‌ها**:
-        - **200 OK**: اطلاعات پروفایل شامل نام، نام خانوادگی، ایمیل، کد ملی، تصویر، کد پستی، آدرس، سطح کاربری و نام سطح.
+        - **200 OK**: اطلاعات پروفایل شامل نام، نام خانوادگی، ایمیل، کد ملی، تصویر، کد پستی، آدرس، سطح کاربری، نام سطح و لیست شماره‌های کارت (حداکثر ۲ شماره).
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
 
         **مثال پاسخ**:
@@ -415,7 +366,152 @@ class NaturalProfileDetailAPIView(APIView):
             "postal_code": "1234567890",
             "address": "تهران، خیابان نمونه",
             "level": 1,
-            "level_name": "کاربر عادی"
+            "level_name": "کاربر عادی",
+            "card_numbers": [
+                {
+                    "id": 1,
+                    "card_number": "1234567890123456",
+                    "iban": "123456789012345678901234"
+                },
+                {
+                    "id": 2,
+                    "card_number": "9876543210987654",
+                    "iban": null
+                }
+            ]
+        }
+        ```
+        """,
+        responses={200: NaturalProfileSerializer(), 401: "Unauthorized"}
+    )
+    def get(self, request):
+        user = request.user
+        try:
+            profile = user.natural_profile
+        except NaturalProfile.DoesNotExist:
+            profile = NaturalProfile(base_user=user)
+        serializer = NaturalProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="ایجاد پروفایل حقیقی",
+        operation_description="""
+        این API امکان ایجاد یک پروفایل حقیقی جدید برای کاربر احراز هویت‌شده را فراهم می‌کند.
+        اگر کاربر از قبل پروفایل داشته باشد، خطای 400 بازگردانده می‌شود.
+        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+        - بدنه درخواست (`multipart/form-data`):
+            - `first_name` (اختیاری): نام کاربر (رشته).
+            - `last_name` (اختیاری): نام خانوادگی کاربر (رشته).
+            - `email` (اختیاری): ایمیل کاربر (رشته).
+            - `national_code` (اختیاری): کد ملی (رشته، دقیقاً ۱۰ رقم).
+            - `image` (اختیاری): فایل تصویر پروفایل (فرمت‌های مجاز: jpg, png).
+            - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
+            - `address` (اختیاری): آدرس کاربر (رشته).
+            - `level` (اختیاری): شناسه سطح کاربری (عدد صحیح).
+
+        **خروجی‌ها**:
+        - **201 Created**: پروفایل با موفقیت ایجاد شد و اطلاعات آن بازگشت داده می‌شود.
+        - **400 Bad Request**: در صورت نامعتبر بودن داده‌ها یا وجود پروفایل از قبل.
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+
+        **مثال درخواست**:
+        ```
+        Content-Type: multipart/form-data
+        Authorization: Bearer <your_token>
+        
+        first_name=علی
+        last_name=احمدی
+        national_code=1234567890
+        image=<file.jpg>
+        ```
+
+        **مثال پاسخ**:
+        ```json
+        {
+            "first_name": "علی",
+            "last_name": "احمدی",
+            "email": null,
+            "national_code": "1234567890",
+            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
+            "postal_code": null,
+            "address": null,
+            "level": null,
+            "level_name": null,
+            "card_numbers": []
+        }
+        ```
+        """,
+        request_body=NaturalProfileSerializer,
+        responses={
+            201: NaturalProfileSerializer(),
+            400: "Bad Request",
+            401: "Unauthorized"
+        }
+    )
+    def post(self, request):
+        user = request.user
+        if NaturalProfile.objects.filter(base_user=user).exists():
+            return Response(
+                {"detail": "این کاربر از قبل پروفایل حقیقی دارد."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = NaturalProfileSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            profile = serializer.save()
+            return Response(
+                NaturalProfileSerializer(profile, context={'request': request}).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+class NaturalProfileDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت اطلاعات پروفایل حقیقی کاربر جاری",
+        operation_description="""
+        این API اطلاعات پروفایل حقیقی کاربر احراز هویت‌شده را بازمی‌گرداند.
+        اگر پروفایل وجود نداشته باشد، یک پروفایل خالی با اطلاعات پایه کاربر (بدون ذخیره در دیتابیس) بازگشت داده می‌شود.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+
+        **خروجی‌ها**:
+        - **200 OK**: اطلاعات پروفایل شامل نام، نام خانوادگی، ایمیل، کد ملی، تصویر، کد پستی، آدرس، سطح کاربری، نام سطح و لیست شماره‌های کارت (حداکثر ۲ شماره).
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+
+        **مثال پاسخ**:
+        ```json
+        {
+            "first_name": "علی",
+            "last_name": "احمدی",
+            "email": "ali@example.com",
+            "national_code": "1234567890",
+            "image": "https://cps.safarnameh24.com/media/profile_images/image.jpg",
+            "postal_code": "1234567890",
+            "address": "تهران، خیابان نمونه",
+            "level": 1,
+            "level_name": "کاربر عادی",
+            "card_numbers": [
+                {
+                    "id": 1,
+                    "card_number": "1234567890123456",
+                    "iban": "123456789012345678901234"
+                },
+                {
+                    "id": 2,
+                    "card_number": "9876543210987654",
+                    "iban": null
+                }
+            ]
         }
         ```
         """,
@@ -427,7 +523,7 @@ class NaturalProfileDetailAPIView(APIView):
         except AttributeError:
             profile = NaturalProfile(base_user=request.user)
         serializer = NaturalProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="ویرایش یا ایجاد پروفایل حقیقی کاربر جاری",
@@ -435,6 +531,7 @@ class NaturalProfileDetailAPIView(APIView):
         این API امکان ویرایش پروفایل حقیقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
         درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
         تمام فیلدها اختیاری هستند و می‌توانند به صورت جزئی (partial) آپدیت شوند.
+        شماره‌های کارت از طریق APIهای جداگانه مدیریت می‌شوند و در این API قابل ویرایش نیستند.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
@@ -442,9 +539,9 @@ class NaturalProfileDetailAPIView(APIView):
             - `first_name` (اختیاری): نام کاربر (رشته).
             - `last_name` (اختیاری): نام خانوادگی کاربر (رشته).
             - `email` (اختیاری): ایمیل کاربر (رشته).
-            - `national_code` (اختیاری): کد ملی (رشته، حداکثر 10 رقم).
+            - `national_code` (اختیاری): کد ملی (رشته، دقیقاً ۱۰ رقم).
             - `image` (اختیاری): فایل تصویر پروفایل (فرمت‌های مجاز: jpg, png).
-            - `postal_code` (اختیاری): کد پستی (رشته، حداکثر 10 رقم).
+            - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس کاربر (رشته).
             - `level` (اختیاری): شناسه سطح کاربری (عدد صحیح).
 
@@ -461,6 +558,7 @@ class NaturalProfileDetailAPIView(APIView):
         
         first_name=علی
         last_name=احمدی
+        national_code=1234567890
         image=<file.jpg>
         ```
 
@@ -475,7 +573,14 @@ class NaturalProfileDetailAPIView(APIView):
             "postal_code": "1234567890",
             "address": "تهران، خیابان نمونه",
             "level": 1,
-            "level_name": "کاربر عادی"
+            "level_name": "کاربر عادی",
+            "card_numbers": [
+                {
+                    "id": 1,
+                    "card_number": "1234567890123456",
+                    "iban": "123456789012345678901234"
+                }
+            ]
         }
         ```
         """,
@@ -491,26 +596,25 @@ class NaturalProfileDetailAPIView(APIView):
         try:
             profile = request.user.natural_profile
         except AttributeError:
-            # ایجاد پروفایل جدید اگر وجود نداشته باشد
             profile = NaturalProfile(base_user=request.user)
             serializer = NaturalProfileSerializer(profile, data=request.data, context={'request': request})
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data, status=201)
-            return Response(serializer.errors, status=400)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # آپدیت پروفایل موجود
         serializer = NaturalProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         operation_summary="حذف پروفایل حقیقی کاربر جاری",
         operation_description="""
         این API پروفایل حقیقی کاربر جاری را حذف می‌کند.
-        در صورت عدم وجود پروفایل، خطای 404 بازگردانده می‌شود.
+        در صورت حذف پروفایل، تمام شماره‌های کارت مرتبط نیز حذف می‌شوند.
+        اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
@@ -535,10 +639,11 @@ class NaturalProfileDetailAPIView(APIView):
         try:
             profile = request.user.natural_profile
             profile.delete()
-            return Response(status=204)
+            return Response(status=status.HTTP_204_NO_CONTENT)
         except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
-
+            return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        
+        
 
 
 

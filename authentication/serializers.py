@@ -7,9 +7,10 @@ from django.contrib.auth.models import update_last_login
 from django.utils.translation import gettext_lazy as _
 
 from safarname24.serializers import ErrorMessageSerializerMixin
+from django.core.validators import RegexValidator
 
 from .validators import validate_phone_number
-from .models import BaseUser, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
+from .models import BaseUser, CardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
 
 
 # -----------------------------
@@ -93,6 +94,44 @@ class AuthSerializer(serializers.Serializer):
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
+# اعتبارسنجی برای کد ملی (دقیقاً ۱۰ رقم)
+validate_national_code = RegexValidator(
+    regex=r'^\d{10}$',
+    message=_('کد ملی باید دقیقاً ۱۰ رقم باشد.')
+)
+
+# اعتبارسنجی برای کد پستی (دقیقاً ۱۰ رقم)
+validate_postal_code = RegexValidator(
+    regex=r'^\d{10}$',
+    message=_('کد پستی باید دقیقاً ۱۰ رقم باشد.')
+)
+
+class CardNumberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CardNumber
+        fields = ['id', 'card_number', 'iban']
+        extra_kwargs = {
+            'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
+            'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
+        }
+
+    def create(self, validated_data):
+        validated_data['profile'] = self.context['request'].user.natural_profile
+        return CardNumber.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+    def validate(self, data):
+        request = self.context.get('request')
+        profile = request.user.natural_profile
+        if not self.instance and profile.card_numbers.count() >= 2:
+            raise serializers.ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+        return data
+
 class NaturalProfileSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False, allow_null=True)
     level_name = serializers.SerializerMethodField()
@@ -101,6 +140,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    card_numbers = CardNumberSerializer(many=True, read_only=True, source='card_numbers')
 
     class Meta:
         model = NaturalProfile
@@ -114,20 +154,18 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'address',
             'level',
             'level_name',
+            'card_numbers',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
-            'national_code': {'required': False, 'allow_null': True},
-            'postal_code': {'required': False, 'allow_null': True},
+            'national_code': {'required': False, 'allow_null': True, 'validators': [validate_national_code]},
+            'postal_code': {'required': False, 'allow_null': True, 'validators': [validate_postal_code]},
             'address': {'required': False, 'allow_null': True},
             'level': {'required': False, 'allow_null': True},
         }
 
     def get_level_name(self, obj):
-        try:
-            return obj.level.title if obj.level else None
-        except Exception:
-            return None
+        return obj.level.title if obj.level else None
 
     def get_image(self, obj):
         request = self.context.get('request')
@@ -148,6 +186,8 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+
+
 
 # -----------------------------
 # JuridicalProfileDocument Serializer

@@ -451,6 +451,7 @@ class JuridicalProfileDocument(models.Model):
     
     
     
+    
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
@@ -516,6 +517,9 @@ validate_iban = RegexValidator(
     regex=r'^\d{24}$',
     message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
 )
+
+
+
 
 class JuridicalCardNumber(models.Model):
     profile = models.ForeignKey(
