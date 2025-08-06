@@ -644,6 +644,7 @@ class NaturalProfileDetailAPIView(APIView):
             return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
         
         
+        
 
 
 
