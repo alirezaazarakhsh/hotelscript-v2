@@ -1155,12 +1155,9 @@ def validate_phone_number(value):
 def validate_identification_code(value):
     if not value:
         raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
-    if re.match(r'^\d{10}$', value):
+    if re.match(r'^\d{10}$', value) or re.match(r'^[A-Z0-9]{6,9}$', value):
         return value
-    elif re.match(r'^[A-Z0-9]{6,9}$', value):
-        return value
-    else:
-        raise ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
+    raise ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
 
 class Passenger(models.Model):
     user = models.ForeignKey(
@@ -1189,18 +1186,26 @@ class Passenger(models.Model):
     )
 
     class Meta:
-        verbose_name = 'مسافر'
-        verbose_name_plural = 'مسافران'
+        verbose_name = _('مسافر')
+        verbose_name_plural = _('مسافران')
+        # افزودن شاخص برای بهبود عملکرد کوئری‌ها
+        indexes = [
+            models.Index(fields=['user', 'identification_code']),
+        ]
+        # جلوگیری از ثبت کد شناسایی تکراری برای یک کاربر
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'identification_code'],
+                name='unique_user_identification_code'
+            )
+        ]
 
     def __str__(self):
-        return f'{self.user} - {self.first_name} {self.last_name}'
+        return f'{self.first_name} {self.last_name} ({self.identification_code})'
 
     def clean(self):
-        validate_identification_code(self.identification_code)
-        validate_phone_number(self.phone_number)
+        # اعتبارسنجی‌های اضافی در صورت نیاز
         super().clean()
-
-
 
 
 
