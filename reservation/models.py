@@ -1156,10 +1156,8 @@ def validate_identification_code(value):
     if not value:
         raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
     if re.match(r'^\d{10}$', value):
-        # Iranian national ID
         return value
     elif re.match(r'^[A-Z0-9]{6,9}$', value):
-        # Foreign passport
         return value
     else:
         raise ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
