@@ -58,9 +58,9 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        # فقط کدهایی که یا به کاربر اختصاص داره یا کاربر فعال‌شون کرده
         return (
-            ShoppingCenterDiscountCode.objects.filter(is_public=False, users=user) |
-            ShoppingCenterDiscountCode.objects.filter(is_public=True) |
+            ShoppingCenterDiscountCode.objects.filter(users=user) |
             ShoppingCenterDiscountCode.objects.filter(activated_users=user)
         ).distinct()
 
@@ -68,7 +68,6 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
 این API کدهای تخفیف مربوط به مراکز خرید را بازمی‌گرداند که با کاربر مرتبط هستند:
-- کدهای عمومی (is_public=True)
 - کدهای اختصاصی مربوط به کاربر
 - کدهایی که کاربر آن‌ها را فعال کرده است.
 """,
@@ -83,6 +82,7 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
