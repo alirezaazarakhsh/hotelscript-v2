@@ -26,6 +26,23 @@ from .models import (
     CommentPoint,
     CommentPointItem,
 )
+from icons.models import IconShortcut
+
+# Updated IconShortcutSerializer to match HotelFAQListSerializer format
+class IconShortcutSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='title_icon', read_only=True)
+    link = serializers.SerializerMethodField()
+
+    class Meta:
+        model = IconShortcut
+        fields = ('title', 'link')
+
+    def get_link(self, obj):
+        if not obj.svg_icon:
+            return None
+        request = self.context.get('request')
+        url = obj.svg_icon.url
+        return request.build_absolute_uri(url) if request else f"https://safarnameh24.com{url}"
 
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -160,14 +177,18 @@ class HotelListSerializer(serializers.ModelSerializer):
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
 
 class FacilitiesSerializer(serializers.ModelSerializer):
+    icon = IconShortcutSerializer(read_only=True)
+
     class Meta:
         model = Facilities
-        fields = ('id', 'title')
+        fields = ('id', 'title', 'icon')
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
+    icon = IconShortcutSerializer(read_only=True)
+
     class Meta:
         model = RoomFacilities
-        fields = ['id', 'title']
+        fields = ('id', 'title', 'icon')
         ref_name = "RoomFacilitiesSerializerCustom"
 
 class HotelFacilitiesSerializer(serializers.ModelSerializer):
@@ -309,8 +330,6 @@ class CommentPointItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'is_positive', 'is_negative']
         ref_name = "CommentPointItemSerializer"
 
-
-
 class SuggestedItemWithRatingSerializer(serializers.Serializer):
     suggested_item_id = serializers.PrimaryKeyRelatedField(
         queryset=SuggestedCommentItem.objects.all(),
@@ -319,11 +338,6 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
         allow_null=True
     )
     rating = serializers.FloatField(min_value=0.0, max_value=5.0, required=False, allow_null=True)
-
-
-
-
-
 
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
@@ -362,7 +376,7 @@ class CommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        ref_name = "ReservationCommentSerializer"  # 👈 اضافه شده برای حل خطای Swagger
+        ref_name = "ReservationCommentSerializer"
         fields = [
             'id',
             'text',
@@ -440,11 +454,6 @@ class CommentSerializer(serializers.ModelSerializer):
         if data.get('stars') is None:
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
-
-
-
-
-
 
 class HotelCommentListSerializer(serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()
@@ -601,11 +610,6 @@ class RoomSerializer(serializers.ModelSerializer):
 
         min_p = min(prices, key=final_price)
         return final_price(min_p)
-
-class RoomFacilitiesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RoomFacilities
-        fields = ['id', 'title']
 
 class HotelSearchSerializer(serializers.Serializer):
     hotels = serializers.SerializerMethodField()

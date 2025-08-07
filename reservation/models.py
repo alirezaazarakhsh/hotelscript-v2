@@ -195,6 +195,14 @@ class Facilities(models.Model):
         max_length=64,
         unique=True,
     )
+    icon = models.ForeignKey(
+        'icons.IconShortcut',
+        on_delete=models.CASCADE,
+        verbose_name=_('آیکن'),
+        related_name='facilities',  # Changed to avoid conflict with RoomFacilities
+        null=True,  # Allow null temporarily
+        blank=True  # Optional in admin forms
+    )
 
     class Meta:
         verbose_name = 'امکانات رفاهی و تفریحی'
@@ -213,6 +221,14 @@ class RoomFacilities(models.Model):
         verbose_name=_('عنوان'),
         max_length=64,
         unique=True,
+    )
+    icon = models.ForeignKey(
+        'icons.IconShortcut',
+        on_delete=models.CASCADE,
+        verbose_name=_('آیکن'),
+        related_name='room_facilities',
+        null=True,  # Allow null temporarily
+        blank=True  # Optional in admin forms
     )
 
     class Meta:

@@ -89,10 +89,37 @@ class FacilitiesAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
+        'icon_preview',
     )
     search_fields = (
         'title',
+        'icon__title_icon',
     )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'title',
+                'icon',
+                'icon_preview',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
 @admin.register(RoomFacilities)
@@ -100,10 +127,37 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'title',
+        'icon_preview',
     )
     search_fields = (
         'title',
+        'icon__title_icon',
     )
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'title',
+                'icon',
+                'icon_preview',
+            )
+        }),
+    )
+
+    def icon_preview(self, obj):
+        if obj.icon and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex;align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
 class HotelTagPublicInline(admin.TabularInline):
