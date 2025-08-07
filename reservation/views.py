@@ -1011,7 +1011,6 @@ class PassengerListCreateView(generics.ListCreateAPIView):
 
 
 
-
 # ای پی ای حذف و ویرایش مسافران
 class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
@@ -1023,6 +1022,11 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         if obj.user != self.request.user:
             raise PermissionDenied("شما اجازه دسترسی به این مسافر را ندارید.")
         return obj
+
+    def perform_update(self, serializer):
+        print("Performing update with data:", serializer.validated_data)  # لاگ داده‌ها قبل از ذخیره
+        super().perform_update(serializer)
+        print("Updated instance in DB:", serializer.instance.identification_code)  # لاگ مقدار ذخیره‌شده
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1064,7 +1068,7 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         operation_summary="ویرایش جزئی اطلاعات یک مسافر",
         operation_description="""
         با استفاده از این متد می‌توان بخشی از اطلاعات یک مسافر خاص را ویرایش کرد.  
-        مثلا فقط شماره موبایل یا کد شناسایی را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
+        مثلاً فقط شماره موبایل یا کد شناسایی را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
         فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
         """,
         request_body=PassengerSerializer,
