@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from django.db.models import Q
 
+
 from authentication import models
 from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
 from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
@@ -23,9 +24,9 @@ class MyRoomDiscountCodeListView(ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return RoomDiscountCode.objects.filter(
-            models.Q(users=user) |          # کدهایی که برای این کاربر تعریف شده‌اند
-            models.Q(activated_users=user)  # کدهایی که کاربر فعال کرده است
-        ).distinct()
+            Q(users=user) |          
+            Q(activated_users=user)
+    ).distinct()
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
