@@ -28,7 +28,7 @@ from .models import (
 )
 from icons.models import IconShortcut
 
-# Updated IconShortcutSerializer to match HotelFAQListSerializer format
+# Updated IconShortcutSerializer with explicit ref_name
 class IconShortcutSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source='title_icon', read_only=True)
     link = serializers.SerializerMethodField()
@@ -36,6 +36,7 @@ class IconShortcutSerializer(serializers.ModelSerializer):
     class Meta:
         model = IconShortcut
         fields = ('title', 'link')
+        ref_name = "ReservationIconShortcutSerializer"  # Unique ref_name to avoid conflict
 
     def get_link(self, obj):
         if not obj.svg_icon:
