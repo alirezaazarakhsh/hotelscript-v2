@@ -59,9 +59,9 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return (
-            ShoppingCenterDiscountCode.objects.filter(is_public=False, user=user)
-            | ShoppingCenterDiscountCode.objects.filter(is_public=True)
-            | ShoppingCenterDiscountCode.objects.filter(activated_users=user)
+            ShoppingCenterDiscountCode.objects.filter(is_public=False, users=user) |
+            ShoppingCenterDiscountCode.objects.filter(is_public=True) |
+            ShoppingCenterDiscountCode.objects.filter(activated_users=user)
         ).distinct()
 
     @swagger_auto_schema(
@@ -76,7 +76,6 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 
 
 
