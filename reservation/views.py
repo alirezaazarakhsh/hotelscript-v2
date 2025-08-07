@@ -965,7 +965,7 @@ class HotelNearbyPlaceListView(ListAPIView):
     
     
 # ای پی ای ثبت مسافر جدید 
-class PassengerListCreateView(ListCreateAPIView):
+class PassengerListCreateView(generics.ListCreateAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PassengerSerializer
 
@@ -974,7 +974,9 @@ class PassengerListCreateView(ListCreateAPIView):
         return Passenger.objects.filter(user=user)
 
     def perform_create(self, serializer):
+        print("POST request data:", self.request.data)  # لاگ برای دیباگ
         serializer.save(user=self.request.user)
+        print("Created passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -987,14 +989,16 @@ class PassengerListCreateView(ListCreateAPIView):
         responses={200: PassengerSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        response = super().get(request, *args, **kwargs)
+        print("GET response data:", response.data)  # لاگ خروجی
+        return response
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
         operation_summary="ثبت مسافر جدید",
         operation_description="""
         با استفاده از این متد می‌توان یک مسافر جدید را ثبت کرد.  
-        اطلاعات مسافر شامل نام، نام خانوادگی، شماره موبایل، ملیت و سایر اطلاعات مرتبط است.  
+        اطلاعات مسافر شامل نام، نام خانوادگی، شماره موبایل، کد شناسایی و سایر اطلاعات مرتبط است.  
         پس از ثبت، این مسافر به حساب کاربری شما متصل خواهد شد.
         """,
         request_body=PassengerSerializer,
@@ -1009,7 +1013,7 @@ class PassengerListCreateView(ListCreateAPIView):
 
 
 # ای پی ای حذف و ویرایش مسافران
-class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PassengerSerializer
     queryset = Passenger.objects.all()
@@ -1030,36 +1034,51 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         responses={200: PassengerSerializer()}
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+        response = super().get(request, *args, **kwargs)
+        print("GET single passenger:", response.data)  # لاگ خروجی
+        return response
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
         operation_summary="ویرایش کامل اطلاعات یک مسافر",
         operation_description="""
-        
         با استفاده از این متد می‌توان اطلاعات یک مسافر خاص را به صورت کامل ویرایش کرد.  
-        تغییرات شامل نام، نام خانوادگی، شماره موبایل، ملیت و سایر اطلاعات مرتبط است.
+        تغییرات شامل نام، نام خانوادگی، شماره موبایل، کد شناسایی و سایر اطلاعات مرتبط است.
         فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
         """,
         request_body=PassengerSerializer,
         responses={200: PassengerSerializer()}
     )
     def put(self, request, *args, **kwargs):
-        return super().put(request, *args, **kwargs)
+        print("PUT request data:", request.data)  # لاگ داده‌های ارسالی
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        print("Validated data:", serializer.validated_data)  # لاگ داده‌های معتبر
+        self.perform_update(serializer)
+        print("Updated passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
         operation_summary="ویرایش جزئی اطلاعات یک مسافر",
         operation_description="""
         با استفاده از این متد می‌توان بخشی از اطلاعات یک مسافر خاص را ویرایش کرد.  
-        مثلا فقط شماره موبایل یا ملیت را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
+        مثلا فقط شماره موبایل یا کد شناسایی را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
         فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
         """,
         request_body=PassengerSerializer,
         responses={200: PassengerSerializer()}
     )
     def patch(self, request, *args, **kwargs):
-        return super().patch(request, *args, **kwargs)
+        print("PATCH request data:", request.data)  # لاگ داده‌های ارسالی
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        print("Validated data:", serializer.validated_data)  # لاگ داده‌های معتبر
+        self.perform_update(serializer)
+        print("Updated passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1072,8 +1091,8 @@ class PassengerRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
         responses={204: 'Deleted successfully'}
     )
     def delete(self, request, *args, **kwargs):
+        print("Deleting passenger:", self.get_object().id)  # لاگ حذف
         return super().delete(request, *args, **kwargs)
-
 
 
 

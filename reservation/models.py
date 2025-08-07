@@ -1204,7 +1204,6 @@ class Passenger(models.Model):
 
 
 
-
 #مدل رزرواسیون در هتل 
 class Reservation(models.Model):
     RESERVATION_STATUSES = (
