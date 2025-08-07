@@ -1,5 +1,6 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.core.exceptions import ObjectDoesNotExist
+from .managers import UserManager
 from django.db import transaction
 
 class UserManager(BaseUserManager):
