@@ -75,8 +75,14 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
         tags=['discount-crm']
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
+        try:
+            return super().get(request, *args, **kwargs)
+        except Exception as exc:
+            return Response({
+                "error": str(exc),
+                "exception_type": exc.__class__.__name__,
+                "trace": traceback.format_exc(limit=2)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
