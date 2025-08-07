@@ -5,6 +5,8 @@ from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from django.db.models import Q
+
+from authentication import models
 from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
 from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
 
