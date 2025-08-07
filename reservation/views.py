@@ -974,9 +974,13 @@ class PassengerListCreateView(generics.ListCreateAPIView):
         return Passenger.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        print("POST request data:", self.request.data)  # لاگ برای دیباگ
-        serializer.save(user=self.request.user)
-        print("Created passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
+        print("POST request data:", self.request.data)
+        try:
+            serializer.save(user=self.request.user)
+            print("Created passenger:", serializer.data)
+        except Exception as e:
+            print("Error in perform_create:", str(e))
+            raise
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -986,12 +990,19 @@ class PassengerListCreateView(generics.ListCreateAPIView):
         - لیست مسافرانی که قبلاً ثبت کرده را ببیند
         این عملیات فقط برای کاربران لاگین‌کرده در دسترس است.
         """,
-        responses={200: PassengerSerializer(many=True)}
+        responses={
+            200: PassengerSerializer(many=True),
+            401: "Unauthorized"
+        }
     )
     def get(self, request, *args, **kwargs):
-        response = super().get(request, *args, **kwargs)
-        print("GET response data:", response.data)  # لاگ خروجی
-        return response
+        try:
+            response = super().get(request, *args, **kwargs)
+            print("GET response data:", response.data)
+            return response
+        except Exception as e:
+            print("Error in get:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1002,10 +1013,24 @@ class PassengerListCreateView(generics.ListCreateAPIView):
         پس از ثبت، این مسافر به حساب کاربری شما متصل خواهد شد.
         """,
         request_body=PassengerSerializer,
-        responses={201: PassengerSerializer()}
+        responses={
+            201: PassengerSerializer(),
+            400: "Bad Request",
+            401: "Unauthorized"
+        }
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        print("POST request data:", request.data)
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                self.perform_create(serializer)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                print("Error in post:", str(e))
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        print("Validation errors:", serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -1024,9 +1049,13 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         return obj
 
     def perform_update(self, serializer):
-        print("Performing update with data:", serializer.validated_data)  # لاگ داده‌ها قبل از ذخیره
-        super().perform_update(serializer)
-        print("Updated instance in DB:", serializer.instance.identification_code)  # لاگ مقدار ذخیره‌شده
+        print("Performing update with data:", serializer.validated_data)
+        try:
+            super().perform_update(serializer)
+            print("Updated instance in DB:", serializer.instance.identification_code)
+        except Exception as e:
+            print("Error in perform_update:", str(e))
+            raise
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1035,12 +1064,21 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         این API به کاربر اجازه می‌دهد تا اطلاعات یک مسافر خاص را که قبلاً ثبت کرده است، مشاهده کند.  
         دسترسی به مسافران متعلق به خود کاربر محدود شده است.
         """,
-        responses={200: PassengerSerializer()}
+        responses={
+            200: PassengerSerializer(),
+            403: "Forbidden",
+            404: "Not Found",
+            401: "Unauthorized"
+        }
     )
     def get(self, request, *args, **kwargs):
-        response = super().get(request, *args, **kwargs)
-        print("GET single passenger:", response.data)  # لاگ خروجی
-        return response
+        try:
+            response = super().get(request, *args, **kwargs)
+            print("GET single passenger:", response.data)
+            return response
+        except Exception as e:
+            print("Error in get:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1051,38 +1089,27 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
         """,
         request_body=PassengerSerializer,
-        responses={200: PassengerSerializer()}
+        responses={
+            200: PassengerSerializer(),
+            400: "Bad Request",
+            403: "Forbidden",
+            404: "Not Found",
+            401: "Unauthorized"
+        }
     )
     def put(self, request, *args, **kwargs):
-        print("PUT request data:", request.data)  # لاگ داده‌های ارسالی
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        print("Validated data:", serializer.validated_data)  # لاگ داده‌های معتبر
-        self.perform_update(serializer)
-        print("Updated passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        tags=["Passenger-user"],
-        operation_summary="ویرایش جزئی اطلاعات یک مسافر",
-        operation_description="""
-        با استفاده از این متد می‌توان بخشی از اطلاعات یک مسافر خاص را ویرایش کرد.  
-        مثلاً فقط شماره موبایل یا کد شناسایی را تغییر داد بدون نیاز به ارسال تمام اطلاعات.
-        فقط مسافرانی که متعلق به کاربر فعلی هستند قابل ویرایش‌اند.
-        """,
-        request_body=PassengerSerializer,
-        responses={200: PassengerSerializer()}
-    )
-    def patch(self, request, *args, **kwargs):
-        print("PATCH request data:", request.data)  # لاگ داده‌های ارسالی
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        print("Validated data:", serializer.validated_data)  # لاگ داده‌های معتبر
-        self.perform_update(serializer)
-        print("Updated passenger:", serializer.data)  # لاگ داده‌های ذخیره‌شده
-        return Response(serializer.data)
+        print("PUT request data:", request.data)
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            print("Validated data:", serializer.validated_data)
+            self.perform_update(serializer)
+            print("Updated passenger:", serializer.data)
+            return Response(serializer.data)
+        except Exception as e:
+            print("Error in put:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
@@ -1092,13 +1119,21 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         تنها مسافرانی که متعلق به کاربر فعلی هستند قابل حذف‌اند.
         پس از حذف، اطلاعات مسافر دیگر در دسترس نخواهد بود.
         """,
-        responses={204: 'Deleted successfully'}
+        responses={
+            204: "Deleted successfully",
+            403: "Forbidden",
+            404: "Not Found",
+            401: "Unauthorized"
+        }
     )
     def delete(self, request, *args, **kwargs):
-        print("Deleting passenger:", self.get_object().id)  # لاگ حذف
-        return super().delete(request, *args, **kwargs)
-
-
+        print("Deleting passenger:", self.get_object().id)
+        try:
+            super().delete(request, *args, **kwargs)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            print("Error in delete:", str(e))
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
