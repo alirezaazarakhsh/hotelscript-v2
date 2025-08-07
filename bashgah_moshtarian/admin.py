@@ -6,96 +6,99 @@ from authentication.models import BaseUser
 from config.models import UserLevel
 
 
+from django.contrib import admin
+from .models import RoomDiscountCode
+
 @admin.register(RoomDiscountCode)
 class RoomDiscountCodeAdmin(admin.ModelAdmin):
     list_display = (
         'code',
         'room',
         'discount_value',
-        'is_public',
-        'user_phone_and_name',
+        'get_users_display',
         'usage_limit',
         'required_points',
-        'user_level',  # اضافه کردن سطح کاربری به لیست نمایش
+        'user_level',
         'expires_at',
-        'activated_users_count',
+        'get_activated_users_display',
     )
-   
+    list_filter = ('user_level',)
     search_fields = (
         'code',
         'room__title',
-        'user__phone_number',
-        'user__natural_profile__first_name',
-        'user__natural_profile__last_name',
-        'user_level__title',  
+        'users__phone_number',
+        'users__natural_profile__first_name',
+        'users__natural_profile__last_name',
+        'user_level__title',
     )
-    autocomplete_fields = ('room', 'user', 'activated_users', 'user_level')  
+    autocomplete_fields = ('room', 'user_level')
     list_editable = (
         'discount_value',
-        'is_public',
         'usage_limit',
         'required_points',
-        'user_level',  
+        'user_level',
         'expires_at',
     )
     list_per_page = 25
     readonly_fields = ('created_at',)
-    filter_horizontal = ('activated_users',)
+    filter_horizontal = ('users', 'activated_users')  # مشابه NotificationAdmin
 
     fieldsets = (
         (_('اطلاعات اصلی'), {
-            'fields': (
-                'room',
-                'code',
-                'discount_value',
-                'is_public',
-                'user',
-            ),
+            'fields': ('room', 'code', 'discount_value', 'users'),
             'description': _('اطلاعات اصلی کد تخفیف را وارد کنید.'),
         }),
         (_('تنظیمات استفاده'), {
-            'fields': (
-                'usage_limit',
-                'required_points',
-                'user_level',  
-                'expires_at',
-            ),
+            'fields': ('usage_limit', 'required_points', 'user_level', 'expires_at'),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
         (_('اطلاعات تکمیلی'), {
-            'fields': (
-                'activation_rules',
-                'activated_users',
-            ),
+            'fields': ('activation_rules', 'activated_users'),
             'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
         }),
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('room', 'user', 'user__natural_profile', 'user_level').prefetch_related('activated_users')
+        return super().get_queryset(request).select_related('room', 'user_level').prefetch_related('users', 'activated_users')
 
-    def user_phone_and_name(self, obj):
-        if obj.user and hasattr(obj.user, 'natural_profile'):
-            full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
-            return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
-        return obj.user.phone_number if obj.user else "-"
-    user_phone_and_name.short_description = _('شماره و نام کاربر')
+    def get_users_display(self, obj):
+        return ", ".join(obj.get_users_with_names())
+    get_users_display.short_description = "کاربران (شماره و نام)"
 
-    def activated_users_count(self, obj):
-        return obj.activated_users.count()
-    activated_users_count.short_description = _('تعداد فعال‌کنندگان')
+    def get_activated_users_display(self, obj):
+        return ", ".join(obj.get_activated_users_with_names())
+    get_activated_users_display.short_description = "کاربران فعال‌کننده (شماره و نام)"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'room':
             kwargs['queryset'] = Room.objects.all().order_by('title')
-        if db_field.name == 'user':
-            kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
         if db_field.name == 'user_level':
-            kwargs['queryset'] = UserLevel.objects.all().order_by('title')  # ترتیب نمایش سطوح کاربری
+            kwargs['queryset'] = UserLevel.objects.all().order_by('title')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def get_users_with_names(self):
+        result = []
+        for user in self.users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
 
-
+    def get_activated_users_with_names(self):
+        result = []
+        for user in self.activated_users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
+    
+    
 
 @admin.register(ShoppingCenterDiscountCode)
 class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
@@ -103,32 +106,31 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'code',
         'shopping_center_name',
         'discount_value',
-        'is_public',
-        'user_phone_and_name',
+        'get_users_display',
         'usage_limit',
         'required_points',
-        'user_level', 
+        'user_level',
         'expires_at',
+        'get_activated_users_display',
     )
-   
     search_fields = (
         'code',
         'shopping_center_name',
-        'user__phone_number',
-        'user__natural_profile__first_name',
-        'user__natural_profile__last_name',
-        'user_level__title',  
+        'users__phone_number',
+        'users__natural_profile__first_name',
+        'users__natural_profile__last_name',
+        'user_level__title',
     )
-    autocomplete_fields = ('user', 'user_level')  
+    autocomplete_fields = ('user_level',)
     list_editable = (
         'discount_value',
-        'is_public',
         'usage_limit',
         'required_points',
-        'user_level',  
+        'user_level',
         'expires_at',
     )
     list_per_page = 25
+    filter_horizontal = ('users', 'activated_users')
 
     fieldsets = (
         (_('اطلاعات اصلی'), {
@@ -137,8 +139,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
                 'shopping_center_image',
                 'code',
                 'discount_value',
-                'is_public',
-                'user',
+                'users',
             ),
             'description': _('اطلاعات اصلی کد تخفیف را وارد کنید.'),
         }),
@@ -146,7 +147,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             'fields': (
                 'usage_limit',
                 'required_points',
-                'user_level',  
+                'user_level',
                 'expires_at',
             ),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
@@ -161,23 +162,42 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'user__natural_profile', 'user_level').prefetch_related('activated_users')
+        return super().get_queryset(request).select_related('user_level').prefetch_related('users', 'activated_users')
 
-    def user_phone_and_name(self, obj):
-        if obj.user and obj.user.natural_profile:
-            full_name = f"{obj.user.natural_profile.first_name or ''} {obj.user.natural_profile.last_name or ''}".strip()
-            return f"{obj.user.phone_number} - {full_name}" if full_name else obj.user.phone_number
-        return obj.user.phone_number if obj.user else "-"
-    user_phone_and_name.short_description = _('شماره و نام کاربر')
+    def get_users_display(self, obj):
+        return ", ".join(obj.get_users_with_names())
+    get_users_display.short_description = "کاربران (شماره و نام)"
+
+    def get_activated_users_display(self, obj):
+        return ", ".join(obj.get_activated_users_with_names())
+    get_activated_users_display.short_description = "کاربران فعال‌کننده (شماره و نام)"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == 'user':
-            kwargs['queryset'] = BaseUser.objects.all().order_by('phone_number')
         if db_field.name == 'user_level':
-            kwargs['queryset'] = UserLevel.objects.all().order_by('title')  # ترتیب نمایش سطوح کاربری
+            kwargs['queryset'] = UserLevel.objects.all().order_by('title')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def get_users_with_names(self):
+        result = []
+        for user in self.users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
 
+    def get_activated_users_with_names(self):
+        result = []
+        for user in self.activated_users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
     
     
 @admin.register(CustomerClubPoint)

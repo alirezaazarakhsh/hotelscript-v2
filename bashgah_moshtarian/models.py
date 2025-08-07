@@ -22,19 +22,12 @@ class RoomDiscountCode(models.Model):
         verbose_name=_("مقدار تخفیف"),
         help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
-    is_public = models.BooleanField(
-        default=True,
-        verbose_name=_("تخفیف عمومی است؟"),
-        help_text=_("در صورت غیرفعال بودن، کد فقط برای یک کاربر خاص فعال خواهد بود.")
-    )
-    user = models.ForeignKey(
+    users = models.ManyToManyField(
         BaseUser,
-        null=True,
+        related_name='targeted_discount_codes',
+        verbose_name=_("کاربران"),
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name='room_discount_codes',
-        verbose_name=_("کاربر"),
-        help_text=_("در صورت شخصی بودن کد، یک کاربر مشخص انتخاب کنید.")
+        help_text=_("کاربرانی که این کد تخفیف برای آن‌ها هدف‌گذاری شده است.")
     )
     code = models.CharField(
         max_length=8,
@@ -53,7 +46,7 @@ class RoomDiscountCode(models.Model):
         help_text=_("حداقل امتیازی که کاربر باید داشته باشد تا بتواند از کد استفاده کند")
     )
     user_level = models.ForeignKey(
-        UserLevel,  # Use the imported UserLevel class
+        UserLevel,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -78,9 +71,9 @@ class RoomDiscountCode(models.Model):
     )
     activated_users = models.ManyToManyField(
         BaseUser,
-        blank=True,
         related_name='activated_room_discount_codes',
         verbose_name=_("کاربران فعال‌کننده"),
+        blank=True,
         help_text=_("کاربرانی که این کد را فعال کرده‌اند.")
     )
 
@@ -90,8 +83,9 @@ class RoomDiscountCode(models.Model):
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
-
-
+        
+        
+        
 
 
 # کد تخفیف باشگاه مشتریان برای مراکز خرید 
@@ -113,19 +107,12 @@ class ShoppingCenterDiscountCode(models.Model):
         verbose_name=_("مقدار تخفیف"),
         help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
     )
-    is_public = models.BooleanField(
-        default=True,
-        verbose_name=_("تخفیف عمومی است؟"),
-        help_text=_("در صورت غیرفعال بودن، کد فقط برای یک کاربر خاص فعال خواهد بود.")
-    )
-    user = models.ForeignKey(
-        BaseUser,  # Use BaseUser class
-        null=True,
+    users = models.ManyToManyField(
+        BaseUser,
+        related_name='targeted_shopping_discount_codes',
+        verbose_name=_("کاربران"),
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name='shopping_center_discount_codes',
-        verbose_name=_("کاربر"),
-        help_text=_("در صورت شخصی بودن کد، یک کاربر مشخص انتخاب کنید.")
+        help_text=_("کاربرانی که این کد تخفیف برای آن‌ها هدف‌گذاری شده است.")
     )
     code = models.CharField(
         max_length=8,
@@ -144,7 +131,7 @@ class ShoppingCenterDiscountCode(models.Model):
         help_text=_("حداقل امتیازی که کاربر باید داشته باشد تا بتواند از کد استفاده کند")
     )
     user_level = models.ForeignKey(
-        UserLevel,  # Use the imported UserLevel class
+        UserLevel,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
