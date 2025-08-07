@@ -1148,19 +1148,19 @@ class ReservationApprovalDuration(models.Model):
 #مدل مسافران اشخاص در هتل 
 def validate_phone_number(value):
     if not value:
-        return
+        raise ValidationError(_('شماره موبایل نمی‌تواند خالی باشد.'))
     if not re.match(r'^09\d{9}$', value):
         raise ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
 
 def validate_identification_code(value):
     if not value:
-        return
+        raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
     if re.match(r'^\d{10}$', value):
         # Iranian national ID
-        return
+        return value
     elif re.match(r'^[A-Z0-9]{6,9}$', value):
         # Foreign passport
-        return
+        return value
     else:
         raise ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
 
@@ -1182,16 +1182,12 @@ class Passenger(models.Model):
     identification_code = models.CharField(
         verbose_name=_('کد شناسایی (کد ملی/پاسپورت)'),
         max_length=10,
-        validators=(),
-        blank=True,
-        default='',
+        validators=[validate_identification_code],
     )
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
         max_length=11,
-        validators=(validate_phone_number,),
-        blank=True,
-        default='',
+        validators=[validate_phone_number],
     )
 
     class Meta:
@@ -1203,8 +1199,8 @@ class Passenger(models.Model):
 
     def clean(self):
         validate_identification_code(self.identification_code)
+        validate_phone_number(self.phone_number)
         super().clean()
-
 
 
 

@@ -274,6 +274,26 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
         )
 
 class PassengerSerializer(serializers.ModelSerializer):
+    identification_code = serializers.CharField(required=True)
+    phone_number = serializers.CharField(required=True)
+
+    def validate_identification_code(self, value):
+        if not value:
+            raise serializers.ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
+        if re.match(r'^\d{10}$', value):
+            return value
+        elif re.match(r'^[A-Z0-9]{6,9}$', value):
+            return value
+        else:
+            raise serializers.ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
+
+    def validate_phone_number(self, value):
+        if not value:
+            raise serializers.ValidationError(_('شماره موبایل نمی‌تواند خالی باشد.'))
+        if not re.match(r'^09\d{9}$', value):
+            raise serializers.ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
+        return value
+
     class Meta:
         model = Passenger
         fields = (
