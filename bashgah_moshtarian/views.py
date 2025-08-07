@@ -19,18 +19,16 @@ class MyRoomDiscountCodeListView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        return (
-            RoomDiscountCode.objects.filter(is_public=False, user=user)
-            | RoomDiscountCode.objects.filter(is_public=True)
-            | RoomDiscountCode.objects.filter(activated_users=user)
+        return RoomDiscountCode.objects.filter(
+            models.Q(users=user) |          # کدهایی که برای این کاربر تعریف شده‌اند
+            models.Q(activated_users=user)  # کدهایی که کاربر فعال کرده است
         ).distinct()
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
 این API کدهای تخفیف مرتبط با کاربر را بازمی‌گرداند:
-- کدهای عمومی (is_public=True)
-- کدهایی که فقط برای همین کاربر تعریف شده‌اند
+- کدهایی که برای این کاربر تعریف شده‌اند.
 - کدهایی که کاربر قبلاً آن‌ها را فعال کرده است.
 """,
         tags=['discount-crm']
