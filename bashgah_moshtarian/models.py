@@ -80,6 +80,28 @@ class RoomDiscountCode(models.Model):
     def __str__(self):
         return f"{self.code} - {self.discount_value}"
 
+    def get_users_with_names(self):
+        result = []
+        for user in self.users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
+
+    def get_activated_users_with_names(self):
+        result = []
+        for user in self.activated_users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
+
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
@@ -160,6 +182,28 @@ class ShoppingCenterDiscountCode(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.discount_value} - {self.shopping_center_name}"
+
+    def get_users_with_names(self):
+        result = []
+        for user in self.users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
+
+    def get_activated_users_with_names(self):
+        result = []
+        for user in self.activated_users.select_related('natural_profile').all():
+            profile = getattr(user, 'natural_profile', None)
+            if profile and (profile.first_name or profile.last_name):
+                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
+                result.append(f"{user.phone_number} - {full_name}")
+            else:
+                result.append(user.phone_number)
+        return result
 
     class Meta:
         verbose_name = _("کد تخفیف مرکز خرید")
