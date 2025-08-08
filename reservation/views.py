@@ -1299,11 +1299,20 @@ class HomeHotelByCityView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌ها بر اساس شهر در صفحه داخلی هتل",
-        operation_description="این API لیستی از تمام هتل‌ها را بدون صفحه‌بندی بر اساس نام شهرها بازمی‌گرداند. هر شهر شامل لیست هتل‌های مربوط به خود است که می‌تواند در صفحه هتل‌های پیشنهادی برای آن شهر نمایش داده شود.",
+        operation_description="این API لیستی از هتل‌های یک شهر خاص را بر اساس اسلاگ شهر بازمی‌گرداند. اگر شهر یافت نشود، خطای 404 برگردانده می‌شود.",
         tags=['hotel'],
+        manual_parameters=[
+            openapi.Parameter(
+                'city_slug',
+                openapi.IN_PATH,
+                description="اسلاگ شهر (مثال: tehran)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
         responses={
             200: openapi.Response(
-                description="لیست هتل‌ها بر اساس شهر",
+                description="لیست هتل‌ها برای شهر مشخص‌شده",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
@@ -1313,26 +1322,35 @@ class HomeHotelByCityView(APIView):
                         )
                     }
                 )
+            ),
+            404: openapi.Response(
+                description="شهر یافت نشد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
             )
         }
     )
-    def get(self, request, *args, **kwargs):
-        hotels = Hotel.objects.all().select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
-        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
+    def get(self, request, city_slug, *args, **kwargs):
+        try:
+            city = City.objects.get(slug=city_slug)
+            hotels = Hotel.objects.filter(city=city).select_related('city', 'type').distinct()
+            hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+            context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-        city_hotels = {}
-        for hotel in hotels:
-            city_name = hotel.city.name
-            serialized = HotelListSerializer(hotel, context=context).data
-            serialized['average_score'] = self.get_average_score(hotel)
-            if city_name not in city_hotels:
-                city_hotels[city_name] = []
-            city_hotels[city_name].append(serialized)
+            serialized_hotels = []
+            for hotel in hotels:
+                serialized = HotelListSerializer(hotel, context=context).data
+                serialized['average_score'] = self.get_average_score(hotel)
+                serialized_hotels.append(serialized)
 
-        response_data = city_hotels
-
-        return Response(response_data)
+            response_data = {city.name: serialized_hotels}
+            return Response(response_data)
+        except City.DoesNotExist:
+            return Response({'error': 'City not found'}, status=404)
 
 
 
