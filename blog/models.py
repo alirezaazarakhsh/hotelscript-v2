@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django_jalali.db import models as jmodels
 from django.contrib.contenttypes.models import ContentType
+from tinymce.models import HTMLField
 from django.contrib.contenttypes.fields import (
     GenericForeignKey,
     GenericRelation,
@@ -210,12 +211,12 @@ class Article(models.Model):
         allow_unicode=True,
     )
     summary = models.TextField(
-    verbose_name=_('خلاصه مقاله'),
-    max_length=512,
-    blank=True,
-    null=True,
+        verbose_name=_('خلاصه مقاله'),
+        max_length=512,
+        blank=True,
+        null=True,
     )
-    body = RichTextField(
+    body = HTMLField(  # تغییر به HTMLField از django-tinymce
         verbose_name=_('متن'),
     )
     author = models.ForeignKey(
@@ -269,8 +270,8 @@ class Article(models.Model):
         default=False,
     )
     created = jmodels.jDateTimeField(
-    verbose_name=_('تاریخ ایجاد'),
-    auto_now_add=True,
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
     )
     updated = jmodels.jDateTimeField(
         verbose_name=_('تاریخ تغییر'),
