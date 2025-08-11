@@ -251,11 +251,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را برای تخفیف ثابت حذف کنید.")
                 if price_data.is_fixed_discount_one_time and fixed_discount_applied:
                     discount_amount = 0
+                    price_after_discount = int(price_data.price)
                 else:
                     discount_amount = int(price_data.discount_value)
+                    price_after_discount = int(max(price_data.price - discount_amount, 0))
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
-                # تغییر: برای تخفیف ثابت، price_after_discount را برابر price نگه می‌داریم و از آن کم نمی‌کنیم
-                price_after_discount = int(price_data.price)
         else:
             discount_amount = 0
 
@@ -643,6 +643,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
+
+    
 
 
 
