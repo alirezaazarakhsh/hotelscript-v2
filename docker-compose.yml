@@ -66,6 +66,55 @@ services:
     networks:
       - app_network
 
+  celery:
+    build: .
+    container_name: celery_worker
+    command: celery -A safarname24 worker -l info
+    volumes:
+      - .:/app
+      - /var/hotelscript-v2/media:/app/media
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DB_ENGINE: "django.db.backends.postgresql"
+      DB_NAME: "safarname24"
+      DB_USER: "postgres"
+      DB_PASSWORD: "admin"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_network
+
+  celery_beat:
+    build: .
+    container_name: celery_beat
+    command: celery -A safarname24 beat -l info
+    volumes:
+      - .:/app
+      - /var/hotelscript-v2/media:/app/media
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DB_ENGINE: "django.db.backends.postgresql"
+      DB_NAME: "safarname24"
+      DB_USER: "postgres"
+      DB_PASSWORD: "admin"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - db
+      - redis
+      - celery
+    networks:
+      - app_network
+
 volumes:
   postgres_data:
     driver: local
@@ -75,6 +124,3 @@ volumes:
 networks:
   app_network:
     driver: bridge
-
-
-

@@ -52,11 +52,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # 'jalali_date',
     'django_jalali',
-    # 'django_jalali_datepicker',
     'colorfield',
-    'ckeditor',  # فقط یکبار
+    'ckeditor',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'authentication',
@@ -74,8 +72,6 @@ INSTALLED_APPS = [
     'notification',
     'setting_payment',
     'tinymce',
-
-    # اضافه‌شده برای Channels
     'channels',
 ]
 
@@ -113,18 +109,25 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'safarname24.wsgi.application'
-
-# اضافه‌شده برای Channels
 ASGI_APPLICATION = 'safarname24.asgi.application'
 
+# تنظیمات Channels
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [("127.0.0.1", 6379)],
+            "hosts": [("redis" if os.environ.get('REDIS_HOST') else "127.0.0.1", 6379)],
         },
     },
 }
+
+# تنظیمات Celery
+CELERY_BROKER_URL = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Tehran'
 
 DATABASES = {
     'default': {
@@ -132,7 +135,7 @@ DATABASES = {
         'NAME': env('DB_NAME'),
         'USER': env('DB_USER'),
         'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST'),
+        'HOST': env('DB_HOST') if not os.environ.get('DB_HOST') else os.environ.get('DB_HOST'),
         'PORT': env('DB_PORT'),
     }
 }
@@ -232,8 +235,6 @@ JALALI_DATE_DEFAULTS = {
     },
 }
 
-
-
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -257,14 +258,10 @@ LOGGING = {
     },
 }
 
-
-
-# payment_project/settings.py
 ZARINPAL_CONFIG = {
-    'SANDBOX': False,  # برای تست، True کنید؛ در محیط واقعی False کنید
-    'CALLBACK_URL': 'https://safarnameh24.com/gateways/verify/',  # URL بازگشت برای زرین‌پال
+    'SANDBOX': False,
+    'CALLBACK_URL': 'https://safarnameh24.com/gateways/verify/',
 }
-
 
 TINYMCE_DEFAULT_CONFIG = {
     "height": 600,
