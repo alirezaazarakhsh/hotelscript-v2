@@ -1258,7 +1258,7 @@ class HomeHotelByCityView(APIView):
         """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل"""
         today = timezone.now().date()
         hotel_min_price_map = {}
-        
+
         for hotel in hotels:
             rooms = Room.objects.filter(hotel=hotel)
             min_price = None
@@ -1301,14 +1301,14 @@ class HomeHotelByCityView(APIView):
         return hotel_min_price_map
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست هتل‌ها بر اساس شهر در صفحه داخلی هتل",
-        operation_description="این API لیستی از هتل‌های یک شهر خاص را بر اساس اسلاگ شهر بازمی‌گرداند. اگر شهر یافت نشود، خطای 404 برگردانده می‌شود.",
+        operation_summary="دریافت لیست هتل‌ها بر اساس نام شهر در صفحه داخلی هتل",
+        operation_description="این API لیستی از هتل‌های یک شهر خاص را بر اساس نام شهر (فارسی یا لاتین) بازمی‌گرداند. اگر شهر یافت نشود، خطای 404 برگردانده می‌شود.",
         tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
-                'city_slug',
+                'city_name',
                 openapi.IN_PATH,
-                description="اسلاگ شهر (مثال: tehran)",
+                description="نام شهر (مثال: تهران)",
                 type=openapi.TYPE_STRING,
                 required=True
             )
@@ -1364,9 +1364,10 @@ class HomeHotelByCityView(APIView):
             )
         }
     )
-    def get(self, request, city_slug, *args, **kwargs):
+    def get(self, request, city_name, *args, **kwargs):
         try:
-            city = City.objects.get(slug=city_slug)
+            city_name = city_name.strip()
+            city = City.objects.get(name=city_name)
             hotels = Hotel.objects.filter(city=city).select_related('city', 'type').distinct()
             hotel_min_price_map = self.get_hotel_min_price_map(hotels)
             context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
@@ -1380,8 +1381,9 @@ class HomeHotelByCityView(APIView):
             return Response(serialized_hotels)
         except City.DoesNotExist:
             return Response({'error': 'City not found'}, status=404)
-
-
+        
+        
+        
 
 #ای پی ای لیست هتل برای سرچ صفحه اول 
 class HotelSearchAPI(ListCreateAPIView):

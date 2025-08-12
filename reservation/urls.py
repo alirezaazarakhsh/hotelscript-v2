@@ -26,7 +26,7 @@ urlpatterns = [
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
     path('hotels/home/', views.HomeHotelListView.as_view(), name='home-hotel-list'),
-    path('hotels/by-city/<str:city_slug>/', HomeHotelByCityView.as_view(), name='hotel-by-city'),
+    path('hotel/hotels/by-city/<str:city_name>/', HomeHotelByCityView.as_view(), name='hotels-by-city'),
 
 
     # ==== Facilities and Services ====
