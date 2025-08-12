@@ -65,16 +65,13 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         if obj.discount_type == 'room' and obj.room_discount_code:
             room = obj.room_discount_code.room
             return {
-                'code': obj.room_discount_code.code,
                 'room_id': room.id,
-                'room_name': str(room),  # یا هر فیلدی که اسم اتاق رو نشون بده
-                'hotel_name': getattr(room, 'hotel_name', 'Unknown Hotel')  # فرض می‌کنیم hotel_name وجود داره
+                'room_name': f"{getattr(room, 'hotel_name', 'Unknown Hotel')} - {str(room)}"
             }
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
             shopping_center = obj.shopping_discount_code.shopping_center
             return {
-                'code': obj.shopping_discount_code.code,
                 'shopping_center_id': shopping_center.id,
-                'shopping_center_name': str(shopping_center)  # یا هر فیلدی که اسم مرکز خرید رو نشون بده
+                'shopping_center_name': str(shopping_center)
             }
         return None
