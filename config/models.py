@@ -758,7 +758,7 @@ class Location(models.Model):
     
     
 # مدل نمایش تمام عکس های سیستم 
-logger = logging.getLogger(__name__)
+ogger = logging.getLogger(__name__)
 
 
 class Folder(models.Model):
@@ -785,7 +785,6 @@ class Media(models.Model):
     )
 
     def admin_file(self):
-        """نمایش پیش‌نمایش یا لینک فایل در ادمین"""
         if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
             return mark_safe(f'<img src="{self.file.url}" width="100" style="object-fit:contain;" />')
         return mark_safe(f'<a href="{self.file.url}" target="_blank">{os.path.basename(self.file.name)}</a>')
@@ -814,13 +813,10 @@ class MediaRestore(models.Model):
 
 @receiver(post_migrate)
 def scan_media_files(sender, **kwargs):
-    """
-    بعد از migrate پوشه media را اسکن می‌کند
-    و فایل‌های موجود را وارد دیتابیس می‌کند.
-    """
     media_root = settings.MEDIA_ROOT
     if not os.path.exists(media_root):
-        return  # اگر پوشه رسانه وجود ندارد، هیچی نکن
+        logger.warning(f"پوشه media_root وجود ندارد: {media_root}")
+        return
 
     for root, _, files in os.walk(media_root):
         relative_folder = os.path.relpath(root, media_root)
@@ -831,10 +827,8 @@ def scan_media_files(sender, **kwargs):
         folder, _ = Folder.objects.get_or_create(name=folder_name)
 
         for file_name in files:
-            if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                relative_path = os.path.join(relative_folder, file_name)
-                logger.info(f"📂 ثبت فایل: {relative_path} - پوشه: {folder_name}")
-                Media.objects.get_or_create(
-                    file=relative_path,
-                    folder=folder
-                )
+            relative_path = os.path.join(relative_folder, file_name)
+            # اگر فایل هنوز ثبت نشده
+            if not Media.objects.filter(file=relative_path).exists():
+                logger.info(f"ثبت فایل: {relative_path} در پوشه {folder_name}")
+                Media.objects.create(file=relative_path, folder=folder)

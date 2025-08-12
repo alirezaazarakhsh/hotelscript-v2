@@ -1,13 +1,13 @@
 # config/admin.py
 import os
 import zipfile
-from django.contrib import admin
-from django.contrib import messages
+import io
+import logging
+
+from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.http import HttpResponse
 from django.conf import settings
-import io
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def list_all_files_and_dirs(base_path):
             files.append(os.path.join(rel_root, f))
     return folders, files
 
-# اکشن ادمین برای نمایش همه فایل‌ها و فولدرهای media
+# اکشن ادمین برای نمایش تمام فایل‌ها و فولدرهای media
 @admin.action(description='نمایش تمام فایل‌ها و فولدرهای media')
 def show_all_media_files(modeladmin, request, queryset):
     base_path = settings.MEDIA_ROOT
@@ -45,7 +45,7 @@ def show_all_media_files(modeladmin, request, queryset):
     message = "فولدرها:\n" + "\n".join(folders) + "\n\nفایل‌ها:\n" + "\n".join(files)
     messages.info(request, message[:3000])  # محدودیت طول پیام برای جلوگیری از خطا
 
-# Inline برای مدل Media
+# Inline برای مدل Media در FolderAdmin
 class MediaInline(admin.TabularInline):
     model = Media
     extra = 1
@@ -68,7 +68,7 @@ class MediaAdmin(admin.ModelAdmin):
     search_fields = ['file']
     list_editable = ['folder']
     autocomplete_fields = ['folder']
-    actions = ['export_as_zip', show_all_media_files]  # اضافه شدن اکشن جدید
+    actions = ['export_as_zip', show_all_media_files]
 
     def export_as_zip(self, request, queryset):
         buffer = io.BytesIO()
@@ -125,7 +125,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
-# ثبت بقیه مدل‌ها
+# سایر مدل‌ها را به صورت کامل و بهینه ثبت کنید:
 
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
@@ -208,18 +208,8 @@ class ChooseReasonAdmin(admin.ModelAdmin):
 
 @admin.register(FAQ)
 class FAQAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'question',
-        'answer',
-        'icon_preview',
-        'page',
-    )
-    search_fields = (
-        'question',
-        'answer',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'question', 'answer', 'icon_preview', 'page')
+    search_fields = ('question', 'answer', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
@@ -257,33 +247,16 @@ class ServiceAdmin(admin.ModelAdmin):
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
     list_display = (
-        'id',
-        'title',
-        'subtitle',
-        'value',
-        'link',
-        'show_in_footer',
-        'icon_preview',
+        'id', 'title', 'subtitle', 'value', 'link', 'show_in_footer', 'icon_preview'
     )
-    search_fields = (
-        'title',
-        'subtitle',
-        'value',
-        'icon__title_icon',
-    )
+    search_fields = ('title', 'subtitle', 'value', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
     fieldsets = (
         (None, {
             'fields': (
-                'title',
-                'subtitle',
-                'value',
-                'link',
-                'icon',
-                'icon_preview',
-                'show_in_footer',
+                'title', 'subtitle', 'value', 'link', 'icon', 'icon_preview', 'show_in_footer',
             )
         }),
     )
@@ -304,31 +277,16 @@ class ContactInfoAdmin(admin.ModelAdmin):
 @admin.register(SocialMedia)
 class SocialMediaAdmin(admin.ModelAdmin):
     list_display = (
-        'id',
-        'type',
-        'type_fa',
-        'link',
-        'show_in_footer',
-        'icon_preview',
+        'id', 'type', 'type_fa', 'link', 'show_in_footer', 'icon_preview',
     )
-    search_fields = (
-        'type',
-        'type_fa',
-        'link',
-        'icon__title_icon',
-    )
+    search_fields = ('type', 'type_fa', 'link', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
     fieldsets = (
         (None, {
             'fields': (
-                'type',
-                'type_fa',
-                'link',
-                'icon',
-                'icon_preview',
-                'show_in_footer',
+                'type', 'type_fa', 'link', 'icon', 'icon_preview', 'show_in_footer',
             )
         }),
     )
@@ -374,27 +332,15 @@ class LicenseAdmin(admin.ModelAdmin):
 
 @admin.register(Advantage)
 class AdvantageAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'subtitle',
-        'icon_preview',
-    )
-    search_fields = (
-        'title',
-        'subtitle',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'title', 'subtitle', 'icon_preview')
+    search_fields = ('title', 'subtitle', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
     fieldsets = (
         (None, {
             'fields': (
-                'title',
-                'subtitle',
-                'icon',
-                'icon_preview',
+                'title', 'subtitle', 'icon', 'icon_preview',
             )
         }),
     )
@@ -446,24 +392,15 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'icon_preview',
-    )
-    search_fields = (
-        'title',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'title', 'icon_preview')
+    search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
     fieldsets = (
         (None, {
             'fields': (
-                'title',
-                'icon',
-                'icon_preview',
+                'title', 'icon', 'icon_preview',
             )
         }),
     )
