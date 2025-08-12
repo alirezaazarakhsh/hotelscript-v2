@@ -19,7 +19,7 @@ from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer
 class MyRoomDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = RoomDiscountCodeSerializer
-    pagination_class = None
+    
 
     def get_queryset(self):
         user = self.request.user
@@ -54,7 +54,7 @@ class MyRoomDiscountCodeListView(ListAPIView):
 class MyShoppingCenterDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = ShoppingCenterDiscountCodeSerializer
-    pagination_class = None
+    
 
     def get_queryset(self):
         user = self.request.user

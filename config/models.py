@@ -760,7 +760,6 @@ class Location(models.Model):
 # مدل نمایش تمام عکس های سیستم 
 logger = logging.getLogger(__name__)
 
-
 class Folder(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="نام پوشه")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
@@ -772,9 +771,7 @@ class Folder(models.Model):
         verbose_name = "پوشه"
         verbose_name_plural = "پوشه‌ها"
 
-
 class Media(models.Model):
-    # من upload_to رو گذاشتم "uploads/" که یکنواخت باشه
     file = models.FileField(verbose_name="فایل", upload_to="uploads/")
     folder = models.ForeignKey(
         Folder,
@@ -799,7 +796,6 @@ class Media(models.Model):
         verbose_name = "رسانه"
         verbose_name_plural = "رسانه‌ها"
 
-
 class MediaRestore(models.Model):
     zip_file = models.FileField(upload_to="media_restore/", verbose_name="فایل ZIP")
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ بارگذاری")
@@ -811,20 +807,15 @@ class MediaRestore(models.Model):
         verbose_name = "بازگردانی رسانه"
         verbose_name_plural = "بازگردانی‌های رسانه"
 
-
-# سیگنال برای اسکن پوشه uploads بعد از مایگریشن
 @receiver(post_migrate)
 def scan_media_files(sender, **kwargs):
     media_root = settings.MEDIA_ROOT
-    upload_prefix = "uploads"  # مطابق upload_to در Media.file
-
-    upload_path = os.path.join(media_root, upload_prefix)
-    if not os.path.exists(upload_path):
-        logger.warning(f"پوشه uploads وجود ندارد: {upload_path}")
+    if not os.path.exists(media_root):
+        logger.warning(f"پوشه MEDIA_ROOT وجود ندارد: {media_root}")
         return
 
-    for root, _, files in os.walk(upload_path):
-        relative_folder = os.path.relpath(root, upload_path)
+    for root, _, files in os.walk(media_root):
+        relative_folder = os.path.relpath(root, media_root)
         folder_name = relative_folder if relative_folder != '.' else 'root'
         if folder_name == 'root' and not files:
             continue
@@ -832,8 +823,7 @@ def scan_media_files(sender, **kwargs):
         folder, _ = Folder.objects.get_or_create(name=folder_name)
 
         for file_name in files:
-            relative_path = os.path.join(upload_prefix, relative_folder, file_name).replace('\\', '/')
-            # اگر فایل هنوز ثبت نشده
+            relative_path = os.path.join(relative_folder, file_name).replace('\\', '/')
             if not Media.objects.filter(file=relative_path).exists():
                 logger.info(f"ثبت فایل: {relative_path} در پوشه {folder_name}")
                 Media.objects.create(file=relative_path, folder=folder)
