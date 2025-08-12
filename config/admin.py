@@ -1,3 +1,4 @@
+# config/admin.py
 import os
 import zipfile
 from django.contrib import admin
@@ -54,7 +55,10 @@ class MediaAdmin(admin.ModelAdmin):
             for media in queryset:
                 if media.file and os.path.exists(media.file.path):
                     folder_name = media.folder.name if media.folder else ''
-                    zip_path = os.path.join('media', folder_name, os.path.basename(media.file.name))
+                    clean_file_name = media.file.name
+                    while clean_file_name.startswith('media/'):
+                        clean_file_name = clean_file_name[len('media/'):]
+                    zip_path = os.path.join('media', folder_name, os.path.basename(clean_file_name))
                     logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
                     zip_file.write(media.file.path, zip_path)
         
@@ -78,8 +82,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
                 zip_ref.extractall(settings.MEDIA_ROOT)
                 for file_name in zip_ref.namelist():
-                    if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                        # پاکسازی مسیر فایل از پیشوندهای اضافی 'media/'
+                    if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                         clean_file_name = file_name
                         while clean_file_name.startswith('media/'):
                             clean_file_name = clean_file_name[len('media/'):]
@@ -101,7 +104,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
-# بقیه مدل‌های ادمین (بدون تغییر)
+# ثبت بقیه مدل‌ها
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'page', 'path')
@@ -114,7 +117,7 @@ class HeaderMenuAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
-            messages.error(request, f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
+            messages.error(request, f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر می‌توانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
@@ -128,7 +131,7 @@ class QuickAccessAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
-            messages.error(request, f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
+            messages.error(request, f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع می‌توانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
@@ -142,7 +145,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and SiteConfig.objects.exists():
-            messages.error(request, 'تنها یک کانفیگ برای سایت میتوان ساخت')
+            messages.error(request, 'تنها یک کانفیگ برای سایت می‌توان ساخت')
         else:
             super().save_model(request, obj, form, change)
 
@@ -334,7 +337,7 @@ class EnamadLicenseAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and EnamadLicense.objects.exists():
-            messages.error(request, 'تنها یک کد اینماد میتوان ساخت')
+            messages.error(request, 'تنها یک کد اینماد می‌توان ساخت')
         else:
             super().save_model(request, obj, form, change)
 
@@ -412,7 +415,7 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and ComingSoon.objects.exists():
-            messages.error(request, 'تنها یک کامینگ سون میتوان ساخت')
+            messages.error(request, 'تنها یک کامینگ سون می‌توان ساخت')
         else:
             super().save_model(request, obj, form, change)
 

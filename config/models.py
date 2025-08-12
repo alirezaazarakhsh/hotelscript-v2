@@ -758,8 +758,8 @@ class Location(models.Model):
     
     
 # مدل نمایش تمام عکس های سیستم 
-
 logger = logging.getLogger(__name__)
+
 class Folder(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="نام پوشه")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
@@ -783,7 +783,7 @@ class Media(models.Model):
     )
 
     def admin_file(self):
-        if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+        if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
             return mark_safe(f'<img src="{self.file.url}" width="100" />')
         return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
     
@@ -820,7 +820,6 @@ def sync_media_files(sender, instance, created, **kwargs):
             if isinstance(field, (models.FileField, models.ImageField)):
                 file = getattr(instance, field.name)
                 if file and file.name:
-                    # پاکسازی مسیر از پیشوندهای اضافی 'media/'
                     clean_file_name = file.name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
@@ -850,12 +849,11 @@ def scan_media_folders(sender, **kwargs):
         folder, _ = Folder.objects.get_or_create(name=folder_name)
         for root, _, files in os.walk(folder_path):
             for file_name in files:
-                if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                     relative_path = os.path.relpath(
                         os.path.join(root, file_name),
                         settings.MEDIA_ROOT
                     )
-                    # پاکسازی مسیر از پیشوندهای اضافی 'media/'
                     clean_relative_path = relative_path
                     while clean_relative_path.startswith('media/'):
                         clean_relative_path = clean_relative_path[len('media/'):]
