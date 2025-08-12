@@ -79,6 +79,7 @@ class MediaAdmin(admin.ModelAdmin):
                     clean_file_name = media.file.name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
+                    # در زیپ مسیر به شکل: media/<folder>/<filename>
                     zip_path = os.path.join('media', folder_name, os.path.basename(clean_file_name))
                     logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
                     zip_file.write(media.file.path, zip_path)
@@ -96,6 +97,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
     list_filter = ['uploaded_at']
     readonly_fields = ['uploaded_at']
+    form = MediaRestoreForm
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -125,7 +127,8 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
-# سایر مدل‌ها را به صورت کامل و بهینه ثبت کنید:
+
+# سایر مدل‌ها
 
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
@@ -138,13 +141,15 @@ class HeaderMenuAdmin(admin.ModelAdmin):
     search_fields = ('order', 'title', 'page')
 
     def save_model(self, request, obj, form, change):
-        if not change and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
-            messages.error(request, f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر می‌توانید بسازید.')
+        max_count = getattr(HeaderMenu, 'MAX_ALLOWED_INSTANCES', 5)
+        if not change and HeaderMenu.objects.count() >= max_count:
+            messages.error(request, f'تنها به تعداد {max_count} منوی هدر می‌توانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
     def has_add_permission(self, request):
-        return HeaderMenu.objects.count() < HeaderMenu.MAX_ALLOWED_INSTANCES
+        max_count = getattr(HeaderMenu, 'MAX_ALLOWED_INSTANCES', 5)
+        return HeaderMenu.objects.count() < max_count
 
 @admin.register(QuickAccess)
 class QuickAccessAdmin(admin.ModelAdmin):
@@ -152,13 +157,15 @@ class QuickAccessAdmin(admin.ModelAdmin):
     search_fields = ('order', 'title', 'page')
 
     def save_model(self, request, obj, form, change):
-        if not change and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
-            messages.error(request, f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع می‌توانید بسازید.')
+        max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
+        if not change and QuickAccess.objects.count() >= max_count:
+            messages.error(request, f'تنها به تعداد {max_count} دسترسی سریع می‌توانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
     def has_add_permission(self, request):
-        return QuickAccess.objects.count() < QuickAccess.MAX_ALLOWED_INSTANCES
+        max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
+        return QuickAccess.objects.count() < max_count
 
 @admin.register(SiteConfig)
 class SiteConfigAdmin(admin.ModelAdmin):
@@ -359,7 +366,8 @@ class AdvantageAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
     def has_add_permission(self, request):
-        if Advantage.objects.count() >= 4:
+        max_advantages = 4
+        if Advantage.objects.count() >= max_advantages:
             return False
         return super().has_add_permission(request)
 
