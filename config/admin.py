@@ -1,4 +1,3 @@
-# safarname24/admin.py
 import os
 import zipfile
 from django.contrib import admin
@@ -6,44 +5,22 @@ from django.contrib import messages
 from django.utils.html import format_html
 from django.http import HttpResponse
 from django.conf import settings
+from django.apps import apps
 import io
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .models import (
-    Location,
-    Page,
-    HeaderMenu,
-    QuickAccess,
-    SiteConfig,
-    Slide,
-    Statistic,
-    StatisticItem,
-    ChooseReason,
-    FAQ,
-    Service,
-    ContactInfo,
-    SocialMedia,
-    Banner,
-    EnamadLicense,
-    License,
-    Advantage,
-    FakeComment,
-    Rule,
-    ComingSoon,
-    UserLevel,
-    Folder,
-    Media,
-    MediaRestore,
+    Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
+    Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
+    SocialMedia, Banner, EnamadLicense, License, Advantage, FakeComment,
+    Rule, ComingSoon, UserLevel, Folder, Media, MediaRestore,
 )
 from .forms import (
-    SiteConfigAdminForm,
-    SlideAdminForm,
-    ChooseReasonForm,
-    ServiceForm,
-    BannerForm,
-    LicenseForm,
-    FakeCommentForm,
-    ComingSoonAdminForm,
-    StatisticAdminForm,
-    MediaRestoreForm,
+    SiteConfigAdminForm, SlideAdminForm, ChooseReasonForm, ServiceForm,
+    BannerForm, LicenseForm, FakeCommentForm, ComingSoonAdminForm,
+    StatisticAdminForm, MediaRestoreForm,
 )
 
 # Inline برای مدل Media
@@ -74,24 +51,12 @@ class MediaAdmin(admin.ModelAdmin):
     def export_as_zip(self, request, queryset):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # اضافه کردن تمام فایل‌های Media
             for media in queryset:
                 if media.file and os.path.exists(media.file.path):
                     folder_name = media.folder.name if media.folder else ''
                     zip_path = os.path.join('media', folder_name, os.path.basename(media.file.name))
+                    logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
                     zip_file.write(media.file.path, zip_path)
-            # اضافه کردن فایل‌های مدل‌های دیگر
-            models_to_track = ['Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason']
-            for model_name in models_to_track:
-                model = apps.get_model('safarname24', model_name)
-                for instance in model.objects.all():
-                    for field in model._meta.get_fields():
-                        if isinstance(field, (models.FileField, models.ImageField)):
-                            file = getattr(instance, field.name)
-                            if file and file.name and os.path.exists(file.path):
-                                folder_name = model_name.lower()
-                                zip_path = os.path.join('media', folder_name, os.path.basename(file.name))
-                                zip_file.write(file.path, zip_path)
         
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type='application/zip')
@@ -118,23 +83,22 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                         clean_file_name = file_name
                         while clean_file_name.startswith('media/'):
                             clean_file_name = clean_file_name[len('media/'):]
-                        # ساخت مسیر نهایی
                         media_path = os.path.join('media', clean_file_name)
-                        # استخراج نام پوشه
                         folder_name = os.path.dirname(clean_file_name).strip('/')
                         folder = None
                         if folder_name:
                             folder, _ = Folder.objects.get_or_create(name=folder_name)
-                        # ایجاد رکورد Media
+                        logger.info(f"ایجاد رکورد برای: {media_path}, پوشه: {folder_name}")
                         Media.objects.get_or_create(
                             file=media_path,
                             folder=folder
                         )
+            logger.info("فایل ZIP با موفقیت بازگردانی شد.")
             messages.success(request, 'فایل ZIP با موفقیت بازگردانی شد.')
-            # حذف فایل ZIP و رکورد MediaRestore
             os.remove(obj.zip_file.path)
             obj.delete()
         except Exception as e:
+            logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
 # بقیه مدل‌های ادمین (بدون تغییر)

@@ -1,8 +1,13 @@
 from decimal import Decimal
+import logging
+import os
 from ckeditor.fields import RichTextField
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save, post_migrate
+from django.dispatch import receiver
 from django.utils.safestring import mark_safe
 from django.core.validators import (
     MinValueValidator,
@@ -753,15 +758,10 @@ class Location(models.Model):
     
     
 # مدل نمایش تمام عکس های سیستم 
-# safarname24/models.py
-from django.db import models
-from django.utils.safestring import mark_safe
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-import os
 
+logger = logging.getLogger(__name__)
 class Folder(models.Model):
-    name = models.CharField(max_length=100, verbose_name="نام پوشه")
+    name = models.CharField(max_length=100, unique=True, verbose_name="نام پوشه")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     
     def __str__(self):
@@ -783,7 +783,7 @@ class Media(models.Model):
     )
 
     def admin_file(self):
-        if self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+        if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
             return mark_safe(f'<img src="{self.file.url}" width="100" />')
         return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
     
@@ -811,18 +811,57 @@ class MediaRestore(models.Model):
 # سیگنال برای ثبت خودکار فایل‌های آپلود‌شده در مدل‌های دیگر
 @receiver(post_save)
 def sync_media_files(sender, instance, created, **kwargs):
-    # لیستی از مدل‌هایی که می‌خواهیم فایل‌هاشون ردیابی بشه
-    models_to_track = ['Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason']  # مدل‌های دیگه رو اضافه کنید
+    models_to_track = [
+        'Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason',
+        'ComingSoon', 'SiteConfig',
+    ]
     if sender.__name__ in models_to_track and created:
         for field in sender._meta.get_fields():
             if isinstance(field, (models.FileField, models.ImageField)):
                 file = getattr(instance, field.name)
                 if file and file.name:
-                    # استخراج نام مدل به‌عنوان نام پوشه
+                    # پاکسازی مسیر از پیشوندهای اضافی 'media/'
+                    clean_file_name = file.name
+                    while clean_file_name.startswith('media/'):
+                        clean_file_name = clean_file_name[len('media/'):]
+                    file_path = os.path.join('media', clean_file_name)
                     folder_name = sender.__name__.lower()
                     folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    # ثبت فایل در مدل Media
+                    logger.info(f"ثبت فایل از مدل {sender.__name__}: {file_path}")
                     Media.objects.get_or_create(
-                        file=file.name,
+                        file=file_path,
+                        folder=folder
+                    )
+
+# سیگنال برای اسکن و ثبت فایل‌های موجود در پوشه‌های MEDIA_ROOT
+@receiver(post_migrate)
+def scan_media_folders(sender, **kwargs):
+    if sender.name != 'config':
+        return
+    folders_to_track = [
+        'about_us', 'cities', 'hotel_gallery', 'icons',
+        'images', 'legal-profiles', 'media', 'shopping_centers'
+    ]
+    for folder_name in folders_to_track:
+        folder_path = os.path.join(settings.MEDIA_ROOT, folder_name)
+        if not os.path.exists(folder_path):
+            logger.warning(f"پوشه {folder_path} وجود ندارد.")
+            continue
+        folder, _ = Folder.objects.get_or_create(name=folder_name)
+        for root, _, files in os.walk(folder_path):
+            for file_name in files:
+                if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    relative_path = os.path.relpath(
+                        os.path.join(root, file_name),
+                        settings.MEDIA_ROOT
+                    )
+                    # پاکسازی مسیر از پیشوندهای اضافی 'media/'
+                    clean_relative_path = relative_path
+                    while clean_relative_path.startswith('media/'):
+                        clean_relative_path = clean_relative_path[len('media/'):]
+                    media_path = os.path.join('media', clean_relative_path)
+                    logger.info(f"ثبت فایل: {media_path}, پوشه: {folder_name}")
+                    Media.objects.get_or_create(
+                        file=media_path,
                         folder=folder
                     )
