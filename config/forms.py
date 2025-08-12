@@ -1,6 +1,7 @@
 from django import forms
 from .models import (
    
+    MediaRestore,
     SiteConfig,
     Slide,
     Service,
@@ -131,5 +132,13 @@ class StatisticAdminForm(forms.ModelForm):
 
 
 
-class MediaRestoreForm(forms.Form):
-    zip_file = forms.FileField(label="فایل ZIP", help_text="فایل ZIP حاوی تصاویر را انتخاب کنید.")
+class MediaRestoreForm(forms.ModelForm):
+    class Meta:
+        model = MediaRestore
+        fields = ['zip_file']
+        labels = {
+            'zip_file': 'فایل ZIP',
+        }
+        help_texts = {
+            'zip_file': 'فایل ZIP حاوی تصاویر را انتخاب کنید.',
+        }
