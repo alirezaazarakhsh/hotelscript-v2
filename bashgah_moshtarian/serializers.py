@@ -51,7 +51,6 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     discount_type = serializers.CharField(source='get_discount_type_display', read_only=True)
     code = serializers.SerializerMethodField()
-    activated_at = serializers.SerializerMethodField()
 
     class Meta:
         model = DiscountActivationRecord
@@ -60,6 +59,3 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code
         return code.code if code else '—'
-
-    def get_activated_at(self, obj):
-        return date2jalali(obj.activated_at).strftime('%Y/%m/%d')
