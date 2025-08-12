@@ -51,11 +51,29 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     discount_type = serializers.CharField(source='get_discount_type_display', read_only=True)
     code = serializers.SerializerMethodField()
+    related_info = serializers.SerializerMethodField()
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'activated_at', 'reward_claimed']
+        fields = ['id', 'user', 'discount_type', 'code', 'activated_at', 'reward_claimed', 'related_info']
 
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code
         return code.code if code else '—'
+
+    def get_related_info(self, obj):
+        # اگر تخفیف اتاق باشه اطلاعات اتاق رو برگردون
+        if obj.discount_type == 'room' and obj.room_discount_code:
+            room = obj.room_discount_code.room  # فرض می‌کنم مدل RoomDiscountCode یه فیلد room داره
+            return {
+                'room_id': room.id,
+                'room_name': str(room),  # یا هر فیلدی که اسم اتاق رو نشون بده
+            }
+        # اگر تخفیف مرکز خرید باشه اطلاعات مرکز خرید رو برگردون
+        elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
+            shopping_center = obj.shopping_discount_code.shopping_center  # فرض می‌کنم مدل ShoppingCenterDiscountCode یه فیلد shopping_center داره
+            return {
+                'shopping_center_id': shopping_center.id,
+                'shopping_center_name': str(shopping_center),  # یا هر فیلدی که اسم مرکز خرید رو نشون بده
+            }
+        return None
