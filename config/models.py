@@ -760,10 +760,11 @@ class Location(models.Model):
 # مدل نمایش تمام عکس های سیستم 
 logger = logging.getLogger(__name__)
 
+
 class Folder(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="نام پوشه")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
-    
+
     def __str__(self):
         return self.name
 
@@ -771,61 +772,69 @@ class Folder(models.Model):
         verbose_name = "پوشه"
         verbose_name_plural = "پوشه‌ها"
 
+
 class Media(models.Model):
     file = models.FileField(verbose_name="فایل", upload_to="media/")
     folder = models.ForeignKey(
-        Folder, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        verbose_name="پوشه", 
+        Folder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="پوشه",
         related_name="media_files"
     )
 
     def admin_file(self):
+        """نمایش پیش‌نمایش یا لینک فایل در ادمین"""
         if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-            return mark_safe('<img src="{}" width="100" />'.format(self.file.url))
-        return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
-    
-    admin_file.short_description = "آیکون"
-    admin_file.allow_tags = True
+            return mark_safe(f'<img src="{self.file.url}" width="100" style="object-fit:contain;" />')
+        return mark_safe(f'<a href="{self.file.url}" target="_blank">{os.path.basename(self.file.name)}</a>')
 
-    def __str__(self) -> str:
-        return self.file.name
+    admin_file.short_description = "پیش‌نمایش"
+
+    def __str__(self):
+        return os.path.basename(self.file.name)
 
     class Meta:
         verbose_name = "رسانه"
-        verbose_name_plural = "رسانه"
+        verbose_name_plural = "رسانه‌ها"
+
 
 class MediaRestore(models.Model):
     zip_file = models.FileField(upload_to="media_restore/", verbose_name="فایل ZIP")
     uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ بارگذاری")
 
     def __str__(self):
-        return f"Restore {self.zip_file.name}"
+        return f"بازگردانی - {os.path.basename(self.zip_file.name)}"
 
     class Meta:
         verbose_name = "بازگردانی رسانه"
         verbose_name_plural = "بازگردانی‌های رسانه"
 
+
 @receiver(post_migrate)
 def scan_media_files(sender, **kwargs):
-    if sender.name != 'config':
-        return
-    for root, _, files in os.walk(settings.MEDIA_ROOT):
-        relative_folder = os.path.relpath(root, settings.MEDIA_ROOT)
+    """
+    بعد از migrate پوشه media را اسکن می‌کند
+    و فایل‌های موجود را وارد دیتابیس می‌کند.
+    """
+    media_root = settings.MEDIA_ROOT
+    if not os.path.exists(media_root):
+        return  # اگر پوشه رسانه وجود ندارد، هیچی نکن
+
+    for root, _, files in os.walk(media_root):
+        relative_folder = os.path.relpath(root, media_root)
         folder_name = relative_folder if relative_folder != '.' else 'root'
         if folder_name == 'root' and not files:
             continue
+
         folder, _ = Folder.objects.get_or_create(name=folder_name)
+
         for file_name in files:
             if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                 relative_path = os.path.join(relative_folder, file_name)
-                if relative_path.startswith('media/'):
-                    relative_path = relative_path[len('media/'):]
-                media_path = os.path.join('media', relative_path)
-                logger.info(f"ثبت فایل: {media_path}, پوشه: {folder_name}")
+                logger.info(f"📂 ثبت فایل: {relative_path} - پوشه: {folder_name}")
                 Media.objects.get_or_create(
-                    file=media_path,
+                    file=relative_path,
                     folder=folder
                 )
