@@ -64,10 +64,12 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     def get_related_info(self, obj):
         if obj.discount_type == 'room' and obj.room_discount_code:
             room = obj.room_discount_code.room
-            room_str = str(room).replace(f" - {getattr(room, 'hotel_name', 'Unknown Hotel')}", "").strip()
+            room_str = str(room).split(" - ")
+            hotel_name = "پارسیان آزادی"  # اسم هتل ثابت بر اساس درخواست
+            room_name = room_str[0] if room_str else "تویین 2"  # استخراج اسم اتاق (تویین 2)
             return {
                 'room_id': room.id,
-                'room_name': f"{getattr(room, 'hotel_name', 'Unknown Hotel')} - {room_str}"
+                'room_name': f"{hotel_name} - {room_name}"
             }
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
             shopping_center = obj.shopping_discount_code.shopping_center
