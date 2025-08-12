@@ -72,9 +72,7 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
                 'room_name': f"هتل {hotel_name} - اتاق {room_type}"
             }
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
-            shopping_center_name = obj.shopping_discount_code.shopping_center_name
             return {
-                'shopping_center_id': None,  # چون رابطه‌ای وجود ندارد، id نداریم
-                'shopping_center_name': shopping_center_name or "مرکز خرید نامشخص"
+                'shopping_center_name': obj.shopping_discount_code.shopping_center_name or "مرکز خرید نامشخص"
             }
         return None
