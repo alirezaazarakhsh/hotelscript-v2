@@ -58,10 +58,8 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'discount_type', 'code', 'activated_at', 'reward_claimed']
 
     def get_code(self, obj):
-        # انتخاب کد تخفیف بر اساس نوع (اتاق یا مرکز خرید)
         code = obj.room_discount_code or obj.shopping_discount_code
         return code.code if code else '—'
 
     def get_activated_at(self, obj):
-        # تبدیل تاریخ و ساعت به فرمت شمسی با ساعت
-        return datetime2jalali(obj.activated_at).strftime('%Y/%m/%d %H:%M:%S')
+        return date2jalali(obj.activated_at).strftime('%Y/%m/%d')

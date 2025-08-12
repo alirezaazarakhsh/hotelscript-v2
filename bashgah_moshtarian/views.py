@@ -122,8 +122,6 @@ class DiscountActivationRecordListView(generics.ListAPIView):
 
 
 
-
-
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
 class MyCustomerClubPointView(APIView):
     permission_classes = [IsAuthenticated]
