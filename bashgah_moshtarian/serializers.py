@@ -65,16 +65,16 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         if obj.discount_type == 'room' and obj.room_discount_code:
             room = obj.room_discount_code.room
             room_parts = str(room).split(" - ")
-            room_type = room_parts[0] if room_parts else "تویین 2"  # اسم اتاق (مثل تویین 2)
-            hotel_name = room_parts[1] if len(room_parts) > 1 else "پارسیان آزادی"  # اسم هتل (مثل پارسیان آزادی)
+            room_type = room_parts[0] if room_parts else "تویین 2"
+            hotel_name = room_parts[1] if len(room_parts) > 1 else "پارسیان آزادی"
             return {
                 'room_id': room.id,
                 'room_name': f"هتل {hotel_name} - اتاق {room_type}"
             }
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
-            shopping_center = obj.shopping_discount_code.shopping_center
+            shopping_center_name = obj.shopping_discount_code.shopping_center_name
             return {
-                'shopping_center_id': shopping_center.id,
-                'shopping_center_name': str(shopping_center)
+                'shopping_center_id': None,  # چون رابطه‌ای وجود ندارد، id نداریم
+                'shopping_center_name': shopping_center_name or "مرکز خرید نامشخص"
             }
         return None
