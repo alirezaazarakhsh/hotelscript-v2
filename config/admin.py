@@ -52,7 +52,6 @@ class MediaInline(admin.TabularInline):
     fields = ['file', 'admin_file']
     readonly_fields = ['admin_file']
 
-# ثبت مدل Folder در ادمین
 @admin.register(Folder)
 class FolderAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'created_at')
@@ -60,7 +59,6 @@ class FolderAdmin(admin.ModelAdmin):
     search_fields = ['name']
     inlines = [MediaInline]
 
-# ثبت مدل Media در ادمین
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
     list_display = ('id', 'file', 'folder', 'admin_file')
@@ -79,7 +77,6 @@ class MediaAdmin(admin.ModelAdmin):
                     clean_file_name = media.file.name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
-                    # در زیپ مسیر به شکل: media/<folder>/<filename>
                     zip_path = os.path.join('media', folder_name, os.path.basename(clean_file_name))
                     logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
                     zip_file.write(media.file.path, zip_path)
@@ -91,13 +88,12 @@ class MediaAdmin(admin.ModelAdmin):
 
     export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
 
-# ثبت مدل MediaRestore در ادمین
 @admin.register(MediaRestore)
 class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
     list_filter = ['uploaded_at']
     readonly_fields = ['uploaded_at']
-    form = MediaRestoreForm
+    form = MediaRestoreForm  # مطمئن شو این فرم از forms.ModelForm ارث برده
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -126,9 +122,6 @@ class MediaRestoreAdmin(admin.ModelAdmin):
         except Exception as e:
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
-
-
-# سایر مدل‌ها
 
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
