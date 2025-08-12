@@ -10,7 +10,7 @@ from django.db.models import Q
 
 from authentication import models
 from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
-from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
+from .serializers import CustomerClubPointSerializer, DiscountActivationRecordSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
 
 
 
