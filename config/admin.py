@@ -74,12 +74,24 @@ class MediaAdmin(admin.ModelAdmin):
     def export_as_zip(self, request, queryset):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # اضافه کردن تمام فایل‌های Media
             for media in queryset:
                 if media.file and os.path.exists(media.file.path):
-                    # ساخت مسیر با حفظ ساختار پوشه
                     folder_name = media.folder.name if media.folder else ''
                     zip_path = os.path.join('media', folder_name, os.path.basename(media.file.name))
                     zip_file.write(media.file.path, zip_path)
+            # اضافه کردن فایل‌های مدل‌های دیگر
+            models_to_track = ['Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason']
+            for model_name in models_to_track:
+                model = apps.get_model('safarname24', model_name)
+                for instance in model.objects.all():
+                    for field in model._meta.get_fields():
+                        if isinstance(field, (models.FileField, models.ImageField)):
+                            file = getattr(instance, field.name)
+                            if file and file.name and os.path.exists(file.path):
+                                folder_name = model_name.lower()
+                                zip_path = os.path.join('media', folder_name, os.path.basename(file.name))
+                                zip_file.write(file.path, zip_path)
         
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type='application/zip')
@@ -114,7 +126,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                         if folder_name:
                             folder, _ = Folder.objects.get_or_create(name=folder_name)
                         # ایجاد رکورد Media
-                        Media.objects.create(
+                        Media.objects.get_or_create(
                             file=media_path,
                             folder=folder
                         )

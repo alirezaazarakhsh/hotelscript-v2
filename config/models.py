@@ -753,6 +753,13 @@ class Location(models.Model):
     
     
 # مدل نمایش تمام عکس های سیستم 
+# safarname24/models.py
+from django.db import models
+from django.utils.safestring import mark_safe
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+import os
+
 class Folder(models.Model):
     name = models.CharField(max_length=100, verbose_name="نام پوشه")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
@@ -780,7 +787,7 @@ class Media(models.Model):
             return mark_safe(f'<img src="{self.file.url}" width="100" />')
         return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
     
-    admin_file.short_description = "عکس"
+    admin_file.short_description = "آیکون"
     admin_file.allow_tags = True
 
     def __str__(self):
@@ -800,3 +807,22 @@ class MediaRestore(models.Model):
     class Meta:
         verbose_name = "بازگردانی رسانه"
         verbose_name_plural = "بازگردانی رسانه‌ها"
+
+# سیگنال برای ثبت خودکار فایل‌های آپلود‌شده در مدل‌های دیگر
+@receiver(post_save)
+def sync_media_files(sender, instance, created, **kwargs):
+    # لیستی از مدل‌هایی که می‌خواهیم فایل‌هاشون ردیابی بشه
+    models_to_track = ['Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason']  # مدل‌های دیگه رو اضافه کنید
+    if sender.__name__ in models_to_track and created:
+        for field in sender._meta.get_fields():
+            if isinstance(field, (models.FileField, models.ImageField)):
+                file = getattr(instance, field.name)
+                if file and file.name:
+                    # استخراج نام مدل به‌عنوان نام پوشه
+                    folder_name = sender.__name__.lower()
+                    folder, _ = Folder.objects.get_or_create(name=folder_name)
+                    # ثبت فایل در مدل Media
+                    Media.objects.get_or_create(
+                        file=file.name,
+                        folder=folder
+                    )
