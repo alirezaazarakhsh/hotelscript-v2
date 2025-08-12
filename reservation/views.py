@@ -1277,8 +1277,12 @@ class HomeHotelByCityView(APIView):
 
                     if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
                         total_price = original_price * (1 - price.discount_value / 100)
+                        discount_percentage = price.discount_value
                     elif price.discount_type == 'fixed' and price.is_fixed_discount_one_time:
                         total_price = original_price - price.discount_value
+                        discount_percentage = (price.discount_value / original_price) * 100 if original_price > 0 else 0
+                    else:
+                        discount_percentage = 0.0
 
                     if min_price is None or total_price < min_price:
                         min_price = total_price
@@ -1287,7 +1291,8 @@ class HomeHotelByCityView(APIView):
                             'original_total_price': int(original_price),
                             'discount_type': price.discount_type,
                             'discount_value': price.discount_value,
-                            'discount_date': price.discount_date
+                            'discount_date': price.discount_date,
+                            'discount_percentage': round(discount_percentage, 1)
                         }
 
             if min_price_data:
@@ -1312,13 +1317,40 @@ class HomeHotelByCityView(APIView):
             200: openapi.Response(
                 description="لیست هتل‌ها برای شهر مشخص‌شده",
                 schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'city_name': openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Items(type=openapi.TYPE_OBJECT)
-                        )
-                    }
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'name': openapi.Schema(type=openapi.TYPE_STRING, description="نام هتل"),
+                            'slug': openapi.Schema(type=openapi.TYPE_STRING, description="اسلاگ هتل"),
+                            'city': openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="شناسه شهر"),
+                                    'image': openapi.Schema(type=openapi.TYPE_STRING, description="لینک تصویر شهر"),
+                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description="نام شهر"),
+                                    'province': openapi.Schema(type=openapi.TYPE_STRING, description="نام استان"),
+                                    'slug': openapi.Schema(type=openapi.TYPE_STRING, description="اسلاگ شهر"),
+                                    'hotels_number': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد هتل‌ها"),
+                                    'show_in_homepage': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="نمایش در صفحه اصلی"),
+                                }
+                            ),
+                            'address': openapi.Schema(type=openapi.TYPE_STRING, description="آدرس هتل"),
+                            'main_image': openapi.Schema(type=openapi.TYPE_STRING, description="تصویر اصلی هتل"),
+                            'stars': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد ستاره‌های هتل"),
+                            'type': openapi.Schema(type=openapi.TYPE_STRING, description="نوع اقامتگاه"),
+                            'is_special_offer': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="آیا پیشنهاد ویژه است"),
+                            'is_flash_sale': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="آیا فروش فوری است"),
+                            'is_best_seller': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="آیا پرفروش است"),
+                            'original_total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description="قیمت اصلی"),
+                            'total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description="قیمت نهایی با تخفیف"),
+                            'rating': openapi.Schema(type=openapi.TYPE_NUMBER, description="امتیاز کلی هتل"),
+                            'discount_percentage': openapi.Schema(type=openapi.TYPE_NUMBER, description="درصد تخفیف"),
+                            'discount_expiry': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description="تاریخ انقضای تخفیف"),
+                            'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد رزروها"),
+                            'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description="میانگین امتیاز کاربران"),
+                        }
+                    )
                 )
             ),
             404: openapi.Response(
@@ -1326,7 +1358,7 @@ class HomeHotelByCityView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                        'error': openapi.Schema(type=openapi.TYPE_STRING, description="پیام خطا")
                     }
                 )
             )
@@ -1345,11 +1377,9 @@ class HomeHotelByCityView(APIView):
                 serialized['average_score'] = self.get_average_score(hotel)
                 serialized_hotels.append(serialized)
 
-            response_data = {city.name: serialized_hotels}
-            return Response(response_data)
+            return Response(serialized_hotels)
         except City.DoesNotExist:
             return Response({'error': 'City not found'}, status=404)
-
 
 
 
