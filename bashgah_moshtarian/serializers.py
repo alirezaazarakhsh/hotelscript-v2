@@ -3,7 +3,8 @@
 from rest_framework import serializers
 
 from reservation.models import Room
-from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
+from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
+from jalali_date import datetime2jalali
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -43,3 +44,24 @@ class CustomerClubPointSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerClubPoint
         fields = ['points']
+        
+        
+
+class DiscountActivationRecordSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    discount_type = serializers.CharField(source='get_discount_type_display', read_only=True)
+    code = serializers.SerializerMethodField()
+    activated_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DiscountActivationRecord
+        fields = ['id', 'user', 'discount_type', 'code', 'activated_at', 'reward_claimed']
+
+    def get_code(self, obj):
+        # انتخاب کد تخفیف بر اساس نوع (اتاق یا مرکز خرید)
+        code = obj.room_discount_code or obj.shopping_discount_code
+        return code.code if code else '—'
+
+    def get_activated_at(self, obj):
+        # تبدیل تاریخ و ساعت به فرمت شمسی با ساعت
+        return datetime2jalali(obj.activated_at).strftime('%Y/%m/%d %H:%M:%S')

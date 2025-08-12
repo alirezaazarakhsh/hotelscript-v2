@@ -9,7 +9,7 @@ from django.db.models import Q
 
 
 from authentication import models
-from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
+from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
 from .serializers import CustomerClubPointSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
 
 
@@ -85,6 +85,44 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
             
 
 
+
+#ای پی ای جوایز دریافتی کاربران 
+class DiscountActivationRecordListView(generics.ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = DiscountActivationRecordSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return DiscountActivationRecord.objects.filter(user=user).order_by('-activated_at')
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست جوایز فعال شده کاربر",
+        operation_description="""
+این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
+- کدهای تخفیف اتاق
+- کدهای تخفیف مرکز خرید
+می‌باشد. نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
+""",
+        tags=['discount-crm'],
+        responses={
+            200: DiscountActivationRecordSerializer(many=True),
+            500: 'خطای سرور داخلی'
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        try:
+            return super().get(request, *args, **kwargs)
+        except Exception as exc:
+            return Response({
+                "error": str(exc),
+                "exception_type": exc.__class__.__name__,
+                "trace": traceback.format_exc(limit=2)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
 class MyCustomerClubPointView(APIView):
     permission_classes = [IsAuthenticated]
@@ -103,3 +141,6 @@ class MyCustomerClubPointView(APIView):
             return Response(serializer.data)
         except CustomerClubPoint.DoesNotExist:
             return Response({'points': 0}, status=status.HTTP_200_OK)
+
+
+
