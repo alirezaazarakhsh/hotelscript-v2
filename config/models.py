@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
-from django.db.models.signals import post_save, post_migrate
+from django.db.models.signals import  post_migrate
 from django.dispatch import receiver
 from django.utils.safestring import mark_safe
 from django.core.validators import (
@@ -784,82 +784,48 @@ class Media(models.Model):
 
     def admin_file(self):
         if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-            return mark_safe(f'<img src="{self.file.url}" width="100" />')
+            return mark_safe('<img src="{}" width="100" />'.format(self.file.url))
         return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
     
     admin_file.short_description = "آیکون"
     admin_file.allow_tags = True
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.file.name
 
     class Meta:
         verbose_name = "رسانه"
-        verbose_name_plural = "رسانه‌ها"
+        verbose_name_plural = "رسانه"
 
 class MediaRestore(models.Model):
-    zip_file = models.FileField(upload_to='media_restores/', verbose_name="فایل ZIP")
-    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان آپلود")
+    zip_file = models.FileField(upload_to="media_restore/", verbose_name="فایل ZIP")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ بارگذاری")
 
     def __str__(self):
-        return f"ZIP آپلود شده در {self.uploaded_at}"
+        return f"Restore {self.zip_file.name}"
 
     class Meta:
         verbose_name = "بازگردانی رسانه"
-        verbose_name_plural = "بازگردانی رسانه‌ها"
+        verbose_name_plural = "بازگردانی‌های رسانه"
 
-# سیگنال برای ثبت خودکار فایل‌های آپلود‌شده در مدل‌های دیگر
-@receiver(post_save)
-def sync_media_files(sender, instance, created, **kwargs):
-    models_to_track = [
-        'Slide', 'Banner', 'Service', 'Statistic', 'ChooseReason',
-        'ComingSoon', 'SiteConfig',
-    ]
-    if sender.__name__ in models_to_track and created:
-        for field in sender._meta.get_fields():
-            if isinstance(field, (models.FileField, models.ImageField)):
-                file = getattr(instance, field.name)
-                if file and file.name:
-                    clean_file_name = file.name
-                    while clean_file_name.startswith('media/'):
-                        clean_file_name = clean_file_name[len('media/'):]
-                    file_path = os.path.join('media', clean_file_name)
-                    folder_name = sender.__name__.lower()
-                    folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    logger.info(f"ثبت فایل از مدل {sender.__name__}: {file_path}")
-                    Media.objects.get_or_create(
-                        file=file_path,
-                        folder=folder
-                    )
-
-# سیگنال برای اسکن و ثبت فایل‌های موجود در پوشه‌های MEDIA_ROOT
 @receiver(post_migrate)
-def scan_media_folders(sender, **kwargs):
+def scan_media_files(sender, **kwargs):
     if sender.name != 'config':
         return
-    folders_to_track = [
-        'about_us', 'cities', 'hotel_gallery', 'icons',
-        'images', 'legal-profiles', 'media', 'shopping_centers'
-    ]
-    for folder_name in folders_to_track:
-        folder_path = os.path.join(settings.MEDIA_ROOT, folder_name)
-        if not os.path.exists(folder_path):
-            logger.warning(f"پوشه {folder_path} وجود ندارد.")
+    for root, _, files in os.walk(settings.MEDIA_ROOT):
+        relative_folder = os.path.relpath(root, settings.MEDIA_ROOT)
+        folder_name = relative_folder if relative_folder != '.' else 'root'
+        if folder_name == 'root' and not files:
             continue
         folder, _ = Folder.objects.get_or_create(name=folder_name)
-        for root, _, files in os.walk(folder_path):
-            for file_name in files:
-                if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                    relative_path = os.path.relpath(
-                        os.path.join(root, file_name),
-                        settings.MEDIA_ROOT
-                    )
-                    clean_relative_path = relative_path
-                    while clean_relative_path.startswith('media/'):
-                        clean_relative_path = clean_relative_path[len('media/'):]
-                    media_path = os.path.join('media', clean_relative_path)
-                    logger.info(f"ثبت فایل: {media_path}, پوشه: {folder_name}")
-                    Media.objects.get_or_create(
-                        file=media_path,
-                        folder=folder
-                    )
+        for file_name in files:
+            if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                relative_path = os.path.join(relative_folder, file_name)
+                if relative_path.startswith('media/'):
+                    relative_path = relative_path[len('media/'):]
+                media_path = os.path.join('media', relative_path)
+                logger.info(f"ثبت فایل: {media_path}, پوشه: {folder_name}")
+                Media.objects.get_or_create(
+                    file=media_path,
+                    folder=folder
+                )
