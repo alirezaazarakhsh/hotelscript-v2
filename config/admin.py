@@ -1,12 +1,17 @@
+# safarname24/admin.py
+import os
+import zipfile
 from django.contrib import admin
 from django.contrib import messages
 from django.utils.html import format_html
+from django.http import HttpResponse
+from django.conf import settings
+import io
 from .models import (
     Location,
     Page,
     HeaderMenu,
     QuickAccess,
-    # Section,
     SiteConfig,
     Slide,
     Statistic,
@@ -24,6 +29,9 @@ from .models import (
     Rule,
     ComingSoon,
     UserLevel,
+    Folder,
+    Media,
+    MediaRestore,
 )
 from .forms import (
     SiteConfigAdminForm,
@@ -35,79 +43,141 @@ from .forms import (
     FakeCommentForm,
     ComingSoonAdminForm,
     StatisticAdminForm,
+    MediaRestoreForm,
 )
 
+# Inline برای مدل Media
+class MediaInline(admin.TabularInline):
+    model = Media
+    extra = 1
+    fields = ['file', 'admin_file']
+    readonly_fields = ['admin_file']
 
-# ثبت مدل Page در ادمین با نمایش ستون‌های مشخص و قابلیت جستجو
+# ثبت مدل Folder در ادمین
+@admin.register(Folder)
+class FolderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'created_at')
+    list_filter = ['created_at']
+    search_fields = ['name']
+    inlines = [MediaInline]
+
+# ثبت مدل Media در ادمین
+@admin.register(Media)
+class MediaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'file', 'folder', 'admin_file')
+    list_filter = ['folder']
+    search_fields = ['file']
+    list_editable = ['folder']
+    autocomplete_fields = ['folder']
+    actions = ['export_as_zip']
+
+    def export_as_zip(self, request, queryset):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for media in queryset:
+                if media.file and os.path.exists(media.file.path):
+                    # ساخت مسیر با حفظ ساختار پوشه
+                    folder_name = media.folder.name if media.folder else ''
+                    zip_path = os.path.join('media', folder_name, os.path.basename(media.file.name))
+                    zip_file.write(media.file.path, zip_path)
+        
+        buffer.seek(0)
+        response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+        response['Content-Disposition'] = 'attachment; filename="media_files.zip"'
+        return response
+
+    export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
+
+# ثبت مدل MediaRestore در ادمین
+@admin.register(MediaRestore)
+class MediaRestoreAdmin(admin.ModelAdmin):
+    list_display = ('id', 'zip_file', 'uploaded_at')
+    list_filter = ['uploaded_at']
+    readonly_fields = ['uploaded_at']
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        try:
+            with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
+                zip_ref.extractall(settings.MEDIA_ROOT)
+                for file_name in zip_ref.namelist():
+                    if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                        # پاکسازی مسیر فایل از پیشوندهای اضافی 'media/'
+                        clean_file_name = file_name
+                        while clean_file_name.startswith('media/'):
+                            clean_file_name = clean_file_name[len('media/'):]
+                        # ساخت مسیر نهایی
+                        media_path = os.path.join('media', clean_file_name)
+                        # استخراج نام پوشه
+                        folder_name = os.path.dirname(clean_file_name).strip('/')
+                        folder = None
+                        if folder_name:
+                            folder, _ = Folder.objects.get_or_create(name=folder_name)
+                        # ایجاد رکورد Media
+                        Media.objects.create(
+                            file=media_path,
+                            folder=folder
+                        )
+            messages.success(request, 'فایل ZIP با موفقیت بازگردانی شد.')
+            # حذف فایل ZIP و رکورد MediaRestore
+            os.remove(obj.zip_file.path)
+            obj.delete()
+        except Exception as e:
+            messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
+
+# بقیه مدل‌های ادمین (بدون تغییر)
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'page', 'path')
     search_fields = ('title', 'page', 'path')
 
-
-# ثبت مدل HeaderMenu در ادمین با محدودیت تعداد ایجاد منوها
 @admin.register(HeaderMenu)
 class HeaderMenuAdmin(admin.ModelAdmin):
     list_display = ('id', 'order', 'title', 'page')
     search_fields = ('order', 'title', 'page')
 
-    # جلوگیری از ساخت بیش از تعداد مجاز منو
     def save_model(self, request, obj, form, change):
         if not change and HeaderMenu.objects.count() >= HeaderMenu.MAX_ALLOWED_INSTANCES:
             messages.error(request, f'تنها به تعداد {HeaderMenu.MAX_ALLOWED_INSTANCES} منوی هدر میتوانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
-    # اجازه افزودن منو فقط در صورت کمتر بودن تعداد موجود از حد مجاز
     def has_add_permission(self, request):
         return HeaderMenu.objects.count() < HeaderMenu.MAX_ALLOWED_INSTANCES
 
-
-# ثبت مدل QuickAccess در ادمین با محدودیت تعداد دسترسی‌های سریع
 @admin.register(QuickAccess)
 class QuickAccessAdmin(admin.ModelAdmin):
     list_display = ('id', 'order', 'title', 'page')
     search_fields = ('order', 'title', 'page')
 
-    # جلوگیری از ساخت بیش از تعداد مجاز دسترسی سریع
     def save_model(self, request, obj, form, change):
         if not change and QuickAccess.objects.count() >= QuickAccess.MAX_ALLOWED_INSTANCES:
             messages.error(request, f'تنها به تعداد {QuickAccess.MAX_ALLOWED_INSTANCES} دسترسی سریع میتوانید بسازید.')
         else:
             super().save_model(request, obj, form, change)
 
-    # اجازه افزودن فقط اگر تعداد دسترسی‌های سریع کمتر از حد مجاز باشد
     def has_add_permission(self, request):
         return QuickAccess.objects.count() < QuickAccess.MAX_ALLOWED_INSTANCES
 
-
-
-# ثبت مدل SiteConfig در ادمین با محدودیت ایجاد تنها یک نمونه
 @admin.register(SiteConfig)
 class SiteConfigAdmin(admin.ModelAdmin):
     form = SiteConfigAdminForm
     list_display = ('id', 'header_title', 'header_sub_title', 'footer_title')
 
-    # جلوگیری از ساخت بیش از یک کانفیگ سایت
     def save_model(self, request, obj, form, change):
         if not change and SiteConfig.objects.exists():
             messages.error(request, 'تنها یک کانفیگ برای سایت میتوان ساخت')
         else:
             super().save_model(request, obj, form, change)
 
-    # اجازه افزودن تنها در صورت عدم وجود کانفیگ قبلی
     def has_add_permission(self, request):
         return not SiteConfig.objects.exists()
 
-
-# ثبت مدل Slide در ادمین همراه با فرم سفارشی
 @admin.register(Slide)
 class SlideAdmin(admin.ModelAdmin):
     form = SlideAdminForm
     list_display = ('id', 'order')
 
-
-# تعریف Inline برای مدل StatisticItem (آیتم‌های آماری) جهت نمایش تو در تو در بخش ادمین
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
     extra = 4
@@ -121,7 +191,6 @@ class StatisticAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
 
-    # جلوگیری از ثبت بیش از 4آمار
     def save_model(self, request, obj, form, change):
         if not change and Statistic.objects.exists():
             messages.error(request, 'تنها یک کانفیگ درباره ما می‌توان ساخت.')
@@ -131,15 +200,11 @@ class StatisticAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not Statistic.objects.exists()
 
-
-# ثبت مدل ChooseReason در ادمین با فرم سفارشی
 @admin.register(ChooseReason)
 class ChooseReasonAdmin(admin.ModelAdmin):
     form = ChooseReasonForm
     list_display = ('id', 'title', 'description')
 
-
-# ثبت مدل FAQ در ادمین با قابلیت جستجو
 @admin.register(FAQ)
 class FAQAdmin(admin.ModelAdmin):
     list_display = (
@@ -163,7 +228,7 @@ class FAQAdmin(admin.ModelAdmin):
                 'question',
                 'answer',
                 'icon',
-                'icon_preview',  # نمایش آیکون در فرم
+                'icon_preview',
                 'page',
             )
         }),
@@ -182,16 +247,12 @@ class FAQAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
-
-# ثبت مدل Service در ادمین با فرم سفارشی و جستجو
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     form = ServiceForm
     list_display = ('id', 'title', 'description')
     search_fields = ('title', 'description')
 
-
-# ثبت مدل ContactInfo در ادمین با جستجو
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
     list_display = (
@@ -220,7 +281,7 @@ class ContactInfoAdmin(admin.ModelAdmin):
                 'value',
                 'link',
                 'icon',
-                'icon_preview',  # نمایش آیکن در فرم
+                'icon_preview',
                 'show_in_footer',
             )
         }),
@@ -237,10 +298,8 @@ class ContactInfoAdmin(admin.ModelAdmin):
                 obj.icon.title_icon
             )
         return "-"
-    icon_preview.short_description = "آیکون انتخاب‌شده" 
+    icon_preview.short_description = "آیکون انتخاب‌شده"
 
-
-# ثبت مدل SocialMedia در ادمین با قابلیت جستجو
 @admin.register(SocialMedia)
 class SocialMediaAdmin(admin.ModelAdmin):
     list_display = (
@@ -255,7 +314,7 @@ class SocialMediaAdmin(admin.ModelAdmin):
         'type',
         'type_fa',
         'link',
-        'icon__title_icon',   
+        'icon__title_icon',
     )
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
@@ -267,7 +326,7 @@ class SocialMediaAdmin(admin.ModelAdmin):
                 'type_fa',
                 'link',
                 'icon',
-                'icon_preview',  # نمایش آیکن در فرم اضافه/ویرایش
+                'icon_preview',
                 'show_in_footer',
             )
         }),
@@ -286,9 +345,6 @@ class SocialMediaAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
-
-
-# ثبت مدل Banner در ادمین با فرم سفارشی، فیلتر و جستجو
 @admin.register(Banner)
 class BannerAdmin(admin.ModelAdmin):
     form = BannerForm
@@ -296,33 +352,25 @@ class BannerAdmin(admin.ModelAdmin):
     search_fields = ('title', 'link')
     list_filter = ('page',)
 
-
-# ثبت مدل EnamadLicense در ادمین با محدودیت ایجاد تنها یک نمونه
 @admin.register(EnamadLicense)
 class EnamadLicenseAdmin(admin.ModelAdmin):
     list_display = ('id',)
 
-    # جلوگیری از ساخت بیش از یک کد اینماد
     def save_model(self, request, obj, form, change):
         if not change and EnamadLicense.objects.exists():
             messages.error(request, 'تنها یک کد اینماد میتوان ساخت')
         else:
             super().save_model(request, obj, form, change)
 
-    # اجازه افزودن تنها در صورت عدم وجود نمونه قبلی
     def has_add_permission(self, request):
         return not EnamadLicense.objects.exists()
 
-
-# ثبت مدل License در ادمین با فرم سفارشی و جستجو
 @admin.register(License)
 class LicenseAdmin(admin.ModelAdmin):
     form = LicenseForm
     list_display = ('id', 'link')
     search_fields = ('link',)
 
-
-# ثبت مدل Advantage در ادمین با قابلیت جستجو
 @admin.register(Advantage)
 class AdvantageAdmin(admin.ModelAdmin):
     list_display = (
@@ -364,23 +412,16 @@ class AdvantageAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
     def has_add_permission(self, request):
-        # جلوگیری از افزودن بیشتر از ۴ آیتم
         if Advantage.objects.count() >= 4:
             return False
         return super().has_add_permission(request)
-    
-    
-    
 
-# ثبت مدل FakeComment در ادمین با فرم سفارشی و جستجو
 @admin.register(FakeComment)
 class FakeCommentAdmin(admin.ModelAdmin):
     form = FakeCommentForm
     list_display = ('id', 'commenter', 'evaluation', 'text', 'rate')
     search_fields = ('commenter', 'text')
 
-
-# ثبت مدل Rule در ادمین با قابلیت جستجو
 @admin.register(Rule)
 class RuleAdmin(admin.ModelAdmin):
     list_display = ('id', 'tab_title', 'order')
@@ -388,27 +429,20 @@ class RuleAdmin(admin.ModelAdmin):
     search_fields = ('tab_title', 'text')
     ordering = ('order',)
 
-
-
-# ثبت مدل ComingSoon در ادمین با فرم سفارشی و محدودیت ایجاد تنها یک نمونه
 @admin.register(ComingSoon)
 class ComingSoonAdmin(admin.ModelAdmin):
     form = ComingSoonAdminForm
     list_display = ('id', 'title', 'subtitle', 'end_date', 'copyright_text', 'is_active')
 
-    # جلوگیری از ساخت بیش از یک کامینگ سون
     def save_model(self, request, obj, form, change):
         if not change and ComingSoon.objects.exists():
             messages.error(request, 'تنها یک کامینگ سون میتوان ساخت')
         else:
             super().save_model(request, obj, form, change)
 
-    # اجازه افزودن تنها در صورت عدم وجود نمونه قبلی
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
 
-
-# ثبت مدل UserLevel در ادمین با قابلیت جستجو
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
     list_display = (
@@ -418,7 +452,7 @@ class UserLevelAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title',
-        'icon__title_icon',  # فیلد مرتبط در مدل IconShortcut
+        'icon__title_icon',
     )
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
@@ -446,8 +480,6 @@ class UserLevelAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
-
-#ادمین کانفیگ تماس با ما 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
     list_display = ('id', 'latitude', 'longitude')

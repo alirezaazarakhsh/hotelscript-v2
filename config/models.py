@@ -3,6 +3,7 @@ from ckeditor.fields import RichTextField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.utils.safestring import mark_safe
 from django.core.validators import (
     MinValueValidator,
     MaxValueValidator,
@@ -748,3 +749,54 @@ class Location(models.Model):
 
     def __str__(self):
         return f"{self.latitude}, {self.longitude}"
+    
+    
+    
+# مدل نمایش تمام عکس های سیستم 
+class Folder(models.Model):
+    name = models.CharField(max_length=100, verbose_name="نام پوشه")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "پوشه"
+        verbose_name_plural = "پوشه‌ها"
+
+class Media(models.Model):
+    file = models.FileField(verbose_name="فایل", upload_to="media/")
+    folder = models.ForeignKey(
+        Folder, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        verbose_name="پوشه", 
+        related_name="media_files"
+    )
+
+    def admin_file(self):
+        if self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            return mark_safe(f'<img src="{self.file.url}" width="100" />')
+        return mark_safe(f'<a href="{self.file.url}" target="_blank">{self.file.name}</a>')
+    
+    admin_file.short_description = "عکس"
+    admin_file.allow_tags = True
+
+    def __str__(self):
+        return self.file.name
+
+    class Meta:
+        verbose_name = "رسانه"
+        verbose_name_plural = "رسانه‌ها"
+
+class MediaRestore(models.Model):
+    zip_file = models.FileField(upload_to='media_restores/', verbose_name="فایل ZIP")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان آپلود")
+
+    def __str__(self):
+        return f"ZIP آپلود شده در {self.uploaded_at}"
+
+    class Meta:
+        verbose_name = "بازگردانی رسانه"
+        verbose_name_plural = "بازگردانی رسانه‌ها"

@@ -130,3 +130,6 @@ class StatisticAdminForm(forms.ModelForm):
                 )
 
 
+
+class MediaRestoreForm(forms.Form):
+    zip_file = forms.FileField(label="فایل ZIP", help_text="فایل ZIP حاوی تصاویر را انتخاب کنید.")
