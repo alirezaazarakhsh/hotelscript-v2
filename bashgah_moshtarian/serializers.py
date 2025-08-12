@@ -62,18 +62,19 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         return code.code if code else '—'
 
     def get_related_info(self, obj):
-        # اگر تخفیف اتاق باشه اطلاعات اتاق رو برگردون
         if obj.discount_type == 'room' and obj.room_discount_code:
-            room = obj.room_discount_code.room  # فرض می‌کنم مدل RoomDiscountCode یه فیلد room داره
+            room = obj.room_discount_code.room
             return {
+                'code': obj.room_discount_code.code,
                 'room_id': room.id,
                 'room_name': str(room),  # یا هر فیلدی که اسم اتاق رو نشون بده
+                'hotel_name': getattr(room, 'hotel_name', 'Unknown Hotel')  # فرض می‌کنیم hotel_name وجود داره
             }
-        # اگر تخفیف مرکز خرید باشه اطلاعات مرکز خرید رو برگردون
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
-            shopping_center = obj.shopping_discount_code.shopping_center  # فرض می‌کنم مدل ShoppingCenterDiscountCode یه فیلد shopping_center داره
+            shopping_center = obj.shopping_discount_code.shopping_center
             return {
+                'code': obj.shopping_discount_code.code,
                 'shopping_center_id': shopping_center.id,
-                'shopping_center_name': str(shopping_center),  # یا هر فیلدی که اسم مرکز خرید رو نشون بده
+                'shopping_center_name': str(shopping_center)  # یا هر فیلدی که اسم مرکز خرید رو نشون بده
             }
         return None
