@@ -6,7 +6,6 @@ from django.contrib import messages
 from django.utils.html import format_html
 from django.http import HttpResponse
 from django.conf import settings
-from django.apps import apps
 import io
 import logging
 
@@ -23,6 +22,28 @@ from .forms import (
     BannerForm, LicenseForm, FakeCommentForm, ComingSoonAdminForm,
     StatisticAdminForm, MediaRestoreForm,
 )
+
+# تابع کمکی برای لیست کردن تمام فایل‌ها و فولدرها در MEDIA_ROOT
+def list_all_files_and_dirs(base_path):
+    folders = []
+    files = []
+    for root, dirs, filenames in os.walk(base_path):
+        rel_root = os.path.relpath(root, base_path)
+        if rel_root == '.':
+            rel_root = ''
+        for d in dirs:
+            folders.append(os.path.join(rel_root, d))
+        for f in filenames:
+            files.append(os.path.join(rel_root, f))
+    return folders, files
+
+# اکشن ادمین برای نمایش همه فایل‌ها و فولدرهای media
+@admin.action(description='نمایش تمام فایل‌ها و فولدرهای media')
+def show_all_media_files(modeladmin, request, queryset):
+    base_path = settings.MEDIA_ROOT
+    folders, files = list_all_files_and_dirs(base_path)
+    message = "فولدرها:\n" + "\n".join(folders) + "\n\nفایل‌ها:\n" + "\n".join(files)
+    messages.info(request, message[:3000])  # محدودیت طول پیام برای جلوگیری از خطا
 
 # Inline برای مدل Media
 class MediaInline(admin.TabularInline):
@@ -47,7 +68,7 @@ class MediaAdmin(admin.ModelAdmin):
     search_fields = ['file']
     list_editable = ['folder']
     autocomplete_fields = ['folder']
-    actions = ['export_as_zip']
+    actions = ['export_as_zip', show_all_media_files]  # اضافه شدن اکشن جدید
 
     def export_as_zip(self, request, queryset):
         buffer = io.BytesIO()
@@ -61,7 +82,7 @@ class MediaAdmin(admin.ModelAdmin):
                     zip_path = os.path.join('media', folder_name, os.path.basename(clean_file_name))
                     logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
                     zip_file.write(media.file.path, zip_path)
-        
+
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type='application/zip')
         response['Content-Disposition'] = 'attachment; filename="media_files.zip"'
@@ -105,6 +126,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
 # ثبت بقیه مدل‌ها
+
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'page', 'path')
