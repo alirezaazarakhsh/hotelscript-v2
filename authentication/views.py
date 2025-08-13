@@ -292,6 +292,136 @@ class JuridicalProfileListCreateAPIView(APIView):
 
 
 
+class JuridicalProfileDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود تصویر
+
+    @swagger_auto_schema(
+        operation_summary="دریافت اطلاعات پروفایل حقوقی کاربر جاری",
+        operation_description="""
+        این API اطلاعات پروفایل حقوقی کاربر احراز هویت‌شده را بازمی‌گرداند.
+        اگر پروفایل وجود نداشته باشد، یک پروفایل خالی با اطلاعات پایه کاربر (بدون ذخیره در دیتابیس) بازگشت داده می‌شود.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+
+        **خروجی‌ها**:
+        - **200 OK**: اطلاعات پروفایل شامل نام شرکت، شناسه ملی، شماره ثبت، کد اقتصادی، شماره تماس، کد پستی، آدرس، ایمیل، تصویر، وضعیت، دلیل رد، مدارک و لیست شماره‌های کارت (حداکثر ۲ شماره).
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+        """,
+        responses={200: JuridicalProfileSerializer(), 401: "Unauthorized"}
+    )
+    def get(self, request):
+        try:
+            profile = request.user.natural_profile.juridical_profile
+        except AttributeError:
+            try:
+                natural_profile = request.user.natural_profile
+            except AttributeError:
+                natural_profile = NaturalProfile(base_user=request.user)
+            profile = JuridicalProfile(natural_profile=natural_profile)  # شیء فیک
+        serializer = JuridicalProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data)
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش یا ایجاد پروفایل حقوقی کاربر جاری",
+        operation_description="""
+        این API امکان ویرایش پروفایل حقوقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
+        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
+        تمام فیلدها اختیاری هستند و می‌توانند به صورت جزئی (partial) آپدیت شوند.
+        شماره‌های کارت از طریق این API قابل ویرایش هستند.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+        - بدنه درخواست (`multipart/form-data`):
+            - `organization_name` (اختیاری): نام شرکت (رشته).
+            - `national_id` (اختیاری): شناسه ملی (رشته، دقیقاً ۱۱ رقم).
+            - `registeration_number` (اختیاری): شماره ثبت (رشته).
+            - `economical_code` (اختیاری): کد اقتصادی (رشته).
+            - `phone_number` (اختیاری): شماره تماس (رشته).
+            - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
+            - `address` (اختیاری): آدرس شرکت (رشته).
+            - `email` (اختیاری): ایمیل شرکت (رشته).
+            - `image` (اختیاری): فایل تصویر شرکت (فرمت‌های مجاز: jpg, png).
+            - `status` (اختیاری): وضعیت پروفایل (checking, accepted, rejected).
+            - `reject_reason` (اختیاری): دلیل رد (رشته، در صورت رد شده بودن اجباری).
+            - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل id برای ویرایش).
+
+        **خروجی‌ها**:
+        - **200 OK**: در صورت آپدیت موفق پروفایل، اطلاعات به‌روز شده بازگشت داده می‌شود.
+        - **201 Created**: در صورت ایجاد پروفایل جدید، اطلاعات پروفایل ایجادشده بازگشت داده می‌شود.
+        - **400 Bad Request**: در صورت نامعتبر بودن داده‌های ورودی.
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+        """,
+        request_body=JuridicalProfileSerializer,
+        responses={
+            200: JuridicalProfileSerializer(),
+            201: JuridicalProfileSerializer(),
+            400: "Bad Request",
+            401: "Unauthorized"
+        }
+    )
+    def put(self, request):
+        try:
+            profile = request.user.natural_profile.juridical_profile
+        except AttributeError:
+            try:
+                natural_profile = request.user.natural_profile
+            except AttributeError:
+                return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
+            profile = JuridicalProfile(natural_profile=natural_profile)
+            serializer = JuridicalProfileSerializer(
+                profile,
+                data=request.data,
+                context={'request': request}
+            )
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = JuridicalProfileSerializer(
+            profile,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    @swagger_auto_schema(
+        operation_summary="حذف پروفایل حقوقی کاربر جاری",
+        operation_description="""
+        این API پروفایل حقوقی کاربر جاری را حذف می‌کند.
+        در صورت حذف پروفایل، تمام مدارک و شماره‌های کارت مرتبط نیز حذف می‌شوند.
+        اگر پروفایل وجود نداشته باشد، خطای 404 بازگردانده می‌شود.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+
+        **خروجی‌ها**:
+        - **204 No Content**: در صورت حذف موفق پروفایل.
+        - **404 Not Found**: در صورت عدم وجود پروفایل.
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+        """,
+        responses={
+            204: "پروفایل حذف شد",
+            404: "پروفایل حقوقی یافت نشد",
+            401: "Unauthorized"
+        }
+    )
+    def delete(self, request):
+        try:
+            profile = request.user.natural_profile.juridical_profile
+            profile.delete()
+            return Response(status=204)
+        except AttributeError:
+            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
+        
+        
+
 
 class NaturalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
