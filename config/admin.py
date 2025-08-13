@@ -353,6 +353,14 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
+    # اعمال ColorWidget فقط برای فیلد color
+    formfield_overrides = {
+        models.CharField: {'widget': TextInput},  # پیش‌فرض برای CharFieldها
+    }
+    formfield_overrides.update({
+        'color': {'widget': ColorWidget},  # فقط برای فیلد color
+    })
+
     def icon_preview(self, obj):
         """نمایش پیش‌نمایش آیکون انتخاب‌شده در ادمین"""
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
