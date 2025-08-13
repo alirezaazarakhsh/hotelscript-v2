@@ -347,6 +347,8 @@ class ComingSoonAdmin(admin.ModelAdmin):
         return not ComingSoon.objects.exists()
 
 
+
+
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'color', 'icon_preview')
@@ -374,6 +376,9 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
+    
+
+
     
 
 @admin.register(Location)
