@@ -257,6 +257,200 @@ class DiscountActivationRecordListView(generics.ListAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
+
+#ای پی ای فعال کردن کد های تخفیف 
+class DiscountActivationView(generics.GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = DiscountActivationRecordSerializer
+
+    @swagger_auto_schema(
+        operation_summary="فعال‌سازی کد تخفیف توسط کاربر",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد با پذیرش قوانین، یک کد تخفیف (اتاق یا مرکز خرید) را فعال کند.
+        در صورت موفقیت، امتیاز مورد نیاز از امتیازات باشگاه مشتریان کاربر کسر می‌شود.
+        ورودی‌ها:
+        - discount_type: نوع تخفیف ('room' یا 'shopping_center')
+        - code: کد تخفیف ۸ رقمی
+        - accept_rules: پذیرش قوانین (باید True باشد)
+        """,
+        tags=['discount-crm'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'discount_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['room', 'shopping_center'], description="نوع کد تخفیف"),
+                'code': openapi.Schema(type=openapi.TYPE_STRING, description="کد تخفیف ۸ رقمی"),
+                'accept_rules': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="پذیرش قوانین")
+            },
+            required=['discount_type', 'code', 'accept_rules']
+        ),
+        responses={
+            201: openapi.Response(
+                description="کد تخفیف با موفقیت فعال شد",
+                schema=DiscountActivationRecordSerializer(),
+                examples={
+                    "application/json": {
+                        "id": 1,
+                        "user": "user@example.com",
+                        "discount_type": "room",
+                        "code": "ABC12345",
+                        "discount_value": "100,000",
+                        "required_points": 500,
+                        "activated_at": "2025-08-13T04:55:00+04:00",
+                        "reward_claimed": False,
+                        "related_info": {
+                            "room_id": 1,
+                            "room_name": "هتل پارسیان آزادی - اتاق تویین 2"
+                        }
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="خطای ورودی",
+                examples={
+                    "application/json": {
+                        "error": "خطای ورودی: کد تخفیف نامعتبر است یا قوانین پذیرفته نشده‌اند."
+                    }
+                }
+            ),
+            500: openapi.Response(
+                description="خطای سرور داخلی",
+                examples={
+                    "application/json": {
+                        "error": "An error occurred",
+                        "exception_type": "Exception",
+                        "trace": "Traceback..."
+                    }
+                }
+            )
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            discount_type = request.data.get('discount_type')
+            code = request.data.get('code')
+            accept_rules = request.data.get('accept_rules')
+
+            # اعتبارسنجی ورودی‌ها
+            if not all([discount_type, code, accept_rules is True]):
+                return Response(
+                    {"error": "خطای ورودی: نوع تخفیف، کد تخفیف و پذیرش قوانین الزامی است."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if discount_type not in ['room', 'shopping_center']:
+                return Response(
+                    {"error": "نوع تخفیف باید 'room' یا 'shopping_center' باشد."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # پیدا کردن کد تخفیف
+            discount_code = None
+            if discount_type == 'room':
+                try:
+                    discount_code = RoomDiscountCode.objects.get(code=code)
+                except RoomDiscountCode.DoesNotExist:
+                    return Response(
+                        {"error": "کد تخفیف اتاق نامعتبر است."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            else:  # shopping_center
+                try:
+                    discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+                except ShoppingCenterDiscountCode.DoesNotExist:
+                    return Response(
+                        {"error": "کد تخفیف مرکز خرید نامعتبر است."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # بررسی تاریخ انقضا
+            if discount_code.expires_at and discount_code.expires_at < jdatetime.date.today():
+                return Response(
+                    {"error": "کد تخفیف منقضی شده است."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # بررسی سطح کاربری
+            if discount_code.user_level and user.level != discount_code.user_level:
+                return Response(
+                    {"error": "سطح کاربری شما برای استفاده از این کد تخفیف کافی نیست."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # بررسی اینکه کاربر جزو کاربران هدف باشد
+            if discount_code.users.exists() and not discount_code.users.filter(id=user.id).exists():
+                return Response(
+                    {"error": "شما مجاز به استفاده از این کد تخفیف نیستید."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # بررسی محدودیت استفاده
+            if discount_code.activated_users.count() >= discount_code.usage_limit:
+                return Response(
+                    {"error": "محدودیت استفاده از کد تخفیف به پایان رسیده است."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # بررسی امتیاز کافی
+            try:
+                customer_points = CustomerClubPoint.objects.get(user=user)
+            except CustomerClubPoint.DoesNotExist:
+                return Response(
+                    {"error": "شما امتیاز کافی برای فعال‌سازی این کد ندارید."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if customer_points.points < discount_code.required_points:
+                return Response(
+                    {"error": f"امتیاز شما ({customer_points.points}) برای فعال‌سازی این کد کافی نیست. نیاز به {discount_code.required_points} امتیاز."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # بررسی اینکه کاربر قبلاً کد را فعال نکرده باشد
+            if DiscountActivationRecord.objects.filter(
+                user=user,
+                **{f"{discount_type}_discount_code": discount_code}
+            ).exists():
+                return Response(
+                    {"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # انجام عملیات فعال‌سازی و کسر امتیاز به صورت اتمیک
+            with transaction.atomic():
+                # ایجاد رکورد فعال‌سازی
+                activation_record = DiscountActivationRecord.objects.create(
+                    user=user,
+                    discount_type=discount_type,
+                    **{f"{discount_type}_discount_code": discount_code}
+                )
+
+                # اضافه کردن کاربر به activated_users
+                discount_code.activated_users.add(user)
+
+                # کسر امتیاز
+                customer_points.points -= discount_code.required_points
+                customer_points.save()
+
+            # سریالایز کردن پاسخ
+            serializer = self.get_serializer(activation_record)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as exc:
+            return Response(
+                {
+                    "error": str(exc),
+                    "exception_type": exc.__class__.__name__,
+                    "trace": traceback.format_exc(limit=2)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
 class MyCustomerClubPointView(APIView):
     permission_classes = [IsAuthenticated]
