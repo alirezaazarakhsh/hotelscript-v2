@@ -345,17 +345,13 @@ class ComingSoonAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
 
+
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'color', 'icon_preview')
     search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
-
-    # اینجا از CharField جنگو استفاده می‌کنیم نه مدل اپ خودمون
-    formfield_overrides = {
-        dj_models.CharField: {'widget': ColorWidget},
-    }
 
     def icon_preview(self, obj):
         """نمایش پیش‌نمایش آیکون انتخاب‌شده در ادمین"""
@@ -369,6 +365,7 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
+    
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
