@@ -1,16 +1,11 @@
-# config/admin.py
 import os
 import zipfile
 import io
 import logging
-
-from django.contrib import admin, messages
-from django.utils.html import format_html
+from django.contrib import admin
+from django.utils.html import mark_safe
 from django.http import HttpResponse
 from django.conf import settings
-
-logger = logging.getLogger(__name__)
-
 from .models import (
     Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
@@ -23,29 +18,9 @@ from .forms import (
     StatisticAdminForm, MediaRestoreForm,
 )
 
-# تابع کمکی برای لیست کردن تمام فایل‌ها و فولدرها در MEDIA_ROOT
-def list_all_files_and_dirs(base_path):
-    folders = []
-    files = []
-    for root, dirs, filenames in os.walk(base_path):
-        rel_root = os.path.relpath(root, base_path)
-        if rel_root == '.':
-            rel_root = ''
-        for d in dirs:
-            folders.append(os.path.join(rel_root, d))
-        for f in filenames:
-            files.append(os.path.join(rel_root, f))
-    return folders, files
+logger = logging.getLogger(__name__)
 
-# اکشن ادمین برای نمایش تمام فایل‌ها و فولدرهای media
-@admin.action(description='نمایش تمام فایل‌ها و فولدرهای media')
-def show_all_media_files(modeladmin, request, queryset):
-    base_path = settings.MEDIA_ROOT
-    folders, files = list_all_files_and_dirs(base_path)
-    message = "فولدرها:\n" + "\n".join(folders) + "\n\nفایل‌ها:\n" + "\n".join(files)
-    messages.info(request, message[:3000])  # محدودیت طول پیام برای جلوگیری از خطا
-
-# Inline برای مدل Media در FolderAdmin
+# Inline برای نمایش فایل‌های داخل پوشه‌ها
 class MediaInline(admin.TabularInline):
     model = Media
     extra = 1
@@ -54,26 +29,43 @@ class MediaInline(admin.TabularInline):
 
 @admin.register(Folder)
 class FolderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'created_at')
+    list_display = ('id', 'name', 'created_at', 'file_count')
     list_filter = ['created_at']
     search_fields = ['name']
     inlines = [MediaInline]
 
+    def file_count(self, obj):
+        return obj.media_files.count()
+    file_count.short_description = "تعداد فایل‌ها"
+
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'file', 'folder', 'admin_file')
+    list_display = ('id', 'file', 'folder', 'admin_file', 'file_size')
     list_filter = ['folder']
     search_fields = ['file']
     list_editable = ['folder']
     autocomplete_fields = ['folder']
-    actions = ['export_as_zip', show_all_media_files]
+    actions = ['export_as_zip']
+
+    def admin_file(self, obj):
+        if obj.file and obj.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+            return mark_safe(f'<img src="{obj.file.url}" width="100" style="object-fit:contain;" />')
+        return mark_safe(f'<a href="{obj.file.url}" target="_blank">{os.path.basename(obj.file.name)}</a>')
+    admin_file.short_description = "پیش‌نمایش"
+
+    def file_size(self, obj):
+        if obj.file and os.path.exists(obj.file.path):
+            size_bytes = os.path.getsize(obj.file.path)
+            return f"{size_bytes / 1024:.2f} KB"
+        return "نامشخص"
+    file_size.short_description = "حجم فایل"
 
     def export_as_zip(self, request, queryset):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for media in queryset:
                 if media.file and os.path.exists(media.file.path):
-                    folder_name = media.folder.name if media.folder else ''
+                    folder_name = media.folder.name if media.folder else 'root'
                     clean_file_name = media.file.name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
@@ -85,7 +77,6 @@ class MediaAdmin(admin.ModelAdmin):
         response = HttpResponse(buffer.getvalue(), content_type='application/zip')
         response['Content-Disposition'] = 'attachment; filename="media_files.zip"'
         return response
-
     export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
 
 @admin.register(MediaRestore)
@@ -93,7 +84,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
     list_filter = ['uploaded_at']
     readonly_fields = ['uploaded_at']
-    form = MediaRestoreForm  # مطمئن شو این فرم از forms.ModelForm ارث برده
+    form = MediaRestoreForm
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -101,27 +92,23 @@ class MediaRestoreAdmin(admin.ModelAdmin):
             with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
                 zip_ref.extractall(settings.MEDIA_ROOT)
                 for file_name in zip_ref.namelist():
-                    if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-                        clean_file_name = file_name
-                        while clean_file_name.startswith('media/'):
-                            clean_file_name = clean_file_name[len('media/'):]
-                        media_path = os.path.join('media', clean_file_name)
-                        folder_name = os.path.dirname(clean_file_name).strip('/')
-                        folder = None
-                        if folder_name:
-                            folder, _ = Folder.objects.get_or_create(name=folder_name)
-                        logger.info(f"ایجاد رکورد برای: {media_path}, پوشه: {folder_name}")
-                        Media.objects.get_or_create(
-                            file=media_path,
-                            folder=folder
-                        )
+                    clean_file_name = file_name
+                    while clean_file_name.startswith('media/'):
+                        clean_file_name = clean_file_name[len('media/'):]
+                    media_path = os.path.join('media', clean_file_name)
+                    folder_name = os.path.dirname(clean_file_name).strip('/')
+                    folder = None
+                    if folder_name:
+                        folder, _ = Folder.objects.get_or_create(name=folder_name)
+                    logger.info(f"ایجاد رکورد برای: {media_path}, پوشه: {folder_name}")
+                    Media.objects.get_or_create(file=media_path, folder=folder)
             logger.info("فایل ZIP با موفقیت بازگردانی شد.")
-            messages.success(request, 'فایل ZIP با موفقیت بازگردانی شد.')
+            self.message_user(request, 'فایل ZIP با موفقیت بازگردانی شد.')
             os.remove(obj.zip_file.path)
             obj.delete()
         except Exception as e:
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
-            messages.error(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
+            self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
 
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
@@ -136,7 +123,7 @@ class HeaderMenuAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         max_count = getattr(HeaderMenu, 'MAX_ALLOWED_INSTANCES', 5)
         if not change and HeaderMenu.objects.count() >= max_count:
-            messages.error(request, f'تنها به تعداد {max_count} منوی هدر می‌توانید بسازید.')
+            self.message_user(request, f'تنها به تعداد {max_count} منوی هدر می‌توانید بسازید.', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -152,7 +139,7 @@ class QuickAccessAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
         if not change and QuickAccess.objects.count() >= max_count:
-            messages.error(request, f'تنها به تعداد {max_count} دسترسی سریع می‌توانید بسازید.')
+            self.message_user(request, f'تنها به تعداد {max_count} دسترسی سریع می‌توانید بسازید.', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -167,7 +154,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and SiteConfig.objects.exists():
-            messages.error(request, 'تنها یک کانفیگ برای سایت می‌توان ساخت')
+            self.message_user(request, 'تنها یک کانفیگ برای سایت می‌توان ساخت', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -194,7 +181,7 @@ class StatisticAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and Statistic.objects.exists():
-            messages.error(request, 'تنها یک کانفیگ درباره ما می‌توان ساخت.')
+            self.message_user(request, 'تنها یک کانفیگ درباره ما می‌توان ساخت.', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -213,27 +200,13 @@ class FAQAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'question',
-                'answer',
-                'icon',
-                'icon_preview',
-                'page',
-            )
-        }),
-    )
-
     def icon_preview(self, obj):
         if obj.icon and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
@@ -246,60 +219,36 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
-    list_display = (
-        'id', 'title', 'subtitle', 'value', 'link', 'show_in_footer', 'icon_preview'
-    )
+    list_display = ('id', 'title', 'subtitle', 'value', 'link', 'show_in_footer', 'icon_preview')
     search_fields = ('title', 'subtitle', 'value', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'title', 'subtitle', 'value', 'link', 'icon', 'icon_preview', 'show_in_footer',
-            )
-        }),
-    )
-
     def icon_preview(self, obj):
         if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 @admin.register(SocialMedia)
 class SocialMediaAdmin(admin.ModelAdmin):
-    list_display = (
-        'id', 'type', 'type_fa', 'link', 'show_in_footer', 'icon_preview',
-    )
+    list_display = ('id', 'type', 'type_fa', 'link', 'show_in_footer', 'icon_preview')
     search_fields = ('type', 'type_fa', 'link', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'type', 'type_fa', 'link', 'icon', 'icon_preview', 'show_in_footer',
-            )
-        }),
-    )
-
     def icon_preview(self, obj):
         if obj.icon and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
@@ -312,12 +261,12 @@ class BannerAdmin(admin.ModelAdmin):
     list_filter = ('page',)
 
 @admin.register(EnamadLicense)
-class EnamadLicenseAdmin(admin.ModelAdmin):
+class MediaAdmin(admin.ModelAdmin):
     list_display = ('id',)
 
     def save_model(self, request, obj, form, change):
         if not change and EnamadLicense.objects.exists():
-            messages.error(request, 'تنها یک کد اینماد می‌توان ساخت')
+            self.message_user(request, 'تنها یک کد اینماد می‌توان ساخت', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -337,23 +286,13 @@ class AdvantageAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'title', 'subtitle', 'icon', 'icon_preview',
-            )
-        }),
-    )
-
     def icon_preview(self, obj):
         if obj.icon and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
@@ -384,7 +323,7 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and ComingSoon.objects.exists():
-            messages.error(request, 'تنها یک کامینگ سون می‌توان ساخت')
+            self.message_user(request, 'تنها یک کامینگ سون می‌توان ساخت', level='error')
         else:
             super().save_model(request, obj, form, change)
 
@@ -398,23 +337,13 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'title', 'icon', 'icon_preview',
-            )
-        }),
-    )
-
     def icon_preview(self, obj):
         if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
@@ -426,9 +355,9 @@ class LocationAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change and Location.objects.exists():
-            messages.error(request, 'تنها یک کانفیگ تماس با ما می‌توان ساخت.')
-            return
-        super().save_model(request, obj, form, change)
+            self.message_user(request, 'تنها یک کانفیگ تماس با ما می‌توان ساخت.', level='error')
+        else:
+            super().save_model(request, obj, form, change)
 
     def has_add_permission(self, request):
         return not Location.objects.exists()
