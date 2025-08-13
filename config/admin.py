@@ -79,6 +79,7 @@ class MediaAdmin(admin.ModelAdmin):
         return response
     export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
 
+
 @admin.register(MediaRestore)
 class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
@@ -90,10 +91,8 @@ class MediaRestoreAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         try:
             with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
-                # استخراج فایل‌ها به MEDIA_ROOT
                 zip_ref.extractall(settings.MEDIA_ROOT)
                 for file_name in zip_ref.namelist():
-                    # نرمال‌سازی مسیر فایل
                     clean_file_name = file_name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
@@ -102,7 +101,6 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                     folder = None
                     if folder_name:
                         folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    # بررسی وجود فایل در دیتابیس
                     if not Media.objects.filter(file=media_path).exists():
                         Media.objects.create(file=media_path, folder=folder)
                         logger.info(f"فایل {media_path} در پوشه {folder_name or 'root'} ثبت شد.")
@@ -110,7 +108,6 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                         logger.info(f"فایل {media_path} قبلاً در دیتابیس وجود دارد.")
             logger.info("فایل ZIP با موفقیت بازگردانی شد.")
             self.message_user(request, 'فایل ZIP با موفقیت بازگردانی شد.')
-            # حذف فایل ZIP پس از بازگردانی
             if os.path.exists(obj.zip_file.path):
                 os.remove(obj.zip_file.path)
                 logger.info(f"فایل ZIP {obj.zip_file.path} حذف شد.")
@@ -118,6 +115,8 @@ class MediaRestoreAdmin(admin.ModelAdmin):
         except Exception as e:
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}', level='error')
+
+
 
 # بقیه کدهای admin.py بدون تغییر باقی می‌مانند
 @admin.register(Page)
