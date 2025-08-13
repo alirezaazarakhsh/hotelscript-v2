@@ -316,7 +316,7 @@ class JuridicalProfileDetailAPIView(APIView):
                 natural_profile = request.user.natural_profile
             except AttributeError:
                 natural_profile = NaturalProfile(base_user=request.user)
-            profile = JuridicalProfile(natural_profile=natural_profile)  # شیء فیک
+            profile = JuridicalProfile(natural_profile=natural_profile)
         serializer = JuridicalProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
 
@@ -351,7 +351,7 @@ class JuridicalProfileDetailAPIView(APIView):
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
         """,
         request_body=JuridicalProfileSerializer,
-        consumes=['application/json'],  # مشخص کردن نوع ورودی
+        consumes=['application/json'],
         responses={
             200: JuridicalProfileSerializer(),
             201: JuridicalProfileSerializer(),
@@ -360,6 +360,7 @@ class JuridicalProfileDetailAPIView(APIView):
         }
     )
     def put(self, request):
+        print("Request data:", request.data)  # لاگ داده‌های ورودی
         try:
             profile = request.user.natural_profile.juridical_profile
         except AttributeError:
@@ -376,6 +377,7 @@ class JuridicalProfileDetailAPIView(APIView):
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
+            print("Create errors:", serializer.errors)  # لاگ خطاها
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = JuridicalProfileSerializer(
@@ -387,6 +389,7 @@ class JuridicalProfileDetailAPIView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
+        print("Update errors:", serializer.errors)  # لاگ خطاها
         return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
@@ -417,6 +420,8 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=204)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
+        
+        
 
 
 class NaturalProfileListCreateAPIView(APIView):

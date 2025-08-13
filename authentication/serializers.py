@@ -1,17 +1,16 @@
 from config.models import UserLevel
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, PasswordField
-from django.contrib.auth import authenticate
 from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.settings import api_settings
-from django.contrib.auth.models import update_last_login
+from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import update_last_login
+from django.core.validators import RegexValidator
+from django.db import IntegrityError
 
 from safarname24.serializers import ErrorMessageSerializerMixin
-from django.core.validators import RegexValidator
-
 from .validators import validate_phone_number
 from .models import BaseUser, CardNumber, JuridicalCardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
-
 
 # -----------------------------
 # Custom Token Serializer (Using phone and OTP)
@@ -21,16 +20,12 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # تغییر رمز به OTP
         self.password_field = "otp"
         self.fields[self.password_field] = PasswordField(write_only=True)
         if "password" in self.fields:
             del self.fields["password"]
-
         self.fields[self.username_field].label = _('phone')
         self.fields[self.password_field].label = _('otp')
-
         ErrorMessageSerializerMixin.__init__(self, *args, **kwargs)
 
     def validate(self, attrs):
@@ -38,31 +33,21 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
             self.username_field: attrs.get(self.username_field),
             self.password_field: attrs.get(self.password_field),
         }
-
         if "request" in self.context:
             authenticate_kwargs["request"] = self.context["request"]
-
-        # احراز هویت با OTP
         self.user = authenticate(**authenticate_kwargs)
-
         if not api_settings.USER_AUTHENTICATION_RULE(self.user):
             raise exceptions.AuthenticationFailed(
                 _("validation code is not correct"),
                 "no_active_account",
             )
-
         refresh = self.get_token(self.user)
-
         data = {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         }
-
-        # ثبت آخرین ورود
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(None, self.user)
-
-        # گرفتن پروفایل طبیعی کاربر برای نام و نام خانوادگی
         try:
             natural_profile = NaturalProfile.objects.get(base_user=self.user)
             first_name = natural_profile.first_name
@@ -70,18 +55,14 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
         except NaturalProfile.DoesNotExist:
             first_name = ""
             last_name = ""
-
-        # افزودن اطلاعات کاربر به پاسخ
         data["user_id"] = self.user.id
         data["phone_number"] = getattr(self.user, "phone_number", "")
         data["first_name"] = first_name
         data["last_name"] = last_name
-
         return data
 
-
 # -----------------------------
-# Authentication Request Serializer (برای درخواست ارسال OTP)
+# Authentication Request Serializer
 # -----------------------------
 class AuthSerializer(serializers.Serializer):
     phone = serializers.CharField(
@@ -90,7 +71,6 @@ class AuthSerializer(serializers.Serializer):
         max_length=15,
     )
 
-
 # -----------------------------
 # NaturalProfile Serializer
 # -----------------------------
@@ -98,8 +78,6 @@ validate_national_code = RegexValidator(
     regex=r'^\d{10}$',
     message=_('کد ملی باید دقیقاً ۱۰ رقم باشد.')
 )
-
-# اعتبارسنجی برای کد پستی
 validate_postal_code = RegexValidator(
     regex=r'^\d{10}$',
     message=_('کد پستی باید دقیقاً ۱۰ رقم باشد.')
@@ -161,14 +139,10 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         return representation
 
     def validate(self, data):
-        """
-        اعتبارسنجی کلی داده‌ها برای اطمینان از سازگاری
-        """
         if 'card_numbers' in data and data.get('card_numbers'):
             card_numbers = data['card_numbers']
             if len(card_numbers) > 2:
                 raise serializers.ValidationError({'card_numbers': _('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.')})
-            
             for card in card_numbers:
                 if 'card_number' not in card or not card['card_number']:
                     raise serializers.ValidationError({'card_numbers': _('شماره کارت الزامی است.')})
@@ -190,36 +164,24 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         card_numbers_data = validated_data.pop('card_numbers', None)
-        
-        # به‌روزرسانی سایر فیلدهای پروفایل
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
         if card_numbers_data is not None:
-            # نگه‌داری لیستی از idهای شماره‌های کارت ارسالی
             card_number_ids = [card_data.get('id') for card_data in card_numbers_data if card_data.get('id')]
-            
-            # حذف شماره‌های کارتی که در ورودی جدید نیستند
             instance.card_numbers.exclude(id__in=card_number_ids).delete()
-
-            # به‌روزرسانی یا ایجاد شماره‌های کارت
             for card_data in card_numbers_data:
                 card_id = card_data.get('id')
                 if card_id:
-                    # اگر id وجود دارد، شماره کارت را به‌روزرسانی کنید
                     try:
                         card = instance.card_numbers.get(id=card_id)
                         card.card_number = card_data.get('card_number', card.card_number)
                         card.iban = card_data.get('iban', card.iban)
                         card.save()
                     except CardNumber.DoesNotExist:
-                        # اگر id وجود نداشته باشد، شماره کارت جدید ایجاد کنید
                         CardNumber.objects.create(profile=instance, **card_data)
                 else:
-                    # اگر id وجود ندارد، شماره کارت جدید ایجاد کنید
                     CardNumber.objects.create(profile=instance, **card_data)
-        
         return instance
 
 # -----------------------------
@@ -242,19 +204,16 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
     def get_file_url(self, obj):
         if not obj.file:
             return None
-
         try:
             url = obj.file.url
         except ValueError:
             return None
-
         request = self.context.get('request')
         if request is not None:
             return request.build_absolute_uri(url)
         return url
 
     def validate(self, data):
-        # Reject 'id' and 'profile' if included in the input data
         if 'id' in data:
             raise serializers.ValidationError(
                 {'id': 'فیلد id نباید در بدنه درخواست ارسال شود.'}
@@ -265,8 +224,9 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
             )
         return data
 
-
-
+# -----------------------------
+# JuridicalCardNumber Serializer
+# -----------------------------
 class JuridicalCardNumberSerializer(serializers.ModelSerializer):
     class Meta:
         model = JuridicalCardNumber
@@ -275,13 +235,10 @@ class JuridicalCardNumberSerializer(serializers.ModelSerializer):
             'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
             'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
         }
-        
+
 # -----------------------------
 # JuridicalProfile Serializer
 # -----------------------------
-class JuridicalCardNumberListSerializer(serializers.ListSerializer):
-    child = JuridicalCardNumberSerializer()
-
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
     image = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -335,22 +292,27 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                 if 'iban' in card and card['iban'] and not isinstance(card['iban'], (type(None), str)) or len(str(card['iban'])) != 24:
                     raise serializers.ValidationError({'card_numbers': _('شماره شبا باید ۲۴ رقم باشد یا خالی باشد.')})
                 if 'id' in card and card['id']:
-                    try:
-                        JuridicalCardNumber.objects.get(id=card['id'], profile__natural_profile__base_user=self.context['request'].user)
-                    except JuridicalCardNumber.DoesNotExist:
-                        raise serializers.ValidationError({'card_numbers': _('شماره کارت با این id یافت نشد.')})
+                    if self.instance:  # برای ویرایش، بررسی instance
+                        try:
+                            self.instance.card_numbers.get(id=card['id'])
+                        except JuridicalCardNumber.DoesNotExist:
+                            raise serializers.ValidationError({'card_numbers': _('شماره کارت با این id یافت نشد.')})
+                    else:  # برای ایجاد، id نباید ارسال شود
+                        raise serializers.ValidationError({'card_numbers': _('برای ایجاد جدید، id ارسال نکنید.')})
         return data
 
     def create(self, validated_data):
         card_numbers_data = validated_data.pop('card_numbers', [])
         profile = JuridicalProfile.objects.create(**validated_data)
         for card_data in card_numbers_data:
-            JuridicalCardNumber.objects.create(profile=profile, **card_data)
+            try:
+                JuridicalCardNumber.objects.create(profile=profile, **card_data)
+            except IntegrityError as e:
+                raise serializers.ValidationError({'card_numbers': _(f'خطا در ایجاد شماره کارت: {str(e)}')})
         return profile
 
     def update(self, instance, validated_data):
         card_numbers_data = validated_data.pop('card_numbers', None)
-
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -366,10 +328,18 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                         card = instance.card_numbers.get(id=card_id)
                         card.card_number = card_data.get('card_number', card.card_number)
                         card.iban = card_data.get('iban', card.iban)
-                        card.save()
+                        try:
+                            card.save()
+                        except IntegrityError as e:
+                            raise serializers.ValidationError({'card_numbers': _(f'خطا در به‌روزرسانی شماره کارت: {str(e)}')})
                     except JuridicalCardNumber.DoesNotExist:
-                        JuridicalCardNumber.objects.create(profile=instance, **card_data)
+                        try:
+                            JuridicalCardNumber.objects.create(profile=instance, **card_data)
+                        except IntegrityError as e:
+                            raise serializers.ValidationError({'card_numbers': _(f'خطا در ایجاد شماره کارت: {str(e)}')})
                 else:
-                    JuridicalCardNumber.objects.create(profile=instance, **card_data)
-
+                    try:
+                        JuridicalCardNumber.objects.create(profile=instance, **card_data)
+                    except IntegrityError as e:
+                        raise serializers.ValidationError({'card_numbers': _(f'خطا در ایجاد شماره کارت: {str(e)}')})
         return instance
