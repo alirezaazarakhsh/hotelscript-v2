@@ -263,11 +263,9 @@ class UserLevelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserLevel
-        exclude = ('id',)
-        fields = ['title', 'color', 'icon']  
+        fields = ['title', 'color', 'icon']  # فقط فیلدهای مورد نیاز را سریالایز می‌کنیم
 
     def get_icon(self, obj):
-      
         if not hasattr(obj, 'icon') or not obj.icon:
             return None
 
