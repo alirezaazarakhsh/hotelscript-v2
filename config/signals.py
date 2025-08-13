@@ -3,7 +3,11 @@ from django.dispatch import receiver
 from django.conf import settings
 import os
 import logging
-from .models import Media, Folder, Slide, Banner  # مدل‌های دیگر را اضافه کنید
+from config.models import (
+    Media, Folder, Slide, SiteConfig, Statistic, ChooseReason, 
+    Service, Banner, License, FakeComment, ComingSoon
+)
+from reservation.models import HotelGallery
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +30,30 @@ def handle_media_upload(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=Media)
 def handle_media_delete(sender, instance, **kwargs):
     if instance.file and os.path.exists(instance.file.path):
-        # بررسی ارجاعات فایل در مدل‌های دیگر
         file_path = instance.file.name
         is_referenced = False
         # بررسی مدل‌های دیگر که ممکن است به فایل ارجاع دهند
-        for model in [Slide, Banner]:  # مدل‌های دیگر را اضافه کنید
-            if model.objects.filter(file=file_path).exists():  # فرض کنید فیلد file دارند
-                is_referenced = True
-                logger.info(f"فایل {file_path} در مدل {model.__name__} استفاده شده و حذف نمی‌شود.")
-                break
+        for model, field_name in [
+            (SiteConfig, 'header_logo'),
+            (SiteConfig, 'footer_logo'),
+            (Slide, 'image'),
+            (Statistic, 'image'),
+            (ChooseReason, 'image'),
+            (Service, 'image'),
+            (Banner, 'image'),
+            (License, 'image'),
+            (FakeComment, 'commenter_image'),
+            (ComingSoon, 'logo'),
+            (ComingSoon, 'background'),
+            (HotelGallery, 'image'),
+        ]:
+            try:
+                if model.objects.filter(**{field_name: file_path}).exists():
+                    is_referenced = True
+                    logger.info(f"فایل {file_path} در مدل {model.__name__} (فیلد {field_name}) استفاده شده و حذف نمی‌شود.")
+                    break
+            except AttributeError:
+                logger.warning(f"مدل {model.__name__} یا فیلد {field_name} وجود ندارد.")
         # اگر فایل در جای دیگری استفاده نشده، حذف شود
         if not is_referenced:
             try:

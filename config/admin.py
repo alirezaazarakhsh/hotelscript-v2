@@ -80,6 +80,8 @@ class MediaAdmin(admin.ModelAdmin):
     export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
 
 
+logger = logging.getLogger(__name__)
+
 @admin.register(MediaRestore)
 class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
