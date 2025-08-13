@@ -3,6 +3,7 @@ import zipfile
 import io
 import logging
 from django.contrib import admin
+from django.db import models as dj_models 
 from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
@@ -350,15 +351,19 @@ class UserLevelAdmin(admin.ModelAdmin):
     search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
+
+    # اینجا از CharField جنگو استفاده می‌کنیم نه مدل اپ خودمون
     formfield_overrides = {
-        models.CharField: {'widget': ColorWidget},
+        dj_models.CharField: {'widget': ColorWidget},
     }
 
     def icon_preview(self, obj):
-        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+        """نمایش پیش‌نمایش آیکون انتخاب‌شده در ادمین"""
+        if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(
                 f'<div style="display:flex;align-items:center;">'
-                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" '
+                f'style="margin-right:8px; object-fit: contain;" />'
                 f'<span>{obj.icon.title_icon}</span>'
                 f'</div>'
             )
