@@ -96,7 +96,7 @@ class ActivateDiscountCodeView(APIView):
         operation_description="""
 این API برای فعال‌سازی یک کد تخفیف توسط کاربر استفاده می‌شود.
 ورودی شامل کد تخفیف و نوع آن (اتاق یا مرکز خرید) است.
-در صورت موفقیت، رکورد فعال‌سازی در سیستم ثبت می‌شود.
+در صورت موفقیت، رکورد فعال‌سازی در سیستم ثبت می‌شود و امتیاز مورد نیاز از حساب مشتری کسر می‌شود.
 """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -109,7 +109,7 @@ class ActivateDiscountCodeView(APIView):
         responses={
             200: "کد تخفیف با موفقیت فعال شد",
             400: "ورودی نامعتبر یا کد تخفیف موجود نیست",
-            403: "کاربر مجاز به فعال‌سازی نیست",
+            403: "کاربر مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد",
             500: "خطای سرور داخلی"
         },
         tags=['discount-crm']
@@ -123,18 +123,30 @@ class ActivateDiscountCodeView(APIView):
             return Response({"error": "کد تخفیف و نوع آن الزامی است"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # دریافت اطلاعات امتیاز کاربر
+            try:
+                customer_points = CustomerClubPoint.objects.get(user=user)
+            except CustomerClubPoint.DoesNotExist:
+                return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
                 if user not in discount_code.users.all() and user not in discount_code.activated_users.all():
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.usage_limit <= discount_code.activated_users.count():
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
-                if discount_code.required_points > 0 and user.points < discount_code.required_points:
+                if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.user_level and user.user_level != discount_code.user_level:
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # کسر امتیاز از کاربر
+                if discount_code.required_points > 0:
+                    customer_points.points -= discount_code.required_points
+                    customer_points.save()
+
                 discount_code.activated_users.add(user)
                 DiscountActivationRecord.objects.create(
                     user=user,
@@ -147,12 +159,18 @@ class ActivateDiscountCodeView(APIView):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.usage_limit <= discount_code.activated_users.count():
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
-                if discount_code.required_points > 0 and user.points < discount_code.required_points:
+                if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.user_level and user.user_level != discount_code.user_level:
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
+                
+                # کسر امتیاز از کاربر
+                if discount_code.required_points > 0:
+                    customer_points.points -= discount_code.required_points
+                    customer_points.save()
+
                 discount_code.activated_users.add(user)
                 DiscountActivationRecord.objects.create(
                     user=user,
@@ -174,6 +192,9 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
 
 
 

@@ -239,7 +239,6 @@ class CustomerClubPoint(models.Model):
         
         
 
-
 #لیست جوایز فعال شده کاربران 
 class DiscountActivationRecord(models.Model):
     DISCOUNT_TYPE_CHOICES = [
