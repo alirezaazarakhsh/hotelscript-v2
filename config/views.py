@@ -503,7 +503,6 @@ class LegalProfileSubmissionRuleView(APIView):
             return Response({"detail": "قوانین یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = LegalProfileSubmissionRuleSerializer(instance, context={'request': request})
-        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
-    
+        return Response(serializer.data, status=status.HTTP_200_OK)  # تغییر در این خط
     
     
