@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics
 from drf_yasg import openapi
-from django.db.models import Q
+from django.db.models import Count, Q, F
 
 
 from authentication import models
@@ -18,25 +18,34 @@ from .serializers import CustomerClubPointSerializer, DiscountActivationRecordSe
 
 
 
-# ✅ ای‌پی‌آی دریافت کد تخفیف برای اتاق‌ها برای کاربر
+# ✅ ای‌پی‌آی دریافت کدهای تخفیف اتاق برای کاربر
 class MyRoomDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = RoomDiscountCodeSerializer
-    
 
     def get_queryset(self):
         user = self.request.user
-        return RoomDiscountCode.objects.filter(
-            Q(users=user) |          
-            Q(activated_users=user)
-    ).distinct()
+        today_jalali = jdatetime.date.today()
+
+        return (
+            RoomDiscountCode.objects.annotate(
+                activated_count=Count('activated_users', distinct=True)
+            )
+            .filter(
+                Q(users=user) | Q(activated_users=user),
+                Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
+                Q(activated_count__lt=F('usage_limit'))
+            )
+            .distinct()
+        )
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
-این API کدهای تخفیف مرتبط با کاربر را بازمی‌گرداند:
-- کدهایی که برای این کاربر تعریف شده‌اند.
-- کدهایی که کاربر قبلاً آن‌ها را فعال کرده است.
+این API فقط کدهای تخفیف معتبر اتاق را برمی‌گرداند:
+- کدهایی که برای کاربر اختصاص داده شده یا فعال کرده است
+- کدهایی که تاریخ انقضای آن‌ها نگذشته
+- کدهایی که هنوز به سقف دفعات استفاده نرسیده‌اند
 """,
         tags=['discount-crm']
     )
@@ -53,26 +62,34 @@ class MyRoomDiscountCodeListView(ListAPIView):
 
 
 
-# ✅ ای‌پی‌آی دریافت تخفیفات مراکز خرید کاربر
+# ✅ ای‌پی‌آی دریافت کدهای تخفیف مراکز خرید برای کاربر
 class MyShoppingCenterDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = ShoppingCenterDiscountCodeSerializer
-    
 
     def get_queryset(self):
         user = self.request.user
-        # فقط کدهایی که یا به کاربر اختصاص داره یا کاربر فعال‌شون کرده
+        today_jalali = jdatetime.date.today()
+
         return (
-            ShoppingCenterDiscountCode.objects.filter(users=user) |
-            ShoppingCenterDiscountCode.objects.filter(activated_users=user)
-        ).distinct()
+            ShoppingCenterDiscountCode.objects.annotate(
+                activated_count=Count('activated_users', distinct=True)
+            )
+            .filter(
+                Q(users=user) | Q(activated_users=user),
+                Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
+                Q(activated_count__lt=F('usage_limit'))
+            )
+            .distinct()
+        )
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
-این API کدهای تخفیف مربوط به مراکز خرید را بازمی‌گرداند که با کاربر مرتبط هستند:
-- کدهای اختصاصی مربوط به کاربر
-- کدهایی که کاربر آن‌ها را فعال کرده است.
+این API فقط کدهای تخفیف معتبر مراکز خرید را برمی‌گرداند:
+- کدهایی که برای کاربر اختصاص داده شده یا فعال کرده است
+- کدهایی که تاریخ انقضای آن‌ها نگذشته
+- کدهایی که هنوز به سقف دفعات استفاده نرسیده‌اند
 """,
         tags=['discount-crm']
     )
@@ -85,6 +102,8 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
             
 
 
