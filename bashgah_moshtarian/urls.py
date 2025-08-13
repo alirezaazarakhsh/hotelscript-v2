@@ -4,6 +4,7 @@ from .views import (
     MyShoppingCenterDiscountCodeListView,
     MyCustomerClubPointView,
     DiscountActivationRecordListView,
+    ActivateDiscountCodeView,  
 )
 
 app_name = "bashgah"
@@ -13,4 +14,5 @@ urlpatterns = [
     path('shopping-discount-codes/', MyShoppingCenterDiscountCodeListView.as_view(), name='shopping-discount-code-list'),
     path('customer-club/points/', MyCustomerClubPointView.as_view(), name='customer-club-points'),
     path('discount-activations/', DiscountActivationRecordListView.as_view(), name='discount-activation-list'),
+    path('activate-discount/', ActivateDiscountCodeView.as_view(), name='activate-discount'),  
 ]
