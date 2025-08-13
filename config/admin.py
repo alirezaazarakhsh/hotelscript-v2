@@ -358,7 +358,7 @@ class UserLevelAdmin(admin.ModelAdmin):
 
     # اعمال ویجت‌ها به صورت خاص
     formfield_overrides = {
-        models.CharField: {'widget': TextInput},  # پیش‌فرض برای همه CharFieldها
+        models.CharField: {'widget': TextInput},  # پیش‌فرض برای همه CharFieldها (مثل title)
     }
     formfield_overrides.update({
         'color': {'widget': ColorWidget},  # فقط برای فیلد color
@@ -376,8 +376,6 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
-    
-
 
     
 
