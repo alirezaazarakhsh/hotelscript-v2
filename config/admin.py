@@ -4,6 +4,7 @@ import io
 import logging
 from django.contrib import admin
 from django.db import models as dj_models 
+from django.forms import TextInput
 from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
