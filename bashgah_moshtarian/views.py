@@ -18,7 +18,7 @@ from .serializers import CustomerClubPointSerializer, DiscountActivationRecordSe
 
 
 
-# ✅ ای‌پی‌آی دریافت کدهای تخفیف اتاق برای کاربر
+# ✅ API کدهای تخفیف اتاق
 class MyRoomDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = RoomDiscountCodeSerializer
@@ -42,10 +42,10 @@ class MyRoomDiscountCodeListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
-این API فقط کدهای تخفیف معتبر اتاق را برمی‌گرداند:
-- کدهایی که برای کاربر اختصاص داده شده یا فعال کرده است
-- کدهایی که تاریخ انقضای آن‌ها نگذشته
-- کدهایی که هنوز به سقف دفعات استفاده نرسیده‌اند
+این API فقط کدهای معتبر اتاق را برمی‌گرداند:
+- به کاربر اختصاص داده شده یا فعال کرده است.
+- تاریخ انقضای آن‌ها نگذشته.
+- تعداد استفاده‌شان به سقف نرسیده.
 """,
         tags=['discount-crm']
     )
@@ -62,7 +62,7 @@ class MyRoomDiscountCodeListView(ListAPIView):
 
 
 
-# ✅ ای‌پی‌آی دریافت کدهای تخفیف مراکز خرید برای کاربر
+# ✅ API کدهای تخفیف مراکز خرید
 class MyShoppingCenterDiscountCodeListView(ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = ShoppingCenterDiscountCodeSerializer
@@ -86,10 +86,10 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
-این API فقط کدهای تخفیف معتبر مراکز خرید را برمی‌گرداند:
-- کدهایی که برای کاربر اختصاص داده شده یا فعال کرده است
-- کدهایی که تاریخ انقضای آن‌ها نگذشته
-- کدهایی که هنوز به سقف دفعات استفاده نرسیده‌اند
+این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
+- به کاربر اختصاص داده شده یا فعال کرده است.
+- تاریخ انقضای آن‌ها نگذشته.
+- تعداد استفاده‌شان به سقف نرسیده.
 """,
         tags=['discount-crm']
     )
@@ -102,7 +102,6 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
             
             
 
