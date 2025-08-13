@@ -109,7 +109,7 @@ class ActivateDiscountCodeView(APIView):
         responses={
             200: "کد تخفیف با موفقیت فعال شد",
             400: "ورودی نامعتبر یا کد تخفیف موجود نیست",
-            403: "کاربر مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد",
+            403: "کاربر مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد",
             500: "خطای سرور داخلی"
         },
         tags=['discount-crm']
@@ -123,6 +123,12 @@ class ActivateDiscountCodeView(APIView):
             return Response({"error": "کد تخفیف و نوع آن الزامی است"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # بررسی وجود پروفایل کاربر
+            try:
+                natural_profile = NaturalProfile.objects.get(base_user=user)
+            except NaturalProfile.DoesNotExist:
+                return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
+
             # دریافت اطلاعات امتیاز کاربر
             try:
                 customer_points = CustomerClubPoint.objects.get(user=user)
@@ -137,12 +143,11 @@ class ActivateDiscountCodeView(APIView):
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
-                if discount_code.user_level and user.user_level != discount_code.user_level:
+                if discount_code.user_level and natural_profile.level != discount_code.user_level:
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
                 
-                # کسر امتیاز از کاربر
                 if discount_code.required_points > 0:
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
@@ -161,12 +166,11 @@ class ActivateDiscountCodeView(APIView):
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
-                if discount_code.user_level and user.user_level != discount_code.user_level:
+                if discount_code.user_level and natural_profile.level != discount_code.user_level:
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
                 
-                # کسر امتیاز از کاربر
                 if discount_code.required_points > 0:
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
