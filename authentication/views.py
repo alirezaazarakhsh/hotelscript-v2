@@ -206,7 +206,6 @@ class TokenRefreshView(JwtTokenRefreshView):
 #ای پی ای لیست پروفایل های حقوقی 
 class JuridicalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود تصویر
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
@@ -237,11 +236,11 @@ class JuridicalProfileListCreateAPIView(APIView):
         operation_description="""
         این API امکان ایجاد یک پروفایل حقوقی جدید برای کاربر احراز هویت‌شده را فراهم می‌کند.
         اگر کاربر از قبل پروفایل حقوقی داشته باشد، خطای 400 بازگردانده می‌شود.
-        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
+        درخواست باید به صورت JSON ارسال شود.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
-        - بدنه درخواست (`multipart/form-data`):
+        - بدنه درخواست (application/json):
             - `organization_name` (اجباری): نام شرکت (رشته).
             - `national_id` (اجباری): شناسه ملی (رشته، دقیقاً ۱۱ رقم).
             - `registeration_number` (اجباری): شماره ثبت (رشته).
@@ -250,7 +249,7 @@ class JuridicalProfileListCreateAPIView(APIView):
             - `postal_code` (اجباری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس شرکت (رشته).
             - `email` (اختیاری): ایمیل شرکت (رشته).
-            - `image` (اختیاری): فایل تصویر شرکت (فرمت‌های مجاز: jpg, png).
+            - `image` (اختیاری): آدرس تصویر شرکت (رشته، URL).
             - `status` (اختیاری): وضعیت پروفایل (checking, accepted, rejected).
             - `reject_reason` (اختیاری): دلیل رد (رشته، در صورت رد شده بودن اجباری).
             - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل card_number و iban).
@@ -261,6 +260,7 @@ class JuridicalProfileListCreateAPIView(APIView):
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
         """,
         request_body=JuridicalProfileSerializer,
+        consumes=['application/json'],  # مشخص کردن نوع ورودی
         responses={
             201: JuridicalProfileSerializer(),
             400: "Bad Request",
@@ -290,11 +290,8 @@ class JuridicalProfileListCreateAPIView(APIView):
             )
 
 
-
-
 class JuridicalProfileDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود تصویر
 
     @swagger_auto_schema(
         operation_summary="دریافت اطلاعات پروفایل حقوقی کاربر جاری",
@@ -306,7 +303,7 @@ class JuridicalProfileDetailAPIView(APIView):
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
 
         **خروجی‌ها**:
-        - **200 OK**: اطلاعات پروفایل شامل نام شرکت، شناسه ملی، شماره ثبت، کد اقتصادی، شماره تماس، کد پستی، آدرس، ایمیل، تصویر، وضعیت، دلیل رد، مدارک و لیست شماره‌های کارت (حداکثر ۲ شماره).
+        - **200 OK**: اطلاعات پروفایل شامل نام شرکت، شناسه ملی، شماره ثبت، کد اقتصادی، شماره تماس، کد پستی، آدرس، ایمیل، وضعیت، دلیل رد، مدارک و لیست شماره‌های کارت (حداکثر ۲ شماره).
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
         """,
         responses={200: JuridicalProfileSerializer(), 401: "Unauthorized"}
@@ -327,13 +324,13 @@ class JuridicalProfileDetailAPIView(APIView):
         operation_summary="ویرایش یا ایجاد پروفایل حقوقی کاربر جاری",
         operation_description="""
         این API امکان ویرایش پروفایل حقوقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
-        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
+        درخواست باید به صورت JSON ارسال شود.
         تمام فیلدها اختیاری هستند و می‌توانند به صورت جزئی (partial) آپدیت شوند.
         شماره‌های کارت از طریق این API قابل ویرایش هستند.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
-        - بدنه درخواست (`multipart/form-data`):
+        - بدنه درخواست (application/json):
             - `organization_name` (اختیاری): نام شرکت (رشته).
             - `national_id` (اختیاری): شناسه ملی (رشته، دقیقاً ۱۱ رقم).
             - `registeration_number` (اختیاری): شماره ثبت (رشته).
@@ -342,7 +339,7 @@ class JuridicalProfileDetailAPIView(APIView):
             - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس شرکت (رشته).
             - `email` (اختیاری): ایمیل شرکت (رشته).
-            - `image` (اختیاری): فایل تصویر شرکت (فرمت‌های مجاز: jpg, png).
+            - `image` (اختیاری): آدرس تصویر شرکت (رشته، URL).
             - `status` (اختیاری): وضعیت پروفایل (checking, accepted, rejected).
             - `reject_reason` (اختیاری): دلیل رد (رشته، در صورت رد شده بودن اجباری).
             - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل id برای ویرایش).
@@ -354,6 +351,7 @@ class JuridicalProfileDetailAPIView(APIView):
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
         """,
         request_body=JuridicalProfileSerializer,
+        consumes=['application/json'],  # مشخص کردن نوع ورودی
         responses={
             200: JuridicalProfileSerializer(),
             201: JuridicalProfileSerializer(),
@@ -419,8 +417,6 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=204)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
-        
-        
 
 
 class NaturalProfileListCreateAPIView(APIView):
