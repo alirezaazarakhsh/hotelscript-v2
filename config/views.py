@@ -432,7 +432,6 @@ class RuleListView(ListAPIView):
 
 # ای پی ای مربوط به ساخت دسترسی برای کاربران سایت 
 class UserLevelListView(ListAPIView):
-    queryset = UserLevel.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = UserLevelSerializer
     pagination_class = None
@@ -442,9 +441,13 @@ class UserLevelListView(ListAPIView):
         operation_description="این API سطوح مختلف کاربری را بازمی‌گرداند.",
         tags=['user']
     )
-    def list(self, request, *args, **kwargs):
-        # متد اصلی list کلاس پایه را صدا بزنید
-        return super().list(request, *args, **kwargs)
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
+
+    def get_queryset(self):
+        return UserLevel.objects.all()
 
 
 
