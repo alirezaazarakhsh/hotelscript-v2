@@ -51,15 +51,22 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     discount_type = serializers.CharField(source='get_discount_type_display', read_only=True)
     code = serializers.SerializerMethodField()
+    discount_value = serializers.SerializerMethodField()
     related_info = serializers.SerializerMethodField()
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'activated_at', 'reward_claimed', 'related_info']
+        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'activated_at', 'reward_claimed', 'related_info']
 
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code
         return code.code if code else '—'
+
+    def get_discount_value(self, obj):
+        code = obj.room_discount_code or obj.shopping_discount_code
+        if code and code.discount_value:
+            return f"{int(code.discount_value):,}"  # اضافه کردن جداکننده سه‌رقمی
+        return '—'
 
     def get_related_info(self, obj):
         if obj.discount_type == 'room' and obj.room_discount_code:

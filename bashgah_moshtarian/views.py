@@ -184,7 +184,10 @@ class DiscountActivationRecordListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        return DiscountActivationRecord.objects.filter(user=user).order_by('-activated_at')
+        return DiscountActivationRecord.objects.filter(user=user).select_related(
+            'room_discount_code__room',
+            'shopping_discount_code'
+        ).order_by('-activated_at')
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست جوایز فعال شده کاربر",
@@ -209,6 +212,8 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
 
 
 
