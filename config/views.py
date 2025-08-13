@@ -442,8 +442,9 @@ class UserLevelListView(ListAPIView):
         operation_description="این API سطوح مختلف کاربری را بازمی‌گرداند.",
         tags=['user']
     )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
+    def list(self, request, *args, **kwargs):
+        # متد اصلی list کلاس پایه را صدا بزنید
+        return super().list(request, *args, **kwargs)
 
 
 
