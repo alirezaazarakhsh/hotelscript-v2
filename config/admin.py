@@ -316,6 +316,7 @@ class RuleAdmin(admin.ModelAdmin):
     search_fields = ('tab_title', 'text')
     ordering = ('order',)
 
+
 @admin.register(ComingSoon)
 class ComingSoonAdmin(admin.ModelAdmin):
     form = ComingSoonAdminForm
@@ -329,6 +330,8 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
+
+
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
