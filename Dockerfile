@@ -11,9 +11,9 @@ ENV PYTHONUNBUFFERED=1
 # Install system dependencies (update GPG keys if needed)
 RUN apt-get update --allow-releaseinfo-change && \
     apt-get install -y --no-install-recommends \
-    gnupg \
-    default-libmysqlclient-dev \
-    curl && \
+        gnupg \
+        default-libmysqlclient-dev \
+        curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy and install Python dependencies
