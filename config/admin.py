@@ -353,9 +353,9 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # اعمال ColorWidget فقط برای فیلد color
+    # اعمال ویجت‌ها به صورت خاص
     formfield_overrides = {
-        models.CharField: {'widget': TextInput},  # پیش‌فرض برای CharFieldها
+        models.CharField: {'widget': TextInput},  # پیش‌فرض برای همه CharFieldها
     }
     formfield_overrides.update({
         'color': {'widget': ColorWidget},  # فقط برای فیلد color
