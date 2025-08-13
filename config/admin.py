@@ -93,7 +93,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                 # استخراج فایل‌ها به MEDIA_ROOT
                 zip_ref.extractall(settings.MEDIA_ROOT)
                 for file_name in zip_ref.namelist():
-                    # حذف پیشوندهای اضافی و نرمال‌سازی مسیر
+                    # نرمال‌سازی مسیر فایل
                     clean_file_name = file_name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
@@ -102,7 +102,7 @@ class MediaRestoreAdmin(admin.ModelAdmin):
                     folder = None
                     if folder_name:
                         folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    # بررسی وجود فایل در دیتابیس برای جلوگیری از تکرار
+                    # بررسی وجود فایل در دیتابیس
                     if not Media.objects.filter(file=media_path).exists():
                         Media.objects.create(file=media_path, folder=folder)
                         logger.info(f"فایل {media_path} در پوشه {folder_name or 'root'} ثبت شد.")
@@ -153,7 +153,7 @@ class QuickAccessAdmin(admin.ModelAdmin):
         else:
             super().save_model(request, obj, form, change)
 
-    def has_add_permission(self, personally):
+    def has_add_permission(self, request):
         max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
         return QuickAccess.objects.count() < max_count
 
