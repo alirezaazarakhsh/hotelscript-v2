@@ -190,7 +190,7 @@ class DiscountActivationRecordListView(generics.ListAPIView):
         ).order_by('-activated_at')
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست جوایز فعال شده کاربر",
+        operation_summary="دریافت لیست جوایز فعال شده کاربر برای مرکز خرید و اتاق‌ها",
         operation_description="""
 این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
 - کدهای تخفیف اتاق
@@ -199,8 +199,51 @@ class DiscountActivationRecordListView(generics.ListAPIView):
 """,
         tags=['discount-crm'],
         responses={
-            200: DiscountActivationRecordSerializer(many=True),
-            500: 'خطای سرور داخلی'
+            200: openapi.Response(
+                description="لیست جوایز فعال شده",
+                schema=DiscountActivationRecordSerializer(many=True),
+                examples={
+                    "application/json": [
+                        {
+                            "id": 1,
+                            "user": "user@example.com",
+                            "discount_type": "room",
+                            "code": "ABC12345",
+                            "discount_value": "100,000",
+                            "required_points": 500,
+                            "activated_at": "2025-08-13T04:40:00+04:00",
+                            "reward_claimed": False,
+                            "related_info": {
+                                "room_id": 1,
+                                "room_name": "هتل پارسیان آزادی - اتاق تویین 2"
+                            }
+                        },
+                        {
+                            "id": 2,
+                            "user": "user@example.com",
+                            "discount_type": "shopping_center",
+                            "code": "XYZ67890",
+                            "discount_value": "50,000",
+                            "required_points": 300,
+                            "activated_at": "2025-08-12T10:00:00+04:00",
+                            "reward_claimed": True,
+                            "related_info": {
+                                "shopping_center_name": "مرکز خرید پالادیوم"
+                            }
+                        }
+                    ]
+                }
+            ),
+            500: openapi.Response(
+                description="خطای سرور داخلی",
+                examples={
+                    "application/json": {
+                        "error": "An error occurred",
+                        "exception_type": "Exception",
+                        "trace": "Traceback..."
+                    }
+                }
+            )
         }
     )
     def get(self, request, *args, **kwargs):
@@ -212,9 +255,6 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            
-
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر

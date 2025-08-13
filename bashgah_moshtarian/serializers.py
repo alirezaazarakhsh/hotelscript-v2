@@ -53,10 +53,11 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     code = serializers.SerializerMethodField()
     discount_value = serializers.SerializerMethodField()
     related_info = serializers.SerializerMethodField()
+    required_points = serializers.SerializerMethodField()  # اضافه کردن فیلد جدید
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'activated_at', 'reward_claimed', 'related_info']
+        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 'activated_at', 'reward_claimed', 'related_info']  # اضافه کردن required_points به fields
 
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code
@@ -67,6 +68,12 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         if code and code.discount_value:
             return f"{int(code.discount_value):,}"  # اضافه کردن جداکننده سه‌رقمی
         return '—'
+
+    def get_required_points(self, obj):  # متد جدید برای required_points
+        code = obj.room_discount_code or obj.shopping_discount_code
+        if code and code.required_points is not None:
+            return code.required_points
+        return 0  # یا مقدار پیش‌فرض دیگری مثل '—' اگر امتیاز مورد نیاز وجود نداشته باشد
 
     def get_related_info(self, obj):
         if obj.discount_type == 'room' and obj.room_discount_code:
