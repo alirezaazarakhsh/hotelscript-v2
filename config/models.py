@@ -806,3 +806,22 @@ class MediaRestore(models.Model):
     class Meta:
         verbose_name = "بازگردانی رسانه"
         verbose_name_plural = "بازگردانی‌های رسانه"
+        
+        
+        
+#مدل قوانین ارسال مدارک 
+class LegalProfileSubmissionRule(models.Model):
+    description = models.TextField(verbose_name="توضیحات قوانین ارسال مدارک")
+
+    def save(self, *args, **kwargs):
+        # اطمینان از اینکه فقط یک نمونه از این مدل وجود داشته باشد
+        if not self.pk and LegalProfileSubmissionRule.objects.exists():
+            raise ValidationError("فقط یک نمونه از قوانین ارسال مدارک می‌تواند وجود داشته باشد.")
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "قوانین ارسال مدارک پروفایل حقوقی"
+        verbose_name_plural = "قوانین ارسال مدارک پروفایل حقوقی"
+
+    def __str__(self):
+        return "قوانین ارسال مدارک پروفایل حقوقی"

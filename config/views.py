@@ -10,6 +10,7 @@ from rest_framework import status
 from .filters import PageFilter
 from .serializers import (
     ComingSoonSerializer,
+    LegalProfileSubmissionRuleSerializer,
     LocationSerializer,
     PageSerializer,
     HeaderMenuSerializer,
@@ -33,6 +34,7 @@ from .serializers import (
 )
 from .models import (
     ComingSoon,
+    LegalProfileSubmissionRule,
     Location,
     Page,
     HeaderMenu,
@@ -482,3 +484,26 @@ class LocationView(APIView):
         
         serializer = LocationSerializer(location)
         return Response(serializer.data)
+
+
+
+
+# ای پی ای قوانین ارسال مدارک حقوقی 
+class LegalProfileSubmissionRuleView(APIView):
+    permission_classes = (AllowAny,)
+
+    @swagger_auto_schema(
+        operation_summary="دریافت قوانین ارسال مدارک پروفایل حقوقی",
+        operation_description="این API اطلاعات مربوط به قوانین ارسال مدارک پروفایل حقوقی شامل توضیحات را برای نمایش در صفحه مربوطه باز می‌گرداند.",
+        tags=['juridical-profiles']
+    )
+    def get(self, request, *args, **kwargs):
+        instance = LegalProfileSubmissionRule.objects.first()
+        if not instance:
+            return Response({"detail": "قوانین یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = LegalProfileSubmissionRuleSerializer(instance, context={'request': request})
+        return Response({"data": serializer.data}, status=status.HTTP_200_OK)
+    
+    
+    

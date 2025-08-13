@@ -3,6 +3,7 @@ from html.parser import HTMLParser
 
 from .models import (
     ComingSoon,
+    LegalProfileSubmissionRule,
     Location,
     Page,
     HeaderMenu,
@@ -308,3 +309,12 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         exclude = ('id',)
+
+
+
+class LegalProfileSubmissionRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LegalProfileSubmissionRule
+        fields = (
+            'description',
+        )

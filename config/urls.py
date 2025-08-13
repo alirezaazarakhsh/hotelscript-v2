@@ -24,6 +24,7 @@ urlpatterns = [
     path('user-levels/', views.UserLevelListView.as_view(), name='user-levels'),
     path('coming-soon/', views.ComingSoonView.as_view(), name='coming-soon'),
     path('location/', views.LocationView.as_view(), name='location'),
+    path('legal-profile-rules/', views.LegalProfileSubmissionRuleView.as_view(), name='legal-profile-rules'),
 
 
 ]

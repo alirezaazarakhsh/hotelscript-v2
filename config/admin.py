@@ -7,7 +7,7 @@ from django.utils.html import mark_safe
 from django.http import HttpResponse
 from django.conf import settings
 from .models import (
-    Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
+    LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
     SocialMedia, Banner, EnamadLicense, License, Advantage, FakeComment,
     Rule, ComingSoon, UserLevel, Folder, Media, MediaRestore,
@@ -372,3 +372,20 @@ class LocationAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not Location.objects.exists()
+    
+    
+    
+@admin.register(LegalProfileSubmissionRule)
+class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
+    list_display = ['description']
+    search_fields = ['description']
+    
+    def has_add_permission(self, request):
+        # جلوگیری از افزودن نمونه جدید اگر یکی وجود داشته باشد
+        if self.model.objects.exists():
+            return False
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        # می‌توانید این را فعال یا غیرفعال کنید بسته به نیاز
+        return True
