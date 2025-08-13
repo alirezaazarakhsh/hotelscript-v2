@@ -206,6 +206,7 @@ class TokenRefreshView(JwtTokenRefreshView):
 #ای پی ای لیست پروفایل های حقوقی 
 class JuridicalProfileListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  # برای پشتیبانی از آپلود تصویر
 
     @swagger_auto_schema(
         operation_summary="دریافت پروفایل حقوقی کاربر جاری",
@@ -216,15 +217,10 @@ class JuridicalProfileListCreateAPIView(APIView):
     )
     def get(self, request):
         try:
-            # ابتدا پروفایل حقیقی کاربر را پیدا می‌کنیم
             natural_profile = NaturalProfile.objects.get(base_user=request.user)
-            
-            # سپس پروفایل حقوقی مرتبط با آن را پیدا می‌کنیم
             juridical_profile = JuridicalProfile.objects.get(natural_profile=natural_profile)
-            
             serializer = JuridicalProfileSerializer(juridical_profile, context={'request': request})
             return Response(serializer.data)
-            
         except NaturalProfile.DoesNotExist:
             return Response(
                 {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
@@ -238,102 +234,60 @@ class JuridicalProfileListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
+        operation_description="""
+        این API امکان ایجاد یک پروفایل حقوقی جدید برای کاربر احراز هویت‌شده را فراهم می‌کند.
+        اگر کاربر از قبل پروفایل حقوقی داشته باشد، خطای 400 بازگردانده می‌شود.
+        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
+
+        **ورودی‌ها**:
+        - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
+        - بدنه درخواست (`multipart/form-data`):
+            - `organization_name` (اجباری): نام شرکت (رشته).
+            - `national_id` (اجباری): شناسه ملی (رشته، دقیقاً ۱۱ رقم).
+            - `registeration_number` (اجباری): شماره ثبت (رشته).
+            - `economical_code` (اجباری): کد اقتصادی (رشته).
+            - `phone_number` (اجباری): شماره تماس (رشته).
+            - `postal_code` (اجباری): کد پستی (رشته، دقیقاً ۱۰ رقم).
+            - `address` (اختیاری): آدرس شرکت (رشته).
+            - `email` (اختیاری): ایمیل شرکت (رشته).
+            - `image` (اختیاری): فایل تصویر شرکت (فرمت‌های مجاز: jpg, png).
+            - `status` (اختیاری): وضعیت پروفایل (checking, accepted, rejected).
+            - `reject_reason` (اختیاری): دلیل رد (رشته، در صورت رد شده بودن اجباری).
+            - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل card_number و iban).
+
+        **خروجی‌ها**:
+        - **201 Created**: پروفایل با موفقیت ایجاد شد و اطلاعات آن بازگشت داده می‌شود.
+        - **400 Bad Request**: در صورت نامعتبر بودن داده‌ها یا وجود پروفایل از قبل.
+        - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
+        """,
         request_body=JuridicalProfileSerializer,
         responses={
             201: JuridicalProfileSerializer(),
-            400: "داده‌های نامعتبر"
+            400: "Bad Request",
+            401: "Unauthorized"
         }
     )
     def post(self, request):
         try:
-            # بررسی می‌کنیم که کاربر پروفایل حقیقی دارد
             natural_profile = NaturalProfile.objects.get(base_user=request.user)
-            
-            # بررسی می‌کنیم که کاربر از قبل پروفایل حقوقی ندارد
             if hasattr(natural_profile, 'juridical_profile'):
                 return Response(
                     {"detail": "این کاربر از قبل پروفایل حقوقی دارد."},
                     status=400
                 )
-            
             serializer = JuridicalProfileSerializer(
                 data=request.data,
                 context={'request': request}
             )
-            
             if serializer.is_valid():
-                # پروفایل حقیقی را به داده‌های سریالایزر اضافه می‌کنیم
                 serializer.save(natural_profile=natural_profile)
                 return Response(serializer.data, status=201)
-                
             return Response(serializer.errors, status=400)
-            
         except NaturalProfile.DoesNotExist:
             return Response(
                 {"detail": "برای ایجاد پروفایل حقوقی، ابتدا باید پروفایل حقیقی ایجاد کنید."},
                 status=400
             )
-
-
-
-
-
-class JuridicalProfileDetailAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @swagger_auto_schema(
-        operation_summary="دریافت پروفایل حقوقی کاربر جاری",
-        responses={200: JuridicalProfileSerializer()}
-    )
-    def get(self, request):
-        from .models import NaturalProfile, JuridicalProfile
-        try:
-            profile = request.user.natural_profile.juridical_profile
-        except AttributeError:
-            try:
-                natural_profile = request.user.natural_profile
-            except AttributeError:
-                natural_profile = NaturalProfile(base_user=request.user)
-            profile = JuridicalProfile(natural_profile=natural_profile)  # شیء فیک
-        serializer = JuridicalProfileSerializer(profile, context={'request': request})
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
-        request_body=JuridicalProfileSerializer,
-        responses={200: JuridicalProfileSerializer()}
-    )
-    def put(self, request):
-        try:
-            profile = request.user.natural_profile.juridical_profile
-        except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
-
-        serializer = JuridicalProfileSerializer(
-            profile,
-            data=request.data,
-            partial=True,
-            context={'request': request}
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
-
-    @swagger_auto_schema(
-        operation_summary="حذف پروفایل حقوقی کاربر جاری",
-        responses={204: "پروفایل حذف شد"}
-    )
-    def delete(self, request):
-        try:
-            profile = request.user.natural_profile.juridical_profile
-            profile.delete()
-            return Response(status=204)
-        except AttributeError:
-            return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
-
-        
-        
 
 
 

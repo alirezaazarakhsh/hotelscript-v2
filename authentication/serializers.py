@@ -10,7 +10,7 @@ from safarname24.serializers import ErrorMessageSerializerMixin
 from django.core.validators import RegexValidator
 
 from .validators import validate_phone_number
-from .models import BaseUser, CardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
+from .models import BaseUser, CardNumber, JuridicalCardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
 
 
 # -----------------------------
@@ -267,12 +267,23 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
 
 
 
+class JuridicalCardNumberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JuridicalCardNumber
+        fields = ['id', 'card_number', 'iban']
+        extra_kwargs = {
+            'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
+            'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
+        }
+
+
 # -----------------------------
 # JuridicalProfile Serializer
 # -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
+    card_numbers = JuridicalCardNumberSerializer(many=True, required=False)  # اضافه کردن فیلد شماره کارت‌ها
 
     class Meta:
         model = JuridicalProfile
@@ -289,6 +300,7 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
             'status',
             'reject_reason',
             'documents',
+            'card_numbers',  # اضافه کردن card_numbers به fields
         ]
         extra_kwargs = {
             'address': {'required': False, 'allow_null': True},
@@ -308,17 +320,69 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
         return JuridicalProfileDocumentSerializer(documents, many=True, context={'request': request}).data
 
     def validate(self, data):
+        # اعتبارسنجی برای وضعیت رد شده
         if data.get('status') == 'rejected' and not data.get('reject_reason', '').strip():
             raise serializers.ValidationError({
                 'reject_reason': _('فیلد دلیل رد برای وضعیت رد شده الزامی است.')
             })
+
+        # اعتبارسنجی شماره‌های کارت
+        if 'card_numbers' in data and data.get('card_numbers'):
+            card_numbers = data['card_numbers']
+            if len(card_numbers) > 2:
+                raise serializers.ValidationError({'card_numbers': _('هر پروفایل حقوقی تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.')})
+
+            for card in card_numbers:
+                if 'card_number' not in card or not card['card_number']:
+                    raise serializers.ValidationError({'card_numbers': _('شماره کارت الزامی است.')})
+                if 'iban' in card and card['iban'] and not isinstance(card['iban'], (type(None), str)) or len(str(card['iban'])) != 24:
+                    raise serializers.ValidationError({'card_numbers': _('شماره شبا باید ۲۴ رقم باشد یا خالی باشد.')})
+                if 'id' in card and card['id']:
+                    try:
+                        JuridicalCardNumber.objects.get(id=card['id'], profile__natural_profile__base_user=self.context['request'].user)
+                    except JuridicalCardNumber.DoesNotExist:
+                        raise serializers.ValidationError({'card_numbers': _('شماره کارت با این id یافت نشد.')})
         return data
 
     def create(self, validated_data):
-        return JuridicalProfile.objects.create(user=self.context['request'].user, **validated_data)
+        card_numbers_data = validated_data.pop('card_numbers', [])
+        # ایجاد پروفایل حقوقی
+        profile = JuridicalProfile.objects.create(**validated_data)
+        # ایجاد شماره‌های کارت
+        for card_data in card_numbers_data:
+            JuridicalCardNumber.objects.create(profile=profile, **card_data)
+        return profile
 
     def update(self, instance, validated_data):
+        card_numbers_data = validated_data.pop('card_numbers', None)
+
+        # به‌روزرسانی سایر فیلدهای پروفایل
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        if card_numbers_data is not None:
+            # نگه‌داری لیستی از idهای شماره‌های کارت ارسالی
+            card_number_ids = [card_data.get('id') for card_data in card_numbers_data if card_data.get('id')]
+
+            # حذف شماره‌های کارتی که در ورودی جدید نیستند
+            instance.card_numbers.exclude(id__in=card_number_ids).delete()
+
+            # به‌روزرسانی یا ایجاد شماره‌های کارت
+            for card_data in card_numbers_data:
+                card_id = card_data.get('id')
+                if card_id:
+                    # اگر id وجود دارد، شماره کارت را به‌روزرسانی کنید
+                    try:
+                        card = instance.card_numbers.get(id=card_id)
+                        card.card_number = card_data.get('card_number', card.card_number)
+                        card.iban = card_data.get('iban', card.iban)
+                        card.save()
+                    except JuridicalCardNumber.DoesNotExist:
+                        # اگر id وجود نداشته باشد، شماره کارت جدید ایجاد کنید
+                        JuridicalCardNumber.objects.create(profile=instance, **card_data)
+                else:
+                    # اگر id وجود ندارد، شماره کارت جدید ایجاد کنید
+                    JuridicalCardNumber.objects.create(profile=instance, **card_data)
+
         return instance
