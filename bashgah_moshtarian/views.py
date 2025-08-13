@@ -136,6 +136,20 @@ class ActivateDiscountCodeView(APIView):
             except CustomerClubPoint.DoesNotExist:
                 return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # تابع کمکی برای ایجاد رکورد فعال‌سازی
+            def create_activation_record(discount_code):
+                kwargs = {
+                    "user": user,
+                    "discount_type": discount_type,
+                    "reward_claimed": True
+                }
+                if discount_type == "room":
+                    kwargs["room_discount_code"] = discount_code
+                else:
+                    kwargs["shopping_discount_code"] = discount_code
+                DiscountActivationRecord.objects.create(**kwargs)
+
+            # فعال‌سازی کد تخفیف اتاق
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
                 if user not in discount_code.users.all() and user not in discount_code.activated_users.all():
@@ -148,17 +162,15 @@ class ActivateDiscountCodeView(APIView):
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
-                
+
                 if discount_code.required_points > 0:
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
                 discount_code.activated_users.add(user)
-                DiscountActivationRecord.objects.create(
-                    user=user,
-                    discount_type=discount_type,
-                    room_discount_code=discount_code
-                )
+                create_activation_record(discount_code)
+
+            # فعال‌سازی کد تخفیف مرکز خرید
             elif discount_type == 'shopping_center':
                 discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
                 if user not in discount_code.users.all() and user not in discount_code.activated_users.all():
@@ -171,17 +183,14 @@ class ActivateDiscountCodeView(APIView):
                     return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
-                
+
                 if discount_code.required_points > 0:
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
                 discount_code.activated_users.add(user)
-                DiscountActivationRecord.objects.create(
-                    user=user,
-                    discount_type=discount_type,
-                    shopping_discount_code=discount_code
-                )
+                create_activation_record(discount_code)
+
             else:
                 return Response({"error": "نوع تخفیف نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
 
