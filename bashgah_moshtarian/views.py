@@ -125,8 +125,8 @@ class ActivateDiscountCodeView(APIView):
         try:
             # بررسی وجود پروفایل کاربر
             try:
-                natural_profile = NaturalProfile.objects.get(base_user=user)
-            except NaturalProfile.DoesNotExist:
+                natural_profile = models.NaturalProfile.objects.get(base_user=user)
+            except models.NaturalProfile.DoesNotExist:
                 return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
 
             # دریافت اطلاعات امتیاز کاربر
