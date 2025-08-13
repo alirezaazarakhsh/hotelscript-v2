@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.conf import settings
 import os
@@ -19,3 +19,13 @@ def handle_media_upload(sender, instance, created, **kwargs):
             logger.info(f"فایل {file_path} در پوشه {folder_name} ثبت شد.")
         else:
             logger.info(f"فایل {file_path} در پوشه root ثبت شد.")
+            
+            
+@receiver(post_delete, sender=Media)
+def handle_media_delete(sender, instance, **kwargs):
+    if instance.file and os.path.exists(instance.file.path):
+        try:
+            os.remove(instance.file.path)
+            logger.info(f"فایل {instance.file.path} از سرور حذف شد.")
+        except Exception as e:
+            logger.error(f"خطا در حذف فایل {instance.file.path}: {str(e)}")

@@ -90,26 +90,36 @@ class MediaRestoreAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         try:
             with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
+                # استخراج فایل‌ها به MEDIA_ROOT
                 zip_ref.extractall(settings.MEDIA_ROOT)
                 for file_name in zip_ref.namelist():
+                    # حذف پیشوندهای اضافی و نرمال‌سازی مسیر
                     clean_file_name = file_name
                     while clean_file_name.startswith('media/'):
                         clean_file_name = clean_file_name[len('media/'):]
-                    media_path = os.path.join('media', clean_file_name)
+                    media_path = os.path.join('media', clean_file_name).replace('\\', '/')
                     folder_name = os.path.dirname(clean_file_name).strip('/')
                     folder = None
                     if folder_name:
                         folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    logger.info(f"ایجاد رکورد برای: {media_path}, پوشه: {folder_name}")
-                    Media.objects.get_or_create(file=media_path, folder=folder)
+                    # بررسی وجود فایل در دیتابیس برای جلوگیری از تکرار
+                    if not Media.objects.filter(file=media_path).exists():
+                        Media.objects.create(file=media_path, folder=folder)
+                        logger.info(f"فایل {media_path} در پوشه {folder_name or 'root'} ثبت شد.")
+                    else:
+                        logger.info(f"فایل {media_path} قبلاً در دیتابیس وجود دارد.")
             logger.info("فایل ZIP با موفقیت بازگردانی شد.")
             self.message_user(request, 'فایل ZIP با موفقیت بازگردانی شد.')
-            os.remove(obj.zip_file.path)
+            # حذف فایل ZIP پس از بازگردانی
+            if os.path.exists(obj.zip_file.path):
+                os.remove(obj.zip_file.path)
+                logger.info(f"فایل ZIP {obj.zip_file.path} حذف شد.")
             obj.delete()
         except Exception as e:
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
-            self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}')
+            self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}', level='error')
 
+# بقیه کدهای admin.py بدون تغییر باقی می‌مانند
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'page', 'path')
@@ -143,7 +153,7 @@ class QuickAccessAdmin(admin.ModelAdmin):
         else:
             super().save_model(request, obj, form, change)
 
-    def has_add_permission(self, request):
+    def has_add_permission(self, personally):
         max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
         return QuickAccess.objects.count() < max_count
 
@@ -261,7 +271,7 @@ class BannerAdmin(admin.ModelAdmin):
     list_filter = ('page',)
 
 @admin.register(EnamadLicense)
-class MediaAdmin(admin.ModelAdmin):
+class EnamadLicenseAdmin(admin.ModelAdmin):
     list_display = ('id',)
 
     def save_model(self, request, obj, form, change):
@@ -316,7 +326,6 @@ class RuleAdmin(admin.ModelAdmin):
     search_fields = ('tab_title', 'text')
     ordering = ('order',)
 
-
 @admin.register(ComingSoon)
 class ComingSoonAdmin(admin.ModelAdmin):
     form = ComingSoonAdminForm
@@ -330,8 +339,6 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
-
-
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
