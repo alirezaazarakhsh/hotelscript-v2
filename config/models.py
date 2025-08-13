@@ -729,15 +729,21 @@ class UserLevel(models.Model):
         IconShortcut,  
         on_delete=models.CASCADE,
         verbose_name=_('آیکن'),
-        related_name='user_levels',  # به صورت جمع و با آندرلاین
+        related_name='user_levels',
+    )
+    color = models.CharField(
+        verbose_name=_('رنگ'),
+        max_length=7,  # برای کد HEX مثل #FFFFFF
+        default='#000000',  # رنگ پیش‌فرض
+        help_text=_('کد رنگ را در فرمت HEX وارد کنید (مثال: #FFFFFF)'),
     )
     
     class Meta:
-        verbose_name = 'سطح کاربری'
-        verbose_name_plural = 'سطوح کاربری'
+        verbose_name = _('سطح کاربری')
+        verbose_name_plural = _('سطوح کاربری')
     
     def __str__(self):
-        return self.title   
+        return self.title
 
 
 

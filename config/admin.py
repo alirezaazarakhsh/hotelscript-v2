@@ -5,7 +5,10 @@ import logging
 from django.contrib import admin
 from django.utils.html import mark_safe
 from django.http import HttpResponse
+from colorfield.widgets import ColorWidget
 from django.conf import settings
+
+from reservation import models
 from .models import (
     LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
@@ -343,10 +346,13 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'icon_preview')
+    list_display = ('id', 'title', 'color', 'icon_preview')
     search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
+    formfield_overrides = {
+        models.CharField: {'widget': ColorWidget},
+    }
 
     def icon_preview(self, obj):
         if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:

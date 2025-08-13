@@ -258,25 +258,31 @@ class RuleSerializer(serializers.ModelSerializer):
 
 
 
-
 class UserLevelSerializer(serializers.ModelSerializer):
-    icon = serializers.SerializerMethodField()
+    icon = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = UserLevel
         exclude = ('id',)
+        fields = ['title', 'color', 'icon']  
 
     def get_icon(self, obj):
-        icon = getattr(obj, 'icon', None)
-        if not icon:
+      
+        if not hasattr(obj, 'icon') or not obj.icon:
             return None
 
-        request = self.context.get('request', None)
-        url = request.build_absolute_uri(icon.svg_icon.url) if request and icon.svg_icon else None
+        icon = obj.icon
+        request = self.context.get('request')
+        url = None
+        if request and getattr(icon, 'svg_icon', None):
+            try:
+                url = request.build_absolute_uri(icon.svg_icon.url)
+            except AttributeError:
+                url = None
 
         return {
-            "title": icon.title_icon or "",
-            "url": url
+            'title': getattr(icon, 'title_icon', '') or '',
+            'url': url
         }
 
         
