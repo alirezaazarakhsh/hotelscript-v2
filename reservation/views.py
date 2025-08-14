@@ -1013,7 +1013,6 @@ class PassengerListCreateView(generics.ListCreateAPIView):
 
 
 
-
 # ای پی ای حذف و ویرایش مسافران
 class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
@@ -1026,40 +1025,23 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             raise PermissionDenied("شما اجازه دسترسی به این مسافر را ندارید.")
         return obj
 
-    @swagger_auto_schema(
-        tags=["Passenger-user"],
-        operation_summary="دریافت اطلاعات یک مسافر",
-        operation_description="اطلاعات یک مسافر خاص که متعلق به کاربر جاری است را نمایش می‌دهد.",
-        responses={200: PassengerSerializer()}
-    )
-    def get(self, request, *args, **kwargs):
-        try:
-            return super().get(request, *args, **kwargs)
-        except Exception as exc:
-            return Response({
-                "error": str(exc),
-                "exception_type": exc.__class__.__name__,
-                "trace": traceback.format_exc(limit=2)
-            }, status=status.HTTP_400_BAD_REQUEST)
-
     def perform_update(self, serializer):
-        # اطمینان از اینکه user تغییر نمی‌کند و id هم ثابت بماند
+        # اطمینان از اینکه user تغییر نمی‌کند
         serializer.save(user=self.request.user)
 
     @swagger_auto_schema(
         tags=["Passenger-user"],
-        operation_summary="ویرایش کامل اطلاعات یک مسافر",
-        operation_description="اطلاعات یک مسافر را به‌طور کامل ویرایش می‌کند.",
+        operation_summary="ویرایش جزئی مسافر",
+        operation_description="اطلاعات مسافر را به‌صورت جزئی ویرایش می‌کند. هیچ فیلدی ضروری نیست.",
         request_body=PassengerSerializer,
         responses={200: PassengerSerializer()}
     )
-    def put(self, request, *args, **kwargs):
+    def patch(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
-            # id را از داده‌های ارسالی حذف می‌کنیم تا تغییر نکند
             data = request.data.copy()
-            data.pop('id', None)
-            serializer = self.get_serializer(instance, data=data)
+            data.pop('id', None)  # ID تغییر نکند
+            serializer = self.get_serializer(instance, data=data, partial=True)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
             return Response(serializer.data)
@@ -1086,7 +1068,6 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 
