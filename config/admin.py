@@ -357,11 +357,6 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # فقط در فرم Add/Change ویجت کالر پیکر اعمال می‌کنیم
-    formfield_overrides = {
-        UserLevel._meta.get_field('color'): {'widget': ColorWidget},
-    }
-
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(
