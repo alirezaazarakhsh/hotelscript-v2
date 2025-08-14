@@ -357,6 +357,11 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
+    # استفاده از ColorWidget برای فیلد color
+    formfield_overrides = {
+        models.CharField: {'widget': ColorWidget(attrs={'type': 'color'})},
+    }
+
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(

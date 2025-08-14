@@ -1042,6 +1042,10 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_400_BAD_REQUEST)
 
+    def perform_update(self, serializer):
+        # اطمینان از اینکه user تغییر نمی‌کند و id هم ثابت بماند
+        serializer.save(user=self.request.user)
+
     @swagger_auto_schema(
         tags=["Passenger-user"],
         operation_summary="ویرایش کامل اطلاعات یک مسافر",
@@ -1052,7 +1056,10 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def put(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data)
+            # id را از داده‌های ارسالی حذف می‌کنیم تا تغییر نکند
+            data = request.data.copy()
+            data.pop('id', None)
+            serializer = self.get_serializer(instance, data=data)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
             return Response(serializer.data)
