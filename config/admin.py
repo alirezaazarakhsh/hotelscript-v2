@@ -359,10 +359,20 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # استفاده از ColorWidget فقط برای ColorField
+    # استفاده از Color Picker برای فیلد color
     formfield_overrides = {
         ColorField: {'widget': ColorWidget},
     }
+
+    def save_model(self, request, obj, form, change):
+        if not change and UserLevel.objects.count() >= 3:
+            self.message_user(request, 'شما نمی‌توانید بیشتر از ۳ سطح کاربری بسازید.', level='error')
+        else:
+            super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        # محدودیت ۳ سطح کاربری
+        return UserLevel.objects.count() < 3
 
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
@@ -384,6 +394,8 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     color_preview.short_description = "پیش‌نمایش رنگ"
+    
+    
     
 
 @admin.register(Location)
