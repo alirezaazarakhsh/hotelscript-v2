@@ -9,6 +9,8 @@ from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
 from django.utils.html import format_html
+from django.db.models import CharField
+
 from django.conf import settings
 
 from reservation import models
@@ -359,8 +361,8 @@ class UserLevelAdmin(admin.ModelAdmin):
 
     # استفاده از ColorWidget برای فیلد color
     formfield_overrides = {
-        models.CharField: {'widget': ColorWidget(attrs={'type': 'color'})},
-    }
+    CharField: {'widget': ColorWidget(attrs={'type': 'color'})},
+}
 
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
