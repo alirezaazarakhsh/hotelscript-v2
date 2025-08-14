@@ -351,7 +351,7 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'color', 'icon_preview')
+    list_display = ('id', 'title', 'color_preview', 'icon_preview')
     search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
@@ -362,7 +362,6 @@ class UserLevelAdmin(admin.ModelAdmin):
     }
 
     def icon_preview(self, obj):
-        """نمایش پیش‌نمایش آیکون انتخاب‌شده در ادمین"""
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(
                 f'<div style="display:flex;align-items:center;">'
