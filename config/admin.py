@@ -8,6 +8,7 @@ from django.forms import TextInput
 from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
+from django.utils.html import format_html
 from django.conf import settings
 
 from reservation import models
@@ -356,7 +357,6 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # فقط برای فیلد color ویجت کالر پیکر اعمال می‌کنیم
     formfield_overrides = {
         UserLevel._meta.get_field('color'): {'widget': ColorWidget},
     }
@@ -372,7 +372,16 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
-    
+
+    # متد جدید برای پیش‌نمایش رنگ
+    def color_preview(self, obj):
+        if obj.color:
+            return format_html(
+                '<div style="width:30px; height:30px; background-color:{}; border:1px solid #000;"></div>',
+                obj.color
+            )
+        return "-"
+    color_preview.short_description = "پیش‌نمایش رنگ"
     
     
 
