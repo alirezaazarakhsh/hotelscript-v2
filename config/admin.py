@@ -3,13 +3,14 @@ import zipfile
 import io
 import logging
 from django.contrib import admin
-from django.db import models as dj_models  # وارد کردن درست ماژول models
+from django.db import models as dj_models 
 from django.forms import TextInput
 from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
 from django.conf import settings
 
+from reservation import models
 from .models import (
     LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
@@ -83,6 +84,7 @@ class MediaAdmin(admin.ModelAdmin):
         return response
     export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
 
+
 logger = logging.getLogger(__name__)
 
 @admin.register(MediaRestore)
@@ -120,6 +122,8 @@ class MediaRestoreAdmin(admin.ModelAdmin):
         except Exception as e:
             logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
             self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}', level='error')
+
+
 
 # بقیه کدهای admin.py بدون تغییر باقی می‌مانند
 @admin.register(Page)
@@ -191,7 +195,7 @@ class StatisticAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'description')
     inlines = [StatisticItemInline]
 
-    def save_model(request, obj, form, change):
+    def save_model(self, request, obj, form, change):
         if not change and Statistic.objects.exists():
             self.message_user(request, 'تنها یک کانفیگ درباره ما می‌توان ساخت.', level='error')
         else:
@@ -342,6 +346,37 @@ class ComingSoonAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
 
+
+
+
+@admin.register(UserLevel)
+class UserLevelAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'color', 'icon_preview')
+    search_fields = ('title', 'icon__title_icon')
+    autocomplete_fields = ('icon',)
+    readonly_fields = ('icon_preview',)
+
+    # فقط برای فیلد color ویجت کالر پیکر اعمال می‌کنیم
+    formfield_overrides = {
+        UserLevel._meta.get_field('color'): {'widget': ColorWidget},
+    }
+
+    def icon_preview(self, obj):
+        """نمایش پیش‌نمایش آیکون انتخاب‌شده در ادمین"""
+        if obj.icon and getattr(obj.icon, 'svg_icon', None):
+            return mark_safe(
+                f'<div style="display:flex;align-items:center;">'
+                f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" '
+                f'style="margin-right:8px; object-fit: contain;" />'
+                f'<span>{obj.icon.title_icon}</span>'
+                f'</div>'
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
+    
+    
+    
+
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
     list_display = ('id', 'latitude', 'longitude')
@@ -355,6 +390,8 @@ class LocationAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not Location.objects.exists()
+    
+    
     
 @admin.register(LegalProfileSubmissionRule)
 class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
