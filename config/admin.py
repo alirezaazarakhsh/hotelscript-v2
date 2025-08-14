@@ -357,6 +357,7 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
+    # فقط در فرم Add/Change ویجت کالر پیکر اعمال می‌کنیم
     formfield_overrides = {
         UserLevel._meta.get_field('color'): {'widget': ColorWidget},
     }
@@ -373,7 +374,6 @@ class UserLevelAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
-    # متد جدید برای پیش‌نمایش رنگ
     def color_preview(self, obj):
         if obj.color:
             return format_html(
