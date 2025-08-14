@@ -351,7 +351,6 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
 
 
-
 @admin.register(UserLevel)
 class UserLevelAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'color_preview', 'icon_preview')
@@ -359,10 +358,11 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # استفاده از ColorWidget برای فیلد color
-    formfield_overrides = {
-    CharField: {'widget': ColorWidget(attrs={'type': 'color'})},
-}
+    # فقط فیلد color رو ColorPicker می‌کنیم
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        if db_field.name == 'color':
+            return db_field.formfield(widget=ColorWidget(attrs={'type': 'color'}))
+        return super().formfield_for_dbfield(db_field, **kwargs)
 
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
