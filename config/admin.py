@@ -9,7 +9,8 @@ from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
 from django.utils.html import format_html
-from django.db.models import CharField
+from colorfield.fields import ColorField
+
 
 from django.conf import settings
 
@@ -358,11 +359,10 @@ class UserLevelAdmin(admin.ModelAdmin):
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
 
-    # فقط فیلد color رو ColorPicker می‌کنیم
-    def formfield_for_dbfield(self, db_field, **kwargs):
-        if db_field.name == 'color':
-            return db_field.formfield(widget=ColorWidget(attrs={'type': 'color'}))
-        return super().formfield_for_dbfield(db_field, **kwargs)
+    # استفاده از ColorWidget فقط برای ColorField
+    formfield_overrides = {
+        ColorField: {'widget': ColorWidget},
+    }
 
     def icon_preview(self, obj):
         if obj.icon and getattr(obj.icon, 'svg_icon', None):
@@ -384,7 +384,6 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     color_preview.short_description = "پیش‌نمایش رنگ"
-    
     
 
 @admin.register(Location)
