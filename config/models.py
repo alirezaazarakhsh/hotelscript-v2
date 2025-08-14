@@ -7,6 +7,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.db.models.signals import  post_migrate
+from colorfield.fields import ColorField
 from django.dispatch import receiver
 from django.utils.safestring import mark_safe
 from django.core.validators import (
@@ -731,7 +732,7 @@ class UserLevel(models.Model):
         verbose_name=_('آیکن'),
         related_name='user_levels',
     )
-    color = models.CharField(
+    color = ColorField(
         verbose_name=_('رنگ'),
         max_length=7,  # برای کد HEX مثل #FFFFFF
         default='#000000',  # رنگ پیش‌فرض
