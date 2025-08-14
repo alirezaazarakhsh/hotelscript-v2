@@ -1032,7 +1032,7 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     @swagger_auto_schema(
         tags=["Passenger-user"],
         operation_summary="ویرایش جزئی مسافر",
-        operation_description="اطلاعات مسافر را به‌صورت جزئی ویرایش می‌کند. هیچ فیلدی ضروری نیست.",
+        operation_description="اطلاعات مسافر را به‌صورت جزئی ویرایش می‌کند. فیلدهای نام و نام خانوادگی ضروری هستند.",
         request_body=PassengerSerializer,
         responses={200: PassengerSerializer()}
     )
@@ -1041,6 +1041,13 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
             instance = self.get_object()
             data = request.data.copy()
             data.pop('id', None)  # ID تغییر نکند
+            
+            # اطمینان از وجود نام و نام خانوادگی در درخواست
+            if not data.get('first_name') or not data.get('last_name'):
+                return Response({
+                    "error": "نام و نام خانوادگی ضروری هستند."
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
             serializer = self.get_serializer(instance, data=data, partial=True)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
