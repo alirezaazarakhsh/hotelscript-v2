@@ -7,6 +7,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.db.models.signals import post_delete
+from django.contrib.contenttypes.models import ContentType
 from colorfield.fields import ColorField
 from django.dispatch import receiver
 from django.utils.safestring import mark_safe
@@ -783,27 +784,18 @@ class LegalProfileSubmissionRule(models.Model):
         return "قوانین ارسال مدارک پروفایل حقوقی"
     
     
-    
-#رسانه ها 
-class Media(models.Model):
-    file = models.FileField(verbose_name="فایل", upload_to="media/")
 
-    def admin_file(self):
-        if self.file:
-            return mark_safe(f'<img src="{self.file.url}" width="100" />')
-        return "بدون فایل"
-    admin_file.short_description = "عکس"
 
-    def __str__(self) -> str:
-        return self.file.name if self.file else "فایل ندارد"
+#ریستور بکاپ اپ ها 
+class AppRestore(models.Model):
+    apps = models.ManyToManyField(ContentType, verbose_name=_("اپ‌ها"))
+    backup_json = models.FileField(upload_to='backups/restore/', verbose_name=_("فایل JSON"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
+   
 
     class Meta:
-        verbose_name = "رسانه"
-        verbose_name_plural = "رسانه ها"
+        verbose_name = "ریستور اپ"
+        verbose_name_plural = "ریستور اپ‌ها"
 
-
-# سیگنال برای پاک کردن فایل هنگام حذف رکورد
-@receiver(post_delete, sender=Media)
-def delete_media_file(sender, instance, **kwargs):
-    if instance.file and os.path.isfile(instance.file.path):
-        os.remove(instance.file.path)
+    def __str__(self):
+        return "ریستور اپلیکیشن‌ها"

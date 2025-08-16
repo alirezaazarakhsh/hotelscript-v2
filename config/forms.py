@@ -1,7 +1,9 @@
 from django import forms
+from django.contrib.contenttypes.models import ContentType
 from .models import (
    
   
+    AppRestore,
     SiteConfig,
     Slide,
     Service,
@@ -132,3 +134,11 @@ class StatisticAdminForm(forms.ModelForm):
 
 
 
+
+class AppRestoreAdminForm(forms.ModelForm):
+    class Meta:
+        model = AppRestore
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
