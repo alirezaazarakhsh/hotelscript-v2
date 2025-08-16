@@ -21,6 +21,7 @@ from django.core.files.storage import default_storage
 
 
 from django.conf import settings
+import jdatetime
 
 from reservation import models
 from .models import (
@@ -36,11 +37,44 @@ from .forms import (
 )
 
 
-# بقیه کدهای admin.py بدون تغییر باقی می‌مانند
+
+
+
 @admin.register(Page)
 class PageAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'page', 'path')
     search_fields = ('title', 'page', 'path')
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'page': obj.page,
+                'path': obj.path,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=pages_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(HeaderMenu)
 class HeaderMenuAdmin(admin.ModelAdmin):
@@ -58,6 +92,37 @@ class HeaderMenuAdmin(admin.ModelAdmin):
         max_count = getattr(HeaderMenu, 'MAX_ALLOWED_INSTANCES', 5)
         return HeaderMenu.objects.count() < max_count
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'order': obj.order,
+                'title': obj.title,
+                'page': obj.page.id if obj.page else None,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=headermenu_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
+
 @admin.register(QuickAccess)
 class QuickAccessAdmin(admin.ModelAdmin):
     list_display = ('id', 'order', 'title', 'page')
@@ -73,6 +138,35 @@ class QuickAccessAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         max_count = getattr(QuickAccess, 'MAX_ALLOWED_INSTANCES', 5)
         return QuickAccess.objects.count() < max_count
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'order': obj.order,
+                'title': obj.title,
+                'page': obj.page.id if obj.page else None,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=quickaccess_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
 
 
 
@@ -90,12 +184,70 @@ class SiteConfigAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not SiteConfig.objects.exists()
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'header_title': obj.header_title,
+                'header_sub_title': obj.header_sub_title,
+                'footer_title': obj.footer_title,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=siteconfig_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
 
 
 @admin.register(Slide)
 class SlideAdmin(admin.ModelAdmin):
     form = SlideAdminForm
     list_display = ('id', 'order')
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'order': obj.order,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=slides_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 class StatisticItemInline(admin.TabularInline):
     model = StatisticItem
@@ -119,10 +271,78 @@ class StatisticAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not Statistic.objects.exists()
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            items = []
+            for item in obj.statisticitem_set.all():
+                items.append({
+                    'id': item.id,
+                    'title': item.title,
+                    'value': item.value,
+                })
+
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'description': obj.description,
+                'items': items,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=statistics_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
+
 @admin.register(ChooseReason)
 class ChooseReasonAdmin(admin.ModelAdmin):
     form = ChooseReasonForm
     list_display = ('id', 'title', 'description')
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'description': obj.description,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=choose_reason_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
 
 @admin.register(FAQ)
 class FAQAdmin(admin.ModelAdmin):
@@ -130,6 +350,11 @@ class FAQAdmin(admin.ModelAdmin):
     search_fields = ('question', 'answer', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
 
     def icon_preview(self, obj):
         if obj.icon and obj.icon.svg_icon:
@@ -142,11 +367,68 @@ class FAQAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'question': obj.question,
+                'answer': obj.answer,
+                'icon': obj.icon.id if obj.icon else None,
+                'page': obj.page.id if obj.page else None,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=faq_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
+
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
     form = ServiceForm
     list_display = ('id', 'title', 'description')
     search_fields = ('title', 'description')
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'description': obj.description,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=service_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
@@ -156,7 +438,7 @@ class ContactInfoAdmin(admin.ModelAdmin):
     readonly_fields = ('icon_preview',)
 
     def icon_preview(self, obj):
-        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+        if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(
                 f'<div style="display:flex;align-items:center;">'
                 f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
@@ -165,6 +447,40 @@ class ContactInfoAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'subtitle': obj.subtitle,
+                'value': obj.value,
+                'link': obj.link,
+                'show_in_footer': obj.show_in_footer,
+                'icon': obj.icon.id if obj.icon else None,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=contactinfo_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(SocialMedia)
 class SocialMediaAdmin(admin.ModelAdmin):
@@ -174,7 +490,7 @@ class SocialMediaAdmin(admin.ModelAdmin):
     readonly_fields = ('icon_preview',)
 
     def icon_preview(self, obj):
-        if obj.icon and obj.icon.svg_icon:
+        if obj.icon and getattr(obj.icon, 'svg_icon', None):
             return mark_safe(
                 f'<div style="display:flex;align-items:center;">'
                 f'<img src="{obj.icon.svg_icon.url}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
@@ -184,12 +500,77 @@ class SocialMediaAdmin(admin.ModelAdmin):
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'type': obj.type,
+                'type_fa': obj.type_fa,
+                'link': obj.link,
+                'show_in_footer': obj.show_in_footer,
+                'icon': obj.icon.id if obj.icon else None,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=socialmedia_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
+
 @admin.register(Banner)
 class BannerAdmin(admin.ModelAdmin):
     form = BannerForm
     list_display = ('id', 'page', 'order', 'title', 'link')
     search_fields = ('title', 'link')
     list_filter = ('page',)
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'page': obj.page.id if obj.page else None,
+                'order': obj.order,
+                'title': obj.title,
+                'link': obj.link,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=banners_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(EnamadLicense)
 class EnamadLicenseAdmin(admin.ModelAdmin):
@@ -204,11 +585,68 @@ class EnamadLicenseAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not EnamadLicense.objects.exists()
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=enamad_licenses_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
+
 @admin.register(License)
 class LicenseAdmin(admin.ModelAdmin):
     form = LicenseForm
     list_display = ('id', 'link')
     search_fields = ('link',)
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'link': obj.link,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=licenses_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(Advantage)
 class AdvantageAdmin(admin.ModelAdmin):
@@ -256,11 +694,46 @@ class AdvantageAdmin(admin.ModelAdmin):
 
 
 
+
+
+
 @admin.register(FakeComment)
 class FakeCommentAdmin(admin.ModelAdmin):
     form = FakeCommentForm
     list_display = ('id', 'commenter', 'evaluation', 'text', 'rate')
     search_fields = ('commenter', 'text')
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        import json
+        from django.http import HttpResponse
+
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'commenter': obj.commenter,
+                'evaluation': obj.evaluation,
+                'text': obj.text,
+                'rate': obj.rate,
+            })
+
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=fake_comments_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
+
 
 @admin.register(Rule)
 class RuleAdmin(admin.ModelAdmin):
@@ -268,6 +741,34 @@ class RuleAdmin(admin.ModelAdmin):
     list_editable = ('order',)
     search_fields = ('tab_title', 'text')
     ordering = ('order',)
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'tab_title': obj.tab_title,
+                'text': obj.text,
+                'order': obj.order,
+            })
+        from django.http import HttpResponse
+        import json
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=rules_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
+
 
 @admin.register(ComingSoon)
 class ComingSoonAdmin(admin.ModelAdmin):
@@ -282,6 +783,34 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'subtitle': obj.subtitle,
+                'end_date': obj.end_date.isoformat() if obj.end_date else None,
+                'copyright_text': obj.copyright_text,
+                'is_active': obj.is_active,
+            })
+        from django.http import HttpResponse
+        import json
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=comingsoon_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
 
 
 
@@ -327,6 +856,32 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     color_preview.short_description = "پیش‌نمایش رنگ"
+
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
+    actions = ['export_as_json']
+
+    def export_as_json(self, request, queryset):
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'color': obj.color,
+                'icon': obj.icon.id if obj.icon else None,
+            })
+        from django.http import HttpResponse
+        import json
+        response = HttpResponse(
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
+        )
+        response['Content-Disposition'] = 'attachment; filename=userlevels_backup.json'
+        return response
+
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
     
     
     
@@ -415,8 +970,19 @@ class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
 @admin.register(AppRestore)
 class AppRestoreAdmin(admin.ModelAdmin):
     form = AppRestoreAdminForm
-    list_display = ('__str__', 'created_at')
+    list_display = ('id', 'restored_apps', 'created_at_jalali')
     filter_horizontal = ('apps',)
+
+    def restored_apps(self, obj):
+        return ", ".join([f"{app.app_label} | {app.model}" for app in obj.apps.all()])
+    restored_apps.short_description = "اپلیکیشن‌های ریستور شده"
+
+    def created_at_jalali(self, obj):
+        if obj.created_at:
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.created_at)
+            return jalali_date.strftime('%Y/%m/%d %H:%M')
+        return "-"
+    created_at_jalali.short_description = "تاریخ ریستور (شمسی)"
 
     def save_model(self, request, obj, form, change):
         # ابتدا instance را ذخیره کن
@@ -515,13 +1081,10 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     # قبل از ذخیره بررسی فیلدهای NOT NULL
                     for field in model_class._meta.fields:
                         if not field.null and getattr(new_obj, field.name) is None:
-                            # اگر فیلد ForeignKey است، نال بگذار
                             if field.many_to_one:
                                 setattr(new_obj, field.name, None)
-                            # اگر CharField یا TextField است، رشته خالی بگذار
                             elif field.get_internal_type() in ['CharField', 'TextField']:
                                 setattr(new_obj, field.name, '')
-                            # بقیه فیلدها را نادیده بگیر
 
                     try:
                         new_obj.save()
