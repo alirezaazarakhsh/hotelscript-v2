@@ -217,23 +217,28 @@ class SiteConfigAdmin(admin.ModelAdmin):
 
 @admin.register(Slide)
 class SlideAdmin(admin.ModelAdmin):
-    form = SlideAdminForm
-    list_display = ('id', 'order')
+    form = SlideAdminForm  # اگر فرم خاصی داری
+    list_display = ('id', 'order', 'image_preview')
+    search_fields = ('order',)
 
     # =======================
     # اکشن بکاپ JSON
     # =======================
     actions = ['export_as_json']
 
-    def export_as_json(self, request, queryset):
-        import json
-        from django.http import HttpResponse
+    def image_preview(self, obj):
+        if obj.image:
+            return mark_safe(f'<img src="{obj.image.url}" width="50" height="50" />')
+        return "-"
+    image_preview.short_description = "پیش‌نمایش تصویر"
 
+    def export_as_json(self, request, queryset):
         data = []
         for obj in queryset:
             data.append({
                 'id': obj.id,
                 'order': obj.order,
+                'image': obj.image.name,
             })
 
         response = HttpResponse(
@@ -242,8 +247,14 @@ class SlideAdmin(admin.ModelAdmin):
         )
         response['Content-Disposition'] = 'attachment; filename=slides_backup.json'
         return response
-
     export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+    def save_model(self, request, obj, form, change):
+        try:
+            super().save_model(request, obj, form, change)
+        except Exception as e:
+            self.message_user(request, f"خطا در ذخیره اسلاید: {e}", level='error')
+            
 
 
 

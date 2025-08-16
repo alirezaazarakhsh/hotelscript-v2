@@ -245,13 +245,10 @@ class Slide(models.Model):
         verbose_name=_('ترتیب'),
         unique=True,
     )
-
     image = models.ImageField(
         verbose_name=_('عکس'),
         upload_to='images/slides/',
     )
-
-    objects = models.Manager()
 
     class Meta:
         verbose_name = _('اسلاید')
@@ -262,19 +259,23 @@ class Slide(models.Model):
         return f"اسلاید #{self.order}"
 
     def save(self, *args, **kwargs):
-        if self.pk:
-            current_instance = Slide.objects.get(pk=self.pk)
-            if current_instance.order != self.order:
-                if current_instance.order < self.order:
-                    Slide.objects.filter(
-                        order__gt=current_instance.order,
-                        order__lte=self.order
-                    ).update(order=models.F('order') - 1)
-                else:
-                    Slide.objects.filter(
-                        order__lt=current_instance.order,
-                        order__gte=self.order
-                    ).update(order=models.F('order') + 1)
+        try:
+            if self.pk:
+                current_instance = Slide.objects.filter(pk=self.pk).first()
+                if current_instance and current_instance.order != self.order:
+                    if current_instance.order < self.order:
+                        Slide.objects.filter(
+                            order__gt=current_instance.order,
+                            order__lte=self.order
+                        ).update(order=models.F('order') - 1)
+                    else:
+                        Slide.objects.filter(
+                            order__lt=current_instance.order,
+                            order__gte=self.order
+                        ).update(order=models.F('order') + 1)
+        except Exception:
+            # اگر رکورد وجود نداشت یا خطای دیگری پیش آمد نادیده بگیر
+            pass
 
         super().save(*args, **kwargs)
 
