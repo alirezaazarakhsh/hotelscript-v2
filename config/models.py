@@ -789,13 +789,21 @@ class Media(models.Model):
     file = models.FileField(verbose_name="فایل", upload_to="media/")
 
     def admin_file(self):
-        return mark_safe('<img src="{}" width="100" />'.format(self.file.url))
+        if self.file:
+            return mark_safe(f'<img src="{self.file.url}" width="100" />')
+        return "بدون فایل"
     admin_file.short_description = "عکس"
-    admin_file.allow_tags = True
 
     def __str__(self) -> str:
-        return self.file.name
+        return self.file.name if self.file else "فایل ندارد"
 
     class Meta:
         verbose_name = "رسانه"
         verbose_name_plural = "رسانه ها"
+
+
+# سیگنال برای پاک کردن فایل هنگام حذف رکورد
+@receiver(post_delete, sender=Media)
+def delete_media_file(sender, instance, **kwargs):
+    if instance.file and os.path.isfile(instance.file.path):
+        os.remove(instance.file.path)
