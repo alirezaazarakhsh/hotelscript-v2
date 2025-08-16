@@ -10,13 +10,13 @@ from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
 from django.utils.html import format_html
 from colorfield.fields import ColorField
-
+from django.contrib.contenttypes.models import ContentType
 
 from django.conf import settings
 
 from reservation import models
 from .models import (
-    LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
+    FileReference, LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
     SocialMedia, Banner, EnamadLicense, License, Advantage, FakeComment,
     Rule, ComingSoon, UserLevel, Folder, Media, MediaRestore,
@@ -46,6 +46,7 @@ class FolderAdmin(admin.ModelAdmin):
     def file_count(self, obj):
         return obj.media_files.count()
     file_count.short_description = "تعداد فایل‌ها"
+    
 
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
@@ -91,41 +92,52 @@ class MediaAdmin(admin.ModelAdmin):
 
 logger = logging.getLogger(__name__)
 
+
+
 @admin.register(MediaRestore)
 class MediaRestoreAdmin(admin.ModelAdmin):
     list_display = ('id', 'zip_file', 'uploaded_at')
-    list_filter = ['uploaded_at']
-    readonly_fields = ['uploaded_at']
-    form = MediaRestoreForm
+    actions = ['restore_from_zip']
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        try:
-            with zipfile.ZipFile(obj.zip_file.path, 'r') as zip_ref:
-                zip_ref.extractall(settings.MEDIA_ROOT)
-                for file_name in zip_ref.namelist():
-                    clean_file_name = file_name
-                    while clean_file_name.startswith('media/'):
-                        clean_file_name = clean_file_name[len('media/'):]
-                    media_path = os.path.join('media', clean_file_name).replace('\\', '/')
-                    folder_name = os.path.dirname(clean_file_name).strip('/')
-                    folder = None
-                    if folder_name:
-                        folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    if not Media.objects.filter(file=media_path).exists():
-                        Media.objects.create(file=media_path, folder=folder)
-                        logger.info(f"فایل {media_path} در پوشه {folder_name or 'root'} ثبت شد.")
-                    else:
-                        logger.info(f"فایل {media_path} قبلاً در دیتابیس وجود دارد.")
-            logger.info("فایل ZIP با موفقیت بازگردانی شد.")
-            self.message_user(request, 'فایل ZIP با موفقیت بازگردانی شد.')
-            if os.path.exists(obj.zip_file.path):
-                os.remove(obj.zip_file.path)
-                logger.info(f"فایل ZIP {obj.zip_file.path} حذف شد.")
-            obj.delete()
-        except Exception as e:
-            logger.error(f'خطا در بازگردانی فایل ZIP: {str(e)}')
-            self.message_user(request, f'خطا در بازگردانی فایل ZIP: {str(e)}', level='error')
+    def restore_from_zip(self, request, queryset):
+        for restore in queryset:
+            if not restore.zip_file or not os.path.exists(restore.zip_file.path):
+                self.message_user(request, f"فایل ZIP برای {restore} وجود ندارد.", level='error')
+                continue
+
+            with zipfile.ZipFile(restore.zip_file.path, 'r') as zip_ref:
+                for file_info in zip_ref.infolist():
+                    extracted_path = os.path.join(settings.MEDIA_ROOT, file_info.filename)
+                    os.makedirs(os.path.dirname(extracted_path), exist_ok=True)
+                    with open(extracted_path, 'wb') as f:
+                        f.write(zip_ref.read(file_info))
+
+                    folder_name = os.path.basename(os.path.dirname(file_info.filename)) if 'media/' in file_info.filename else 'root'
+                    folder, _ = Folder.objects.get_or_create(name=folder_name)
+                    media = Media.objects.create(
+                        file=os.path.join('uploads/', os.path.basename(file_info.filename)),
+                        folder=folder
+                    )
+                    media.save()
+
+                    # تلاش برای لینک به مدل‌های مرتبط (اختیاری)
+                    # مثلاً: اگر نام فایل با مدل خاصی (مثل BlogPost) مطابقت داره
+                    from blog.models import BlogPost  # یا سایر اپ‌ها
+                    content_type = ContentType.objects.get_for_model(BlogPost)
+                    blog_post = BlogPost.objects.filter(title__contains=os.path.basename(file_info.filename)).first()
+                    if blog_post:
+                        FileReference.objects.create(
+                            media=media,
+                            content_type=content_type,
+                            object_id=blog_post.pk
+                        )
+                        # اگر مدل BlogPost هنوز FileField داره، آپدیتش کنید
+                        if hasattr(blog_post, 'image') and isinstance(blog_post._meta.get_field('image'), models.FileField):
+                            blog_post.image = media.file
+                            blog_post.save()
+
+        self.message_user(request, "بازگردانی با موفقیت انجام شد.")
+    restore_from_zip.short_description = "بازگردانی از ZIP"
 
 
 

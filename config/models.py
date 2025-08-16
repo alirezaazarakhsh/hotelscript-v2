@@ -6,6 +6,8 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models.signals import  post_migrate
 from colorfield.fields import ColorField
 from django.dispatch import receiver
@@ -814,6 +816,22 @@ class MediaRestore(models.Model):
         verbose_name = "بازگردانی رسانه"
         verbose_name_plural = "بازگردانی‌های رسانه"
         
+        
+class FileReference(models.Model):
+    media = models.ForeignKey('Media', on_delete=models.CASCADE, verbose_name="فایل رسانه")
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+    class Meta:
+        verbose_name = "مرجع فایل"
+        verbose_name_plural = "مراجع فایل"
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+
+    def __str__(self):
+        return f"مرجع {self.media} برای {self.content_type.name} #{self.object_id}"
         
         
 #مدل قوانین ارسال مدارک 
