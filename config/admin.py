@@ -4,6 +4,7 @@ import io
 import logging
 from django.contrib import admin
 from django.db import models as dj_models 
+from django.dispatch import receiver
 from django.forms import TextInput   
 from config.models import Media  
 from django.utils.html import mark_safe
@@ -11,6 +12,7 @@ from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
 from django.utils.html import format_html
 from colorfield.fields import ColorField
+from django.db.models.signals import post_delete
 from django.contrib.contenttypes.models import ContentType
 
 from django.conf import settings
@@ -330,22 +332,45 @@ class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
         return True
     
     
+    
+    
+    
+# -------------------------
+# سیگنال حذف فایل هنگام پاک کردن رکورد
+# -------------------------
+@receiver(post_delete, sender=Media)
+def delete_media_file(sender, instance, **kwargs):
+    """
+    وقتی رکورد پاک شد، فایل فیزیکی هم پاک بشه
+    """
+    if instance.file and os.path.isfile(instance.file.path):
+        os.remove(instance.file.path)
+
+# -------------------------
+# ادمین Media
+# -------------------------
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
     list_display = ('admin_file', 'file', '__str__')
     list_display_links = ('__str__',)
     search_fields = ('file',)
     list_per_page = 25
-    actions = ["download_as_zip"]   # 👈 اکشن اضافه می‌کنیم
+    actions = ["download_as_zip", "sync_from_app_media"]
 
     def get_readonly_fields(self, request, obj=None):
         return ['admin_file'] if obj else []
 
+    # نمایش تصویر کوچک در ادمین
+    def admin_file(self, obj):
+        if obj.file:
+            return mark_safe(f'<img src="{obj.file.url}" width="100" />')
+        return "بدون فایل"
+    admin_file.short_description = "عکس"
+
+    # -------------------------
+    # اکشن دانلود zip با حفظ پوشه‌ها
+    # -------------------------
     def download_as_zip(self, request, queryset):
-        """
-        اکشن برای دانلود فایل‌های انتخاب شده به صورت zip
-        """
-        # ساخت یک zip در حافظه
         response = HttpResponse(content_type="application/zip")
         response["Content-Disposition"] = 'attachment; filename=media_files.zip'
 
@@ -354,12 +379,34 @@ class MediaAdmin(admin.ModelAdmin):
         for media in queryset:
             file_path = media.file.path
             if os.path.exists(file_path):
-                # اسم پوشه رو می‌ذاریم هم‌نام id مدل یا اسم فایل
-                folder_name = f"media_{media.id}"
-                arcname = os.path.join(folder_name, os.path.basename(file_path))
-                zip_file.write(file_path, arcname)
+                # مسیر نسبی فایل نسبت به MEDIA_ROOT
+                relative_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
+                zip_file.write(file_path, relative_path)
 
         zip_file.close()
         return response
-
     download_as_zip.short_description = "📦 خروجی zip از فایل‌های انتخاب‌شده"
+
+    # -------------------------
+    # اکشن سینک فایل‌های جدید از اپ اصلی
+    # -------------------------
+    def sync_from_app_media(self, request, queryset):
+        """
+        فایل‌هایی که در اپ اصلی اضافه شدند ولی در Media نیستند،
+        به مدل اضافه می‌شوند.
+        """
+        APP_MEDIA_DIR = '/var/hotelscript-v2/media/'  # مسیر اپ اصلی
+        created_count = 0
+
+        for root, dirs, files in os.walk(APP_MEDIA_DIR):
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                relative_path = os.path.relpath(full_path, APP_MEDIA_DIR)
+
+                # چک کنیم که این فایل در Media موجود نباشه
+                if not Media.objects.filter(file=f"media/{relative_path}").exists():
+                    Media.objects.create(file=f"media/{relative_path}")
+                    created_count += 1
+
+        self.message_user(request, f"✅ {created_count} فایل جدید به Media اضافه شد.")
+    sync_from_app_media.short_description = "🔄 سینک فایل‌های جدید از اپ اصلی"
