@@ -16,129 +16,16 @@ from django.conf import settings
 
 from reservation import models
 from .models import (
-    FileReference, LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
+    LegalProfileSubmissionRule, Location, Page, HeaderMenu, QuickAccess, SiteConfig, Slide,
     Statistic, StatisticItem, ChooseReason, FAQ, Service, ContactInfo,
     SocialMedia, Banner, EnamadLicense, License, Advantage, FakeComment,
-    Rule, ComingSoon, UserLevel, Folder, Media, MediaRestore,
+    Rule, ComingSoon, UserLevel, 
 )
 from .forms import (
     SiteConfigAdminForm, SlideAdminForm, ChooseReasonForm, ServiceForm,
     BannerForm, LicenseForm, FakeCommentForm, ComingSoonAdminForm,
-    StatisticAdminForm, MediaRestoreForm,
+    StatisticAdminForm, 
 )
-
-logger = logging.getLogger(__name__)
-
-# Inline برای نمایش فایل‌های داخل پوشه‌ها
-class MediaInline(admin.TabularInline):
-    model = Media
-    extra = 1
-    fields = ['file', 'admin_file']
-    readonly_fields = ['admin_file']
-
-@admin.register(Folder)
-class FolderAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'created_at', 'file_count')
-    list_filter = ['created_at']
-    search_fields = ['name']
-    inlines = [MediaInline]
-
-    def file_count(self, obj):
-        return obj.media_files.count()
-    file_count.short_description = "تعداد فایل‌ها"
-    
-
-@admin.register(Media)
-class MediaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'file', 'folder', 'admin_file', 'file_size')
-    list_filter = ['folder']
-    search_fields = ['file']
-    list_editable = ['folder']
-    autocomplete_fields = ['folder']
-    actions = ['export_as_zip']
-
-    def admin_file(self, obj):
-        if obj.file and obj.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-            return mark_safe(f'<img src="{obj.file.url}" width="100" style="object-fit:contain;" />')
-        return mark_safe(f'<a href="{obj.file.url}" target="_blank">{os.path.basename(obj.file.name)}</a>')
-    admin_file.short_description = "پیش‌نمایش"
-
-    def file_size(self, obj):
-        if obj.file and os.path.exists(obj.file.path):
-            size_bytes = os.path.getsize(obj.file.path)
-            return f"{size_bytes / 1024:.2f} KB"
-        return "نامشخص"
-    file_size.short_description = "حجم فایل"
-
-    def export_as_zip(self, request, queryset):
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for media in queryset:
-                if media.file and os.path.exists(media.file.path):
-                    folder_name = media.folder.name if media.folder else 'root'
-                    clean_file_name = media.file.name
-                    while clean_file_name.startswith('media/'):
-                        clean_file_name = clean_file_name[len('media/'):]
-                    zip_path = os.path.join('media', folder_name, os.path.basename(clean_file_name))
-                    logger.info(f"اضافه کردن فایل به ZIP: {zip_path}")
-                    zip_file.write(media.file.path, zip_path)
-
-        buffer.seek(0)
-        response = HttpResponse(buffer.getvalue(), content_type='application/zip')
-        response['Content-Disposition'] = 'attachment; filename="media_files.zip"'
-        return response
-    export_as_zip.short_description = "خروجی گرفتن از فایل‌ها به‌صورت ZIP"
-
-
-logger = logging.getLogger(__name__)
-
-
-
-@admin.register(MediaRestore)
-class MediaRestoreAdmin(admin.ModelAdmin):
-    list_display = ('id', 'zip_file', 'uploaded_at')
-    actions = ['restore_from_zip']
-
-    def restore_from_zip(self, request, queryset):
-        for restore in queryset:
-            if not restore.zip_file or not os.path.exists(restore.zip_file.path):
-                self.message_user(request, f"فایل ZIP برای {restore} وجود ندارد.", level='error')
-                continue
-
-            with zipfile.ZipFile(restore.zip_file.path, 'r') as zip_ref:
-                for file_info in zip_ref.infolist():
-                    extracted_path = os.path.join(settings.MEDIA_ROOT, file_info.filename)
-                    os.makedirs(os.path.dirname(extracted_path), exist_ok=True)
-                    with open(extracted_path, 'wb') as f:
-                        f.write(zip_ref.read(file_info))
-
-                    folder_name = os.path.basename(os.path.dirname(file_info.filename)) if 'media/' in file_info.filename else 'root'
-                    folder, _ = Folder.objects.get_or_create(name=folder_name)
-                    media = Media.objects.create(
-                        file=os.path.join('uploads/', os.path.basename(file_info.filename)),
-                        folder=folder
-                    )
-                    media.save()
-
-                    # تلاش برای لینک به مدل‌های مرتبط (اختیاری)
-                    # مثلاً: اگر نام فایل با مدل خاصی (مثل BlogPost) مطابقت داره
-                    from blog.models import BlogPost  # یا سایر اپ‌ها
-                    content_type = ContentType.objects.get_for_model(BlogPost)
-                    blog_post = BlogPost.objects.filter(title__contains=os.path.basename(file_info.filename)).first()
-                    if blog_post:
-                        FileReference.objects.create(
-                            media=media,
-                            content_type=content_type,
-                            object_id=blog_post.pk
-                        )
-                        # اگر مدل BlogPost هنوز FileField داره، آپدیتش کنید
-                        if hasattr(blog_post, 'image') and isinstance(blog_post._meta.get_field('image'), models.FileField):
-                            blog_post.image = media.file
-                            blog_post.save()
-
-        self.message_user(request, "بازگردانی با موفقیت انجام شد.")
-    restore_from_zip.short_description = "بازگردانی از ZIP"
-
 
 
 # بقیه کدهای admin.py بدون تغییر باقی می‌مانند

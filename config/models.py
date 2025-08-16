@@ -6,8 +6,6 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models.signals import  post_migrate
 from colorfield.fields import ColorField
 from django.dispatch import receiver
@@ -765,75 +763,9 @@ class Location(models.Model):
         return f"{self.latitude}, {self.longitude}"
     
     
-    
-# مدل نمایش تمام عکس های سیستم 
-logger = logging.getLogger(__name__)
-
-class Folder(models.Model):
-    name = models.CharField(max_length=100, unique=True, verbose_name="نام پوشه")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "پوشه"
-        verbose_name_plural = "پوشه‌ها"
-
-class Media(models.Model):
-    file = models.FileField(verbose_name="فایل", upload_to="uploads/")
-    folder = models.ForeignKey(
-        Folder,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name="پوشه",
-        related_name="media_files"
-    )
-
-    def admin_file(self):
-        if self.file and self.file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-            return mark_safe(f'<img src="{self.file.url}" width="100" style="object-fit:contain;" />')
-        return mark_safe(f'<a href="{self.file.url}" target="_blank">{os.path.basename(self.file.name)}</a>')
-
-    admin_file.short_description = "پیش‌نمایش"
-
-    def __str__(self):
-        return os.path.basename(self.file.name)
-
-    class Meta:
-        verbose_name = "رسانه"
-        verbose_name_plural = "رسانه‌ها"
-
-class MediaRestore(models.Model):
-    zip_file = models.FileField(upload_to="media_restore/", verbose_name="فایل ZIP")
-    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ بارگذاری")
-
-    def __str__(self):
-        return f"بازگردانی - {os.path.basename(self.zip_file.name)}"
-
-    class Meta:
-        verbose_name = "بازگردانی رسانه"
-        verbose_name_plural = "بازگردانی‌های رسانه"
         
         
-class FileReference(models.Model):
-    media = models.ForeignKey('Media', on_delete=models.CASCADE, verbose_name="فایل رسانه")
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey('content_type', 'object_id')
 
-    class Meta:
-        verbose_name = "مرجع فایل"
-        verbose_name_plural = "مراجع فایل"
-        indexes = [
-            models.Index(fields=['content_type', 'object_id']),
-        ]
-
-    def __str__(self):
-        return f"مرجع {self.media} برای {self.content_type.name} #{self.object_id}"
-        
-        
 #مدل قوانین ارسال مدارک 
 class LegalProfileSubmissionRule(models.Model):
     description = models.TextField(verbose_name="توضیحات قوانین ارسال مدارک")
