@@ -765,7 +765,6 @@ class Location(models.Model):
     
         
         
-
 #مدل قوانین ارسال مدارک 
 class LegalProfileSubmissionRule(models.Model):
     description = models.TextField(verbose_name="توضیحات قوانین ارسال مدارک")
@@ -782,3 +781,21 @@ class LegalProfileSubmissionRule(models.Model):
 
     def __str__(self):
         return "قوانین ارسال مدارک پروفایل حقوقی"
+    
+    
+    
+#رسانه ها 
+class Media(models.Model):
+    file = models.FileField(verbose_name="فایل", upload_to="media/")
+
+    def admin_file(self):
+        return mark_safe('<img src="{}" width="100" />'.format(self.file.url))
+    admin_file.short_description = "عکس"
+    admin_file.allow_tags = True
+
+    def __str__(self) -> str:
+        return self.file.name
+
+    class Meta:
+        verbose_name = "رسانه"
+        verbose_name_plural = "رسانه ها"

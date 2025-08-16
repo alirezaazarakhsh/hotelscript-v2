@@ -4,7 +4,8 @@ import io
 import logging
 from django.contrib import admin
 from django.db import models as dj_models 
-from django.forms import TextInput
+from django.forms import TextInput   
+from config.models import Media  
 from django.utils.html import mark_safe
 from django.http import HttpResponse
 from colorfield.widgets import ColorWidget
@@ -327,3 +328,38 @@ class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # می‌توانید این را فعال یا غیرفعال کنید بسته به نیاز
         return True
+    
+    
+@admin.register(Media)
+class MediaAdmin(admin.ModelAdmin):
+    list_display = ('admin_file', 'file', '__str__')
+    list_display_links = ('__str__',)
+    search_fields = ('file',)
+    list_per_page = 25
+    actions = ["download_as_zip"]   # 👈 اکشن اضافه می‌کنیم
+
+    def get_readonly_fields(self, request, obj=None):
+        return ['admin_file'] if obj else []
+
+    def download_as_zip(self, request, queryset):
+        """
+        اکشن برای دانلود فایل‌های انتخاب شده به صورت zip
+        """
+        # ساخت یک zip در حافظه
+        response = HttpResponse(content_type="application/zip")
+        response["Content-Disposition"] = 'attachment; filename=media_files.zip'
+
+        zip_file = zipfile.ZipFile(response, "w")
+
+        for media in queryset:
+            file_path = media.file.path
+            if os.path.exists(file_path):
+                # اسم پوشه رو می‌ذاریم هم‌نام id مدل یا اسم فایل
+                folder_name = f"media_{media.id}"
+                arcname = os.path.join(folder_name, os.path.basename(file_path))
+                zip_file.write(file_path, arcname)
+
+        zip_file.close()
+        return response
+
+    download_as_zip.short_description = "📦 خروجی zip از فایل‌های انتخاب‌شده"
