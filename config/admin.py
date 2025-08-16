@@ -48,9 +48,18 @@ class PageAdmin(admin.ModelAdmin):
     # =======================
     # اکشن بکاپ JSON
     # =======================
-    actions = ['export_as_json']
+    actions = ['export_as_json', 'export_all_as_json']
 
     def export_as_json(self, request, queryset):
+        """بکاپ از رکوردهای انتخاب شده"""
+        return self._export_json(queryset, filename='pages_backup.json')
+
+    def export_all_as_json(self, request, queryset=None):
+        """بکاپ از تمام رکوردها"""
+        all_objs = Page.objects.all()
+        return self._export_json(all_objs, filename='pages_backup_all.json')
+
+    def _export_json(self, queryset, filename):
         import json
         from django.http import HttpResponse
 
@@ -67,10 +76,12 @@ class PageAdmin(admin.ModelAdmin):
             json.dumps(data, ensure_ascii=False, indent=4),
             content_type='application/json'
         )
-        response['Content-Disposition'] = 'attachment; filename=pages_backup.json'
+        response['Content-Disposition'] = f'attachment; filename={filename}'
         return response
 
     export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+    export_all_as_json.short_description = "بکاپ JSON از تمام داده‌های Page"
+
 
 
 
