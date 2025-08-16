@@ -8,6 +8,7 @@ from config.models import (
     Media, Folder, Slide, SiteConfig, Statistic, ChooseReason, 
     Service, Banner, License, FakeComment, ComingSoon
 )
+from reservation import models
 from reservation.models import HotelGallery
 from .models import FileReference  # اگر از مدل FileReference استفاده می‌کنید
 
