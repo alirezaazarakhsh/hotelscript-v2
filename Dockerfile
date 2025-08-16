@@ -1,5 +1,5 @@
-# Use the official Python image
-FROM python:3.10
+# Use the official Python 3.10 slim image to reduce size
+FROM python:3.10-slim
 
 # Set the working directory to /app
 WORKDIR /app
@@ -8,19 +8,23 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install dependencies from requirements.txt
+# Install system dependencies and update GPG keys
+RUN apt-get update && \
+    apt-get install -y gnupg && \
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 648ACFD622F3D138 0E98404D386FA1D9 112695A0E3C5F4F8 && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends default-libmysqlclient-dev curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all files to /app directory in the container
+# Copy all project files to /app
 COPY . .
 
-# Install system dependencies (e.g., libmysqlclient-dev for MySQL)
-RUN apt-get update && \
-    apt-get install -y default-libmysqlclient-dev curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copy start.sh file and set executable permissions
+# Copy and set executable permissions for start.sh
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
