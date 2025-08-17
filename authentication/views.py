@@ -324,7 +324,7 @@ class JuridicalProfileDetailAPIView(APIView):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="ویرایش یا ایجاد پروفایل حقوقی کاربر جاری",
+        operation_summary="ویرایش پروفایل حقوقی کاربر جاری",
         operation_description="""
         این API امکان ویرایش پروفایل حقوقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
         درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود فایل تصویر وجود داشته باشد.
@@ -522,7 +522,7 @@ class NaturalProfileDetailAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_summary="ویرایش یا ایجاد پروفایل حقیقی کاربر جاری",
+        operation_summary="ویرایش پروفایل حقیقی کاربر جاری",
         operation_description="""
         این API امکان ویرایش پروفایل حقیقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
         درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود تصویر پروفایل وجود داشته باشد.
@@ -653,9 +653,10 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
 
         response_data = []
         for uploaded_file in uploaded_files:
-            # بررسی اینکه فایل عکس نباشد (بر اساس پسوند یا MIME type)
+            print(f"Processing file: {uploaded_file.name}, type: {uploaded_file.content_type}")
             if uploaded_file.content_type.startswith('image/'):
-                continue  # نادیده گرفتن فایل‌های تصویری
+                print(f"Skipping image: {uploaded_file.name}")
+                continue
 
             data = request.data.copy()
             data['file'] = uploaded_file
@@ -664,7 +665,13 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
                 serializer.save(profile=profile)
                 response_data.append(serializer.data)
             else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                print(f"Errors for {uploaded_file.name}: {serializer.errors}")
+
+        if not response_data:
+            return Response(
+                {'detail': 'هیچ فایلی با موفقیت آپلود نشد.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 
