@@ -241,7 +241,7 @@ class JuridicalCardNumberSerializer(serializers.ModelSerializer):
 # -----------------------------
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
-    image = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    image = serializers.ImageField(required=False, allow_empty_file=False, allow_null=True)
     card_numbers = JuridicalCardNumberSerializer(many=True, required=False)
 
     class Meta:
@@ -268,7 +268,7 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
         }
 
     def get_image(self, obj):
-        return obj.image
+        return obj.image.url if obj.image else None
 
     def get_documents(self, obj):
         request = self.context.get('request')
@@ -303,7 +303,11 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         card_numbers_data = validated_data.pop('card_numbers', [])
+        image_data = validated_data.pop('image', None)
         profile = JuridicalProfile.objects.create(**validated_data)
+        if image_data:
+            profile.image = image_data
+            profile.save()
         for card_data in card_numbers_data:
             try:
                 JuridicalCardNumber.objects.create(profile=profile, **card_data)
@@ -313,8 +317,11 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         card_numbers_data = validated_data.pop('card_numbers', None)
+        image_data = validated_data.pop('image', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if image_data:
+            instance.image = image_data
         instance.save()
 
         if card_numbers_data is not None:

@@ -324,13 +324,13 @@ class JuridicalProfileDetailAPIView(APIView):
         operation_summary="ویرایش یا ایجاد پروفایل حقوقی کاربر جاری",
         operation_description="""
         این API امکان ویرایش پروفایل حقوقی کاربر جاری یا ایجاد پروفایل جدید (در صورت عدم وجود) را فراهم می‌کند.
-        درخواست باید به صورت JSON ارسال شود.
+        درخواست باید به صورت `multipart/form-data` ارسال شود تا امکان آپلود فایل تصویر وجود داشته باشد.
         تمام فیلدها اختیاری هستند و می‌توانند به صورت جزئی (partial) آپدیت شوند.
         شماره‌های کارت از طریق این API قابل ویرایش هستند.
 
         **ورودی‌ها**:
         - هدر `Authorization`: توکن احراز هویت (Bearer Token) الزامی است.
-        - بدنه درخواست (application/json):
+        - بدنه درخواست (`multipart/form-data`):
             - `organization_name` (اختیاری): نام شرکت (رشته).
             - `national_id` (اختیاری): شناسه ملی (رشته، دقیقاً ۱۱ رقم).
             - `registeration_number` (اختیاری): شماره ثبت (رشته).
@@ -339,7 +339,7 @@ class JuridicalProfileDetailAPIView(APIView):
             - `postal_code` (اختیاری): کد پستی (رشته، دقیقاً ۱۰ رقم).
             - `address` (اختیاری): آدرس شرکت (رشته).
             - `email` (اختیاری): ایمیل شرکت (رشته).
-            - `image` (اختیاری): آدرس تصویر شرکت (رشته، URL).
+            - `image` (اختیاری): فایل تصویر شرکت (فرمت‌های مجاز: jpg, png).
             - `status` (اختیاری): وضعیت پروفایل (checking, accepted, rejected).
             - `reject_reason` (اختیاری): دلیل رد (رشته، در صورت رد شده بودن اجباری).
             - `card_numbers` (اختیاری): لیست شماره‌های کارت (حداکثر ۲ مورد، شامل id برای ویرایش).
@@ -351,7 +351,7 @@ class JuridicalProfileDetailAPIView(APIView):
         - **401 Unauthorized**: در صورت عدم ارائه توکن معتبر.
         """,
         request_body=JuridicalProfileSerializer,
-        consumes=['application/json'],
+        consumes=['multipart/form-data'],
         responses={
             200: JuridicalProfileSerializer(),
             201: JuridicalProfileSerializer(),
@@ -360,7 +360,7 @@ class JuridicalProfileDetailAPIView(APIView):
         }
     )
     def put(self, request):
-        print("Request data:", request.data)  # لاگ داده‌های ورودی
+        print("Request data:", request.data)
         try:
             profile = request.user.natural_profile.juridical_profile
         except AttributeError:
@@ -369,16 +369,6 @@ class JuridicalProfileDetailAPIView(APIView):
             except AttributeError:
                 return Response({"detail": "پروفایل حقیقی یافت نشد"}, status=404)
             profile = JuridicalProfile(natural_profile=natural_profile)
-            serializer = JuridicalProfileSerializer(
-                profile,
-                data=request.data,
-                context={'request': request}
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            print("Create errors:", serializer.errors)  # لاگ خطاها
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = JuridicalProfileSerializer(
             profile,
@@ -388,8 +378,8 @@ class JuridicalProfileDetailAPIView(APIView):
         )
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
-        print("Update errors:", serializer.errors)  # لاگ خطاها
+            return Response(serializer.data, status=status.HTTP_200_OK if profile.id else status.HTTP_201_CREATED)
+        print("Update errors:", serializer.errors)
         return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
@@ -420,7 +410,6 @@ class JuridicalProfileDetailAPIView(APIView):
             return Response(status=204)
         except AttributeError:
             return Response({"detail": "پروفایل حقیقی یا حقوقی یافت نشد"}, status=404)
-        
         
 
 
