@@ -624,7 +624,7 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="آپلود مدارک برای پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        request_body=JuridicalProfileDocumentSerializer(many=True),
+        request_body=JuridicalProfileDocumentSerializer,
         responses={
             201: JuridicalProfileDocumentSerializer(many=True),
             400: "خطا در داده‌های ورودی",
@@ -632,11 +632,9 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         }
     )
     def post(self, request):
-        # چاپ برای دیباگ
         print("request.FILES:", request.FILES)
         print("request.data:", request.data)
 
-        # بررسی وجود پروفایل حقوقی
         try:
             natural_profile = request.user.natural_profile
             profile = natural_profile.juridical_profile
@@ -646,43 +644,29 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # بررسی وجود فایل‌ها
-        files = request.FILES
-        if not files:
+        uploaded_files = request.FILES.getlist('file')
+        if not uploaded_files:
             return Response(
                 {'detail': 'هیچ فایلی آپلود نشده است.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # لیست برای ذخیره داده‌های سریالایزر
-        serialized_data = []
-        errors = []
+        response_data = []
+        for uploaded_file in uploaded_files:
+            # بررسی اینکه فایل عکس نباشد (بر اساس پسوند یا MIME type)
+            if uploaded_file.content_type.startswith('image/'):
+                continue  # نادیده گرفتن فایل‌های تصویری
 
-        # پردازش هر فایل
-        for key in files:
-            # اطمینان از اینکه کلید با فرمت file[0]، file[1] و غیره است
-            if key.startswith('file[') and key.endswith(']'):
-                file = files[key]
-                data = request.data.copy()
-                data['file'] = file
+            data = request.data.copy()
+            data['file'] = uploaded_file
+            serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
+            if serializer.is_valid():
+                serializer.save(profile=profile)
+                response_data.append(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                # سریالایزر برای هر فایل
-                serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
-                if serializer.is_valid():
-                    serializer.save(profile=profile)
-                    serialized_data.append(serializer.data)
-                else:
-                    errors.append({key: serializer.errors})
-
-        # بررسی وجود خطاها
-        if errors:
-            return Response(
-                {'detail': 'خطا در پردازش برخی فایل‌ها', 'errors': errors},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        return Response(serialized_data, status=status.HTTP_201_CREATED)
-
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -699,7 +683,7 @@ class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=400)
 
     @swagger_auto_schema(
         operation_summary="حذف مدرک پروفایل حقوقی",
@@ -709,4 +693,4 @@ class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
     def delete(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)
         document.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(status=204)
