@@ -1,4 +1,3 @@
-import os
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -418,16 +417,10 @@ class JuridicalProfile(models.Model):
 
 
 def juridical_profile_document_upload_to(instance, filename):
-    try:
-        profile_id = instance.profile.natural_profile.base_user.pk
-        path = f'legal-profiles/documents/{profile_id}/{filename}'
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, f'legal-profiles/documents/{profile_id}'), exist_ok=True)
-        return path
-    except Exception as e:
-        print(f"Error in upload_to: {e}")
-        default_path = f'legal-profiles/documents/default/{filename}'
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'legal-profiles/documents/default'), exist_ok=True)
-        return default_path
+        try:
+            return f'legal-profiles/documents/{instance.profile.natural_profile.base_user.pk}/{filename}'
+        except:
+            return f'legal-profiles/documents/default/{filename}'
 
 
 
