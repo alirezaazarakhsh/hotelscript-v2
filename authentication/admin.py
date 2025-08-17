@@ -14,6 +14,7 @@ from .models import (
 )
 from .forms import (
     AdminForm,
+    JuridicalProfileForm,
     NaturalProfileForm,
 )
 
@@ -150,6 +151,7 @@ class JuridicalCardNumberInline(admin.TabularInline):
 
 @admin.register(JuridicalProfile)
 class JuridicalProfileAdmin(admin.ModelAdmin):
+    form = JuridicalProfileForm
     list_display = (
         'id',
         'base_user__phone_number',
