@@ -1095,7 +1095,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             return
 
                     for field in model_class._meta.fields:
-                        if not field.null and getattr(new_obj, field.name) is None:
+                        if not field.null and getattr(new_obj, field.name) is None and not field.auto_created:
                             if field.many_to_one:
                                 self.message_user(
                                     request,
