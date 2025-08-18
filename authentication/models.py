@@ -454,6 +454,7 @@ class JuridicalProfileDocument(models.Model):
     
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
+# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
     regex=r'^\d{16}$',
     message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
@@ -465,10 +466,10 @@ validate_iban = RegexValidator(
     message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
 )
 
-# اعتبارسنجی برای نام صاحب حساب (فقط حروف و فاصله)
+# اعتبارسنجی برای نام صاحب حساب (حروف فارسی و فاصله)
 validate_account_holder_name = RegexValidator(
-    regex=r'^[a-zA-Z\s]+$',
-    message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.')
+    regex=r'^[\u0600-\u06FF\s]+$',
+    message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
 )
 
 class CardNumber(models.Model):
@@ -496,7 +497,7 @@ class CardNumber(models.Model):
         verbose_name=_('نام صاحب حساب'),
         max_length=100,
         validators=(validate_account_holder_name,),
-
+        
     )
 
     class Meta:
@@ -532,10 +533,10 @@ validate_iban = RegexValidator(
     message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
 )
 
-# اعتبارسنجی برای نام صاحب حساب (فقط حروف و فاصله)
+# اعتبارسنجی برای نام صاحب حساب (حروف فارسی و فاصله)
 validate_account_holder_name = RegexValidator(
-    regex=r'^[a-zA-Z\s]+$',
-    message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.')
+    regex=r'^[\u0600-\u06FF\s]+$',
+    message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
 )
 
 class JuridicalCardNumber(models.Model):
@@ -563,7 +564,7 @@ class JuridicalCardNumber(models.Model):
         verbose_name=_('نام صاحب حساب'),
         max_length=100,
         validators=(validate_account_holder_name,),
-
+        
     )
 
     class Meta:

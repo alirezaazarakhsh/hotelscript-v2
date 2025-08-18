@@ -90,7 +90,7 @@ class CardNumberSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
             'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
-            'account_holder_name': {'validators': [RegexValidator(regex=r'^[a-zA-Z\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.'))]},
+            'account_holder_name': {'validators': [RegexValidator(regex=r'^[\u0600-\u06FF\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.'))]},
         }
 
 class NaturalProfileSerializer(serializers.ModelSerializer):
@@ -240,7 +240,7 @@ class JuridicalCardNumberSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
             'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
-            'account_holder_name': {'validators': [RegexValidator(regex=r'^[a-zA-Z\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.'))]},
+            'account_holder_name': {'validators': [RegexValidator(regex=r'^[\u0600-\u06FF\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.'))]},
         }
 
 class JuridicalProfileSerializer(serializers.ModelSerializer):
