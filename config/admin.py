@@ -16,6 +16,7 @@ from django.utils.html import format_html
 from colorfield.fields import ColorField
 from django.db.models.signals import post_delete
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.apps import apps
 from django.core.files.storage import default_storage
 
@@ -1053,12 +1054,22 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     self.message_user(request, f"هیچ داده‌ای برای مدل {model_name} یافت نشد.", level='warning')
                     continue
 
+                # بررسی وجود صفحات برای مدل Banner
+                if model_name.lower() == 'banner':  # برای جلوگیری از حساسیت به حروف بزرگ/کوچک
+                    required_page_ids = {item.get('page') for item in records if item.get('page') is not None}
+                    if required_page_ids:
+                        missing_pages = required_page_ids - set(Page.objects.filter(id__in=required_page_ids).values_list('id', flat=True))
+                        if missing_pages:
+                            self.message_user(request, f"صفحات با IDهای {missing_pages} وجود ندارند!", level='error')
+                            raise ValueError(f"صفحات با IDهای {missing_pages} وجود ندارند!")
+
                 # حذف داده‌های قبلی
                 model_class.objects.all().delete()
                 self.message_user(request, f"داده‌های قبلی مدل {model_name} حذف شدند.", level='info')
 
                 # ایجاد رکوردهای جدید
                 for record in records:
+                    self.message_user(request, f"پردازش رکورد: {record}", level='info')
                     new_obj = model_class()
                     for field_name, value in record.items():
                         try:
@@ -1072,30 +1083,51 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                 except related_model.DoesNotExist:
                                     self.message_user(
                                         request,
-                                        f"ForeignKey {field_name} با id={value} در مدل {related_model.__name__} موجود نیست! مقدار پیش‌فرض NULL ست شد.",
-                                        level='warning'
+                                        f"ForeignKey {field_name} با id={value} در مدل {related_model.__name__} موجود نیست!",
+                                        level='error'
                                     )
-                                    setattr(new_obj, field_name, None)
+                                    raise
                             # ImageField
-                            elif field.get_internal_type() == 'ImageField' and value:
-                                if default_storage.exists(value):
+                            elif field.get_internal_type() == 'ImageField':
+                                if value and default_storage.exists(value):
                                     with default_storage.open(value, 'rb') as f_img:
-                                        new_obj.__dict__[field_name] = File(f_img, name=os.path.basename(value))
+                                        setattr(new_obj, field_name, File(f_img, name=os.path.basename(value)))
                                 else:
-                                    self.message_user(request, f"فایل تصویر {value} موجود نیست!", level='warning')
+                                    # تنظیم تصویر پیش‌فرض
+                                    default_image_content = b''  # محتوای خالی یا محتوای تصویر پیش‌فرض واقعی
+                                    setattr(new_obj, field_name, ContentFile(default_image_content, name='default.jpg'))
+                                    self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field_name} تنظیم شد.", level='warning')
                             # سایر فیلدها
                             else:
                                 setattr(new_obj, field_name, value)
                         except Exception as e:
                             self.message_user(request, f"خطا در پر کردن فیلد {field_name}: {e}", level='error')
+                            raise
 
                     # قبل از ذخیره بررسی فیلدهای NOT NULL
                     for field in model_class._meta.fields:
                         if not field.null and getattr(new_obj, field.name) is None:
                             if field.many_to_one:
-                                setattr(new_obj, field.name, None)
+                                self.message_user(
+                                    request,
+                                    f"فیلد {field.name} نمی‌تواند NULL باشد و شیء مرتبط پیدا نشد!",
+                                    level='error'
+                                )
+                                raise
                             elif field.get_internal_type() in ['CharField', 'TextField']:
                                 setattr(new_obj, field.name, '')
+                            elif field.get_internal_type() == 'ImageField':
+                                # تنظیم تصویر پیش‌فرض برای فیلدهای NOT NULL
+                                default_image_content = b''
+                                setattr(new_obj, field.name, ContentFile(default_image_content, name='default.jpg'))
+                                self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field.name} تنظیم شد.", level='warning')
+                            else:
+                                self.message_user(
+                                    request,
+                                    f"فیلد {field.name} نمی‌تواند NULL باشد و مقدار پیش‌فرضی برای آن تعریف نشده!",
+                                    level='error'
+                                )
+                                raise
 
                     try:
                         new_obj.save()
