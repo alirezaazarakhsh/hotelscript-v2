@@ -506,11 +506,13 @@ class CardNumber(models.Model):
     def clean(self):
         """
         هر کاربر فقط می‌تواند حداکثر ۲ شماره کارت داشته باشد.
-        این اعتبارسنجی فقط وقتی انجام می‌شود که پروفایل ذخیره شده باشد.
+        این اعتبارسنجی فقط زمانی انجام می‌شود که پروفایل ذخیره شده باشد.
         """
-        if self.pk is None and self.profile_id and self.profile.pk:
-            if self.profile.card_numbers.count() >= 2:
-                raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+        if not self.profile_id or not self.profile.pk:
+            return  # پروفایل هنوز ذخیره نشده، بررسی لازم نیست
+
+        if self.pk is None and self.profile.card_numbers.count() >= 2:
+            raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
 
     def save(self, *args, **kwargs):
         # قبل از ذخیره اعتبارسنجی انجام بده
@@ -518,8 +520,9 @@ class CardNumber(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.card_number} - {self.account_holder_name} - {self.profile}'
-    
+        profile_str = f'Profile-{self.profile.pk}' if self.profile_id else "بدون پروفایل"
+        return f'{self.card_number} - {self.account_holder_name} - {profile_str}'
+
     
     
 # مدل شماره کارت های حقوقی 
