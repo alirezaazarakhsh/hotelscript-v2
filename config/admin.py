@@ -1055,7 +1055,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                         missing_pages = required_page_ids - set(Page.objects.filter(id__in=required_page_ids).values_list('id', flat=True))
                         if missing_pages:
                             self.message_user(request, f"صفحات با IDهای {missing_pages} وجود ندارند!", level='error')
-                            raise ValueError(f"صفحات با IDهای {missing_pages} وجود ندارند!")
+                            return
 
                 model_class.objects.all().delete()
                 self.message_user(request, f"داده‌های قبلی مدل {model_name} حذف شدند.", level='info')
@@ -1064,7 +1064,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     self.message_user(request, f"پردازش رکورد: {record}", level='info')
                     new_obj = model_class()
                     for field_name, value in record.items():
-                        # نادیده گرفتن فیلد id
                         if field_name == 'id':
                             continue
                         try:
@@ -1080,7 +1079,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                         f"ForeignKey {field_name} با id={value} در مدل {related_model.__name__} موجود نیست!",
                                         level='error'
                                     )
-                                    raise
+                                    return
                             elif field.get_internal_type() == 'ImageField':
                                 if value and default_storage.exists(value):
                                     with default_storage.open(value, 'rb') as f_img:
@@ -1093,7 +1092,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                 setattr(new_obj, field_name, value)
                         except Exception as e:
                             self.message_user(request, f"خطا در پر کردن فیلد {field_name}: {e}", level='error')
-                            raise
+                            return
 
                     for field in model_class._meta.fields:
                         if not field.null and getattr(new_obj, field.name) is None:
@@ -1103,7 +1102,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                     f"فیلد {field.name} نمی‌تواند NULL باشد و شیء مرتبط پیدا نشد!",
                                     level='error'
                                 )
-                                raise
+                                return
                             elif field.get_internal_type() in ['CharField', 'TextField']:
                                 setattr(new_obj, field.name, '')
                             elif field.get_internal_type() == 'ImageField':
@@ -1116,13 +1115,13 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                     f"فیلد {field.name} نمی‌تواند NULL باشد و مقدار پیش‌فرضی برای آن تعریف نشده!",
                                     level='error'
                                 )
-                                raise
+                                return
 
                     try:
                         new_obj.save()
                         self.message_user(request, f"رکورد {new_obj} برای مدل {model_name} ایجاد شد.", level='info')
                     except Exception as e:
                         self.message_user(request, f"خطا در ذخیره رکورد {model_name}: {e}", level='error')
-                        raise
+                        return
 
         self.message_user(request, "ریستور با موفقیت انجام شد!", level='success')
