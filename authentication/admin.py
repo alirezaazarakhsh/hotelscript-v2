@@ -134,14 +134,13 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
 
-    def get_formsets_with_inlines(self, request, obj=None):
+    def save_related(self, request, form, formsets, change):
         """
-        وقتی پروفایل جدید ساخته میشه (obj=None)،
-        اینلاین کارت‌ها رو نمایش نده چون هنوز پروفایل pk نداره.
+        اول پروفایل ذخیره میشه تا pk بگیره،
+        بعد اینلاین کارت‌ها ذخیره میشن.
         """
-        if obj is None:
-            return []
-        return super().get_formsets_with_inlines(request, obj)
+        self.save_formset(request, form, formsets, change=change)
+        super().save_related(request, form, formsets, change)
 
 
 
