@@ -135,12 +135,11 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     base_user__phone_number.short_description = 'موبایل'
 
     def save_related(self, request, form, formsets, change):
-        """
-        اول پروفایل ذخیره میشه تا pk بگیره،
-        بعد اینلاین کارت‌ها ذخیره میشن.
-        """
-        self.save_formset(request, form, formsets, change=change)
+        
         super().save_related(request, form, formsets, change)
+
+        for formset in formsets:
+            self.save_formset(request, form, formset, change=change)
 
 
 
