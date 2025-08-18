@@ -97,11 +97,14 @@ class SuperUserAdmin(admin.ModelAdmin):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
 
+
+
+
 class CardNumberInline(admin.TabularInline):
     model = CardNumber
     extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
     max_num = 2  # محدودیت حداکثر ۲ شماره کارت
-    fields = ('card_number', 'iban' , 'account_holder_name')  # فیلدهای قابل ویرایش در اینلاین
+    fields = ('card_number', 'iban', 'account_holder_name')  # فیلدهای قابل ویرایش در اینلاین
     verbose_name = "شماره کارت حقیقی کاربر"
     verbose_name_plural = "شماره‌های کارت حقیقی کاربر"
 
@@ -126,13 +129,21 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
-    inlines = [CardNumberInline]  # افزودن اینلاین برای شماره‌های کارت
+    inlines = [CardNumberInline]
 
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
+
+    def get_formsets_with_inlines(self, request, obj=None):
+        # اگر obj=None باشد، یعنی در حال افزودن یک NaturalProfile جدید هستیم
+        # در این حالت، اینلاین‌ها را غیرفعال می‌کنیم
+        if obj is None:
+            return []
+        return super().get_formsets_with_inlines(request, obj)
     
-    
+
+
 
 class JuridicalProfileDocumentInline(admin.TabularInline):
     model = JuridicalProfileDocument

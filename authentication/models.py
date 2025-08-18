@@ -276,8 +276,8 @@ class NaturalProfile(models.Model):
     )
 
     class Meta:
-        verbose_name = "پروفایل کاربری"
-        verbose_name_plural = "پروفایل‌های کاربری"
+        verbose_name = "پروفایل حقیقی"
+        verbose_name_plural = "پروفایل‌ های حقیقی"
     
     def __str__(self):
         return f'{self.base_user}'
@@ -454,7 +454,6 @@ class JuridicalProfileDocument(models.Model):
     
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
-# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
     regex=r'^\d{16}$',
     message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
@@ -471,6 +470,7 @@ validate_account_holder_name = RegexValidator(
     regex=r'^[\u0600-\u06FF\s]+$',
     message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
 )
+
 
 class CardNumber(models.Model):
     profile = models.ForeignKey(
@@ -497,7 +497,7 @@ class CardNumber(models.Model):
         verbose_name=_('نام صاحب حساب'),
         max_length=100,
         validators=(validate_account_holder_name,),
-        
+        default='ناشناس',
     )
 
     class Meta:
@@ -505,18 +505,16 @@ class CardNumber(models.Model):
         verbose_name_plural = _('شماره‌های کارت')
 
     def clean(self):
-        # بررسی محدودیت تعداد کارت‌ها (حداکثر ۲ کارت)
-        if self.profile.card_numbers.count() >= 2 and not self.pk:
+        # بررسی محدودیت تعداد کارت‌ها فقط برای نمونه‌های ذخیره‌شده
+        if self.pk is None and self.profile_id and self.profile.card_numbers.count() >= 2:
             raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
 
     def save(self, *args, **kwargs):
-        # اجرای اعتبارسنجی قبل از ذخیره
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.card_number} - {self.account_holder_name} - {self.profile}'
-    
     
     
     
