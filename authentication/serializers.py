@@ -86,10 +86,11 @@ validate_postal_code = RegexValidator(
 class CardNumberSerializer(serializers.ModelSerializer):
     class Meta:
         model = CardNumber
-        fields = ['id', 'card_number', 'iban']
+        fields = ['id', 'card_number', 'iban', 'account_holder_name']
         extra_kwargs = {
             'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
             'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
+            'account_holder_name': {'validators': [RegexValidator(regex=r'^[a-zA-Z\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.'))]},
         }
 
 class NaturalProfileSerializer(serializers.ModelSerializer):
@@ -148,6 +149,8 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({'card_numbers': _('شماره کارت الزامی است.')})
                 if 'iban' in card and card['iban'] and not isinstance(card['iban'], (type(None), str)) or len(str(card['iban'])) != 24:
                     raise serializers.ValidationError({'card_numbers': _('شماره شبا باید ۲۴ رقم باشد یا خالی باشد.')})
+                if 'account_holder_name' not in card or not card['account_holder_name']:
+                    raise serializers.ValidationError({'card_numbers': _('نام صاحب حساب الزامی است.')})
                 if 'id' in card and card['id']:
                     try:
                         CardNumber.objects.get(id=card['id'], profile__base_user=self.context['request'].user)
@@ -177,6 +180,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
                         card = instance.card_numbers.get(id=card_id)
                         card.card_number = card_data.get('card_number', card.card_number)
                         card.iban = card_data.get('iban', card.iban)
+                        card.account_holder_name = card_data.get('account_holder_name', card.account_holder_name)
                         card.save()
                     except CardNumber.DoesNotExist:
                         CardNumber.objects.create(profile=instance, **card_data)
@@ -224,21 +228,21 @@ class JuridicalProfileDocumentSerializer(serializers.ModelSerializer):
             )
         return data
 
-# -----------------------------
-# JuridicalCardNumber Serializer
-# -----------------------------
-class JuridicalCardNumberSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JuridicalCardNumber
-        fields = ['id', 'card_number', 'iban']
-        extra_kwargs = {
-            'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
-            'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
-        }
+
 
 # -----------------------------
 # JuridicalProfile Serializer
 # -----------------------------
+class JuridicalCardNumberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JuridicalCardNumber
+        fields = ['id', 'card_number', 'iban', 'account_holder_name']
+        extra_kwargs = {
+            'card_number': {'validators': [RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))]},
+            'iban': {'validators': [RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))], 'required': False, 'allow_null': True},
+            'account_holder_name': {'validators': [RegexValidator(regex=r'^[a-zA-Z\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.'))]},
+        }
+
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False, allow_empty_file=False, allow_null=True)
@@ -291,6 +295,8 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({'card_numbers': _('شماره کارت الزامی است.')})
                 if 'iban' in card and card['iban'] and not isinstance(card['iban'], (type(None), str)) or len(str(card['iban'])) != 24:
                     raise serializers.ValidationError({'card_numbers': _('شماره شبا باید ۲۴ رقم باشد یا خالی باشد.')})
+                if 'account_holder_name' not in card or not card['account_holder_name']:
+                    raise serializers.ValidationError({'card_numbers': _('نام صاحب حساب الزامی است.')})
                 if 'id' in card and card['id']:
                     if self.instance:  # برای ویرایش، بررسی instance
                         try:
@@ -335,6 +341,7 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                         card = instance.card_numbers.get(id=card_id)
                         card.card_number = card_data.get('card_number', card.card_number)
                         card.iban = card_data.get('iban', card.iban)
+                        card.account_holder_name = card_data.get('account_holder_name', card.account_holder_name)
                         try:
                             card.save()
                         except IntegrityError as e:

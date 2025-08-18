@@ -454,7 +454,6 @@ class JuridicalProfileDocument(models.Model):
     
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
-# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
     regex=r'^\d{16}$',
     message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
@@ -497,7 +496,6 @@ class CardNumber(models.Model):
         verbose_name=_('نام صاحب حساب'),
         max_length=100,
         validators=(validate_account_holder_name,),
-        default='Unknown',  
 
     )
 
@@ -565,7 +563,6 @@ class JuridicalCardNumber(models.Model):
         verbose_name=_('نام صاحب حساب'),
         max_length=100,
         validators=(validate_account_holder_name,),
-        default='Unknown',  
 
     )
 
