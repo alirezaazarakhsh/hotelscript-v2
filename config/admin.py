@@ -997,15 +997,12 @@ class AppRestoreAdmin(admin.ModelAdmin):
     created_at_jalali.short_description = "تاریخ ریستور (شمسی)"
 
     def save_model(self, request, obj, form, change):
-        # ابتدا instance را ذخیره کن
         super().save_model(request, obj, form, change)
 
-        # ست کردن مقدار انتخاب‌شده‌ی apps
         if form.cleaned_data.get('apps'):
             obj.apps.set(form.cleaned_data['apps'])
             obj.save()
 
-        # بررسی فایل JSON
         if not obj.backup_json:
             self.message_user(request, "هیچ فایلی برای ریستور انتخاب نشده.", level='warning')
             return
@@ -1029,7 +1026,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
             level='info'
         )
 
-        # ریستور داده‌ها در تراکنش اتمیک
         with transaction.atomic():
             for app_content in obj.apps.all():
                 app_label = app_content.app_label
@@ -1042,7 +1038,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     self.message_user(request, f"مدل {model_name} در اپ {app_label} پیدا نشد.", level='error')
                     continue
 
-                # پیدا کردن رکوردهای مربوط به مدل
                 if isinstance(data, dict):
                     records = data.get(model_name, [])
                 elif isinstance(data, list):
@@ -1054,8 +1049,7 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     self.message_user(request, f"هیچ داده‌ای برای مدل {model_name} یافت نشد.", level='warning')
                     continue
 
-                # بررسی وجود صفحات برای مدل Banner
-                if model_name.lower() == 'banner':  # برای جلوگیری از حساسیت به حروف بزرگ/کوچک
+                if model_name.lower() == 'banner':
                     required_page_ids = {item.get('page') for item in records if item.get('page') is not None}
                     if required_page_ids:
                         missing_pages = required_page_ids - set(Page.objects.filter(id__in=required_page_ids).values_list('id', flat=True))
@@ -1063,18 +1057,18 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             self.message_user(request, f"صفحات با IDهای {missing_pages} وجود ندارند!", level='error')
                             raise ValueError(f"صفحات با IDهای {missing_pages} وجود ندارند!")
 
-                # حذف داده‌های قبلی
                 model_class.objects.all().delete()
                 self.message_user(request, f"داده‌های قبلی مدل {model_name} حذف شدند.", level='info')
 
-                # ایجاد رکوردهای جدید
                 for record in records:
                     self.message_user(request, f"پردازش رکورد: {record}", level='info')
                     new_obj = model_class()
                     for field_name, value in record.items():
+                        # نادیده گرفتن فیلد id
+                        if field_name == 'id':
+                            continue
                         try:
                             field = model_class._meta.get_field(field_name)
-                            # ForeignKey
                             if field.many_to_one and value is not None:
                                 related_model = field.remote_field.model
                                 try:
@@ -1087,24 +1081,20 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                         level='error'
                                     )
                                     raise
-                            # ImageField
                             elif field.get_internal_type() == 'ImageField':
                                 if value and default_storage.exists(value):
                                     with default_storage.open(value, 'rb') as f_img:
                                         setattr(new_obj, field_name, File(f_img, name=os.path.basename(value)))
                                 else:
-                                    # تنظیم تصویر پیش‌فرض
-                                    default_image_content = b''  # محتوای خالی یا محتوای تصویر پیش‌فرض واقعی
+                                    default_image_content = b''  # جایگزین با محتوای واقعی تصویر اگر موجود است
                                     setattr(new_obj, field_name, ContentFile(default_image_content, name='default.jpg'))
                                     self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field_name} تنظیم شد.", level='warning')
-                            # سایر فیلدها
                             else:
                                 setattr(new_obj, field_name, value)
                         except Exception as e:
                             self.message_user(request, f"خطا در پر کردن فیلد {field_name}: {e}", level='error')
                             raise
 
-                    # قبل از ذخیره بررسی فیلدهای NOT NULL
                     for field in model_class._meta.fields:
                         if not field.null and getattr(new_obj, field.name) is None:
                             if field.many_to_one:
@@ -1117,7 +1107,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             elif field.get_internal_type() in ['CharField', 'TextField']:
                                 setattr(new_obj, field.name, '')
                             elif field.get_internal_type() == 'ImageField':
-                                # تنظیم تصویر پیش‌فرض برای فیلدهای NOT NULL
                                 default_image_content = b''
                                 setattr(new_obj, field.name, ContentFile(default_image_content, name='default.jpg'))
                                 self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field.name} تنظیم شد.", level='warning')
@@ -1132,9 +1121,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
                     try:
                         new_obj.save()
                         self.message_user(request, f"رکورد {new_obj} برای مدل {model_name} ایجاد شد.", level='info')
-                    except IntegrityError as e:
-                        self.message_user(request, f"خطای IntegrityError در ذخیره رکورد {model_name}: {e}", level='error')
-                        raise
                     except Exception as e:
                         self.message_user(request, f"خطا در ذخیره رکورد {model_name}: {e}", level='error')
                         raise

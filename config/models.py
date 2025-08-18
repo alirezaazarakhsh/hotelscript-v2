@@ -511,7 +511,7 @@ class Banner(models.Model):
         blank=True,
     )
     page = models.ForeignKey(
-        Page,
+        'Page',  # فرض بر این که مدل Page در همان اپ تعریف شده است
         on_delete=models.CASCADE,
         verbose_name=_('صفحه'),
         related_name='banners',
@@ -533,13 +533,16 @@ class Banner(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:
-            current_instance = Banner.objects.get(pk=self.pk)
-            if current_instance.order != self.order:
-                if current_instance.order < self.order:
-                    Banner.objects.filter(page=self.page, order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
-                else:
-                    Banner.objects.filter(page=self.page, order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
-
+            try:
+                current_instance = Banner.objects.get(pk=self.pk)
+                if current_instance.order != self.order:
+                    if current_instance.order < self.order:
+                        Banner.objects.filter(page=self.page, order__gt=current_instance.order, order__lte=self.order).update(order=models.F('order') - 1)
+                    else:
+                        Banner.objects.filter(page=self.page, order__lt=current_instance.order, order__gte=self.order).update(order=models.F('order') + 1)
+            except Banner.DoesNotExist:
+                # اگر شیء وجود ندارد، مثل یک شیء جدید رفتار کن
+                pass
         super().save(*args, **kwargs)
 
 
