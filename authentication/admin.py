@@ -101,7 +101,7 @@ class CardNumberInline(admin.TabularInline):
     model = CardNumber
     extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
     max_num = 2  # محدودیت حداکثر ۲ شماره کارت
-    fields = ('card_number', 'iban')  # فیلدهای قابل ویرایش در اینلاین
+    fields = ('card_number', 'iban' , 'account_holder_name')  # فیلدهای قابل ویرایش در اینلاین
     verbose_name = "شماره کارت حقیقی کاربر"
     verbose_name_plural = "شماره‌های کارت حقیقی کاربر"
 
@@ -145,7 +145,7 @@ class JuridicalCardNumberInline(admin.TabularInline):
     model = JuridicalCardNumber
     extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
     max_num = 2  # محدودیت حداکثر ۲ شماره کارت
-    fields = ('card_number', 'iban')  # فیلدهای قابل ویرایش در اینلاین
+    fields = ('card_number', 'iban' , 'account_holder_name')  # فیلدهای قابل ویرایش در اینلاین
     verbose_name = "شماره کارت حقوقی"
     verbose_name_plural = "شماره‌های کارت حقوقی"
 

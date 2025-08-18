@@ -454,6 +454,7 @@ class JuridicalProfileDocument(models.Model):
     
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
+# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
     regex=r'^\d{16}$',
     message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
@@ -463,6 +464,12 @@ validate_card_number = RegexValidator(
 validate_iban = RegexValidator(
     regex=r'^\d{24}$',
     message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
+)
+
+# اعتبارسنجی برای نام صاحب حساب (فقط حروف و فاصله)
+validate_account_holder_name = RegexValidator(
+    regex=r'^[a-zA-Z\s]+$',
+    message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.')
 )
 
 class CardNumber(models.Model):
@@ -486,6 +493,13 @@ class CardNumber(models.Model):
         null=True,
         blank=True,
     )
+    account_holder_name = models.CharField(
+        verbose_name=_('نام صاحب حساب'),
+        max_length=100,
+        validators=(validate_account_holder_name,),
+        default='Unknown',  
+
+    )
 
     class Meta:
         verbose_name = _('شماره کارت')
@@ -502,7 +516,9 @@ class CardNumber(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.card_number} - {self.profile}'
+        return f'{self.card_number} - {self.account_holder_name} - {self.profile}'
+    
+    
     
     
 # مدل شماره کارت های حقوقی 
@@ -518,8 +534,11 @@ validate_iban = RegexValidator(
     message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
 )
 
-
-
+# اعتبارسنجی برای نام صاحب حساب (فقط حروف و فاصله)
+validate_account_holder_name = RegexValidator(
+    regex=r'^[a-zA-Z\s]+$',
+    message=_('نام صاحب حساب فقط می‌تواند شامل حروف و فاصله باشد.')
+)
 
 class JuridicalCardNumber(models.Model):
     profile = models.ForeignKey(
@@ -542,6 +561,13 @@ class JuridicalCardNumber(models.Model):
         null=True,
         blank=True,
     )
+    account_holder_name = models.CharField(
+        verbose_name=_('نام صاحب حساب'),
+        max_length=100,
+        validators=(validate_account_holder_name,),
+        default='Unknown',  
+
+    )
 
     class Meta:
         verbose_name = _('شماره کارت حقوقی')
@@ -558,4 +584,4 @@ class JuridicalCardNumber(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.card_number} - {self.profile}'
+        return f'{self.card_number} - {self.account_holder_name} - {self.profile}'
