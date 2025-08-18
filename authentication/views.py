@@ -627,7 +627,7 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         request_body=JuridicalProfileDocumentSerializer,
         responses={
             201: JuridicalProfileDocumentSerializer(many=True),
-            400: "خطا در داده‌های ورودی",
+            400: "خطا در داده‌های ورودی یا عدم موفقیت در آپلود",
             404: "پروفایل حقوقی یافت نشد"
         }
     )
@@ -635,15 +635,18 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         print("request.FILES:", request.FILES)
         print("request.data:", request.data)
 
+        # بررسی وجود پروفایل حقوقی
         try:
             natural_profile = request.user.natural_profile
             profile = natural_profile.juridical_profile
-        except AttributeError:
+        except (AttributeError, Exception) as e:
+            print(f"Error fetching profile: {e}")
             return Response(
                 {'detail': 'پروفایل حقوقی یافت نشد.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # بررسی وجود فایل‌ها
         uploaded_files = request.FILES.getlist('file')
         if not uploaded_files:
             return Response(
@@ -652,28 +655,46 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
             )
 
         response_data = []
+        errors = []
+
+        # پردازش هر فایل
         for uploaded_file in uploaded_files:
             print(f"Processing file: {uploaded_file.name}, type: {uploaded_file.content_type}")
             if uploaded_file.content_type.startswith('image/'):
                 print(f"Skipping image: {uploaded_file.name}")
+                errors.append(f"فایل {uploaded_file.name} به دلیل بودن تصویر نادیده گرفته شد.")
                 continue
 
             data = request.data.copy()
             data['file'] = uploaded_file
             serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
             if serializer.is_valid():
-                serializer.save(profile=profile)
-                response_data.append(serializer.data)
+                try:
+                    serializer.save(profile=profile)
+                    response_data.append(serializer.data)
+                except Exception as e:
+                    print(f"Error saving {uploaded_file.name}: {e}")
+                    errors.append(f"خطا در ذخیره فایل {uploaded_file.name}: {str(e)}")
             else:
                 print(f"Errors for {uploaded_file.name}: {serializer.errors}")
+                errors.append(f"خطا در اعتبارسنجی فایل {uploaded_file.name}: {serializer.errors}")
 
-        if not response_data:
+        # مدیریت نتیجه
+        if not response_data and errors:
+            return Response(
+                {'detail': 'هیچ فایلی با موفقیت آپلود نشد.', 'errors': errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        elif not response_data:
             return Response(
                 {'detail': 'هیچ فایلی با موفقیت آپلود نشد.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+    
+    
+    
 
 class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -682,22 +703,41 @@ class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
         operation_summary="ویرایش مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
         request_body=JuridicalProfileDocumentSerializer,
-        responses={200: JuridicalProfileDocumentSerializer()}
+        responses={
+            200: JuridicalProfileDocumentSerializer(),
+            400: "خطا در داده‌های ورودی",
+            404: "مدرک یافت نشد"
+        }
     )
     def put(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)
         serializer = JuridicalProfileDocumentSerializer(document, data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+            try:
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response(
+                    {'detail': f'خطا در ذخیره مدرک: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         operation_summary="حذف مدرک پروفایل حقوقی",
         tags=["JuridicalProfile-Document"],
-        responses={204: 'مدرک حذف شد'}
+        responses={
+            204: 'مدرک حذف شد',
+            404: 'مدرک یافت نشد'
+        }
     )
     def delete(self, request, pk):
         document = get_object_or_404(JuridicalProfileDocument, pk=pk)
-        document.delete()
-        return Response(status=204)
+        try:
+            document.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response(
+                {'detail': f'خطا در حذف مدرک: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
