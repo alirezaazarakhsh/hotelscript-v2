@@ -1085,9 +1085,14 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                     with default_storage.open(value, 'rb') as f_img:
                                         setattr(new_obj, field_name, File(f_img, name=os.path.basename(value)))
                                 else:
-                                    default_image_content = b''  # جایگزین با محتوای واقعی تصویر اگر موجود است
-                                    setattr(new_obj, field_name, ContentFile(default_image_content, name='default.jpg'))
-                                    self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field_name} تنظیم شد.", level='warning')
+                                    default_image_path = 'images/banners/default.jpg'  # مسیر تصویر پیش‌فرض
+                                    try:
+                                        with default_storage.open(default_image_path, 'rb') as f_img:
+                                            setattr(new_obj, field_name, File(f_img, name='default.jpg'))
+                                        self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field_name} تنظیم شد.", level='warning')
+                                    except FileNotFoundError:
+                                        self.message_user(request, f"فایل تصویر پیش‌فرض {default_image_path} یافت نشد!", level='error')
+                                        return
                             else:
                                 setattr(new_obj, field_name, value)
                         except Exception as e:
@@ -1106,9 +1111,14 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             elif field.get_internal_type() in ['CharField', 'TextField']:
                                 setattr(new_obj, field.name, '')
                             elif field.get_internal_type() == 'ImageField':
-                                default_image_content = b''
-                                setattr(new_obj, field.name, ContentFile(default_image_content, name='default.jpg'))
-                                self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field.name} تنظیم شد.", level='warning')
+                                default_image_path = 'images/banners/default.jpg'
+                                try:
+                                    with default_storage.open(default_image_path, 'rb') as f_img:
+                                        setattr(new_obj, field.name, File(f_img, name='default.jpg'))
+                                    self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field.name} تنظیم شد.", level='warning')
+                                except FileNotFoundError:
+                                    self.message_user(request, f"فایل تصویر پیش‌فرض {default_image_path} یافت نشد!", level='error')
+                                    return
                             else:
                                 self.message_user(
                                     request,
