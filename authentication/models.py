@@ -471,7 +471,6 @@ validate_account_holder_name = RegexValidator(
     message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
 )
 
-
 class CardNumber(models.Model):
     profile = models.ForeignKey(
         NaturalProfile,
@@ -505,11 +504,16 @@ class CardNumber(models.Model):
         verbose_name_plural = _('شماره‌های کارت')
 
     def clean(self):
-        # بررسی محدودیت تعداد کارت‌ها فقط برای نمونه‌های ذخیره‌شده
-        if self.pk is None and self.profile_id and self.profile.card_numbers.count() >= 2:
-            raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+        """
+        هر کاربر فقط می‌تواند حداکثر ۲ شماره کارت داشته باشد.
+        این اعتبارسنجی فقط وقتی انجام می‌شود که پروفایل ذخیره شده باشد.
+        """
+        if self.pk is None and self.profile_id and self.profile.pk:
+            if self.profile.card_numbers.count() >= 2:
+                raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
 
     def save(self, *args, **kwargs):
+        # قبل از ذخیره اعتبارسنجی انجام بده
         self.full_clean()
         super().save(*args, **kwargs)
 
