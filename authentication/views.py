@@ -660,18 +660,15 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
         # پردازش هر فایل
         for uploaded_file in uploaded_files:
             print(f"Processing file: {uploaded_file.name}, type: {uploaded_file.content_type}")
-            if uploaded_file.content_type.startswith('image/'):
-                print(f"Skipping image: {uploaded_file.name}")
-                errors.append(f"فایل {uploaded_file.name} به دلیل بودن تصویر نادیده گرفته شد.")
-                continue
-
             data = request.data.copy()
             data['file'] = uploaded_file
             serializer = JuridicalProfileDocumentSerializer(data=data, context={'request': request})
             if serializer.is_valid():
                 try:
                     serializer.save(profile=profile)
-                    response_data.append(serializer.data)
+                    # بعد از ذخیره، داده‌ها رو با تمام فیلدهای خواندنی سریالایزر بگیر
+                    saved_instance = JuridicalProfileDocument.objects.get(id=serializer.data['id'])
+                    response_data.append(JuridicalProfileDocumentSerializer(saved_instance, context={'request': request}).data)
                 except Exception as e:
                     print(f"Error saving {uploaded_file.name}: {e}")
                     errors.append(f"خطا در ذخیره فایل {uploaded_file.name}: {str(e)}")
@@ -692,6 +689,52 @@ class JuridicalProfileDocumentListCreateAPIView(APIView):
             )
 
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+class JuridicalProfileDocumentRetrieveUpdateDestroyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش مدرک پروفایل حقوقی",
+        tags=["JuridicalProfile-Document"],
+        request_body=JuridicalProfileDocumentSerializer,
+        responses={
+            200: JuridicalProfileDocumentSerializer(),
+            400: "خطا در داده‌های ورودی",
+            404: "مدرک یافت نشد"
+        }
+    )
+    def put(self, request, pk):
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
+        serializer = JuridicalProfileDocumentSerializer(document, data=request.data, context={'request': request}, partial=True)
+        if serializer.is_valid():
+            try:
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response(
+                    {'detail': f'خطا در ذخیره مدرک: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(
+        operation_summary="حذف مدرک پروفایل حقوقی",
+        tags=["JuridicalProfile-Document"],
+        responses={
+            204: 'مدرک حذف شد',
+            404: 'مدرک یافت نشد'
+        }
+    )
+    def delete(self, request, pk):
+        document = get_object_or_404(JuridicalProfileDocument, pk=pk)
+        try:
+            document.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response(
+                {'detail': f'خطا در حذف مدرک: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     
     
