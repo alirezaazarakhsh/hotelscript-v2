@@ -9,6 +9,7 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics
 from drf_yasg import openapi
 from django.db.models import Count, Q, F
+from bashgah_moshtarian import models
 
 
 from authentication import models
@@ -264,8 +265,6 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 
 #ای پی ای جوایز دریافتی کاربران 
