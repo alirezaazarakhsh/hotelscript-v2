@@ -74,8 +74,6 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 # ✅ API کدهای تخفیف مراکز خرید
 class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -124,8 +122,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 
 # ای پی ای فعال سازی کد تخفیف
@@ -273,8 +269,6 @@ class ActivateDiscountCodeView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 # ای پی ای جوایز دریافتی کاربران 
 class DiscountActivationRecordListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -353,7 +347,6 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
