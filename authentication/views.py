@@ -77,7 +77,6 @@ class APILogoutView(APIView):
 
 
 
-#ای پی ای ارسال otp برای کاربران 
 class AuthView(APIView):
     permission_classes = (AllowAny,)
 
@@ -91,7 +90,7 @@ class AuthView(APIView):
         responses={
             200: 'کد تایید با موفقیت ارسال شد',
             400: 'فرمت شماره صحیح نیست',
-            403: 'شما قبلاً با موفقیت  وارد شده‌اید',
+            403: 'شما قبلاً با موفقیت وارد شده‌اید',
             429: 'جهت دریافت کد جدید لطفا یک دقیقه صبر کنید',
             500: 'ارسال کد ناموفق بود'
         }
@@ -99,7 +98,7 @@ class AuthView(APIView):
     def post(self, request):
         if request.user.is_authenticated:
             return Response(
-                {"detail": "شما قبلاً  با موفقیت وارد شده‌اید."},
+                {"detail": "شما قبلاً با موفقیت وارد شده‌اید."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -127,7 +126,7 @@ class AuthView(APIView):
 
         code = generate_otp_code()
         otp = OTP(user=user)
-        otp.set_code(code)
+        otp.set_code(code)  # فرض می‌شود این متد زمان انقضا را به 60 ثانیه تنظیم می‌کند
         otp.save()
 
         # ارسال کد OTP به شماره موبایل
