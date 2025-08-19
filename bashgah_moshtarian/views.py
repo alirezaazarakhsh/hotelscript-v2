@@ -9,14 +9,19 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics
 from drf_yasg import openapi
 from django.db.models import Count, Q, F
-from bashgah_moshtarian import models
-
-
-from authentication import models
-from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
-from .serializers import CustomerClubPointSerializer, DiscountActivationRecordSerializer, RoomDiscountCodeSerializer, ShoppingCenterDiscountCodeSerializer
-
-
+from .models import (
+    CustomerClubPoint,
+    DiscountActivationRecord,
+    RoomDiscountCode,
+    ShoppingCenterDiscountCode,
+    NaturalProfile
+)
+from .serializers import (
+    CustomerClubPointSerializer,
+    DiscountActivationRecordSerializer,
+    RoomDiscountCodeSerializer,
+    ShoppingCenterDiscountCodeSerializer
+)
 
 
 # ✅ API کدهای تخفیف اتاق
@@ -31,7 +36,7 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         # دسترسی به سطح کاربر از مدل NaturalProfile
         try:
             user_level = user.natural_profile.level  # دسترسی به سطح کاربر
-        except (AttributeError, models.NaturalProfile.DoesNotExist):
+        except (AttributeError, NaturalProfile.DoesNotExist):
             user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
 
         return (
@@ -70,7 +75,6 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 # ✅ API کدهای تخفیف مراکز خرید
 class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -106,7 +110,7 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
         - به کاربر اختصاص داده شده یا فعال کرده است.
         - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
-        - تاریخ ان3قضای آن‌ها نگذشته.
+        - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
         """,
         tags=['discount-crm']
@@ -160,14 +164,14 @@ class ActivateDiscountCodeView(APIView):
         try:
             # بررسی وجود پروفایل کاربر
             try:
-                natural_profile = models.NaturalProfile.objects.get(base_user=user)
-            except models.NaturalProfile.DoesNotExist:
+                natural_profile = NaturalProfile.objects.get(base_user=user)
+            except NaturalProfile.DoesNotExist:
                 return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
 
             # دریافت اطلاعات امتیاز کاربر
             try:
-                customer_points = models.CustomerClubPoint.objects.get(user=user)
-            except models.CustomerClubPoint.DoesNotExist:
+                customer_points = CustomerClubPoint.objects.get(user=user)
+            except CustomerClubPointsidesNotExist:
                 return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
             # تابع کمکی برای ایجاد رکورد فعال‌سازی
@@ -181,11 +185,11 @@ class ActivateDiscountCodeView(APIView):
                     kwargs["room_discount_code"] = discount_code
                 else:
                     kwargs["shopping_discount_code"] = discount_code
-                models.DiscountActivationRecord.objects.create(**kwargs)
+                DiscountActivationRecord.objects.create(**kwargs)
 
             # منطق فعال‌سازی برای هر نوع کد
             if discount_type == 'room':
-                discount_code = models.RoomDiscountCode.objects.get(code=code)
+                discount_code = RoomDiscountCode.objects.get(code=code)
 
                 # شرط 2: هر کاربر فقط یکبار بتونه استفاده کنه
                 if user in discount_code.activated_users.all():
@@ -221,7 +225,7 @@ class ActivateDiscountCodeView(APIView):
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
-                discount_code = models.ShoppingCenterDiscountCode.objects.get(code=code)
+                discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
 
                 if user in discount_code.activated_users.all():
                     return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
@@ -255,9 +259,9 @@ class ActivateDiscountCodeView(APIView):
 
             return Response({"message": "کد تخفیف با موفقیت فعال شد"}, status=status.HTTP_200_OK)
 
-        except models.RoomDiscountCode.DoesNotExist:
+        except RoomDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-        except models.ShoppingCenterDiscountCode.DoesNotExist:
+        except ShoppingCenterDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({
@@ -267,7 +271,7 @@ class ActivateDiscountCodeView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-#ای پی ای جوایز دریافتی کاربران 
+# ای پی ای جوایز دریافتی کاربران 
 class DiscountActivationRecordListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = DiscountActivationRecordSerializer
@@ -282,11 +286,11 @@ class DiscountActivationRecordListView(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست جوایز فعال شده کاربر برای مرکز خرید و اتاق‌ها",
         operation_description="""
-این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
-- کدهای تخفیف اتاق
-- کدهای تخفیف مرکز خرید
-می‌باشد. نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
-""",
+        این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
+        - کدهای تخفیف اتاق
+        - کدهای تخفیف مرکز خرید
+        می‌باشد. نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
+        """,
         tags=['discount-crm'],
         responses={
             200: openapi.Response(
@@ -347,8 +351,6 @@ class DiscountActivationRecordListView(generics.ListAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
 class MyCustomerClubPointView(APIView):
     permission_classes = [IsAuthenticated]
@@ -356,8 +358,8 @@ class MyCustomerClubPointView(APIView):
     @swagger_auto_schema(
         operation_summary="دریافت امتیاز باشگاه مشتریان",
         operation_description="""
-این API امتیاز فعلی کاربر در باشگاه مشتریان را بازمی‌گرداند.
-""",
+        این API امتیاز فعلی کاربر در باشگاه مشتریان را بازمی‌گرداند.
+        """,
         tags=["discount-crm"]
     )
     def get(self, request, *args, **kwargs):
@@ -367,6 +369,3 @@ class MyCustomerClubPointView(APIView):
             return Response(serializer.data)
         except CustomerClubPoint.DoesNotExist:
             return Response({'points': 0}, status=status.HTTP_200_OK)
-
-
-
