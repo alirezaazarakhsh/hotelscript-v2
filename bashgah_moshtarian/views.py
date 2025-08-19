@@ -9,12 +9,12 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics
 from drf_yasg import openapi
 from django.db.models import Count, Q, F
+from authentication.models import NaturalProfile  # ایمپورت NaturalProfile از authentication.models
 from .models import (
     CustomerClubPoint,
     DiscountActivationRecord,
     RoomDiscountCode,
-    ShoppingCenterDiscountCode,
-    NaturalProfile
+    ShoppingCenterDiscountCode
 )
 from .serializers import (
     CustomerClubPointSerializer,
@@ -171,7 +171,7 @@ class ActivateDiscountCodeView(APIView):
             # دریافت اطلاعات امتیاز کاربر
             try:
                 customer_points = CustomerClubPoint.objects.get(user=user)
-            except CustomerClubPointsidesNotExist:
+            except CustomerClubPoint.DoesNotExist:
                 return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
             # تابع کمکی برای ایجاد رکورد فعال‌سازی
