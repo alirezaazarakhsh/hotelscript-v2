@@ -27,6 +27,12 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         user = self.request.user
         today_jalali = jdatetime.date.today()
 
+        # دسترسی به سطح کاربر از مدل NaturalProfile
+        try:
+            user_level = user.natural_profile.level  # دسترسی به سطح کاربر
+        except (AttributeError, models.NaturalProfile.DoesNotExist):
+            user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
+
         return (
             RoomDiscountCode.objects.annotate(
                 activated_count=Count('activated_users', distinct=True)
@@ -34,7 +40,7 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             .filter(
                 Q(users=user) | 
                 Q(activated_users=user) | 
-                Q(user_level=user.level),
+                Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
             )
@@ -44,12 +50,12 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
-            این API فقط کدهای معتبر اتاق را برمی‌گرداند:
-            - به کاربر اختصاص داده شده یا فعال کرده است.
-            - برای سطح کاربر در دسترس است.
-            - تاریخ انقضای آن‌ها نگذشته.
-            - تعداد استفاده‌شان به سقف نرسیده.
-            """,
+        این API فقط کدهای معتبر اتاق را برمی‌گرداند:
+        - به کاربر اختصاص داده شده یا فعال کرده است.
+        - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
+        - تاریخ انقضای آن‌ها نگذشته.
+        - تعداد استفاده‌شان به سقف نرسیده.
+        """,
         tags=['discount-crm']
     )
     def get(self, request, *args, **kwargs):
@@ -73,6 +79,12 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         user = self.request.user
         today_jalali = jdatetime.date.today()
 
+        # دسترسی به سطح کاربر از مدل NaturalProfile
+        try:
+            user_level = user.natural_profile.level  # دسترسی به سطح کاربر
+        except (AttributeError, NaturalProfile.DoesNotExist):
+            user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
+
         return (
             ShoppingCenterDiscountCode.objects.annotate(
                 activated_count=Count('activated_users', distinct=True)
@@ -80,7 +92,7 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
             .filter(
                 Q(users=user) | 
                 Q(activated_users=user) | 
-                Q(user_level=user.level),
+                Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
             )
@@ -92,8 +104,8 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         operation_description="""
         این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
         - به کاربر اختصاص داده شده یا فعال کرده است.
-        - برای سطح کاربر در دسترس است.
-        - تاریخ انقضای آن‌ها نگذشته.
+        - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
+        - تاریخ ان3قضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
         """,
         tags=['discount-crm']
@@ -107,7 +119,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
 
 
 # ای پی ای فعال سازی کد تخفیف
@@ -117,10 +128,10 @@ class ActivateDiscountCodeView(APIView):
     @swagger_auto_schema(
         operation_summary="فعال‌سازی کد تخفیف",
         operation_description="""
-این API برای فعال‌سازی یک کد تخفیف توسط کاربر استفاده می‌شود.
-ورودی شامل کد تخفیف و نوع آن (اتاق یا مرکز خرید) است.
-در صورت موفقیت، رکورد فعال‌سازی در سیستم ثبت می‌شود و امتیاز مورد نیاز از حساب مشتری کسر می‌شود.
-""",
+        این API برای فعال‌سازی یک کد تخفیف توسط کاربر استفاده می‌شود.
+        ورودی شامل کد تخفیف و نوع آن (اتاق یا مرکز خرید) است.
+        در صورت موفقیت، رکورد فعال‌سازی در سیستم ثبت می‌شود و امتیاز مورد نیاز از حساب مشتری کسر می‌شود.
+        """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
