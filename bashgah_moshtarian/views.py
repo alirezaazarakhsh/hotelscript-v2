@@ -165,8 +165,8 @@ class ActivateDiscountCodeView(APIView):
 
             # دریافت اطلاعات امتیاز کاربر
             try:
-                customer_points = CustomerClubPoint.objects.get(user=user)
-            except CustomerClubPoint.DoesNotExist:
+                customer_points = models.CustomerClubPoint.objects.get(user=user)
+            except models.CustomerClubPoint.DoesNotExist:
                 return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
             # تابع کمکی برای ایجاد رکورد فعال‌سازی
@@ -180,11 +180,11 @@ class ActivateDiscountCodeView(APIView):
                     kwargs["room_discount_code"] = discount_code
                 else:
                     kwargs["shopping_discount_code"] = discount_code
-                DiscountActivationRecord.objects.create(**kwargs)
+                models.DiscountActivationRecord.objects.create(**kwargs)
 
             # منطق فعال‌سازی برای هر نوع کد
             if discount_type == 'room':
-                discount_code = RoomDiscountCode.objects.get(code=code)
+                discount_code = models.RoomDiscountCode.objects.get(code=code)
 
                 # شرط 2: هر کاربر فقط یکبار بتونه استفاده کنه
                 if user in discount_code.activated_users.all():
@@ -194,13 +194,15 @@ class ActivateDiscountCodeView(APIView):
                 if discount_code.usage_limit <= 0:
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
 
-                # بقیه چک‌ها
-                if user not in discount_code.users.all() and user not in discount_code.activated_users.all():
+                # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
+                if (user not in discount_code.users.all() and 
+                    user not in discount_code.activated_users.all() and
+                    (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
+
+                # بقیه چک‌ها
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
-                if discount_code.user_level and natural_profile.level != discount_code.user_level:
-                    return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -218,7 +220,7 @@ class ActivateDiscountCodeView(APIView):
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
-                discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+                discount_code = models.ShoppingCenterDiscountCode.objects.get(code=code)
 
                 if user in discount_code.activated_users.all():
                     return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
@@ -226,12 +228,14 @@ class ActivateDiscountCodeView(APIView):
                 if discount_code.usage_limit <= 0:
                     return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
 
-                if user not in discount_code.users.all() and user not in discount_code.activated_users.all():
+                # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
+                if (user not in discount_code.users.all() and 
+                    user not in discount_code.activated_users.all() and
+                    (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
+
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
-                if discount_code.user_level and natural_profile.level != discount_code.user_level:
-                    return Response({"error": "سطح کاربری شما با این کد سازگار نیست"}, status=status.HTTP_403_FORBIDDEN)
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -250,9 +254,9 @@ class ActivateDiscountCodeView(APIView):
 
             return Response({"message": "کد تخفیف با موفقیت فعال شد"}, status=status.HTTP_200_OK)
 
-        except RoomDiscountCode.DoesNotExist:
+        except models.RoomDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-        except ShoppingCenterDiscountCode.DoesNotExist:
+        except models.ShoppingCenterDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({
@@ -260,7 +264,6 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 
