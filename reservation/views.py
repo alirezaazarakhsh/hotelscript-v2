@@ -330,7 +330,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             room_count_int = 1
             rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
             
-            # فیلتر عمومی بر اساس ظرفیت
+            # فیلتر عمومی بر اساس ظرفیت (برای حالت بدون فیلتر که room_count=1 است)
             rooms_qs = rooms_qs.filter(
                 room_capacity__lte=passenger_count_int,
                 extra_capacity__gte=passenger_count_int - F('room_capacity')
@@ -480,11 +480,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
             inventory__gt=0,
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
-        # فیلتر عمومی بر اساس ظرفیت
-        rooms_qs = rooms_qs.filter(
-            room_capacity__lte=passenger_count_int,
-            extra_capacity__gte=passenger_count_int - F('room_capacity')
-        )
+        # فیلتر ظرفیت فقط برای حالت تک اتاقی اعمال شود
+        if room_count_int == 1:
+            rooms_qs = rooms_qs.filter(
+                room_capacity__lte=passenger_count_int,
+                extra_capacity__gte=passenger_count_int - F('room_capacity')
+            )
 
         logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}, start_date={start_date}, end_date={end_date}")
 
@@ -612,8 +613,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
             room_ids = [r['id'] for r in pack_rooms]
             logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
+            # چک جدید: مجموع ظرفیت استاندارد نباید بیشتر از تعداد مسافران باشد (برای جلوگیری از تخصیص کمتر از ظرفیت به اتاق‌ها)
+            if total_capacity > passenger_count_int:
+                logger.debug(f"Pack {room_ids} skipped: total_capacity ({total_capacity}) > passenger_count ({passenger_count_int})")
+                continue
+
+            # چک ظرفیت حداکثر
             if total_capacity + total_extra_capacity < passenger_count_int:
-                logger.debug(f"Pack {room_ids} skipped: insufficient capacity ({total_capacity + total_extra_capacity} < {passenger_count_int})")
+                logger.debug(f"Pack {room_ids} skipped: insufficient max capacity ({total_capacity + total_extra_capacity} < {passenger_count_int})")
                 continue
 
             if all(r['room_number'] > 0 for r in pack_rooms):
@@ -656,7 +663,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
 
     
 
