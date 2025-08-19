@@ -45,7 +45,6 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             )
             .filter(
                 Q(users=user) | 
-                Q(activated_users=user) | 
                 Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
@@ -57,7 +56,7 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
         این API فقط کدهای معتبر اتاق را برمی‌گرداند:
-        - به کاربر اختصاص داده شده یا فعال کرده است.
+        - به کاربر اختصاص داده شده است.
         - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
         - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
@@ -73,6 +72,8 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 # ✅ API کدهای تخفیف مراکز خرید
@@ -96,7 +97,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
             )
             .filter(
                 Q(users=user) | 
-                Q(activated_users=user) | 
                 Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
@@ -108,7 +108,7 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
         این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
-        - به کاربر اختصاص داده شده یا فعال کرده است.
+        - به کاربر اختصاص داده شده است.
         - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
         - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
@@ -124,6 +124,8 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 # ای پی ای فعال سازی کد تخفیف
@@ -271,6 +273,8 @@ class ActivateDiscountCodeView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
 # ای پی ای جوایز دریافتی کاربران 
 class DiscountActivationRecordListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -349,6 +353,7 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
