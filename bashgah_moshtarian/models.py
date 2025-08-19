@@ -52,7 +52,7 @@ class RoomDiscountCode(models.Model):
         on_delete=models.SET_NULL,
         related_name='discount_codes',
         verbose_name=_("سطح کاربری"),
-        help_text=_("سطح کاربری مورد نیاز برای استفاده از این کد تخفیف (اختیاری).")
+        help_text=_("سطوح کاربری که این کد تخفیف برای آن‌ها قابل استفاده است. اگر خالی باشد، برای همه سطوح اعمال می‌شود.")
     )
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -159,7 +159,7 @@ class ShoppingCenterDiscountCode(models.Model):
         on_delete=models.SET_NULL,
         related_name='shopping_discount_codes',
         verbose_name=_("سطح کاربری"),
-        help_text=_("سطح کاربری مورد نیاز برای استفاده از این کد تخفیف (اختیاری).")
+        help_text=_("سطوح کاربری که این کد تخفیف برای آن‌ها قابل استفاده است. اگر خالی باشد، برای همه سطوح اعمال می‌شود.")
     )
     expires_at = jmodels.jDateField(
         null=True,

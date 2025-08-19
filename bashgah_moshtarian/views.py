@@ -19,7 +19,7 @@ from .serializers import CustomerClubPointSerializer, DiscountActivationRecordSe
 
 
 # ✅ API کدهای تخفیف اتاق
-class MyRoomDiscountCodeListView(ListAPIView):
+class MyRoomDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = RoomDiscountCodeSerializer
 
@@ -32,7 +32,9 @@ class MyRoomDiscountCodeListView(ListAPIView):
                 activated_count=Count('activated_users', distinct=True)
             )
             .filter(
-                Q(users=user) | Q(activated_users=user),
+                Q(users=user) | 
+                Q(activated_users=user) | 
+                Q(user_level=user.level),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
             )
@@ -42,11 +44,12 @@ class MyRoomDiscountCodeListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
-این API فقط کدهای معتبر اتاق را برمی‌گرداند:
-- به کاربر اختصاص داده شده یا فعال کرده است.
-- تاریخ انقضای آن‌ها نگذشته.
-- تعداد استفاده‌شان به سقف نرسیده.
-""",
+            این API فقط کدهای معتبر اتاق را برمی‌گرداند:
+            - به کاربر اختصاص داده شده یا فعال کرده است.
+            - برای سطح کاربر در دسترس است.
+            - تاریخ انقضای آن‌ها نگذشته.
+            - تعداد استفاده‌شان به سقف نرسیده.
+            """,
         tags=['discount-crm']
     )
     def get(self, request, *args, **kwargs):
@@ -61,9 +64,8 @@ class MyRoomDiscountCodeListView(ListAPIView):
 
 
 
-
 # ✅ API کدهای تخفیف مراکز خرید
-class MyShoppingCenterDiscountCodeListView(ListAPIView):
+class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = ShoppingCenterDiscountCodeSerializer
 
@@ -76,7 +78,9 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
                 activated_count=Count('activated_users', distinct=True)
             )
             .filter(
-                Q(users=user) | Q(activated_users=user),
+                Q(users=user) | 
+                Q(activated_users=user) | 
+                Q(user_level=user.level),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
             )
@@ -86,11 +90,12 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
-این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
-- به کاربر اختصاص داده شده یا فعال کرده است.
-- تاریخ انقضای آن‌ها نگذشته.
-- تعداد استفاده‌شان به سقف نرسیده.
-""",
+        این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
+        - به کاربر اختصاص داده شده یا فعال کرده است.
+        - برای سطح کاربر در دسترس است.
+        - تاریخ انقضای آن‌ها نگذشته.
+        - تعداد استفاده‌شان به سقف نرسیده.
+        """,
         tags=['discount-crm']
     )
     def get(self, request, *args, **kwargs):
@@ -102,7 +107,6 @@ class MyShoppingCenterDiscountCodeListView(ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
             
 
 
