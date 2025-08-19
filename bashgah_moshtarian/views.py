@@ -24,6 +24,8 @@ from .serializers import (
 )
 
 
+
+
 # ✅ API کدهای تخفیف اتاق
 class MyRoomDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -44,6 +46,7 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
                 activated_count=Count('activated_users', distinct=True)
             )
             .filter(
+                ~Q(activated_users=user),  # حذف کدهایی که کاربر قبلاً فعال کرده است
                 Q(users=user) | 
                 Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
@@ -55,9 +58,9 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
         operation_description="""
-        این API فقط کدهای معتبر اتاق را برمی‌گرداند:
-        - به کاربر اختصاص داده شده است.
-        - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
+        این API فقط کدهای معتبر اتاق را برمی‌گرداند که:
+        - به کاربر اختصاص داده شده یا با سطح کاربری او مطابقت دارند.
+        - کاربر قبلاً آن‌ها را فعال نکرده است.
         - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
         """,
@@ -94,6 +97,7 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 activated_count=Count('activated_users', distinct=True)
             )
             .filter(
+                ~Q(activated_users=user),  # حذف کدهایی که کاربر قبلاً فعال کرده است
                 Q(users=user) | 
                 Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
@@ -105,9 +109,9 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
         operation_description="""
-        این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند:
-        - به کاربر اختصاص داده شده است.
-        - برای سطح کاربر (از پروفایل حقیقی) در دسترس است.
+        این API فقط کدهای معتبر مراکز خرید را برمی‌گرداند که:
+        - به کاربر اختصاص داده شده یا با سطح کاربری او مطابقت دارند.
+        - کاربر قبلاً آن‌ها را فعال نکرده است.
         - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
         """,
@@ -122,6 +126,8 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 # ای پی ای فعال سازی کد تخفیف
@@ -269,6 +275,8 @@ class ActivateDiscountCodeView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
 # ای پی ای جوایز دریافتی کاربران 
 class DiscountActivationRecordListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
@@ -347,6 +355,8 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر
