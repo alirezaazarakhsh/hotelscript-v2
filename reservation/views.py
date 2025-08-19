@@ -217,6 +217,7 @@ except Exception:
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
 from django.db.models import F
+from itertools import combinations
 
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -613,7 +614,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             room_ids = [r['id'] for r in pack_rooms]
             logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
-            # چک جدید: مجموع ظرفیت استاندارد نباید بیشتر از تعداد مسافران باشد (برای جلوگیری از تخصیص کمتر از ظرفیت به اتاق‌ها)
+            # چک جدید: مجموع ظرفیت استاندارد نباید بیشتر از تعداد مسافران باشد
             if total_capacity > passenger_count_int:
                 logger.debug(f"Pack {room_ids} skipped: total_capacity ({total_capacity}) > passenger_count ({passenger_count_int})")
                 continue
@@ -661,7 +662,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': price_calendar
             }, status=404)
 
-        packs.sort(key=lambda x: x['total_price'])
+        # حذف سورت بر اساس قیمت و نمایش پک‌ها به ترتیب انتخاب اتاق‌ها
         return Response(packs)
 
     
