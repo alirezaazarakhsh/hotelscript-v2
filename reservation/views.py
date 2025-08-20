@@ -267,8 +267,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، و وضعیت دسترسی باز می‌گرداند. "
-            "در حالت بدون فیلتر، فقط اتاق‌هایی که حداقل یک بازه قیمتی معتبر دارند و موجودی آنها بیشتر از صفر است نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
-            "در حالت فیلترشده، همه اتاق‌ها یا پک‌هایی که موجودی دارند نمایش داده می‌شوند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
+            "در حالت بدون فیلتر، تا 8 اتاق با موجودی و قیمت معتبر نمایش داده می‌شوند. "
+            "در حالت فیلترشده، اتاق‌ها یا پک‌هایی که با شرایط فیلتر (تعداد مسافران و اتاق‌ها) سازگارند نمایش داده می‌شوند. بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
             "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
@@ -276,8 +276,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- passenger_count (اختیاری): تعداد مسافران، پیش‌فرض ۱، حداکثر ۸\n"
             "- room_count (اختیاری): تعداد اتاق‌ها، پیش‌فرض ۱، حداکثر ۳\n\n"
             "خروجی:\n"
-            "- بدون فیلتر: لیست اتاق‌هایی که حداقل یک بازه قیمتی دارند با تقویم قیمتی\n"
-            "- با فیلتر: لیست اتاق‌ها یا پک‌های اتاق با قیمت و تقویم قیمتی برای تمام روزها\n"
+            "- بدون فیلتر: تا 8 اتاق با داده قیمتی و موجودی\n"
+            "- با فیلتر: لیست اتاق‌ها یا پک‌های اتاق با قیمت و تقویم قیمتی\n"
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
             "- تخفیف‌های درصدی باید تاریخ انقضا (discount_date) داشته باشند.\n"
@@ -329,15 +329,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
             end_date_obj = start_date_obj + jdatetime.timedelta(days=30)
             passenger_count_int = 1
             room_count_int = 1
-            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+            rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')[:8]
             
-            # فیلتر عمومی بر اساس ظرفیت (برای حالت بدون فیلتر که room_count=1 است)
-            rooms_qs = rooms_qs.filter(
-                room_capacity__lte=passenger_count_int,
-                extra_capacity__gte=passenger_count_int - F('room_capacity')
-            )
-
-            logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data and inventory > 0, using default range {start_date_obj} to {end_date_obj}")
+            logger.info(f"No filters applied, showing up to 8 rooms with price data and inventory > 0, using default range {start_date_obj} to {end_date_obj}")
 
             date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
             night_count = (end_date_obj - start_date_obj).days
@@ -481,12 +475,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
             inventory__gt=0,
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
-        # فیلتر ظرفیت فقط برای حالت تک اتاقی اعمال شود
-        if room_count_int == 1:
-            rooms_qs = rooms_qs.filter(
-                room_capacity__lte=passenger_count_int,
-                extra_capacity__gte=passenger_count_int - F('room_capacity')
-            )
+        # فیلتر ظرفیت بر اساس تعداد مسافران
+        rooms_qs = rooms_qs.filter(
+            room_capacity__lte=passenger_count_int,
+            extra_capacity__gte=passenger_count_int - F('room_capacity')
+        )
 
         logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}, start_date={start_date}, end_date={end_date}")
 
