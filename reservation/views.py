@@ -350,13 +350,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
         night_count = (end_date_obj - start_date_obj).days
 
         # فیلتر اتاق‌ها با توجه به ظرفیت و موجودی
+        total_capacity = ExpressionWrapper(F('room_capacity') + F('extra_capacity'), output_field=IntegerField())
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gt=0
         ).filter(
-            Q(room_capacity__gte=passenger_count_int) | 
-            Q(room_capacity__lt=passenger_count_int, room_capacity__add=F('extra_capacity') >= passenger_count_int)
+            Q(room_capacity__gte=passenger_count_int) | Q(total_capacity__gte=passenger_count_int)
+        ).annotate(
+            total_capacity=total_capacity
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
         logger.info(f"Found {rooms_qs.count()} rooms with inventory > 0, valid price data, and sufficient capacity for {passenger_count_int} passengers")
 
@@ -529,9 +531,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # مرتب‌سازی پک‌ها بر اساس مجموع قیمت کل با تخفیف
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
-
-
 
 
 
