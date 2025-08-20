@@ -706,7 +706,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
     
-    
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
