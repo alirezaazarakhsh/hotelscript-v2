@@ -606,6 +606,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if room_count_int == 1:
             return Response(room_data)
 
+        # سورت اتاق‌ها بر اساس ظرفیت (از کم به زیاد) برای ترتیب منطقی در ترکیب‌ها
+        room_data.sort(key=lambda r: r['capacity'])
+
         packs = []
         for combo in combinations(room_data, room_count_int):
             pack_rooms = list(combo)
@@ -664,9 +667,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # سورت پک‌ها بر اساس قیمت کل از کم به زیاد
         packs.sort(key=lambda x: x['total_price'])
-        return Response(packs)
 
+        return Response(packs)
     
+
+
+
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
