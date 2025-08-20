@@ -669,7 +669,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         packs.sort(key=lambda x: x['total_price'])
 
         return Response(packs)
-    
 
 
 
