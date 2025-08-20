@@ -39,6 +39,7 @@ from django.db.models import (
     Q,
     F,
     ExpressionWrapper,
+    IntegerField,
     Sum,
     Count,
     Avg,
