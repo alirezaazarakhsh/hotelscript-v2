@@ -218,6 +218,8 @@ except Exception:
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
+from itertools import permutations, combinations
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -275,10 +277,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             "- passengers (اختیاری): لیست تعداد مسافران برای هر اتاق (مثل [2,3,5])، حداکثر ۳ اتاق\n\n"
             "خروجی:\n"
             "- بدون فیلتر: لیست همه اتاق‌ها با تقویم قیمتی، مرتب‌شده بر اساس قیمت\n"
-            "- با فیلتر passengers=[1]: اتاق‌های با ظرفیت اصلی ۱ نفر\n"
-            "- با فیلتر passengers=[2]: اتاق‌های با ظرفیت اصلی ۲ نفر یا ظرفیت اصلی ۱ نفر و ظرفیت اضافی حداقل ۱ نفر\n"
-            "- با فیلتر passengers=[3]: اتاق‌های با ظرفیت اصلی ۳ نفر، یا ظرفیت اصلی ۲ نفر و ظرفیت اضافی حداقل ۱ نفر، یا ظرفیت اصلی ۱ نفر و ظرفیت اضافی حداقل ۲ نفر\n"
-            "- با فیلتر passengers=[2,3]: پک‌های دو اتاقی (اتاق اول برای ۲ نفر، اتاق دوم برای ۳ نفر)، مرتب‌شده بر اساس مجموع قیمت\n"
+            "- با فیلتر passengers=[n]: اتاق‌هایی که ظرفیت اصلی یا مجموع ظرفیت اصلی و اضافی آنها حداقل n نفر باشد\n"
+            "- با فیلتر passengers=[n1,n2,...]: پک‌های چنداتاقی که ترکیب‌های ممکن ظرفیت‌های درخواستی را پوشش دهند، مرتب‌شده بر اساس مجموع قیمت\n"
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
             "- تخفیف‌های درصدی باید تاریخ انقضا (discount_date) داشته باشند.\n"
@@ -594,7 +594,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': price_calendar
             }, status=404)
 
-        # حالت تک اتاق (مثل passengers=[2])
+        # حالت تک اتاق (مثل passengers=[1], [2], [4])
         if len(passenger_list) == 1:
             passenger_count = passenger_list[0]
             filtered_rooms = []
@@ -603,20 +603,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 extra_capacity = room['extra_capacity']
                 total_capacity = capacity + extra_capacity
 
-                if passenger_count == 1:
-                    # فقط اتاق‌های با ظرفیت اصلی ۱ نفر
-                    if capacity == 1:
-                        filtered_rooms.append(room)
-                elif passenger_count == 2:
-                    # ظرفیت اصلی ۲ نفر یا ظرفیت اصلی ۱ نفر با حداقل ۱ نفر ظرفیت اضافی
-                    if capacity == 2 or (capacity == 1 and extra_capacity >= 1):
-                        filtered_rooms.append(room)
-                elif passenger_count == 3:
-                    # ظرفیت اصلی ۳ نفر، یا ظرفیت اصلی ۲ نفر با حداقل ۱ نفر ظرفیت اضافی، یا ظرفیت اصلی ۱ نفر با حداقل ۲ نفر ظرفیت اضافی
-                    if capacity == 3 or (capacity == 2 and extra_capacity >= 1) or (capacity == 1 and extra_capacity >= 2):
-                        filtered_rooms.append(room)
-                elif total_capacity >= passenger_count:
-                    # برای تعداد مسافران بیشتر، ظرفیت کل باید کافی باشد
+                # بررسی اینکه آیا ظرفیت کل (اصلی + اضافی) می‌تواند تعداد مسافران را پوشش دهد
+                if total_capacity >= passenger_count:
                     filtered_rooms.append(room)
 
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'])
@@ -634,63 +622,52 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
             return Response(filtered_rooms)
 
-        # حالت پک چند اتاقی (مثل passengers=[2,3])
+        # حالت پک چند اتاقی (مثل passengers=[1,2,4])
         packs = []
         for combo in combinations(room_data, len(passenger_list)):
             pack_rooms = list(combo)
-            is_valid_pack = True
-            for i, passenger_count in enumerate(passenger_list):
-                room = pack_rooms[i]
-                capacity = room['capacity']
-                extra_capacity = room['extra_capacity']
-                total_capacity = capacity + extra_capacity
+            # بررسی تمام ترتیب‌های ممکن برای passenger_list
+            for perm in permutations(passenger_list):
+                is_valid_pack = True
+                for i, passenger_count in enumerate(perm):
+                    room = pack_rooms[i]
+                    capacity = room['capacity']
+                    extra_capacity = room['extra_capacity']
+                    total_capacity = capacity + extra_capacity
 
-                if passenger_count == 1:
-                    # فقط اتاق‌های با ظرفیت اصلی ۱ نفر
-                    if capacity != 1:
+                    # بررسی اینکه آیا ظرفیت کل (اصلی + اضافی) می‌تواند تعداد مسافران را پوشش دهد
+                    if total_capacity < passenger_count:
                         is_valid_pack = False
                         break
-                elif passenger_count == 2:
-                    # ظرفیت اصلی ۲ نفر یا ظرفیت اصلی ۱ نفر با حداقل ۱ نفر ظرفیت اضافی
-                    if not (capacity == 2 or (capacity == 1 and extra_capacity >= 1)):
-                        is_valid_pack = False
-                        break
-                elif passenger_count == 3:
-                    # ظرفیت اصلی ۳ نفر، یا ظرفیت اصلی ۲ نفر با حداقل ۱ نفر ظرفیت اضافی، یا ظرفیت اصلی ۱ نفر با حداقل ۲ نفر ظرفیت اضافی
-                    if not (capacity == 3 or (capacity == 2 and extra_capacity >= 1) or (capacity == 1 and extra_capacity >= 2)):
-                        is_valid_pack = False
-                        break
-                elif total_capacity < passenger_count:
-                    # برای تعداد مسافران بیشتر، ظرفیت کل باید کافی باشد
-                    is_valid_pack = False
+
+                if is_valid_pack and all(r['room_number'] > 0 for r in pack_rooms):
+                    pack_total_price = sum(r['price']['total_price_discount'] for r in pack_rooms)
+                    packs.append({
+                        "pack_rooms": [
+                            {
+                                "id": r['id'],
+                                "name": r['name'],
+                                "descriptions": r['descriptions'],
+                                "room_number": r['room_number'],
+                                "customer_club_points": r['customer_club_points'],
+                                "room_services": r['room_services'],
+                                "accept_need": r['accept_need'],
+                                "dont_accept_need": r['dont_accept_need'],
+                                "hotel": r['hotel'],
+                                "hotel_name": r['hotel_name'],
+                                "capacity": r['capacity'],
+                                "extra_capacity": r['extra_capacity'],
+                                "price": r['price'],
+                                "night_count": r['night_count'],
+                                "price_calendar": r['price_calendar']
+                            } for r in pack_rooms
+                        ],
+                        "total_price": pack_total_price,
+                        "night_count": night_count,
+                        "room_count": len(pack_rooms)
+                    })
+                    # فقط یک پک معتبر برای این ترکیب نیاز است، پس از پیدا کردن اولین پک معتبر خارج شو
                     break
-
-            if is_valid_pack and all(r['room_number'] > 0 for r in pack_rooms):
-                pack_total_price = sum(r['price']['total_price_discount'] for r in pack_rooms)
-                packs.append({
-                    "pack_rooms": [
-                        {
-                            "id": r['id'],
-                            "name": r['name'],
-                            "descriptions": r['descriptions'],
-                            "room_number": r['room_number'],
-                            "customer_club_points": r['customer_club_points'],
-                            "room_services": r['room_services'],
-                            "accept_need": r['accept_need'],
-                            "dont_accept_need": r['dont_accept_need'],
-                            "hotel": r['hotel'],
-                            "hotel_name": r['hotel_name'],
-                            "capacity": r['capacity'],
-                            "extra_capacity": r['extra_capacity'],
-                            "price": r['price'],
-                            "night_count": r['night_count'],
-                            "price_calendar": r['price_calendar']
-                        } for r in pack_rooms
-                    ],
-                    "total_price": pack_total_price,
-                    "night_count": night_count,
-                    "room_count": len(pack_rooms)
-                })
 
         if not packs:
             price_calendar = [
