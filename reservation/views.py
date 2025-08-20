@@ -606,8 +606,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if room_count_int == 1:
             return Response(room_data)
 
-        # سورت اتاق‌ها بر اساس ظرفیت (از کم به زیاد) برای ترتیب منطقی در ترکیب‌ها
-        room_data.sort(key=lambda r: r['capacity'])
+        # سورت اتاق‌ها بر اساس ظرفیت از زیاد به کم برای ترتیب دلخواه
+        room_data.sort(key=lambda r: r['capacity'], reverse=True)
 
         packs = []
         for combo in combinations(room_data, room_count_int):
