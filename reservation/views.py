@@ -662,7 +662,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': price_calendar
             }, status=404)
 
-        # حذف سورت بر اساس قیمت و نمایش پک‌ها به ترتیب انتخاب اتاق‌ها
         return Response(packs)
 
     
