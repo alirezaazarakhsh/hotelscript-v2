@@ -159,6 +159,7 @@ class HomePageCityListView(generics.ListAPIView):
 class HotelTypeListView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = HotelTypeSerializer
+    pagination_class = None  
     queryset = HotelType.objects.all()
     # pagination_class = None
 
@@ -1409,6 +1410,8 @@ class HomeHotelByCityView(APIView):
             return Response(serialized_hotels)
         except City.DoesNotExist:
             return Response({'error': 'City not found'}, status=404)
+        
+        
         
         
         
