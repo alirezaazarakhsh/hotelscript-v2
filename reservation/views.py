@@ -265,16 +265,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
         operation_description=(
             "این API لیست اتاق‌های هتل مشخص شده توسط slug را به همراه قیمت‌های روزانه، تخفیف‌ها، و وضعیت دسترسی باز می‌گرداند. "
             "در حالت بدون فیلتر (عدم وجود پارامتر passengers)، همه اتاق‌هایی که حداقل یک بازه قیمتی معتبر دارند و موجودی آنها بیشتر از صفر است نمایش داده می‌شوند، همراه با تقویم قیمتی برای بازه پیش‌فرض (امروز تا ۳۰ روز بعد). "
-            "در حالت فیلترشده با passengers (مثل passengers=[2])، اتاق‌هایی که ظرفیت اصلی یا مجموع ظرفیت اصلی و اضافی آنها حداقل n نفر باشد نمایش داده می‌شوند. "
+            "در حالت فیلترشده با passengers (مثل passengers=[2])، اتاق‌هایی که ظرفیت کل (اصلی + اضافی) آنها دقیقاً برابر با تعداد مسافران باشد نمایش داده می‌شوند. "
             "در حالت پک چنداتاقی (مثل passengers=[2,3,1])، پک‌هایی از اتاق‌ها که ترکیب‌های ممکن ظرفیت‌های درخواستی را پوشش دهند نمایش داده می‌شوند، مرتب‌شده بر اساس مجموع قیمت.\n\n"
             "پارامترهای ورودی:\n"
             "- slug (اجباری): شناسه slug هتل\n"
             "- start_date (اختیاری): تاریخ شروع به فرمت yyyy-mm-dd\n"
             "- end_date (اختیاری): تاریخ پایان به فرمت yyyy-mm-dd\n"
-            "- passengers (اختیاری): لیست تعداد مسافران برای هر اتاق (مثل [2,3,1])، حداکثر ۳ اتاق، هر عدد حداکثر ۸\n\n"
+            "- passengers (اختیاری): لیست تعداد مسافران برای هر اتاق، مثل [2,3,1]، حداکثر ۳ اتاق، هر عدد حداکثر ۸\n\n"
             "خروجی:\n"
             "- بدون فیلتر: لیست همه اتاق‌ها با تقویم قیمتی، مرتب‌شده بر اساس قیمت\n"
-            "- با فیلتر passengers=[n]: اتاق‌هایی که ظرفیت اصلی یا مجموع ظرفیت اصلی و اضافی آنها حداقل n نفر باشد\n"
+            "- با فیلتر passengers=[n]: اتاق‌هایی که ظرفیت کل آنها دقیقاً n نفر باشد\n"
             "- با فیلتر passengers=[n1,n2,...]: پک‌های چنداتاقی که ترکیب‌های ممکن ظرفیت‌های درخواستی را پوشش دهند، مرتب‌شده بر اساس مجموع قیمت\n"
             "- در صورت عدم وجود اتاق یا پک: پیام با جزئیات روزهای غیرقابل دسترس\n\n"
             "نکات:\n"
@@ -427,7 +427,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             )
             total_price_discount = sum(
                 day['price']['price_after_discount'] for day in price_calendar 
-                if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
+                if day['status'] == "open" and day['price'] and day['price']['price_AFTER_discount'] is not None
             )
 
             room_dict[room.id] = {
@@ -484,7 +484,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 extra_capacity = room['extra_capacity']
                 total_capacity = capacity + extra_capacity
 
-                if total_capacity >= passenger_count:
+                # تغییر شرط: فقط اتاق‌هایی با ظرفیت کل دقیقاً برابر با passenger_count
+                if total_capacity == passenger_count:
                     filtered_rooms.append(room)
 
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'])
@@ -496,7 +497,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ]
                 logger.warning(f"No rooms found for hotel {hotel.slug} with passenger_count={passenger_count}")
                 return Response({
-                    'detail': f'اتاقی با ظرفیت مناسب برای {passenger_count} نفر یافت نشد.',
+                    'detail': f'اتاقی با ظرفیت دقیق {passenger_count} نفر یافت نشد.',
                     'price_calendar': price_calendar
                 }, status=404)
 
@@ -504,10 +505,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # حالت پک چند اتاقی (مثل passengers=[2,3,1])
         packs = []
-        # بررسی تمام ترکیب‌های ممکن از اتاق‌ها به تعداد درخواستی
         for combo in combinations(room_data, len(passenger_list)):
             pack_rooms = list(combo)
-            # بررسی تمام ترتیب‌های ممکن برای passenger_list
             for perm in permutations(passenger_list):
                 is_valid_pack = True
                 assigned_rooms = []
@@ -524,7 +523,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
                 if is_valid_pack and all(r['room_number'] > 0 for r in pack_rooms):
                     pack_total_price = sum(r['price']['total_price_discount'] for r in assigned_rooms)
-                    # جلوگیری از افزودن پک‌های تکراری با مرتب‌سازی اتاق‌ها بر اساس id
                     sorted_room_ids = sorted(r['id'] for r in assigned_rooms)
                     pack_key = tuple(sorted_room_ids + [pack_total_price])
                     if pack_key not in {tuple(sorted(pr['id'] for pr in p['pack_rooms']) + [p['total_price']]) for p in packs}:
