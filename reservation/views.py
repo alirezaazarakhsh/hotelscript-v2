@@ -662,6 +662,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': price_calendar
             }, status=404)
 
+        # سورت پک‌ها بر اساس قیمت کل از کم به زیاد
+        packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
 
     
