@@ -38,6 +38,7 @@ from django.db import (
 from django.db.models import (
     Q,
     F,
+    ExpressionWrapper,
     Sum,
     Count,
     Avg,
