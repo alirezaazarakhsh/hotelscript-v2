@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import product
+import itertools
 from datetime import datetime, timedelta
 import logging
 import sys
@@ -14,7 +14,6 @@ from .utils import Round
 from rest_framework.generics import CreateAPIView
 from rest_framework.generics import ListCreateAPIView
 from rest_framework import generics
-from itertools import permutations, combinations
 
 
 from rest_framework.pagination import PageNumberPagination
