@@ -216,9 +216,6 @@ except Exception:
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
-from django.db.models import F
-from itertools import combinations
-
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -257,6 +254,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 else:
                     discount_amount = int(price_data.discount_value)
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
+                # تغییر: برای تخفیف ثابت، price_after_discount را برابر price نگه می‌داریم و از آن کم نمی‌کنیم
                 price_after_discount = int(price_data.price)
         else:
             discount_amount = 0
@@ -330,13 +328,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
             passenger_count_int = 1
             room_count_int = 1
             rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-            
-            # فیلتر عمومی بر اساس ظرفیت (برای حالت بدون فیلتر که room_count=1 است)
-            rooms_qs = rooms_qs.filter(
-                room_capacity__lte=passenger_count_int,
-                extra_capacity__gte=passenger_count_int - F('room_capacity')
-            )
-
             logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data and inventory > 0, using default range {start_date_obj} to {end_date_obj}")
 
             date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -475,20 +466,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
         except Exception:
             return Response({'detail': 'پارامترهای passenger_count و room_count باید عدد صحیح باشند.'}, status=400)
 
+        logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}, start_date={start_date}, end_date={end_date}")
+
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gt=0,
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-
-        # فیلتر ظرفیت فقط برای حالت تک اتاقی اعمال شود
-        if room_count_int == 1:
-            rooms_qs = rooms_qs.filter(
-                room_capacity__lte=passenger_count_int,
-                extra_capacity__gte=passenger_count_int - F('room_capacity')
-            )
-
-        logger.info(f"Applying filters: passenger_count={passenger_count_int}, room_count={room_count_int}, start_date={start_date}, end_date={end_date}")
+        logger.info(f"Found {rooms_qs.count()} rooms with inventory > 0 and valid price data")
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
@@ -606,9 +591,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if room_count_int == 1:
             return Response(room_data)
 
-        # سورت اتاق‌ها بر اساس ظرفیت از زیاد به کم برای ترتیب دلخواه
-        room_data.sort(key=lambda r: r['capacity'], reverse=True)
-
         packs = []
         for combo in combinations(room_data, room_count_int):
             pack_rooms = list(combo)
@@ -617,14 +599,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             room_ids = [r['id'] for r in pack_rooms]
             logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
-            # چک جدید: مجموع ظرفیت استاندارد نباید بیشتر از تعداد مسافران باشد
-            if total_capacity > passenger_count_int:
-                logger.debug(f"Pack {room_ids} skipped: total_capacity ({total_capacity}) > passenger_count ({passenger_count_int})")
-                continue
-
-            # چک ظرفیت حداکثر
             if total_capacity + total_extra_capacity < passenger_count_int:
-                logger.debug(f"Pack {room_ids} skipped: insufficient max capacity ({total_capacity + total_extra_capacity} < {passenger_count_int})")
+                logger.debug(f"Pack {room_ids} skipped: insufficient capacity ({total_capacity + total_extra_capacity} < {passenger_count_int})")
                 continue
 
             if all(r['room_number'] > 0 for r in pack_rooms):
@@ -665,10 +641,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': price_calendar
             }, status=404)
 
-        # سورت پک‌ها بر اساس قیمت کل از کم به زیاد
         packs.sort(key=lambda x: x['total_price'])
-
         return Response(packs)
+
+
+
 
 
 
