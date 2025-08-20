@@ -328,7 +328,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             passenger_count_int = 1
             room_count_int = 1
             rooms_qs = hotel.rooms.filter(date_prices__isnull=False, inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-            rooms_qs = rooms_qs.annotate(total_capacity=F('room_capacity') + F('extra_capacity')).filter(total_capacity__gte=passenger_count_int)
+            rooms_qs = rooms_qs.annotate(total_capacity=F('room_capacity') + F('extra_capacity')).filter(total_capacity__gte=passenger_count_int, room_capacity__lte=passenger_count_int)
             logger.info(f"No filters applied, found {rooms_qs.count()} rooms with price data, inventory > 0, and sufficient capacity, using default range {start_date_obj} to {end_date_obj}")
 
             date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -477,7 +477,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
         if room_count_int == 1:
-            rooms_qs = rooms_qs.annotate(total_capacity=F('room_capacity') + F('extra_capacity')).filter(total_capacity__gte=passenger_count_int)
+            rooms_qs = rooms_qs.annotate(total_capacity=F('room_capacity') + F('extra_capacity')).filter(
+                total_capacity__gte=passenger_count_int,
+                room_capacity__lte=passenger_count_int
+            )
 
         logger.info(f"Found {rooms_qs.count()} rooms with inventory > 0 and valid price data")
 
@@ -604,11 +607,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
         for combo in combinations(room_data, room_count_int):
             pack_rooms = list(combo)
             total_capacity = sum(r['capacity'] + r['extra_capacity'] for r in pack_rooms)
+            base_capacity = sum(r['capacity'] for r in pack_rooms)
             room_ids = [r['id'] for r in pack_rooms]
-            logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, passenger_count={passenger_count_int}")
+            logger.info(f"Evaluating pack with rooms {room_ids}: base_capacity={base_capacity}, total_capacity={total_capacity}, passenger_count={passenger_count_int}")
 
-            if total_capacity < passenger_count_int:
-                logger.debug(f"Pack {room_ids} skipped: insufficient capacity ({total_capacity} < {passenger_count_int})")
+            if base_capacity > passenger_count_int or total_capacity < passenger_count_int:
+                logger.debug(f"Pack {room_ids} skipped: insufficient or excess capacity (base={base_capacity} > {passenger_count_int} or total={total_capacity} < {passenger_count_int})")
                 continue
 
             if all(r['room_number'] > 0 for r in pack_rooms):
@@ -653,10 +657,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
-
-
-
+    
+    
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
