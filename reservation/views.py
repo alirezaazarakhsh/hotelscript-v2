@@ -352,15 +352,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
         night_count = (end_date_obj - start_date_obj).days
 
         # فیلتر اتاق‌ها با توجه به ظرفیت و موجودی
-        total_capacity = ExpressionWrapper(F('room_capacity') + F('extra_capacity'), output_field=IntegerField())
-        rooms_qs = hotel.rooms.filter(
+        total_capacity = ExpressionWrapper(
+            Coalesce(F('room_capacity'), 0) + Coalesce(F('extra_capacity'), 0),
+            output_field=IntegerField()
+        )
+        rooms_qs = hotel.rooms.annotate(
+            total_capacity=total_capacity
+        ).filter(
             date_prices__start_date__lte=end_date_obj,
             date_prices__end_date__gte=start_date_obj,
             inventory__gt=0
         ).filter(
-            Q(room_capacity__gte=passenger_count_int) | Q(total_capacity__gte=passenger_count_int)
-        ).annotate(
-            total_capacity=total_capacity
+            Q(total_capacity__gte=passenger_count_int)
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
         logger.info(f"Found {rooms_qs.count()} rooms with inventory > 0, valid price data, and sufficient capacity for {passenger_count_int} passengers")
 
@@ -483,8 +486,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         packs = []
         for combo in combinations(room_data, room_count_int):
             pack_rooms = list(combo)
-            total_capacity = sum(r['capacity'] for r in pack_rooms)
-            total_extra_capacity = sum(r['extra_capacity'] for r in pack_rooms)
+            total_capacity = sum(Coalesce(r['capacity'], 0) for r in pack_rooms)
+            total_extra_capacity = sum(Coalesce(r['extra_capacity'], 0) for r in pack_rooms)
             room_ids = [r['id'] for r in pack_rooms]
             logger.info(f"Evaluating pack with rooms {room_ids}: total_capacity={total_capacity}, total_extra_capacity={total_extra_capacity}, passenger_count={passenger_count_int}")
 
@@ -533,39 +536,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # مرتب‌سازی پک‌ها بر اساس مجموع قیمت کل با تخفیف
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
-
-
-#دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
-class HotelImagesView(RetrieveAPIView):
-    permission_classes = (AllowAny,)
-    serializer_class = HotelImagesSerializer
-    queryset = Hotel.objects.all()
-    lookup_field = 'slug'
-    lookup_url_kwarg = 'slug'
-
-    @swagger_auto_schema(
-        operation_summary="دریافت تصاویر هتل",
-        operation_description="این API تصاویر اصلی هتل را بر اساس slug باز می‌گرداند.",
-        tags=['hotel'],
-        manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
-        responses={
-            200: HotelImagesSerializer,
-            404: 'هتل پیدا نشد.'
-        }
-    )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    
 
 
 
