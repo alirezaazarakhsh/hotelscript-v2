@@ -1638,7 +1638,7 @@ class BestHotelspageAPI(APIView):
                 if price_data.discount_date >= date:
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
-                    discount_date = price_data.discount_date.strftime('%Y/%m/%d')
+                    discount_date = price_data.discount_date.strftime('%Y-%m-%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
                 else:
                     logger.warning(f"Hotel {price_data.room.hotel.id} on {date}: Discount ignored due to expired discount_date")
@@ -1660,27 +1660,27 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. تگ‌های عمومی هر هتل در بدنه اطلاعات هتل‌ها قرار می‌گیرد.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. تگ‌های عمومی هر هتل در بدنه اطلاعات هتل‌ها قرار می‌گیرد.",
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(
                 name='city', 
                 in_=openapi.IN_QUERY, 
-                description='نام slug شهر (مثال: tehran)', 
+                description='نام شهر (مثال: Tehran)', 
                 type=openapi.TYPE_STRING, 
                 required=False
             ),
             openapi.Parameter(
                 name='start-date', 
                 in_=openapi.IN_QUERY, 
-                description='تاریخ شروع به فرمت yyyy/mm/dd (اختیاری، پیش‌فرض: امروز)', 
+                description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: امروز)', 
                 type=openapi.TYPE_STRING, 
                 required=False
             ),
             openapi.Parameter(
                 name='end-date', 
                 in_=openapi.IN_QUERY, 
-                description='تاریخ پایان به فرمت yyyy/mm/dd (اختیاری، پیش‌فرض: مشابه تاریخ شروع)', 
+                description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: مشابه تاریخ شروع)', 
                 type=openapi.TYPE_STRING, 
                 required=False
             ),
@@ -1765,7 +1765,7 @@ class BestHotelspageAPI(APIView):
 
         # Apply filters
         if city:
-            hotels_qs = hotels_qs.filter(city__slug=city.lower())
+            hotels_qs = hotels_qs.filter(city__name__iexact=city)
         if star:
             hotels_qs = hotels_qs.filter(stars=star)
         if residence_type:
@@ -1797,15 +1797,15 @@ class BestHotelspageAPI(APIView):
         start_date_obj = end_date_obj = None
         if start_date_str or end_date_str:
             try:
-                start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('/')))
-                end_date_obj = jdatetime.date(*map(int, end_date_str.split('/'))) if end_date_str else start_date_obj
+                start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
+                end_date_obj = jdatetime.date(*map(int, end_date_str.split('-'))) if end_date_str else start_date_obj
                 if start_date_obj > end_date_obj:
                     return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
                 nights = (end_date_obj - start_date_obj).days
                 if nights < 1:
                     return Response({'detail': 'حداقل یک شب الزامی است.'}, status=400)
             except ValueError:
-                return Response({'detail': 'فرمت تاریخ باید yyyy/mm/dd باشد.'}, status=400)
+                return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
         # Calculate minimum total price and discounted price for each hotel
         hotel_min_price_map = {}
