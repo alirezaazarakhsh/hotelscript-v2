@@ -670,3 +670,19 @@ class HotelSearchSerializer(serializers.Serializer):
             }
             for city in cities
         ]
+        
+        
+        
+        
+        
+    class HotelListWithFacilitiesSerializer(HotelListSerializer):
+        facilities = FacilitiesSerializer(many=True, read_only=True)
+        room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
+        tags = HotelTagSerializer(many=True, read_only=True)
+
+    class Meta(HotelListSerializer.Meta):
+        fields = HotelListSerializer.Meta.fields + (
+            "facilities",
+            "room_facilities",
+            "tags",
+        )

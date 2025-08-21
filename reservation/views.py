@@ -1802,7 +1802,9 @@ class CreateCommentView(ListCreateAPIView):
     
     
     
-    # ای پی ای صفحه بهترین هتل ها 
+    
+    
+# ای پی ای صفحه بهترین هتل ها 
 class BestHotelspageAPI(APIView):
     permission_classes = [AllowAny]
 
