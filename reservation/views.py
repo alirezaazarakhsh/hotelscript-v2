@@ -1601,7 +1601,7 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'original_total_price', 'total_price', 'discount_percentage', 
-            'discount_date', 'rating', 'reservation_count', 'public_tags', 'average_score'
+            'discount_date', 'rating', 'average_score', 'reservation_count', 'public_tags'
         )
 
     def get_original_total_price(self, obj):
@@ -1624,6 +1624,10 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         hotel_min_price_map = self.context.get('hotel_min_price_map', {})
         return hotel_min_price_map.get(obj.id, {}).get('rating', 0)
 
+    def get_average_score(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('average_score', 0.0)
+
     def get_reservation_count(self, obj):
         hotel_min_price_map = self.context.get('hotel_min_price_map', {})
         return hotel_min_price_map.get(obj.id, {}).get('reservation_count', 0)
@@ -1631,10 +1635,6 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     def get_public_tags(self, obj):
         public_tags = HotelTagPublic.objects.filter(hotel=obj)
         return HotelTagPublicSerializer(public_tags, many=True, context={'request': self.context.get('request')}).data
-
-    def get_average_score(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('average_score', 0.0)
 
 class BestHotelspageAPI(APIView):
     permission_classes = [AllowAny]
@@ -1713,9 +1713,9 @@ class BestHotelspageAPI(APIView):
                                     'discount_percentage': openapi.Schema(type=openapi.TYPE_INTEGER, nullable=True, description='درصد تخفیف برای ارزان‌ترین اتاق'),
                                     'discount_date': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description='تاریخ انقضای تخفیف برای ارزان‌ترین اتاق'),
                                     'rating': openapi.Schema(type=openapi.TYPE_NUMBER, description='امتیاز هتل'),
+                                    'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description='میانگین امتیازات هتل'),
                                     'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد رزروها'),
                                     'public_tags': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT), description='تگ‌های عمومی'),
-                                    'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description='میانگین امتیازات هتل')
                                 }
                             )
                         )
