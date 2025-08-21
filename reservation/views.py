@@ -173,6 +173,7 @@ class HotelTypeListView(ListAPIView):
     
 
  
+ 
 
 # API دریافت لیست امکانات هتل  و اتاق بر اساس یه هتل خاص 
 class HotelFacilitiesView(RetrieveAPIView):
@@ -189,6 +190,8 @@ class HotelFacilitiesView(RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
  
+
+
 
 
 # ای پی ای لیست خدمات اتاق ها 
@@ -715,6 +718,8 @@ class HotelImagesView(RetrieveAPIView):
 
 
 
+
+
 #دریافت توضیحات هتل برای صفحه جزئیات 
 class HotelDescriptionView(RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -743,6 +748,8 @@ class HotelDescriptionView(RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
     
     
     
@@ -778,6 +785,9 @@ class HotelIntroductionView(RetrieveAPIView):
 
 
 
+
+
+
 # ای پی ای دریافت توضیحات تکمیلی هتل در صفجه جزئیات 
 class HotelFurtherDescriptionView(RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -806,6 +816,8 @@ class HotelFurtherDescriptionView(RetrieveAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
 
 
 
@@ -996,7 +1008,6 @@ class HotelNearbyPlaceListView(ListAPIView):
     
     
     
-    
 # ای پی ای ثبت مسافر جدید 
 class PassengerListCreateView(generics.ListCreateAPIView):
     permission_classes = (IsAuthenticated,)
@@ -1043,6 +1054,8 @@ class PassengerListCreateView(generics.ListCreateAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 
@@ -1109,6 +1122,7 @@ class PassengerRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
@@ -1785,3 +1799,142 @@ class CreateCommentView(ListCreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
+    
+    
+    
+    # ای پی ای صفحه بهترین هتل ها 
+class BestHotelspageAPI(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای شهر، تاریخ و تعداد شب",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان و تعداد شب‌ها بازمی‌گرداند. فقط هتل‌هایی که اتاق در دسترس دارند نمایش داده می‌شوند. امکانات رفاهی، تفریحی هتل، امکانات داخل اتاق و تگ‌های عمومی نیز بر اساس تنظیمات هتل‌ها برگردانده می‌شود.",
+        tags=["best-hotel"],
+        manual_parameters=[
+            openapi.Parameter(
+                name='city_slug',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='اسلاگ شهر برای فیلتر هتل‌ها',
+                required=False
+            ),
+            openapi.Parameter(
+                name='start_date',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)',
+                required=False
+            ),
+            openapi.Parameter(
+                name='end_date',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)',
+                required=False
+            ),
+            openapi.Parameter(
+                name='nights',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                description='تعداد شب‌ها (پیش‌فرض 1، حداکثر 30)',
+                required=False
+            ),
+        ],
+        responses={
+            200: "لیست هتل‌های موجود با جزئیات",
+            400: "خطا در پارامترهای ورودی",
+            404: "هیچ هتلی یافت نشد"
+        }
+    )
+    def get(self, request):
+        city_slug = request.query_params.get('city_slug')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        nights = request.query_params.get('nights', 1)
+        
+        try:
+            nights = int(nights)
+            if nights < 1 or nights > 30:
+                return Response({'detail': 'تعداد شب‌ها باید بین 1 تا 30 باشد.'}, status=400)
+        except ValueError:
+            return Response({'detail': 'تعداد شب‌ها باید عدد صحیح باشد.'}, status=400)
+
+        try:
+            start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
+            if end_date_str:
+                end_date_obj = jdatetime.date(*map(int, end_date_str.split('-')))
+                if start_date_obj > end_date_obj:
+                    return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+                if (end_date_obj - start_date_obj).days != nights:
+                    return Response({'detail': 'تعداد شب‌ها با اختلاف تاریخ مطابقت ندارد.'}, status=400)
+            else:
+                end_date_obj = start_date_obj + jdatetime.timedelta(days=nights)
+        except ValueError:
+            return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
+
+        # فیلتر هتل‌ها بر اساس شهر
+        hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related('facilities', 'tags', 'room_facilities')
+        if city_slug:
+            hotels_qs = hotels_qs.filter(city__slug=city_slug)
+
+        # بررسی اتاق‌های در دسترس بر اساس تاریخ
+        available_hotels = []
+        for hotel in hotels_qs:
+            room_prices = RoomDatePrice.objects.filter(
+                room__hotel=hotel,
+                start_date__lte=end_date_obj,
+                end_date__gte=start_date_obj,
+                room__inventory__gt=0
+            ).annotate(
+                price_after_discount=F('price') - (
+                    F('price') * F('discount_value') / 100
+                    if F('discount_type') == 'percentage' and F('discount_date') >= start_date_obj
+                    else F('discount_value') if F('discount_type') == 'fixed' and not F('is_fixed_discount_one_time')
+                    else 0
+                )
+            ).aggregate(
+                min_price=Min('price'),
+                min_price_after_discount=Min('price_after_discount')
+            )
+
+            min_price = room_prices['min_price'] or 0
+            min_price_after_discount = room_prices['min_price_after_discount'] or min_price
+            discount_percentage = (
+                ((min_price - min_price_after_discount) / min_price * 100)
+                if min_price > 0 and min_price_after_discount < min_price
+                else 0
+            )
+
+            if min_price > 0:  # اگر اتاقی برای این تاریخ موجود باشد
+                hotel_data = {
+                    "id": hotel.id,
+                    "name": hotel.name,
+                    "main_image": hotel.main_image.url if hotel.main_image else None,
+                    "city": {
+                        "id": hotel.city.id,
+                        "name": hotel.city.name,
+                        "province": {"name": hotel.city.province.name},
+                        "slug": hotel.city.slug
+                    },
+                    "stars": hotel.stars,
+                    "rating": float(hotel.rating),
+                    "address": hotel.address,
+                    "price": {
+                        "min_price": min_price,
+                        "min_price_after_discount": min_price_after_discount,
+                        "discount_percentage": discount_percentage
+                    },
+                    "type": hotel.type.name if hotel.type else "نامشخص",
+                    "facilities": [facility.name for facility in hotel.facilities.all()],
+                    "tags": [tag.name for tag in hotel.tags.all()],
+                    "room_facilities": [facility.name for facility in hotel.room_facilities.all()]
+                }
+                available_hotels.append(hotel_data)
+
+        if not available_hotels:
+            return Response({'detail': 'هیچ هتلی برای این فیلترها یافت نشد.'}, status=404)
+
+        serializer = HotelListSerializer(data=available_hotels, many=True)
+        if serializer.is_valid():
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
