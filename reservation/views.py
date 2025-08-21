@@ -1593,9 +1593,9 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     discount_percentage = serializers.SerializerMethodField()
     discount_date = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
+    average_score = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
-    average_score = serializers.SerializerMethodField()
 
     class Meta(HotelListSerializer.Meta):
         fields = (
