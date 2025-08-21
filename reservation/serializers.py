@@ -680,9 +680,22 @@ class HotelSearchSerializer(serializers.Serializer):
         room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
         tags = HotelTagSerializer(many=True, read_only=True)
 
+        original_total_price = serializers.FloatField(read_only=True)
+        total_price = serializers.FloatField(read_only=True)
+        rating = serializers.FloatField(read_only=True)
+        discount_percentage = serializers.FloatField(read_only=True)
+        discount_expiry = serializers.DateField(read_only=True, allow_null=True)
+        reservation_count = serializers.IntegerField(read_only=True)
+
     class Meta(HotelListSerializer.Meta):
         fields = HotelListSerializer.Meta.fields + (
             "facilities",
             "room_facilities",
             "tags",
+            "original_total_price",
+            "total_price",
+            "rating",
+            "discount_percentage",
+            "discount_expiry",
+            "reservation_count",
         )
