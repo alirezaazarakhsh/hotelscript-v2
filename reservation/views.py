@@ -1583,12 +1583,13 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     discount_date = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
+    public_tags = serializers.SerializerMethodField()
 
     class Meta(HotelListSerializer.Meta):
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'original_total_price', 'total_price', 'discount_percentage', 
-            'discount_date', 'rating', 'reservation_count'
+            'discount_date', 'rating', 'reservation_count', 'public_tags'
         )
 
     def get_original_total_price(self, obj):
@@ -1614,6 +1615,10 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     def get_reservation_count(self, obj):
         hotel_min_price_map = self.context.get('hotel_min_price_map', {})
         return hotel_min_price_map.get(obj.id, {}).get('reservation_count', 0)
+
+    def get_public_tags(self, obj):
+        public_tags = HotelTagPublic.objects.filter(hotel=obj)
+        return HotelTagPublicSerializer(public_tags, many=True, context={'request': self.context.get('request')}).data
 
 class BestHotelspageAPI(APIView):
     permission_classes = [AllowAny]
@@ -1655,7 +1660,7 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. همچنین لیست جداگانه‌ای از نوع اقامتگاه‌ها، امکانات رفاهی و تفریحی، امکانات اتاق و تگ‌های عمومی هتل‌ها را برمی‌گرداند. قیمت هتل بر اساس کمترین قیمت کل اتاق در بازه زمانی مشخص شده محاسبه می‌شود.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. تگ‌های عمومی هر هتل در بدنه اطلاعات هتل‌ها قرار می‌گیرد.",
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(
@@ -1724,7 +1729,7 @@ class BestHotelspageAPI(APIView):
             openapi.Parameter(
                 name='other-filters', 
                 in_=openapi.IN_QUERY, 
-                description='شناسه‌های امکانات، امکانات اتاق یا تگ‌های عمومی به صورت کاما جدا شده (مثال: 1,2,3)', 
+                description='شناسه‌های تگ‌های عمومی به صورت کاما جدا شده (مثال: 1,2,3)', 
                 type=openapi.TYPE_STRING, 
                 required=False
             ),
@@ -1755,7 +1760,7 @@ class BestHotelspageAPI(APIView):
 
         # Base hotel query with related data
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
-            'facilities', 'room_facilities', 'public_tags', 'rooms'
+            'public_tags', 'rooms'
         )
 
         # Apply filters
@@ -1773,12 +1778,10 @@ class BestHotelspageAPI(APIView):
             try:
                 facility_ids = [int(x) for x in other_filters.split(',')]
                 hotels_qs = hotels_qs.filter(
-                    Q(facilities__id__in=facility_ids) |
-                    Q(room_facilities__id__in=facility_ids) |
                     Q(public_tags__id__in=facility_ids)
                 ).distinct()
             except ValueError:
-                return Response({'detail': 'شناسه‌های امکانات باید اعداد صحیح باشند.'}, status=400)
+                return Response({'detail': 'شناسه‌های تگ‌های عمومی باید اعداد صحیح باشند.'}, status=400)
 
         # Apply passenger count and room count filters
         if passenger_count or room_count:
@@ -1870,13 +1873,7 @@ class BestHotelspageAPI(APIView):
             }
 
         if not hotel_min_price_map:
-            return Response({'detail': 'هیچ هتلی برای این فیلترها یافت نشد.'}, status=404)
-
-        # Fetch separate lists for hotel types, facilities, room facilities, and public tags
-        hotel_types = HotelType.objects.all()
-        facilities = Facilities.objects.all()
-        room_facilities = RoomFacilities.objects.all()
-        hotel_public_tags = HotelTagPublic.objects.filter(hotel__in=hotels_qs).distinct()
+            return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
 
         response_data = {
             'hotels': UpdatedHotelListSerializer(
@@ -1884,10 +1881,6 @@ class BestHotelspageAPI(APIView):
                 many=True,
                 context={"request": request, "hotel_min_price_map": hotel_min_price_map},
             ).data,
-            'hotel_types': HotelTypeSerializer(hotel_types, many=True, context={"request": request}).data,
-            'facilities': FacilitiesSerializer(facilities, many=True, context={"request": request}).data,
-            'room_facilities': RoomFacilitiesSerializer(room_facilities, many=True, context={"request": request}).data,
-            'hotel_public_tags': HotelTagPublicSerializer(hotel_public_tags, many=True, context={"request": request}).data,
         }
 
         return Response(response_data)
