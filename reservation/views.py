@@ -1571,21 +1571,23 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. همچنین لیست جداگانه‌ای از نوع اقامتگاه‌ها، امکانات رفاهی و تفریحی، امکانات اتاق و تگ‌های عمومی/عمومی هتل‌ها را برمی‌گرداند.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. همچنین لیست جداگانه‌ای از نوع اقامتگاه‌ها، امکانات رفاهی و تفریحی، امکانات اتاق و تگ‌های عمومی هتل‌ها را برمی‌گرداند. قیمت هتل بر اساس کمترین قیمت کل اتاق در بازه زمانی مشخص شده محاسبه می‌شود.",
         tags=["best-hotel"],
     )
     def get(self, request):
+        # Extract query parameters with the specified format
         city = request.query_params.get('city')
-        start_date_str = request.query_params.get('start_date')
-        end_date_str = request.query_params.get('end_date')
-        passenger_count = request.query_params.get('passenger_count')
-        room_count = request.query_params.get('room_count')
+        start_date_str = request.query_params.get('start-date')
+        end_date_str = request.query_params.get('end-date')
+        passenger_count = request.query_params.get('passenger-count')
+        room_count = request.query_params.get('room-count')
         star = request.query_params.get('star')
-        min_price = request.query_params.get('min_price')
-        max_price = request.query_params.get('max_price')
-        residence_type = request.query_params.get('residence_type')
-        other_filters = request.query_params.get('other_filters')
+        min_price = request.query_params.get('min-price')
+        max_price = request.query_params.get('max-price')
+        residence_type = request.query_params.get('residence-type')
+        other_filters = request.query_params.get('other-filters')
 
+        # Validate numeric query parameters
         try:
             passenger_count = int(passenger_count) if passenger_count else None
             room_count = int(room_count) if room_count else None
@@ -1595,10 +1597,12 @@ class BestHotelspageAPI(APIView):
         except ValueError:
             return Response({'detail': 'مقادیر عددی باید صحیح باشند.'}, status=400)
 
+        # Base hotel query with related data
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
-            'facilities', 'tags', 'room_facilities'
+            'facilities', 'room_facilities', 'public_tags'
         )
 
+        # Apply filters
         if city:
             hotels_qs = hotels_qs.filter(city__slug=city.lower())
         if star:
@@ -1611,12 +1615,20 @@ class BestHotelspageAPI(APIView):
             hotels_qs = hotels_qs.filter(
                 Q(facilities__id__in=facility_ids) |
                 Q(room_facilities__id__in=facility_ids) |
-                Q(tags__id__in=facility_ids)
+                Q(public_tags__id__in=facility_ids)
+            ).distinct()
+
+        # Apply passenger count and room count filters
+        if passenger_count or room_count:
+            hotels_qs = hotels_qs.filter(
+                rooms__room_capacity__gte=passenger_count if passenger_count else 0,
+                rooms__inventory__gte=room_count if room_count else 0
             ).distinct()
 
         if not hotels_qs.exists():
             return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
 
+        # Validate date parameters
         start_date_obj = end_date_obj = None
         if start_date_str or end_date_str:
             try:
@@ -1631,6 +1643,7 @@ class BestHotelspageAPI(APIView):
             except ValueError:
                 return Response({'detail': 'فرمت تاریخ باید yyyy/mm/dd باشد.'}, status=400)
 
+        # Calculate minimum total price for each hotel
         hotel_min_price_map = {}
         for hotel in hotels_qs:
             original_price = 0
@@ -1651,17 +1664,17 @@ class BestHotelspageAPI(APIView):
                     continue
 
                 rp = room_prices.first()
-                original_price = rp.price
+                original_price = rp.price * nights  # Total price for all nights
                 discount_type = rp.discount_type
                 discount_value = rp.discount_value
                 discount_date = rp.discount_date
 
                 if discount_type == 'percentage':
-                    total_price = rp.price - (rp.price * discount_value / 100)
+                    total_price = original_price * (100 - discount_value) / 100
                 elif discount_type == 'fixed':
-                    total_price = rp.price - discount_value
+                    total_price = original_price - discount_value
                 else:
-                    total_price = rp.price
+                    total_price = original_price
             else:
                 total_price = 0
 
@@ -1690,14 +1703,13 @@ class BestHotelspageAPI(APIView):
                     'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
                     'original_total_price', 'total_price', 'rating',
                     'discount_percentage', 'discount_expiry', 'reservation_count'
-                )  # Removed is_special_offer, is_flash_sale, is_best_seller
+                )
 
-        # Fetch separate lists for hotel types, facilities, room facilities, tags, and public tags
+        # Fetch separate lists for hotel types, facilities, room facilities, and public tags
         hotel_types = HotelType.objects.all()
         facilities = Facilities.objects.all()
         room_facilities = RoomFacilities.objects.all()
-        hotel_tags = HotelTag.objects.all()
-        hotel_public_tags = HotelTagPublic.objects.all()  # Assuming you want all public tags
+        hotel_public_tags = HotelTagPublic.objects.filter(hotel__in=hotels_qs).distinct()
 
         response_data = {
             'hotels': UpdatedHotelListSerializer(
@@ -1708,7 +1720,6 @@ class BestHotelspageAPI(APIView):
             'hotel_types': HotelTypeSerializer(hotel_types, many=True, context={"request": request}).data,
             'facilities': FacilitiesSerializer(facilities, many=True, context={"request": request}).data,
             'room_facilities': RoomFacilitiesSerializer(room_facilities, many=True, context={"request": request}).data,
-            'hotel_tags': HotelTagSerializer(hotel_tags, many=True, context={"request": request}).data,
             'hotel_public_tags': HotelTagPublicSerializer(hotel_public_tags, many=True, context={"request": request}).data,
         }
 
