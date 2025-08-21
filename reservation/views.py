@@ -280,7 +280,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             openapi.Parameter(name='slug', in_=openapi.IN_PATH, description='شناسه slug هتل', type=openapi.TYPE_STRING, required=True),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='لیست ظرفیت‌های اتاق‌ها، به فرمت [2,3,5]، حداکثر ۳ اتاق و مجموع ۸ مسافر', type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='لیست ظرفیت‌های اتاق‌ها، به فرمت [2,3,5] یا 0 برای نمایش همه، حداکثر ۳ اتاق و مجموع ۸ مسافر', type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), required=False),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -299,14 +299,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 passengers_list = [int(p) for p in passengers_clean if p.strip()]
                 if not passengers_list:
                     return Response({'detail': 'پارامتر passengers باید حداقل یک عدد صحیح داشته باشد.'}, status=400)
-                if len(passengers_list) > 3:
+                if passengers_list == [0]:  # Handle passengers=[0] to return all rooms
+                    passengers_list = []
+                elif len(passengers_list) > 3:
                     return Response({'detail': 'تعداد اتاق‌ها نمی‌تواند بیشتر از ۳ باشد.'}, status=400)
-                if sum(passengers_list) > 8:
+                elif sum(passengers_list) > 8:
                     return Response({'detail': 'مجموع مسافران نمی‌تواند بیشتر از ۸ نفر باشد.'}, status=400)
-                if any(p <= 0 for p in passengers_list):
-                    return Response({'detail': 'ظرفیت هر اتاق باید بیشتر از صفر باشد.'}, status=400)
+                elif any(p < 0 for p in passengers_list):
+                    return Response({'detail': 'ظرفیت هر اتاق نمی‌تواند منفی باشد.'}, status=400)
             except ValueError:
-                return Response({'detail': 'پارامتر passengers باید به فرمت [2,3,5] و شامل اعداد صحیح باشد.'}, status=400)
+                return Response({'detail': 'پارامتر passengers باید به فرمت [2,3,5] یا 0 و شامل اعداد صحیح باشد.'}, status=400)
 
         try:
             start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
@@ -453,7 +455,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-    
     
 
 
