@@ -1992,7 +1992,7 @@ class BestHotelspageAPI(APIView):
                             "min_price_after_discount": min_price_after_discount,
                             "discount_percentage": discount_percentage
                         },
-                        "type": hotel.type.name if hotel.type else "نامشخص",
+                        "type": hotel.type.title if hotel.type else "نامشخص",  # تغییر name به title
                         "facilities": [facility.name for facility in hotel.facilities.all()],  # امکانات رفاهی و تفریحی
                         "room_facilities": [facility.name for facility in hotel.room_facilities.all()],  # امکانات اتاق
                         "tags": [tag.name for tag in hotel.tags.all()]  # تگ‌ها (تفریحی)
@@ -2020,7 +2020,7 @@ class BestHotelspageAPI(APIView):
                         "min_price_after_discount": 0,
                         "discount_percentage": 0
                     },
-                    "type": hotel.type.name if hotel.type else "نامشخص",
+                    "type": hotel.type.title if hotel.type else "نامشخص",  # تغییر name به title
                     "facilities": [facility.name for facility in hotel.facilities.all()],  # امکانات رفاهی و تفریحی
                     "room_facilities": [facility.name for facility in hotel.room_facilities.all()],  # امکانات اتاق
                     "tags": [tag.name for tag in hotel.tags.all()]  # تگ‌ها (تفریحی)
