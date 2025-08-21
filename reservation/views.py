@@ -1811,7 +1811,7 @@ class BestHotelspageAPI(APIView):
         operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند.",
         tags=["best-hotel"],
         manual_parameters=[
-            # ... همان پارامترهای شما ...
+            # همان پارامترها
         ],
         responses={
             200: "لیست هتل‌های موجود با جزئیات",
@@ -1857,28 +1857,26 @@ class BestHotelspageAPI(APIView):
                 Q(tags__id__in=facility_ids)
             ).distinct()
 
-        available_hotels = []
-
         # بررسی تاریخ
+        start_date_obj = None
+        end_date_obj = None
         if start_date_str or end_date_str:
             try:
                 start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('/')))
                 end_date_obj = jdatetime.date(*map(int, end_date_str.split('/'))) if end_date_str else start_date_obj
-
                 if start_date_obj > end_date_obj:
                     return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
-                nights = (end_date_obj - start_date_obj).days
-                if nights < 1:
-                    return Response({'detail': 'تعداد شب‌ها باید حداقل 1 باشد.'}, status=400)
             except ValueError:
                 return Response({'detail': 'فرمت تاریخ باید yyyy/mm/dd باشد.'}, status=400)
 
+        # لیست هتل‌ها
+        available_hotels = []
         for hotel in hotels_qs:
             min_price_value = 0
             min_price_after_discount = 0
             discount_percentage = 0
 
-            if start_date_str or end_date_str:
+            if start_date_obj and end_date_obj:
                 room_prices = RoomDatePrice.objects.filter(
                     room__hotel=hotel,
                     start_date__lte=end_date_obj,
@@ -1901,7 +1899,7 @@ class BestHotelspageAPI(APIView):
                 if min_price_value > 0 and min_price_after_discount < min_price_value:
                     discount_percentage = ((min_price_value - min_price_after_discount) / min_price_value * 100)
 
-            if min_price_value > 0 or not (start_date_str or end_date_str):
+            if min_price_value > 0 or not (start_date_obj and end_date_obj):
                 if min_price and min_price_value < min_price:
                     continue
                 if max_price and min_price_value > max_price:
@@ -1935,7 +1933,7 @@ class BestHotelspageAPI(APIView):
         if not available_hotels:
             return Response({'detail': 'هیچ هتلی برای این فیلترها یافت نشد.'}, status=404)
 
-        serializer = HotelListSerializer(data=available_hotels, many=True)
-        if serializer.is_valid():
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        # ✅ استفاده از instance به جای data
+        serializer = HotelListSerializer(instance=available_hotels, many=True)
+        return Response(serializer.data)
+
