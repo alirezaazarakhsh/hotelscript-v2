@@ -94,7 +94,8 @@ from .serializers import (
     NearbyPlaceListSerializer,
     PassengerSerializer,
     FacilitiesSerializer,
-    HotelCommentListSerializer,   # اینجا اضافه شد
+    HotelCommentListSerializer,  
+    HotelListWithFacilitiesSerializer,
     
 )
 
