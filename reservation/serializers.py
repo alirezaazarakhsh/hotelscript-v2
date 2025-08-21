@@ -10,6 +10,7 @@ from .models import (
     ClosedDate,
     HotelGallery,
     HotelGalleryImage,
+    HotelTagPublic,
     Province,
     City,
     HotelType,
@@ -27,6 +28,8 @@ from .models import (
     Comment,
     CommentPoint,
     CommentPointItem,
+ 
+
 )
 from icons.models import IconShortcut
 
@@ -634,6 +637,8 @@ class RoomSerializer(serializers.ModelSerializer):
         min_p = min(prices, key=final_price)
         return final_price(min_p)
 
+
+
 class HotelSearchSerializer(serializers.Serializer):
     hotels = serializers.SerializerMethodField()
     cities = serializers.SerializerMethodField()
@@ -673,57 +678,9 @@ class HotelSearchSerializer(serializers.Serializer):
         ]
         
         
+class HotelTagPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelTagPublic
+        fields = ('id', 'title')
         
         
-        
-    class HotelListWithFacilitiesSerializer(HotelListSerializer):
-        facilities = FacilitiesSerializer(many=True, read_only=True)
-        room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
-        tags = PageSerializer(many=True, read_only=True)
-
-        total_price = serializers.SerializerMethodField()
-        original_total_price = serializers.SerializerMethodField()
-        discount_type = serializers.SerializerMethodField()
-        discount_value = serializers.SerializerMethodField()
-        discount_date = serializers.SerializerMethodField()
-        rating = serializers.SerializerMethodField()
-        reservation_count = serializers.SerializerMethodField()
-
-        class Meta(HotelListSerializer.Meta):
-            fields = HotelListSerializer.Meta.fields + (
-                "facilities",
-                "room_facilities",
-                "tags",
-                "total_price",
-                "original_total_price",
-                "discount_type",
-                "discount_value",
-                "discount_date",
-                "rating",
-                "reservation_count",
-            )
-
-        def get_hotel_price_info(self, obj):
-            hotel_min_price_map = self.context.get("hotel_min_price_map", {})
-            return hotel_min_price_map.get(obj.id, {})
-
-        def get_total_price(self, obj):
-            return self.get_hotel_price_info(obj).get("total_price")
-
-        def get_original_total_price(self, obj):
-            return self.get_hotel_price_info(obj).get("original_total_price")
-
-        def get_discount_type(self, obj):
-            return self.get_hotel_price_info(obj).get("discount_type")
-
-        def get_discount_value(self, obj):
-            return self.get_hotel_price_info(obj).get("discount_value")
-
-        def get_discount_date(self, obj):
-            return self.get_hotel_price_info(obj).get("discount_date")
-
-        def get_rating(self, obj):
-            return self.get_hotel_price_info(obj).get("rating")
-
-        def get_reservation_count(self, obj):
-            return self.get_hotel_price_info(obj).get("reservation_count")

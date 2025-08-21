@@ -56,6 +56,8 @@ from .models import (
     CommentPoint,
     CommentPointItem,
     Hotel,
+    HotelTag,
+    HotelTagPublic,
     Room,
     RoomDate,
     City,
@@ -85,6 +87,7 @@ from .serializers import (
     CitySerializer,
     HotelRulesSerializer,
     HotelSearchSerializer,
+    HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
     RoomFacilitiesSerializer,
@@ -95,6 +98,7 @@ from .serializers import (
     PassengerSerializer,
     FacilitiesSerializer,
     HotelCommentListSerializer,  
+    
     
 )
 
@@ -1567,7 +1571,7 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. همچنین لیست جداگانه‌ای از نوع اقامتگاه‌ها، امکانات رفاهی و تفریحی، امکانات اتاق و تگ‌های عمومی/عمومی هتل‌ها را برمی‌گرداند.",
         tags=["best-hotel"],
     )
     def get(self, request):
@@ -1679,9 +1683,33 @@ class BestHotelspageAPI(APIView):
         if not hotel_min_price_map:
             return Response({'detail': 'هیچ هتلی برای این فیلترها یافت نشد.'}, status=404)
 
-        serializer = HotelListWithFacilitiesSerializer(
-            hotels_qs.filter(id__in=hotel_min_price_map.keys()),
-            many=True,
-            context={"request": request, "hotel_min_price_map": hotel_min_price_map},
-        )
-        return Response(serializer.data)
+        # Updated serializer without is_special_offer, is_flash_sale, is_best_seller
+        class UpdatedHotelListSerializer(HotelListSerializer):
+            class Meta(HotelListSerializer.Meta):
+                fields = (
+                    'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
+                    'original_total_price', 'total_price', 'rating',
+                    'discount_percentage', 'discount_expiry', 'reservation_count'
+                )  # Removed is_special_offer, is_flash_sale, is_best_seller
+
+        # Fetch separate lists for hotel types, facilities, room facilities, tags, and public tags
+        hotel_types = HotelType.objects.all()
+        facilities = Facilities.objects.all()
+        room_facilities = RoomFacilities.objects.all()
+        hotel_tags = HotelTag.objects.all()
+        hotel_public_tags = HotelTagPublic.objects.all()  # Assuming you want all public tags
+
+        response_data = {
+            'hotels': UpdatedHotelListSerializer(
+                hotels_qs.filter(id__in=hotel_min_price_map.keys()),
+                many=True,
+                context={"request": request, "hotel_min_price_map": hotel_min_price_map},
+            ).data,
+            'hotel_types': HotelTypeSerializer(hotel_types, many=True, context={"request": request}).data,
+            'facilities': FacilitiesSerializer(facilities, many=True, context={"request": request}).data,
+            'room_facilities': RoomFacilitiesSerializer(room_facilities, many=True, context={"request": request}).data,
+            'hotel_tags': HotelTagSerializer(hotel_tags, many=True, context={"request": request}).data,
+            'hotel_public_tags': HotelTagPublicSerializer(hotel_public_tags, many=True, context={"request": request}).data,
+        }
+
+        return Response(response_data)
