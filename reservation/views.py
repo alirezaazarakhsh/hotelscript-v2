@@ -1585,7 +1585,6 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
-
 class UpdatedHotelListSerializer(HotelListSerializer):
     original_total_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
@@ -1670,7 +1669,7 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. قیمت کل و قیمت تخفیف‌خورده برای ارزان‌ترین اتاق هر هتل نمایش داده می‌شود.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. قیمت کل و قیمت تخفیف‌خورده برای ارزان‌ترین اتاق هر هتل در بازه زمانی مشخص‌شده نمایش داده می‌شود.",
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(
@@ -1718,14 +1717,14 @@ class BestHotelspageAPI(APIView):
             openapi.Parameter(
                 name='min-price', 
                 in_=openapi.IN_QUERY, 
-                description='حداقل قیمت کل ارزان‌ترین اتاق (مثال: 1000000)', 
+                description='حداقل قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 1000000)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
             openapi.Parameter(
                 name='max-price', 
                 in_=openapi.IN_QUERY, 
-                description='حداکثر قیمت کل ارزان‌ترین اتاق (مثال: 5000000)', 
+                description='حداکثر قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 5000000)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
@@ -1762,10 +1761,10 @@ class BestHotelspageAPI(APIView):
                                     'main_image': openapi.Schema(type=openapi.TYPE_STRING, description='URL تصویر اصلی'),
                                     'stars': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد ستاره‌ها'),
                                     'type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع اقامتگاه'),
-                                    'original_total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق بدون تخفیف'),
-                                    'total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق با تخفیف'),
-                                    'discount_percentage': openapi.Schema(type=openapi.TYPE_INTEGER, nullable=True, description='درصد تخفیف'),
-                                    'discount_date': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description='تاریخ انقضای تخفیف'),
+                                    'original_total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق بدون تخفیف در بازه زمانی'),
+                                    'total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق با تخفیف در بازه زمانی'),
+                                    'discount_percentage': openapi.Schema(type=openapi.TYPE_INTEGER, nullable=True, description='درصد تخفیف برای ارزان‌ترین اتاق'),
+                                    'discount_date': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description='تاریخ انقضای تخفیف برای ارزان‌ترین اتاق'),
                                     'rating': openapi.Schema(type=openapi.TYPE_NUMBER, description='امتیاز هتل'),
                                     'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد رزروها'),
                                     'public_tags': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT), description='تگ‌های عمومی'),
@@ -1809,7 +1808,10 @@ class BestHotelspageAPI(APIView):
 
         # Base hotel query with related data
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
-            'public_tags', 'rooms'
+            'public_tags', 
+            Prefetch('rooms', queryset=Room.objects.prefetch_related(
+                Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
+            ))
         )
 
         # Apply filters
@@ -1875,7 +1877,7 @@ class BestHotelspageAPI(APIView):
                     date_prices__start_date__lte=end_date_obj,
                     date_prices__end_date__gte=start_date_obj,
                     inventory__gt=0
-                ).distinct().prefetch_related('date_prices')
+                ).distinct()
 
                 if not rooms_qs.exists():
                     continue
