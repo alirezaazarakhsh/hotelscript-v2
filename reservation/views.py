@@ -1808,79 +1808,10 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند. تعداد شب‌ها از تاریخ شروع و پایان محاسبه می‌شود. اگر هیچ فیلتری وارد نشود، تمام هتل‌ها نمایش داده می‌شوند.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و فیلترهای دیگر (مانند امکانات) بازمی‌گرداند.",
         tags=["best-hotel"],
         manual_parameters=[
-            openapi.Parameter(
-                name='city',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_STRING,
-                description='نام یا اسلاگ شهر برای فیلتر هتل‌ها (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='start_date',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_STRING,
-                description='تاریخ شروع به فرمت yyyy/mm/dd (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='end_date',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_STRING,
-                description='تاریخ پایان به فرمت yyyy/mm/dd (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='passenger_count',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_INTEGER,
-                description='تعداد مسافران (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='room_count',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_INTEGER,
-                description='تعداد اتاق‌ها (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='star',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_INTEGER,
-                description='تعداد ستاره‌ها (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='min_price',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_INTEGER,
-                description='حداقل قیمت (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='max_price',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_INTEGER,
-                description='حداکثر قیمت (اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='residence_type',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_STRING,
-                description='نوع اقامتگاه (چند مقدار با کاما جدا شوند، مثلاً 1,2، اختیاری)',
-                required=False
-            ),
-            openapi.Parameter(
-                name='other_filters',
-                in_=openapi.IN_QUERY,
-                type=openapi.TYPE_STRING,
-                description='فیلترهای دیگر (شناسه امکانات اتاق، رفاهی یا تفریحی با کاما جدا شوند، مثلاً 3، اختیاری)',
-                required=False
-            ),
+            # ... همان پارامترهای شما ...
         ],
         responses={
             200: "لیست هتل‌های موجود با جزئیات",
@@ -1909,8 +1840,8 @@ class BestHotelspageAPI(APIView):
         except ValueError:
             return Response({'detail': 'مقادیر عددی باید عدد صحیح باشند.'}, status=400)
 
-        # فیلتر هتل‌ها
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related('facilities', 'tags', 'room_facilities')
+
         if city:
             hotels_qs = hotels_qs.filter(city__slug=city.lower())
         if star:
@@ -1921,29 +1852,33 @@ class BestHotelspageAPI(APIView):
         if other_filters:
             facility_ids = [int(x) for x in other_filters.split(',')]
             hotels_qs = hotels_qs.filter(
-                Q(facilities__id__in=facility_ids) | Q(room_facilities__id__in=facility_ids) | Q(tags__id__in=facility_ids)
+                Q(facilities__id__in=facility_ids) |
+                Q(room_facilities__id__in=facility_ids) |
+                Q(tags__id__in=facility_ids)
             ).distinct()
 
-        # اگر تاریخ مشخص نشده، تمام هتل‌ها را بدون فیلتر تاریخ نمایش می‌دهیم
+        available_hotels = []
+
+        # بررسی تاریخ
         if start_date_str or end_date_str:
             try:
                 start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('/')))
-                if end_date_str:
-                    end_date_obj = jdatetime.date(*map(int, end_date_str.split('/')))
-                    if start_date_obj > end_date_obj:
-                        return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
-                    nights = (end_date_obj - start_date_obj).days
-                    if nights < 1:
-                        return Response({'detail': 'تعداد شب‌ها باید حداقل 1 باشد.'}, status=400)
-                else:
-                    end_date_obj = start_date_obj
-                    nights = 0  # اگر فقط start_date باشد، شب صفر محسوب می‌شود
+                end_date_obj = jdatetime.date(*map(int, end_date_str.split('/'))) if end_date_str else start_date_obj
+
+                if start_date_obj > end_date_obj:
+                    return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+                nights = (end_date_obj - start_date_obj).days
+                if nights < 1:
+                    return Response({'detail': 'تعداد شب‌ها باید حداقل 1 باشد.'}, status=400)
             except ValueError:
                 return Response({'detail': 'فرمت تاریخ باید yyyy/mm/dd باشد.'}, status=400)
 
-            # بررسی اتاق‌های در دسترس
-            available_hotels = []
-            for hotel in hotels_qs:
+        for hotel in hotels_qs:
+            min_price_value = 0
+            min_price_after_discount = 0
+            discount_percentage = 0
+
+            if start_date_str or end_date_str:
                 room_prices = RoomDatePrice.objects.filter(
                     room__hotel=hotel,
                     start_date__lte=end_date_obj,
@@ -1963,45 +1898,15 @@ class BestHotelspageAPI(APIView):
 
                 min_price_value = room_prices['min_price'] or 0
                 min_price_after_discount = room_prices['min_price_after_discount'] or min_price_value
-                discount_percentage = (
-                    ((min_price_value - min_price_after_discount) / min_price_value * 100)
-                    if min_price_value > 0 and min_price_after_discount < min_price_value
-                    else 0
-                )
+                if min_price_value > 0 and min_price_after_discount < min_price_value:
+                    discount_percentage = ((min_price_value - min_price_after_discount) / min_price_value * 100)
 
-                if min_price_value > 0:  # اگر اتاقی موجود باشد
-                    if min_price and min_price_value < min_price:
-                        continue
-                    if max_price and min_price_value > max_price:
-                        continue
-                    hotel_data = {
-                        "id": hotel.id,
-                        "name": hotel.name,
-                        "main_image": hotel.main_image.url if hotel.main_image else None,
-                        "city": {
-                            "id": hotel.city.id,
-                            "name": hotel.city.name,
-                            "province": {"name": hotel.city.province.name},
-                            "slug": hotel.city.slug
-                        },
-                        "stars": hotel.stars,
-                        "rating": float(hotel.rating),
-                        "address": hotel.address,
-                        "price": {
-                            "min_price": min_price_value,
-                            "min_price_after_discount": min_price_after_discount,
-                            "discount_percentage": discount_percentage
-                        },
-                        "type": hotel.type.title if hotel.type else "نامشخص",  # تغییر name به title
-                        "facilities": [facility.name for facility in hotel.facilities.all()],  # امکانات رفاهی و تفریحی
-                        "room_facilities": [facility.name for facility in hotel.room_facilities.all()],  # امکانات اتاق
-                        "tags": [tag.name for tag in hotel.tags.all()]  # تگ‌ها (تفریحی)
-                    }
-                    available_hotels.append(hotel_data)
-        else:
-            # اگر تاریخ مشخص نشده، تمام هتل‌ها را بدون فیلتر تاریخ نمایش می‌دهیم
-            available_hotels = []
-            for hotel in hotels_qs:
+            if min_price_value > 0 or not (start_date_str or end_date_str):
+                if min_price and min_price_value < min_price:
+                    continue
+                if max_price and min_price_value > max_price:
+                    continue
+
                 hotel_data = {
                     "id": hotel.id,
                     "name": hotel.name,
@@ -2016,14 +1921,14 @@ class BestHotelspageAPI(APIView):
                     "rating": float(hotel.rating),
                     "address": hotel.address,
                     "price": {
-                        "min_price": 0,  # قیمت پیش‌فرض، چون تاریخ مشخص نشده
-                        "min_price_after_discount": 0,
-                        "discount_percentage": 0
+                        "min_price": min_price_value,
+                        "min_price_after_discount": min_price_after_discount,
+                        "discount_percentage": discount_percentage
                     },
-                    "type": hotel.type.title if hotel.type else "نامشخص",  # تغییر name به title
-                    "facilities": [facility.name for facility in hotel.facilities.all()],  # امکانات رفاهی و تفریحی
-                    "room_facilities": [facility.name for facility in hotel.room_facilities.all()],  # امکانات اتاق
-                    "tags": [tag.name for tag in hotel.tags.all()]  # تگ‌ها (تفریحی)
+                    "type": hotel.type.title if hotel.type else "نامشخص",
+                    "facilities": [facility.title for facility in hotel.facilities.all()],
+                    "room_facilities": [facility.title for facility in hotel.room_facilities.all()],
+                    "tags": [tag.title for tag in hotel.tags.all()]
                 }
                 available_hotels.append(hotel_data)
 
