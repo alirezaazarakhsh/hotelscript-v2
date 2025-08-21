@@ -278,8 +278,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         tags=['hotel-room'],
         manual_parameters=[
             openapi.Parameter(name='slug', in_=openapi.IN_PATH, description='شناسه slug هتل', type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter(name='start_date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='end_date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='لیست ظرفیت‌های اتاق‌ها، به فرمت [2,3,5]، حداکثر ۳ اتاق و مجموع ۸ مسافر', type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER), required=False),
         ]
     )
@@ -287,8 +287,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         hotel = self.get_object()
         logger.info(f"Processing request for hotel {hotel.slug}")
 
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
+        start_date = request.query_params.get('start-date')
+        end_date = request.query_params.get('end-date')
         passengers = request.query_params.get('passengers')
 
         # Parse passengers parameter
@@ -412,7 +412,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # --- Single room ---
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
+            filtered_rooms = [r for r in room_data if r['capacity'] + r['extra_capacity'] == required_capacity]
             if not filtered_rooms:
                 price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
                 return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
@@ -425,7 +425,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         packs = []
         valid_combinations = []
         for combo in itertools.permutations(room_data, len(passengers_list)):
-            if all(combo[i]['capacity'] <= passengers_list[i] <= combo[i]['capacity'] + combo[i]['extra_capacity'] for i in range(len(passengers_list))):
+            if all(combo[i]['capacity'] + combo[i]['extra_capacity'] == passengers_list[i] for i in range(len(passengers_list))):
                 valid_combinations.append(combo)
 
         seen = set()
@@ -435,8 +435,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 room_ids = tuple(sorted([r['id'] for r in combo]))
                 if room_ids not in seen:
                     seen.add(room_ids)
+                    pack_rooms = []
+                    for i, room in enumerate(combo):
+                        room_copy = room.copy()
+                        room_copy['selected_passenger'] = passengers_list[i]
+                        pack_rooms.append(room_copy)
                     packs.append({
-                        "pack_rooms": combo,
+                        "pack_rooms": pack_rooms,
                         "total_price": pack_total_price,
                         "night_count": night_count,
                         "room_count": len(combo)
@@ -448,6 +453,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
+    
+    
 
 
 
