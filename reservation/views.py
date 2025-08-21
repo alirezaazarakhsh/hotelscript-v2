@@ -412,7 +412,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # --- Single room ---
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] + r['extra_capacity'] >= required_capacity]
+            filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
             if not filtered_rooms:
                 price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
                 return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
@@ -425,18 +425,22 @@ class HotelRoomsView(generics.RetrieveAPIView):
         packs = []
         valid_combinations = []
         for combo in itertools.permutations(room_data, len(passengers_list)):
-            if all(combo[i]['capacity'] + combo[i]['extra_capacity'] >= passengers_list[i] for i in range(len(passengers_list))):
+            if all(combo[i]['capacity'] <= passengers_list[i] <= combo[i]['capacity'] + combo[i]['extra_capacity'] for i in range(len(passengers_list))):
                 valid_combinations.append(combo)
 
+        seen = set()
         for combo in valid_combinations:
             if all(r['room_number'] > 0 for r in combo):
                 pack_total_price = sum(r['price']['total_price_discount'] for r in combo)
-                packs.append({
-                    "pack_rooms": combo,
-                    "total_price": pack_total_price,
-                    "night_count": night_count,
-                    "room_count": len(combo)
-                })
+                room_ids = tuple(sorted([r['id'] for r in combo]))
+                if room_ids not in seen:
+                    seen.add(room_ids)
+                    packs.append({
+                        "pack_rooms": combo,
+                        "total_price": pack_total_price,
+                        "night_count": night_count,
+                        "room_count": len(combo)
+                    })
 
         if not packs:
             price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
@@ -444,8 +448,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-
-
 
 
 
@@ -1660,7 +1662,7 @@ class BestHotelspageAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. تگ‌های عمومی هر هتل در بدنه اطلاعات هتل‌ها قرار می‌گیرد.",
+        operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. قیمت کل و قیمت تخفیف‌خورده برای ارزان‌ترین اتاق هر هتل نمایش داده می‌شود.",
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(
@@ -1807,7 +1809,7 @@ class BestHotelspageAPI(APIView):
             except ValueError:
                 return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
-        # Calculate minimum total price and discounted price for each hotel
+        # Calculate minimum total price and discounted price for the cheapest room of each hotel
         hotel_min_price_map = {}
         for hotel in hotels_qs:
             total_price = 0
@@ -1818,44 +1820,77 @@ class BestHotelspageAPI(APIView):
 
             if start_date_obj and end_date_obj:
                 # Get the cheapest available room for the date range
-                room_prices = RoomDatePrice.objects.filter(
-                    room__hotel=hotel,
-                    start_date__lte=end_date_obj,
-                    end_date__gte=start_date_obj,
-                    room__inventory__gt=0
-                ).order_by('price')
+                rooms_qs = hotel.rooms.filter(
+                    date_prices__start_date__lte=end_date_obj,
+                    date_prices__end_date__gte=start_date_obj,
+                    inventory__gt=0
+                ).distinct().prefetch_related('date_prices')
 
-                if not room_prices.exists():
+                if not rooms_qs.exists():
                     continue
 
-                # Calculate price for each day in the date range
-                date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range(nights)]
-                daily_prices = []
-                for date in date_range:
-                    price_data = room_prices.filter(start_date__lte=date, end_date__gte=date).order_by('price').first()
-                    if not price_data:
-                        continue
-                    try:
-                        discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
-                            price_data, date, fixed_discount_applied
-                        )
-                        daily_prices.append({
-                            'original_price': price_data.price,
-                            'price_after_discount': price_after_discount,
-                            'discount_percentage': discount_percentage,
-                            'discount_date': discount_date
-                        })
-                    except ValueError as e:
-                        logger.warning(f"Discount calculation failed for hotel {hotel.id} on {date}: {str(e)}")
+                # Find the room with the lowest total discounted price
+                min_room = None
+                min_total_price = float('inf')
+                min_total_price_discount = float('inf')
+                min_discount_percentage = None
+                min_discount_date = None
+
+                for room in rooms_qs:
+                    room_total_price = 0
+                    room_total_price_discount = 0
+                    room_discount_percentage = None
+                    room_discount_date = None
+                    fixed_discount_applied = False
+                    daily_prices = []
+
+                    date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range(nights)]
+                    for date in date_range:
+                        price_data = room.date_prices.filter(
+                            start_date__lte=date,
+                            end_date__gte=date
+                        ).order_by('price').first()
+                        if not price_data:
+                            daily_prices = []
+                            break
+
+                        try:
+                            discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
+                                price_data, date, fixed_discount_applied
+                            )
+                            daily_prices.append({
+                                'original_price': price_data.price,
+                                'price_after_discount': price_after_discount,
+                                'discount_percentage': discount_percentage,
+                                'discount_date': discount_date
+                            })
+                        except ValueError as e:
+                            logger.warning(f"Discount calculation failed for hotel {hotel.id}, room {room.id} on {date}: {str(e)}")
+                            daily_prices = []
+                            break
+
+                    if not daily_prices:
                         continue
 
-                if not daily_prices:
+                    room_total_price = sum(day['original_price'] for day in daily_prices)
+                    room_total_price_discount = sum(day['price_after_discount'] for day in daily_prices)
+                    room_discount_percentage = daily_prices[0]['discount_percentage'] if daily_prices[0]['discount_percentage'] else None
+                    room_discount_date = daily_prices[0]['discount_date'] if daily_prices[0]['discount_date'] else None
+
+                    if room_total_price_discount < min_total_price_discount:
+                        min_room = room
+                        min_total_price = room_total_price
+                        min_total_price_discount = room_total_price_discount
+                        min_discount_percentage = room_discount_percentage
+                        min_discount_date = room_discount_date
+
+                if min_room is None:
                     continue
 
-                total_price = sum(day['original_price'] for day in daily_prices)
-                total_price_discount = sum(day['price_after_discount'] for day in daily_prices)
-                discount_percentage = daily_prices[0]['discount_percentage'] if daily_prices[0]['discount_percentage'] else None
-                discount_date = daily_prices[0]['discount_date'] if daily_prices[0]['discount_date'] else None
+                total_price = min_total_price
+                total_price_discount = min_total_price_discount
+                discount_percentage = min_discount_percentage
+                discount_date = min_discount_date
 
             # Apply price range filters
             if min_price and total_price_discount and total_price_discount < min_price:
