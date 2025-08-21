@@ -15,6 +15,7 @@ class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
         fields = ('id', 'title', 'hotel_name', 'hotel_main_image')
+        ref_name = "BashgahRoomSerializer"  
 
     def get_hotel_main_image(self, obj):
         request = self.context.get('request')

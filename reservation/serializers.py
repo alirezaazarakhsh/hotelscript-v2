@@ -571,7 +571,7 @@ class RoomSerializer(serializers.ModelSerializer):
             'date_prices',
             'min_price'
         ]
-
+    ref_name = "ReservationRoomSerializer"  
     def get_date_prices(self, obj):
         user_level = self.context.get('user_level')
         start_date = self.context.get('start_date')
