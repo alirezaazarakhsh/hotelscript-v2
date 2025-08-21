@@ -1697,14 +1697,14 @@ class BestHotelspageAPI(APIView):
             openapi.Parameter(
                 name='passenger-count', 
                 in_=openapi.IN_QUERY, 
-                description='تعداد کل مسافران (مثال: 2)', 
+                description='تعداد کل مسافران (مثال: 2، یا 0 برای نمایش همه هتل‌ها بدون فیلتر ظرفیت)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
             openapi.Parameter(
                 name='room-count', 
                 in_=openapi.IN_QUERY, 
-                description='تعداد اتاق‌های مورد نیاز (مثال: 1)', 
+                description='تعداد اتاق‌های مورد نیاز (مثال: 1، یا 0 برای نمایش همه هتل‌ها بدون فیلتر تعداد اتاق)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
@@ -1718,14 +1718,14 @@ class BestHotelspageAPI(APIView):
             openapi.Parameter(
                 name='min-price', 
                 in_=openapi.IN_QUERY, 
-                description='حداقل قیمت کل (مثال: 1000000)', 
+                description='حداقل قیمت کل ارزان‌ترین اتاق (مثال: 1000000)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
             openapi.Parameter(
                 name='max-price', 
                 in_=openapi.IN_QUERY, 
-                description='حداکثر قیمت کل (مثال: 5000000)', 
+                description='حداکثر قیمت کل ارزان‌ترین اتاق (مثال: 5000000)', 
                 type=openapi.TYPE_INTEGER, 
                 required=False
             ),
@@ -1743,7 +1743,41 @@ class BestHotelspageAPI(APIView):
                 type=openapi.TYPE_STRING, 
                 required=False
             ),
-        ]
+        ],
+        responses={
+            200: openapi.Response(
+                description="لیست هتل‌ها با موفقیت بازگردانده شد.",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'hotels': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام هتل'),
+                                    'slug': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه slug هتل'),
+                                    'city': openapi.Schema(type=openapi.TYPE_STRING, description='نام شهر'),
+                                    'address': openapi.Schema(type=openapi.TYPE_STRING, description='آدرس هتل'),
+                                    'main_image': openapi.Schema(type=openapi.TYPE_STRING, description='URL تصویر اصلی'),
+                                    'stars': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد ستاره‌ها'),
+                                    'type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع اقامتگاه'),
+                                    'original_total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق بدون تخفیف'),
+                                    'total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت کل ارزان‌ترین اتاق با تخفیف'),
+                                    'discount_percentage': openapi.Schema(type=openapi.TYPE_INTEGER, nullable=True, description='درصد تخفیف'),
+                                    'discount_date': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description='تاریخ انقضای تخفیف'),
+                                    'rating': openapi.Schema(type=openapi.TYPE_NUMBER, description='امتیاز هتل'),
+                                    'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد رزروها'),
+                                    'public_tags': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT), description='تگ‌های عمومی'),
+                                }
+                            )
+                        )
+                    }
+                )
+            ),
+            400: openapi.Response(description="خطا در پارامترهای ورودی"),
+            404: openapi.Response(description="هتلی یافت نشد")
+        }
     )
     def get(self, request):
         # Extract query parameters
@@ -1765,6 +1799,11 @@ class BestHotelspageAPI(APIView):
             star = int(star) if star else None
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
+            # Allow passenger_count and room_count to be 0
+            if passenger_count is not None and passenger_count < 0:
+                return Response({'detail': 'تعداد مسافران نمی‌تواند منفی باشد.'}, status=400)
+            if room_count is not None and room_count < 0:
+                return Response({'detail': 'تعداد اتاق‌ها نمی‌تواند منفی باشد.'}, status=400)
         except ValueError:
             return Response({'detail': 'مقادیر عددی باید صحیح باشند.'}, status=400)
 
@@ -1795,10 +1834,14 @@ class BestHotelspageAPI(APIView):
 
         # Apply passenger count and room count filters
         if passenger_count or room_count:
-            hotels_qs = hotels_qs.filter(
-                rooms__room_capacity__gte=passenger_count if passenger_count else 0,
-                rooms__inventory__gte=room_count if room_count else 0
-            ).distinct()
+            if passenger_count == 0 and room_count == 0:
+                # Skip capacity and inventory filters if both are 0
+                pass
+            else:
+                hotels_qs = hotels_qs.filter(
+                    rooms__room_capacity__gte=passenger_count if passenger_count else 0,
+                    rooms__inventory__gte=room_count if room_count else 0
+                ).distinct()
 
         if not hotels_qs.exists():
             return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
