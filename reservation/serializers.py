@@ -178,6 +178,9 @@ class HotelListSerializer(serializers.ModelSerializer):
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
 
+
+
+
 class FacilitiesSerializer(serializers.ModelSerializer):
     icon = IconShortcutSerializer(read_only=True)
 
