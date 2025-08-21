@@ -1573,6 +1573,45 @@ except Exception:
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
+class UpdatedHotelListSerializer(HotelListSerializer):
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_date = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    reservation_count = serializers.SerializerMethodField()
+
+    class Meta(HotelListSerializer.Meta):
+        fields = (
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
+            'original_total_price', 'total_price', 'discount_percentage', 
+            'discount_date', 'rating', 'reservation_count'
+        )
+
+    def get_original_total_price(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('original_total_price', 0)
+
+    def get_total_price(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('total_price', 0)
+
+    def get_discount_percentage(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('discount_percentage', None)
+
+    def get_discount_date(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('discount_date', None)
+
+    def get_rating(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('rating', 0)
+
+    def get_reservation_count(self, obj):
+        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
+        return hotel_min_price_map.get(obj.id, {}).get('reservation_count', 0)
+
 class BestHotelspageAPI(APIView):
     permission_classes = [AllowAny]
 
@@ -1587,7 +1626,7 @@ class BestHotelspageAPI(APIView):
             if price_data.discount_type == 'percentage':
                 if not price_data.discount_date:
                     logger.error(f"Hotel {price_data.room.hotel.id} on {date}: Percentage discount requires a discount_date")
-                    raise ValueError("Percentage discount requires a discount_date.")
+                    raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد.")
                 if price_data.discount_date >= date:
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
@@ -1599,13 +1638,13 @@ class BestHotelspageAPI(APIView):
             elif price_data.discount_type == 'fixed':
                 if price_data.discount_date:
                     logger.error(f"Hotel {price_data.room.hotel.id} on {date}: Fixed discount should not have a discount_date")
-                    raise ValueError("Fixed discount cannot have a discount_date.")
+                    raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد.")
                 if price_data.is_fixed_discount_one_time and fixed_discount_applied:
                     discount_amount = 0
                 else:
                     discount_amount = int(price_data.discount_value)
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
-                price_after_discount = int(price_data.price - discount_amount)
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
         else:
             discount_amount = 0
 
@@ -1813,9 +1852,9 @@ class BestHotelspageAPI(APIView):
                 discount_date = daily_prices[0]['discount_date'] if daily_prices[0]['discount_date'] else None
 
             # Apply price range filters
-            if min_price and total_price_discount < min_price:
+            if min_price and total_price_discount and total_price_discount < min_price:
                 continue
-            if max_price and total_price_discount > max_price:
+            if max_price and total_price_discount and total_price_discount > max_price:
                 continue
 
             hotel_min_price_map[hotel.id] = {
@@ -1829,15 +1868,6 @@ class BestHotelspageAPI(APIView):
 
         if not hotel_min_price_map:
             return Response({'detail': 'هیچ هتلی برای این فیلترها یافت نشد.'}, status=404)
-
-        # Updated serializer
-        class UpdatedHotelListSerializer(HotelListSerializer):
-            class Meta(HotelListSerializer.Meta):
-                fields = (
-                    'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
-                    'original_total_price', 'total_price', 'discount_percentage', 
-                    'discount_date', 'rating', 'reservation_count'
-                )
 
         # Fetch separate lists for hotel types, facilities, room facilities, and public tags
         hotel_types = HotelType.objects.all()
