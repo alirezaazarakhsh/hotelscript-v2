@@ -1630,119 +1630,46 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         public_tags = HotelTagPublic.objects.filter(hotel=obj)
         return HotelTagPublicSerializer(public_tags, many=True, context={'request': self.context.get('request')}).data
 
+
 class BestHotelspageAPI(APIView):
     permission_classes = [AllowAny]
 
-    def calculate_discount(self, price_data, date, fixed_discount_applied=False):
-        """Calculate discount amount and price after discount."""
-        discount_amount = 0
-        price_after_discount = price_data.price if price_data else None
-        discount_percentage = None
-        discount_date = None
+    def calculate_discount(self, price_data, date):
+        """Calculate discount amount and price after discount similar to HomeHotelListView."""
+        original_price = price_data.price
+        total_price = original_price
+        discount_type = price_data.discount_type
+        discount_value = price_data.discount_value
+        discount_date = price_data.discount_date.strftime('%Y-%m-%d') if price_data.discount_date else None
 
-        if price_data and price_data.discount_type != 'none':
-            if price_data.discount_type == 'percentage':
-                if not price_data.discount_date:
-                    logger.error(f"Hotel {price_data.room.hotel.id} on {date}: Percentage discount requires a discount_date")
-                    raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد.")
-                if price_data.discount_date >= date:
-                    discount_amount = int(price_data.price * price_data.discount_value / 100)
-                    discount_percentage = price_data.discount_value
-                    discount_date = price_data.discount_date.strftime('%Y-%m-%d')
-                    price_after_discount = int(max(price_data.price - discount_amount, 0))
-                else:
-                    logger.warning(f"Hotel {price_data.room.hotel.id} on {date}: Discount ignored due to expired discount_date")
-                    price_after_discount = int(price_data.price)
-            elif price_data.discount_type == 'fixed':
-                if price_data.discount_date:
-                    logger.error(f"Hotel {price_data.room.hotel.id} on {date}: Fixed discount should not have a discount_date")
-                    raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد.")
-                if price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                    discount_amount = 0
-                else:
-                    discount_amount = int(price_data.discount_value)
-                    fixed_discount_applied = price_data.is_fixed_discount_one_time
-                price_after_discount = int(max(price_data.price - discount_amount, 0))
-        else:
-            discount_amount = 0
+        if discount_type == 'percentage' and price_data.discount_date and price_data.discount_date >= date:
+            total_price = original_price * (1 - discount_value / 100)
+        elif discount_type == 'fixed' and price_data.is_fixed_discount_one_time:
+            total_price = original_price - discount_value
 
-        return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
+        return {
+            'total_price': int(total_price),
+            'original_total_price': int(original_price),
+            'discount_type': discount_type,
+            'discount_value': discount_value,
+            'discount_date': discount_date
+        }
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
         operation_description="این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. قیمت کل و قیمت تخفیف‌خورده برای ارزان‌ترین اتاق هر هتل در بازه زمانی مشخص‌شده نمایش داده می‌شود.",
         tags=["best-hotel"],
         manual_parameters=[
-            openapi.Parameter(
-                name='city', 
-                in_=openapi.IN_QUERY, 
-                description='نام شهر (مثال: Tehran)', 
-                type=openapi.TYPE_STRING, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='start-date', 
-                in_=openapi.IN_QUERY, 
-                description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: امروز)', 
-                type=openapi.TYPE_STRING, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='end-date', 
-                in_=openapi.IN_QUERY, 
-                description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: مشابه تاریخ شروع)', 
-                type=openapi.TYPE_STRING, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='passenger-count', 
-                in_=openapi.IN_QUERY, 
-                description='تعداد کل مسافران (مثال: 2، یا 0 برای نمایش همه هتل‌ها بدون فیلتر ظرفیت)', 
-                type=openapi.TYPE_INTEGER, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='room-count', 
-                in_=openapi.IN_QUERY, 
-                description='تعداد اتاق‌های مورد نیاز (مثال: 1، یا 0 برای نمایش همه هتل‌ها بدون فیلتر تعداد اتاق)', 
-                type=openapi.TYPE_INTEGER, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='star', 
-                in_=openapi.IN_QUERY, 
-                description='تعداد ستاره‌های هتل (مثال: 5)', 
-                type=openapi.TYPE_INTEGER, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='min-price', 
-                in_=openapi.IN_QUERY, 
-                description='حداقل قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 1000000)', 
-                type=openapi.TYPE_INTEGER, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='max-price', 
-                in_=openapi.IN_QUERY, 
-                description='حداکثر قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 5000000)', 
-                type=openapi.TYPE_INTEGER, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='residence-type', 
-                in_=openapi.IN_QUERY, 
-                description='شناسه‌های نوع اقامتگاه به صورت کاما جدا شده (مثال: 1,2)', 
-                type=openapi.TYPE_STRING, 
-                required=False
-            ),
-            openapi.Parameter(
-                name='other-filters', 
-                in_=openapi.IN_QUERY, 
-                description='شناسه‌های تگ‌های عمومی به صورت کاما جدا شده (مثال: 1,2,3)', 
-                type=openapi.TYPE_STRING, 
-                required=False
-            ),
+            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر (مثال: Tehran)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: امروز)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd (اختیاری، پیش‌فرض: مشابه تاریخ شروع)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='passenger-count', in_=openapi.IN_QUERY, description='تعداد کل مسافران (مثال: 2، یا 0 برای نمایش همه هتل‌ها بدون فیلتر ظرفیت)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='room-count', in_=openapi.IN_QUERY, description='تعداد اتاق‌های مورد نیاز (مثال: 1، یا 0 برای نمایش همه هتل‌ها بدون فیلتر تعداد اتاق)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='تعداد ستاره‌های هتل (مثال: 5)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 1000000)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت کل ارزان‌ترین اتاق در بازه زمانی (مثال: 5000000)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='شناسه‌های نوع اقامتگاه به صورت کاما جدا شده (مثال: 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='other-filters', in_=openapi.IN_QUERY, description='شناسه‌های تگ‌های عمومی به صورت کاما جدا شده (مثال: 1,2,3)', type=openapi.TYPE_STRING, required=False),
         ],
         responses={
             200: openapi.Response(
@@ -1799,7 +1726,6 @@ class BestHotelspageAPI(APIView):
             star = int(star) if star else None
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
-            # Allow passenger_count and room_count to be 0
             if passenger_count is not None and passenger_count < 0:
                 return Response({'detail': 'تعداد مسافران نمی‌تواند منفی باشد.'}, status=400)
             if room_count is not None and room_count < 0:
@@ -1838,7 +1764,6 @@ class BestHotelspageAPI(APIView):
         # Apply passenger count and room count filters
         if passenger_count or room_count:
             if passenger_count == 0 and room_count == 0:
-                # Skip capacity and inventory filters if both are 0
                 pass
             else:
                 hotels_qs = hotels_qs.filter(
@@ -1850,7 +1775,9 @@ class BestHotelspageAPI(APIView):
             return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
 
         # Validate date parameters
-        start_date_obj = end_date_obj = None
+        today = jdatetime.date.today()
+        start_date_obj = today
+        end_date_obj = today
         if start_date_str or end_date_str:
             try:
                 start_date_obj = jdatetime.date.today() if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
@@ -1866,100 +1793,40 @@ class BestHotelspageAPI(APIView):
         # Calculate minimum total price and discounted price for the cheapest room of each hotel
         hotel_min_price_map = {}
         for hotel in hotels_qs:
-            total_price = 0
-            total_price_discount = 0
-            discount_percentage = None
-            discount_date = None
-            fixed_discount_applied = False
+            rooms = hotel.rooms.filter(
+                date_prices__start_date__lte=end_date_obj,
+                date_prices__end_date__gte=start_date_obj,
+                inventory__gt=0
+            ).distinct()
 
-            if start_date_obj and end_date_obj:
-                # Get the cheapest available room for the date range
-                rooms_qs = hotel.rooms.filter(
-                    date_prices__start_date__lte=end_date_obj,
-                    date_prices__end_date__gte=start_date_obj,
-                    inventory__gt=0
-                ).distinct()
-
-                if not rooms_qs.exists():
-                    continue
-
-                # Find the room with the lowest total discounted price
-                min_room = None
-                min_total_price = float('inf')
-                min_total_price_discount = float('inf')
-                min_discount_percentage = None
-                min_discount_date = None
-
-                for room in rooms_qs:
-                    room_total_price = 0
-                    room_total_price_discount = 0
-                    room_discount_percentage = None
-                    room_discount_date = None
-                    fixed_discount_applied = False
-                    daily_prices = []
-
-                    date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range(nights)]
-                    for date in date_range:
-                        price_data = room.date_prices.filter(
-                            start_date__lte=date,
-                            end_date__gte=date
-                        ).order_by('price').first()
-                        if not price_data:
-                            daily_prices = []
-                            break
-
-                        try:
-                            discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
-                                price_data, date, fixed_discount_applied
-                            )
-                            daily_prices.append({
-                                'original_price': price_data.price,
-                                'price_after_discount': price_after_discount,
-                                'discount_percentage': discount_percentage,
-                                'discount_date': discount_date
-                            })
-                        except ValueError as e:
-                            logger.warning(f"Discount calculation failed for hotel {hotel.id}, room {room.id} on {date}: {str(e)}")
-                            daily_prices = []
-                            break
-
-                    if not daily_prices:
-                        continue
-
-                    room_total_price = sum(day['original_price'] for day in daily_prices)
-                    room_total_price_discount = sum(day['price_after_discount'] for day in daily_prices)
-                    room_discount_percentage = daily_prices[0]['discount_percentage'] if daily_prices[0]['discount_percentage'] else None
-                    room_discount_date = daily_prices[0]['discount_date'] if daily_prices[0]['discount_date'] else None
-
-                    if room_total_price_discount < min_total_price_discount:
-                        min_room = room
-                        min_total_price = room_total_price
-                        min_total_price_discount = room_total_price_discount
-                        min_discount_percentage = room_discount_percentage
-                        min_discount_date = room_discount_date
-
-                if min_room is None:
-                    continue
-
-                total_price = min_total_price
-                total_price_discount = min_total_price_discount
-                discount_percentage = min_discount_percentage
-                discount_date = min_discount_date
-
-            # Apply price range filters
-            if min_price and total_price_discount and total_price_discount < min_price:
-                continue
-            if max_price and total_price_discount and total_price_discount > max_price:
+            if not rooms.exists():
                 continue
 
-            hotel_min_price_map[hotel.id] = {
-                "original_total_price": total_price,
-                "total_price": total_price_discount,
-                "discount_percentage": discount_percentage,
-                "discount_date": discount_date,
-                "rating": hotel.rating,
-                "reservation_count": hotel.reservation_count
-            }
+            min_price = None
+            min_price_data = {}
+
+            for room in rooms:
+                prices = room.date_prices.filter(
+                    start_date__lte=end_date_obj,
+                    end_date__gte=start_date_obj
+                ).order_by('price')
+
+                for price in prices:
+                    price_data = self.calculate_discount(price, today)
+                    total_price = price_data['total_price']
+                    if min_price is None or total_price < min_price:
+                        min_price = total_price
+                        min_price_data = price_data
+                        min_price_data['rating'] = hotel.rating
+                        min_price_data['reservation_count'] = hotel.reservation_count
+
+            if min_price_data:
+                # Apply price range filters
+                if min_price and min_price_data['total_price'] < min_price:
+                    continue
+                if max_price and min_price_data['total_price'] > max_price:
+                    continue
+                hotel_min_price_map[hotel.id] = min_price_data
 
         if not hotel_min_price_map:
             return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
