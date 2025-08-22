@@ -1664,8 +1664,6 @@ class CreateCommentView(ListCreateAPIView):
     
 # ای پی ای صفحه بهترین هتل ها 
 # --- logger fallback ---
-# ای پی ای صفحه بهترین هتل ها 
-# --- logger fallback ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1735,8 +1733,7 @@ class BestHotelspageAPI(generics.ListAPIView):
     serializer_class = UpdatedHotelListSerializer
     pagination_class = PageNumberPagination
     queryset = Hotel.objects.none()
-    swagger_tags = ["best-hotel"]  
-
+    swagger_tags = ["best-hotel"]
 
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
@@ -1752,8 +1749,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         discount_type = price_data.discount_type
         discount_value = price_data.discount_value
         discount_date = (
-            price_data.discount_date.strftime('%Y-%m-%d')
-            if price_data.discount_date else None
+            price_data.discount_date.strftime('%Y-%m-%d') if price_data.discount_date else None
         )
 
         if discount_type == 'percentage' and price_data.discount_date and price_data.discount_date >= date:
@@ -1785,8 +1781,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passenger-count', in_=openapi.IN_QUERY, description='تعداد مسافران', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter(name='room-count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='passenger', in_=openapi.IN_QUERY, description='ظرفیت مسافر برای فیلتر اتاق‌ها (مثلاً 1 برای یک نفر در یک اتاق، 2 برای دو نفر در یک اتاق یا مجموع چند اتاق)', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
@@ -1798,8 +1793,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
-        passenger_count = request.query_params.get('passenger-count')
-        room_count = request.query_params.get('room-count')
+        passenger = request.query_params.get('passenger')
         star = request.query_params.get('star')
         min_price = request.query_params.get('min-price')
         max_price = request.query_params.get('max-price')
@@ -1807,8 +1801,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         other_filters = request.query_params.get('other-filters')
 
         try:
-            passenger_count = int(passenger_count) if passenger_count else None
-            room_count = int(room_count) if room_count else None
+            passenger = int(passenger) if passenger else 1
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
         except ValueError:
@@ -1868,7 +1861,8 @@ class BestHotelspageAPI(generics.ListAPIView):
             rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=start_date_obj,
                 date_prices__end_date__gte=end_date_obj,
-                inventory__gt=0
+                inventory__gt=0,
+                room_capacity__lte=passenger,
             ).distinct()
             if not rooms.exists():
                 continue
