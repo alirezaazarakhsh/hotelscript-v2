@@ -268,7 +268,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 else:
                     discount_amount = int(price_data.discount_value)
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
-                price_after_discount = int(price_data.price)
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
         else:
             discount_amount = 0
 
@@ -415,13 +415,25 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # --- Single room ---
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] + r['extra_capacity'] == required_capacity]
+            filtered_rooms = [r for r in room_data if r['capacity'] + r['extra_capacity'] >= required_capacity]
             if not filtered_rooms:
                 price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
                 return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
-            filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'])
+            
             for room in filtered_rooms:
+                if required_capacity > room['capacity']:
+                    extra_passengers = required_capacity - room['capacity']
+                    extra_price_per_night = room['price']['extra_capacity_price']
+                    for day in room['price_calendar']:
+                        if day['status'] == "open" and day['price']:
+                            day['price']['price'] += extra_passengers * extra_price_per_night
+                            day['price']['price_after_discount'] += extra_passengers * extra_price_per_night
+                    room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                    room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                
                 room['selected_passenger'] = required_capacity
+            
+            filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(filtered_rooms)
 
         # --- Pack rooms ---
@@ -456,7 +468,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         packs.sort(key=lambda x: x['total_price'])
         return Response(packs)
-    
 
 
 
