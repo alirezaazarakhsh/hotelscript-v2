@@ -1,20 +1,20 @@
 # authentication/signals.py
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import BaseUser, NaturalProfile, UserLevel
+from .models import BaseUser, NaturalProfile
+from config.models import UserLevel  # فرض بر این است که UserLevel در app config است
 
 @receiver(post_save, sender=BaseUser)
 def create_natural_profile(sender, instance, created, **kwargs):
     if created:
-        # ایجاد پروفایل اولیه با نام پیش‌فرض "میهمان"
-        profile = NaturalProfile.objects.create(
+        # ایجاد پروفایل اولیه با مقادیر پیش‌فرض
+        NaturalProfile.objects.create(
             base_user=instance,
             first_name='میهمان',
-            last_name='میهمان',
-            # سایر فیلدها را می‌توان با مقدار پیش‌فرض تنظیم کرد
+            last_name='کاربر',
         )
 
-        # تنظیم سطح پیش‌فرض کاربر به میهمان
-        guest_level, _ = UserLevel.objects.get_or_create(name='میهمان')
-        profile.level = guest_level
-        profile.save()
+        # ست کردن سطح کاربری پیش‌فرض
+        guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
+        instance.user_level = guest_level
+        instance.save()
