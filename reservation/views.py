@@ -230,8 +230,6 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
-
-
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -410,12 +408,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         room_data = list(room_dict.values())
 
         if not passengers_list:
+            room_data.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(room_data)
 
         # --- Single room ---
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] + r['extra_capacity'] >= required_capacity]
+            filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
             if not filtered_rooms:
                 price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
                 return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
@@ -438,38 +437,64 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # --- Pack rooms ---
         packs = []
-        valid_combinations = []
-        for combo in itertools.permutations(room_data, len(passengers_list)):
-            if all(combo[i]['capacity'] + combo[i]['extra_capacity'] == passengers_list[i] for i in range(len(passengers_list))):
-                valid_combinations.append(combo)
+        passengers_list.sort()
+        room_candidates = {}
+        for p in set(passengers_list):
+            room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
 
-        seen = set()
-        for combo in valid_combinations:
-            if all(r['room_number'] > 0 for r in combo):
-                pack_total_price = sum(r['price']['total_price_discount'] for r in combo)
-                room_ids = tuple(sorted([r['id'] for r in combo]))
-                if room_ids not in seen:
-                    seen.add(room_ids)
-                    pack_rooms = []
-                    for i, room in enumerate(combo):
-                        room_copy = room.copy()
-                        room_copy['selected_passenger'] = passengers_list[i]
-                        pack_rooms.append(room_copy)
-                    packs.append({
-                        "pack_rooms": pack_rooms,
-                        "total_price": pack_total_price,
-                        "night_count": night_count,
-                        "room_count": len(combo)
-                    })
+        def generate_packs(current_pack, remaining_groups, used_rooms):
+            if not remaining_groups:
+                pack_total_price = 0
+                pack_rooms = []
+                for orig_room, p in current_pack:
+                    room = copy.deepcopy(orig_room)
+                    if p > room['capacity']:
+                        extra_passengers = p - room['capacity']
+                        extra_price_per_night = room['price']['extra_capacity_price']
+                        for day in room['price_calendar']:
+                            if day['status'] == "open" and day['price']:
+                                day['price']['price'] += extra_passengers * extra_price_per_night
+                                day['price']['price_after_discount'] += extra_passengers * extra_price_per_night
+                        room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                        room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                    room['selected_passenger'] = p
+                    pack_rooms.append(room)
+                    pack_total_price += room['price']['total_price_discount']
+                packs.append({
+                    "pack_rooms": pack_rooms,
+                    "total_price": pack_total_price,
+                    "night_count": night_count,
+                    "room_count": len(current_pack)
+                })
+                return
+
+            p = remaining_groups[0]
+            for room in room_candidates.get(p, []):
+                room_id = room['id']
+                used_count = used_rooms.get(room_id, 0)
+                if used_count < room['room_number']:
+                    new_used = used_rooms.copy()
+                    new_used[room_id] = used_count + 1
+                    generate_packs(current_pack + [(room, p)], remaining_groups[1:], new_used)
+
+        generate_packs([], passengers_list, {})
 
         if not packs:
             price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
             return Response({'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.', 'price_calendar': price_calendar}, status=404)
 
-        packs.sort(key=lambda x: x['total_price'])
-        return Response(packs)
+        seen = set()
+        unique_packs = []
+        for pack in packs:
+            key = tuple(sorted((r['id'], r['selected_passenger']) for r in pack['pack_rooms']))
+            if key not in seen:
+                seen.add(key)
+                unique_packs.append(pack)
 
-
+        unique_packs.sort(key=lambda x: x['total_price'])
+        return Response(unique_packs)
+    
+    
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
