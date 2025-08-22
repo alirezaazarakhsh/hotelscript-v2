@@ -231,7 +231,6 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
-
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -245,7 +244,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         price_after_discount = price_data.price if price_data else None
         discount_percentage = None
         discount_date = None
-        discount_value = None  # برای حفظ مقدار تخفیف ثابت
 
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
@@ -264,13 +262,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
                     raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را برای تخفیف ثابت حذف کنید.")
-                discount_value = int(price_data.discount_value)  # مقدار تخفیف ثابت برای استفاده در پرداخت
-                price_after_discount = int(price_data.price)  # بدون اعمال تخفیف ثابت
-                fixed_discount_applied = price_data.is_fixed_discount_one_time
+                if price_data.is_fixed_discount_one_time and fixed_discount_applied:
+                    discount_amount = 0
+                else:
+                    discount_amount = int(price_data.discount_value)
+                    fixed_discount_applied = price_data.is_fixed_discount_one_time
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
         else:
             discount_amount = 0
 
-        return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied, discount_value
+        return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
@@ -345,7 +346,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 status = "open" if price_data and not closed_date else "close"
 
                 try:
-                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied, discount_value = self.calculate_discount(price_data, date, fixed_discount_applied)
+                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
                 except ValueError as e:
                     return Response({'detail': str(e)}, status=400)
 
@@ -359,7 +360,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "price_after_discount": price_after_discount,
                         "discount_percentage": discount_percentage,
                         "discount_amount": discount_amount,
-                        "discount_value": discount_value,  # مقدار تخفیف ثابت برای استفاده در پرداخت
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
                         "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
@@ -372,7 +372,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 continue
 
             try:
-                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _, discount_value_first = self.calculate_discount(first_price_data, start_date_obj, False)
+                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False)
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
@@ -397,7 +397,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "total_price_discount": total_price_discount,
                     "discount_percentage": discount_percentage_first,
                     "discount_amount": discount_amount,
-                    "discount_value": discount_value_first,  # مقدار تخفیف ثابت
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
                     "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
@@ -420,7 +419,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             if not filtered_rooms:
                 price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
                 return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
-
+            
             for room in filtered_rooms:
                 if required_capacity > room['capacity']:
                     extra_passengers = required_capacity - room['capacity']
@@ -431,9 +430,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             day['price']['price_after_discount'] += extra_passengers * extra_price_per_night
                     room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-
+                
                 room['selected_passenger'] = required_capacity
-
+            
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(filtered_rooms)
 
@@ -495,6 +494,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
+    
     
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
