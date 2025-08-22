@@ -248,8 +248,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
-                # تخفیف درصدی به طور کامل حذف شده
-                price_after_discount = price_data.price
+                if not price_data.discount_date or price_data.discount_date < date:
+                    # اگر تایمر صفر شده، تخفیف و تایمر برداشته می‌شه و قیمت اصلی نمایش داده می‌شه
+                    price_after_discount = price_data.price
+                else:
+                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
+                    discount_amount = int(price_data.price * price_data.discount_value / 100)
+                    discount_percentage = price_data.discount_value
+                    discount_date = price_data.discount_date.strftime('%Y/%m/%d')
+                    price_after_discount = int(max(price_data.price - discount_amount, 0))
             elif price_data.discount_type == 'fixed':
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
