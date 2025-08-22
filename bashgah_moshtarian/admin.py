@@ -200,18 +200,11 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         return result
     
     
+@admin.register(CustomerClubPoint)
 class CustomerClubPointAdmin(admin.ModelAdmin):
     list_display = ['user', 'points']
-    
-    search_fields = [
-        'user__phone_number',                  # شماره موبایل اصلی
-        'user__natural_profile__first_name',  # نام کاربر حقیقی
-        'user__natural_profile__last_name',   # نام خانوادگی کاربر حقیقی
-        'user__admin__first_name',            # نام ادمین (اگر کاربر ادمین باشه)
-        'user__admin__last_name',             # نام خانوادگی ادمین
-    ]
-    
-    autocomplete_fields = ['user']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name']
+    autocomplete_fields = ['user']  
     
     
     
