@@ -231,6 +231,7 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -315,6 +316,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
             end_date_obj = jdatetime.date(*map(int, end_date.split('-'))) if end_date else start_date_obj + jdatetime.timedelta(days=30)
             if start_date_obj > end_date_obj:
                 return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
+            if start_date_obj == end_date_obj:
+                return Response({'detail': 'بازه رزرو نمی‌تواند صفر شب باشد.'}, status=400)
             if (end_date_obj - start_date_obj).days > 30:
                 return Response({'detail': 'بازه رزرو نمی‌تواند بیشتر از ۳۰ روز باشد.'}, status=400)
         except Exception:
@@ -324,9 +327,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = "میهمان"
 
+        # Filter rooms to ensure they are available for the entire date range
         rooms_qs = hotel.rooms.filter(
-            date_prices__start_date__lte=end_date_obj,
-            date_prices__end_date__gte=start_date_obj,
+            date_prices__start_date__lte=start_date_obj,
+            date_prices__end_date__gte=end_date_obj,
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
@@ -377,7 +381,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
-            total_price_discount = sum(day['price']['price_after_discount'] for day in price_calendar if day['status'] == "open" and day['price'])
+            # Only apply percentage discounts to total_price_discount
+            total_price_discount = sum(
+                day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
+                day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
+            )
 
             room_dict[room.id] = {
                 "id": room.id,
@@ -427,9 +435,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     for day in room['price_calendar']:
                         if day['status'] == "open" and day['price']:
                             day['price']['price'] += extra_passengers * extra_price_per_night
-                            day['price']['price_after_discount'] += extra_passengers * extra_price_per_night
+                            day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
                     room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                    room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                    room['price']['total_price_discount'] = sum(
+                        day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
+                        day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
+                    )
                 
                 room['selected_passenger'] = required_capacity
             
@@ -455,9 +466,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         for day in room['price_calendar']:
                             if day['status'] == "open" and day['price']:
                                 day['price']['price'] += extra_passengers * extra_price_per_night
-                                day['price']['price_after_discount'] += extra_passengers * extra_price_per_night
+                                day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
                         room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                        room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                        room['price']['total_price_discount'] = sum(
+                            day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
+                            day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
+                        )
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
                     pack_total_price += room['price']['total_price_discount']
