@@ -249,7 +249,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
 
-    def calculate_discount(self, price_data, date, fixed_discount_applied=False):
+    def calculate_discount(self, price_data, date, fixed_discount_applied=False, is_pack=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
         discount_amount = 0
         price_after_discount = price_data.price if price_data else None
@@ -269,7 +269,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 else:
                     logger.warning(f"Room {price_data.room.id} on {date}: Discount expired on {price_data.discount_date}, reverting to normal price")
                     price_after_discount = int(price_data.price)  # بازگشت به قیمت عادی
-            elif price_data.discount_type == 'fixed':
+            elif price_data.discount_type == 'fixed' and not is_pack:
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
                     raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را برای تخفیف ثابت حذف کنید.")
@@ -279,6 +279,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     discount_amount = int(price_data.discount_value)
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
                 price_after_discount = int(max(price_data.price - discount_amount, 0))
+            else:
+                price_after_discount = int(price_data.price)  # برای پک‌ها تخفیف ثابت اعمال نشود
         else:
             discount_amount = 0
 
@@ -358,7 +360,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 status = "open" if price_data and not closed_date else "close"
 
                 try:
-                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
+                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied, is_pack=False)
                 except ValueError as e:
                     return Response({'detail': str(e)}, status=400)
 
@@ -384,7 +386,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 continue
 
             try:
-                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False)
+                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False, is_pack=False)
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
@@ -472,8 +474,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
-                    # فقط تخفیف‌های درصدی معتبر اعمال شوند
-                    pack_total_price += room['price']['total_price_discount']
+                    # فقط قیمت بدون تخفیف ثابت برای پک‌ها استفاده شود
+                    base_price = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                    pack_total_price += base_price
                 packs.append({
                     "pack_rooms": pack_rooms,
                     "total_price": pack_total_price,
