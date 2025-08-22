@@ -1630,13 +1630,38 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
+import logging
+import sys
+import jdatetime
+from django.db.models import Avg, Prefetch
+from rest_framework import generics, serializers
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from drf_yasg.utils import swagger_auto_schema
+
+from .models import (
+    Hotel, Room, RoomDatePrice, HotelTagPublic, Comment, CommentPoint
+)
+from .serializers import HotelListSerializer, HotelTagPublicSerializer
+
+
+# --- logger fallback ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
-    logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
+    logger = type(
+        'Logger', (), {
+            'info': logger_fallback,
+            'warning': logger_fallback,
+            'debug': logger_fallback
+        }
+    )()
 
+
+# --- Serializer ---
 class UpdatedHotelListSerializer(HotelListSerializer):
     price = serializers.SerializerMethodField()
     price_after_discount = serializers.SerializerMethodField()
@@ -1653,36 +1678,29 @@ class UpdatedHotelListSerializer(HotelListSerializer):
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
-            'reservation_count', 'public_tags', 
+            'reservation_count', 'public_tags',
         )
 
     def get_price(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('original_total_price', 0)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price', 0)
 
     def get_price_after_discount(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('total_price', 0)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price', 0)
 
     def get_discount_percentage(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('discount_percentage', None)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('discount_percentage', None)
 
     def get_discount_date(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('discount_date', None)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('discount_date', None)
 
     def get_rating(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('rating', 0)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('rating', 0)
 
     def get_average_score(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('average_score', 0.0)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('average_score', 0.0)
 
     def get_reservation_count(self, obj):
-        hotel_min_price_map = self.context.get('hotel_min_price_map', {})
-        return hotel_min_price_map.get(obj.id, {}).get('reservation_count', 0)
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('reservation_count', 0)
 
     def get_public_tags(self, obj):
         public_tags = HotelTagPublic.objects.filter(hotel=obj)
@@ -1695,10 +1713,12 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         return self.context.get("night_count", 1)
 
 
+# --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = PageNumberPagination
+    queryset = Hotel.objects.none()  # برای جلوگیری از AssertionError
 
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
@@ -1737,14 +1757,14 @@ class BestHotelspageAPI(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
         operation_description=(
-            "این API لیست هتل‌های موجود را با توجه به فیلترهای شهر، تاریخ شروع، تاریخ پایان، "
-            "تعداد مسافران، تعداد اتاق‌ها، ستاره‌ها، محدوده قیمت، نوع اقامتگاه و تگ‌های عمومی بازمی‌گرداند. "
-            "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) برای ارزان‌ترین اتاق نمایش داده می‌شود. "
+            "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
+            "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
+            "برای ارزان‌ترین اتاق نمایش داده می‌شود. "
             "همچنین تعداد شب‌ها (night_count) محاسبه و نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
     )
-    def get(self, request, *args, **kwargs):
+    def list(self, request, *args, **kwargs):
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
@@ -1845,6 +1865,10 @@ class BestHotelspageAPI(generics.ListAPIView):
         page = self.paginate_queryset(queryset)
         serializer = self.get_serializer(
             page, many=True,
-            context={"request": request, "hotel_min_price_map": hotel_min_price_map, "night_count": night_count}
+            context={
+                "request": request,
+                "hotel_min_price_map": hotel_min_price_map,
+                "night_count": night_count
+            }
         )
         return self.get_paginated_response(serializer.data)
