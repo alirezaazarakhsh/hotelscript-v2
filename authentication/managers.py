@@ -1,21 +1,24 @@
 from django.contrib.auth.base_user import BaseUserManager
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from authentication.models import NaturalProfile
-from config.models import UserLevel
-from finance.models import Wallet
-from bashgah_moshtarian.models import CustomerClubPoint
 
 class UserManager(BaseUserManager):
+    """
+    UserManager برای کاربران OTP-based
+    """
     def create_user(self, phone_number=None, **other_fields):
         if not phone_number:
             raise ValueError('شماره موبایل الزامی است.')
 
+        # ایمپورت داخلی برای جلوگیری از circular import
+        from authentication.models import NaturalProfile
+        from config.models import UserLevel
+
+        # ساخت کاربر بدون پسورد
         user = self.model(phone_number=phone_number, **other_fields)
-        user.set_unusable_password()  # چون پسورد سنتی نداریم
+        user.set_unusable_password()
         user.save(using=self._db)
 
-        # ساخت پروفایل حقیقی و ست کردن سطح میهمان
+        # ست کردن پروفایل حقیقی و سطح میهمان
         guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
         NaturalProfile.objects.create(
             base_user=user,
@@ -26,18 +29,18 @@ class UserManager(BaseUserManager):
 
         return user
 
-    def create_superuser(self, phone_number, **other_fields):
-        other_fields.setdefault('is_staff', True)
-        other_fields.setdefault('is_superuser', True)
-        return self.create_user(phone_number=phone_number, **other_fields)
+    def create_superuser(self, **other_fields):
+        raise NotImplementedError('Use the SuperUser model to create superusers.')
 
     def get_by_phone(self, phone):
         return super(UserManager, self).get_queryset().get(phone_number=phone)
 
     def get_by_phone_or_create(self, phone):
+        from finance.models import Wallet
+        from bashgah_moshtarian.models import CustomerClubPoint
         try:
             return self.get_by_phone(phone)
-        except ObjectDoesNotExist:
+        except self.model.DoesNotExist:
             with transaction.atomic():
                 user = self.create_user(phone_number=phone)
                 Wallet.objects.create(user=user, balance=0)
