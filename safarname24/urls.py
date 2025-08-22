@@ -11,7 +11,7 @@ schema_view = get_schema_view(
     openapi.Info(
         title="API",
         default_version='v1',
-        description="API SAFARNAMEH",
+        description="API SAFARNAMEH24",
         terms_of_service="https://www.sevinhost.com/",
         contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
         license=openapi.License(name="checked ✅"),

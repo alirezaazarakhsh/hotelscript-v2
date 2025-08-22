@@ -1640,8 +1640,8 @@ except Exception:
 
 # --- Serializer ---
 class UpdatedHotelListSerializer(HotelListSerializer):
-    price = serializers.SerializerMethodField()
-    price_after_discount = serializers.SerializerMethodField()
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
     discount_percentage = serializers.SerializerMethodField()
     discount_date = serializers.SerializerMethodField()
     night_count = serializers.SerializerMethodField()
@@ -1650,20 +1650,19 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
-    
 
     class Meta(HotelListSerializer.Meta):
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
-            'price', 'price_after_discount', 'discount_percentage',
+            'original_total_price', 'total_price', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
-            'comment_count','reservation_count', 'public_tags',
+            'comment_count', 'reservation_count', 'public_tags',
         )
 
-    def get_price(self, obj):
+    def get_original_total_price(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price', 0)
 
-    def get_price_after_discount(self, obj):
+    def get_total_price(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price', 0)
 
     def get_discount_percentage(self, obj):
@@ -1672,11 +1671,17 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     def get_discount_date(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('discount_date', None)
 
+    def get_night_count(self, obj):
+        return self.context.get('night_count', 1)
+
     def get_rating(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('rating', 0)
 
     def get_average_score(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('average_score', 0.0)
+
+    def get_comment_count(self, obj):
+        return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
     def get_reservation_count(self, obj):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('reservation_count', 0)
@@ -1687,12 +1692,6 @@ class UpdatedHotelListSerializer(HotelListSerializer):
             public_tags, many=True,
             context={'request': self.context.get('request')}
         ).data
-
-    def get_night_count(self, obj):
-        return self.context.get("night_count", 1)
-
-    def get_comment_count(self, obj):
-        return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
@@ -1739,17 +1738,16 @@ class BestHotelspageAPI(generics.ListAPIView):
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
         operation_description=(
             "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
-            "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
+            "قیمت اصلی (original_total_price) و قیمت با تخفیف (total_price) "
             "برای ارزان‌ترین اتاق نمایش داده می‌شود. "
-            "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
+            "پارامتر passengers تعداد مسافران هر اتاق را به صورت کاما جدا شده مشخص می‌کند (مثل passengers=1,2)."
         ),
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passenger-count', in_=openapi.IN_QUERY, description='تعداد مسافران', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter(name='room-count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='تعداد مسافران برای هر اتاق (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
@@ -1761,22 +1759,27 @@ class BestHotelspageAPI(generics.ListAPIView):
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
-        passenger_count = request.query_params.get('passenger-count')
-        room_count = request.query_params.get('room-count')
+        passengers = request.query_params.get('passengers')
         star = request.query_params.get('star')
         min_price = request.query_params.get('min-price')
         max_price = request.query_params.get('max-price')
         residence_type = request.query_params.get('residence-type')
         other_filters = request.query_params.get('other-filters')
 
+        # Validate numeric query parameters
         try:
-            passenger_count = int(passenger_count) if passenger_count else None
-            room_count = int(room_count) if room_count else None
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
+            # Validate passengers parameter
+            passengers_list = None
+            if passengers:
+                passengers_list = [int(x) for x in passengers.split(',')]
+                if any(p <= 0 for p in passengers_list):
+                    return Response({'detail': 'تعداد مسافران نمی‌تواند صفر یا منفی باشد.'}, status=400)
         except ValueError:
-            return Response({'detail': 'پارامترهای عددی معتبر نیستند.'}, status=400)
+            return Response({'detail': 'پارامترهای عددی یا passengers معتبر نیستند.'}, status=400)
 
+        # Base hotel query with related data
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
             'public_tags',
             Prefetch('rooms', queryset=Room.objects.prefetch_related(
@@ -1785,6 +1788,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             Prefetch('comments', queryset=Comment.objects.filter(is_approved=True))
         )
 
+        # Apply filters
         if city:
             hotels_qs = hotels_qs.filter(city__name__iexact=city)
 
@@ -1809,6 +1813,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             except ValueError:
                 return Response({'detail': 'شناسه‌های تگ‌های عمومی نامعتبر است.'}, status=400)
 
+        # Validate date parameters
         today = jdatetime.date.today()
         start_date_obj = today
         end_date_obj = today
@@ -1825,26 +1830,52 @@ class BestHotelspageAPI(generics.ListAPIView):
 
         night_count = max((end_date_obj - start_date_obj).days, 1)
 
+        # Filter hotels based on passengers
         hotel_min_price_map = {}
         hotel_comment_count_map = {}
         for hotel in hotels_qs:
             rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=start_date_obj,
-                date_prices__end_date__gte=end_date_obj,
+                date_prices__end_date__gte=start_date_obj,  # استفاده از start_date_obj برای سازگاری با کد قبلی
                 inventory__gt=0
             ).distinct()
+            logger.debug(f"Found {rooms.count()} rooms for hotel {hotel.id}")
             if not rooms.exists():
+                logger.warning(f"No rooms found for hotel {hotel.id}")
                 continue
+
+            # Check if hotel has enough rooms with required capacities
+            if passengers_list:
+                available_rooms = list(rooms.values('id', 'room_capacity'))
+                room_capacities = [room['room_capacity'] for room in available_rooms]
+                # Check if we can match each passenger count to a room with sufficient capacity
+                valid = True
+                remaining_capacities = room_capacities.copy()
+                for required_capacity in passengers_list:
+                    # Find a room with at least the required capacity
+                    found = False
+                    for capacity in remaining_capacities:
+                        if capacity >= required_capacity:
+                            remaining_capacities.remove(capacity)
+                            found = True
+                            break
+                    if not found:
+                        valid = False
+                        break
+                if not valid:
+                    logger.debug(f"Hotel {hotel.id} does not meet passengers requirement: {passengers_list}")
+                    continue
 
             # Calculate comment count
             comment_count = hotel.comments.count()
             hotel_comment_count_map[hotel.id] = comment_count
 
+            # Calculate minimum price for the hotel
             min_price_data = None
             for room in rooms:
                 price_data = room.date_prices.filter(
                     start_date__lte=start_date_obj,
-                    end_date__gte=end_date_obj
+                    end_date__gte=start_date_obj
                 ).order_by('price').first()
                 if not price_data:
                     continue
@@ -1861,6 +1892,9 @@ class BestHotelspageAPI(generics.ListAPIView):
                 hotel_min_price_map[hotel.id] = min_price_data
 
         queryset = hotels_qs.filter(id__in=hotel_min_price_map.keys())
+        if not queryset.exists():
+            return Response({'detail': 'هیچ هتلی یافت نشد.'}, status=404)
+
         page = self.paginate_queryset(queryset)
         serializer = self.get_serializer(
             page, many=True,
