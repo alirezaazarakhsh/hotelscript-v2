@@ -251,14 +251,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if not price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
                     raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را مشخص کنید.")
-                if price_data.discount_date >= date:  # فقط اگر تاریخ تخفیف معتبر باشد
+                if price_data.discount_date >= date:
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
                 else:
                     logger.warning(f"Room {price_data.room.id} on {date}: Discount expired on {price_data.discount_date}, reverting to normal price")
-                    price_after_discount = int(price_data.price)  # بازگشت به قیمت عادی
+                    price_after_discount = int(price_data.price)
             elif price_data.discount_type == 'fixed' and not is_pack:
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
@@ -270,7 +270,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
                 price_after_discount = int(max(price_data.price - discount_amount, 0))
             else:
-                price_after_discount = int(price_data.price)  # برای پک‌ها تخفیف ثابت اعمال نشود
+                price_after_discount = int(price_data.price)
         else:
             discount_amount = 0
 
@@ -302,7 +302,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 passengers_list = [int(p) for p in passengers_clean if p.strip()]
                 if not passengers_list:
                     return Response({'detail': 'پارامتر passengers باید حداقل یک عدد صحیح داشته باشد.'}, status=400)
-                if passengers_list == [0]:  # Handle passengers=[0] to return all rooms
+                if passengers_list == [0]:
                     passengers_list = []
                 elif len(passengers_list) > 3:
                     return Response({'detail': 'تعداد اتاق‌ها نمی‌تواند بیشتر از ۳ باشد.'}, status=400)
@@ -314,14 +314,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': 'پارامتر passengers باید به فرمت [2,3,5] یا 0 و شامل اعداد صحیح باشد.'}, status=400)
 
         try:
-            current_date = jdatetime.datetime.now().date()  # تاریخ فعلی: 1404/06/01
+            current_date = jdatetime.datetime.now().date()
             start_date_obj = current_date if not start_date else jdatetime.date(*map(int, start_date.split('-')))
             end_date_obj = jdatetime.date(*map(int, end_date.split('-'))) if end_date else start_date_obj + jdatetime.timedelta(days=30)
 
-            # بررسی اینکه تاریخ شروع و پایان یکسان نباشد
             if start_date_obj == end_date_obj:
                 return Response({'detail': 'تاریخ شروع و پایان نمی‌تواند یکسان باشد. لطفاً بازه زمانی معتبر وارد کنید.'}, status=400)
-
             if start_date_obj > end_date_obj:
                 return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
             if (end_date_obj - start_date_obj).days > 30:
@@ -333,11 +331,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = "میهمان"
 
-        # فیلتر اتاق‌ها با توجه به تاریخ پایان درخواستی
+        # فیلتر اتاق‌ها: فقط اتاق‌هایی که حداقل یک روز در بازه درخواستی باز هستند
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
-            date_prices__end_date__gte=start_date_obj,
-            date_prices__end_date__lte=end_date_obj,  # محدود کردن به تاریخ پایان درخواستی
+            date_prices__end_date__gte=max(start_date_obj, current_date),
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
@@ -350,6 +347,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             closed_dates = ClosedDate.objects.filter(room_date__room=room, date__range=(start_date_obj, end_date_obj))
             price_calendar = []
             fixed_discount_applied = False
+            has_open_day = False
 
             for date in date_range:
                 price_data = room.date_prices.filter(
@@ -358,35 +356,45 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ).order_by('-id').select_related('user_level').first()
                 closed_date = closed_dates.filter(date=date).first()
 
-                # بررسی وضعیت با توجه به تاریخ پایان درخواستی
-                status = "open" if price_data and not closed_date and date <= end_date_obj else "close"
+                # بررسی وضعیت تاریخ
+                if (price_data and 
+                    not closed_date and 
+                    price_data.end_date >= max(current_date, start_date_obj) and 
+                    date <= price_data.end_date):
+                    status = "open"
+                    has_open_day = True
+                else:
+                    status = "close"
 
-                try:
-                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
-                        price_data, date, fixed_discount_applied, is_pack=False
-                    )
-                except ValueError as e:
-                    return Response({'detail': str(e)}, status=400)
+                price_info = None
+                if status == "open":
+                    try:
+                        discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
+                            price_data, date, fixed_discount_applied, is_pack=False
+                        )
+                        price_info = {
+                            "price": price_data.price,
+                            "price_after_discount": price_after_discount,
+                            "discount_percentage": discount_percentage,
+                            "discount_amount": discount_amount,
+                            "discount_date": discount_date,
+                            "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time,
+                            "user_level": price_data.user_level.title if price_data.user_level else default_user_level,
+                            "extra_capacity_price": price_data.extra_passenger_price
+                        }
+                    except ValueError as e:
+                        return Response({'detail': str(e)}, status=400)
 
                 price_calendar.append({
                     "date": date.strftime('%Y/%m/%d'),
                     "month": persian_months[date.month - 1],
                     "day": persian_days[date.weekday()],
                     "status": status,
-                    "price": {
-                        "price": price_data.price if price_data else None,
-                        "price_after_discount": price_after_discount,
-                        "discount_percentage": discount_percentage,
-                        "discount_amount": discount_amount,
-                        "discount_date": discount_date,
-                        "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
-                        "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
-                        "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
-                    } if status == "open" else None
+                    "price": price_info
                 })
 
-            # فقط اتاق‌هایی که حداقل یک روز باز دارند را اضافه کن
-            if not any(day['status'] == "open" for day in price_calendar):
+            # فقط اتاق‌هایی که حداقل یک روز باز دارند اضافه شوند
+            if not has_open_day:
                 continue
 
             first_price_data = room.date_prices.filter(
@@ -487,7 +495,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
-                    # فقط قیمت بدون تخفیف ثابت برای پک‌ها استفاده شود
                     base_price = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     pack_total_price += base_price
                 packs.append({
@@ -523,7 +530,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
     
     
 
