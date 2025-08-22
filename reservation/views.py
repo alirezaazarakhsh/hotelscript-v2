@@ -1647,16 +1647,17 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     night_count = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     average_score = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
-    comment_count = serializers.SerializerMethodField()
+    
 
     class Meta(HotelListSerializer.Meta):
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
-            'reservation_count', 'public_tags', 'comment_count',
+            'comment_count','reservation_count', 'public_tags',
         )
 
     def get_price(self, obj):
@@ -1742,7 +1743,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             "برای ارزان‌ترین اتاق نمایش داده می‌شود. "
             "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
-        tags=["best-hotels"],
+        tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
