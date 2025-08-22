@@ -1,14 +1,14 @@
 from django.urls import path
 from . import views
 from .views import (
+    AmazingHotelsListView,
     CommentPointsAndSuggestionsView,
     HomeHotelByCityView,
     HotelCommentPointSummaryView,
     HotelCommentsBySlugView,
     CreateCommentView,
-    SpecialOffersListView,
-    FlashSalesListView,
     BestSellersListView,
+    SuggesteHotelListView,
 )
 
 app_name = 'reservation'
@@ -31,8 +31,8 @@ urlpatterns = [
     # ==== Hotel Listings ====
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
-    path('hotels/special-offers/', SpecialOffersListView.as_view(), name='special-offers-list'),
-    path('hotels/flash-sales/', FlashSalesListView.as_view(), name='flash-sales-list'),
+    path('hotels/suggested-hotels/', SuggesteHotelListView.as_view(), name='suggested-hotels'),
+    path('hotels/amazing-hotels/', AmazingHotelsListView.as_view(), name='amazing-hotels'),
     path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-list'),
     path('hotels/by-city/<str:city_name>/', HomeHotelByCityView.as_view(), name='hotels-by-city'),
     path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),

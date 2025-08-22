@@ -1051,9 +1051,9 @@ class BaseHotelListView(APIView):
         return hotel_min_price_map
 
 
-class SpecialOffersListView(BaseHotelListView):
+class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
-        operation_summary="دریافت لیست هتل‌های پیشنهادی ویژه",
+        operation_summary="دریافت لیست هتل‌های پیشنهادی",
         operation_description="این API لیستی از هتل‌های پیشنهادی ویژه را بدون صفحه‌بندی باز می‌گرداند.",
         tags=['hotel-home'],
         responses={
@@ -1080,7 +1080,8 @@ class SpecialOffersListView(BaseHotelListView):
         return Response(special_offers_data)
 
 
-class FlashSalesListView(BaseHotelListView):
+
+class AmazingHotelsListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های فروش شگفت‌انگیز",
         operation_description="این API لیستی از هتل‌های فروش شگفت‌انگیز را بدون صفحه‌بندی باز می‌گرداند.",
@@ -1107,6 +1108,8 @@ class FlashSalesListView(BaseHotelListView):
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
+
+
 
 
 class BestSellersListView(BaseHotelListView):
