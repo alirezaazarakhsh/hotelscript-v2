@@ -8,6 +8,8 @@ import jdatetime
 from decimal import Decimal
 from datetime import timedelta
 from functools import cached_property
+from django.db.models.signals import pre_save
+
 
 # 🌐 Django
 from django.db import models
@@ -1091,7 +1093,6 @@ def check_expired_discount(sender, instance, **kwargs):
         instance.discount_type = 'none'
         instance.discount_value = 0
         instance.discount_date = None
-    
     
     
     
