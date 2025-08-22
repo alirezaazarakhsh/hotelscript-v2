@@ -240,19 +240,22 @@ class HotelRoomsView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'slug'
 
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
-        """محاسبه مقدار تخفیف و قیمت پس از تخفیف با در نظر گرفتن زمان دقیق"""
+        """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
         discount_amount = 0
         price_after_discount = price_data.price if price_data else None
         discount_percentage = None
         discount_date = None
-        current_time = timezone.now()
 
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
-                if not price_data.discount_date or (price_data.discount_date and jdatetime.datetime.combine(price_data.discount_date, jdatetime.time(23, 59, 59)) >= jdatetime.datetime.fromgregorian(datetime=current_time)):
+                if not price_data.discount_date or price_data.discount_date <= date:
+                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
+                    price_after_discount = price_data.price
+                else:
+                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
-                    discount_date = price_data.discount_date.strftime('%Y/%m/%d') if price_data.discount_date else None
+                    discount_date = price_data.discount_date.strftime('%Y/%m/%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
             elif price_data.discount_type == 'fixed':
                 if price_data.discount_date:
@@ -307,8 +310,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': 'پارامتر passengers باید به فرمت [2,3,5] یا 0 و شامل اعداد صحیح باشد.'}, status=400)
 
         try:
-            current_time = timezone.now()
-            start_date_obj = jdatetime.date.fromgregorian(datetime=current_time) if not start_date else jdatetime.date(*map(int, start_date.split('-')))
+            start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
             end_date_obj = jdatetime.date(*map(int, end_date.split('-'))) if end_date else start_date_obj + jdatetime.timedelta(days=30)
             if start_date_obj > end_date_obj:
                 return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
@@ -377,6 +379,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
+            # Only apply percentage discounts to total_price_discount
             total_price_discount = sum(
                 day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
                 day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
@@ -433,7 +436,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
                     room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     room['price']['total_price_discount'] = sum(
-                        day['price']['price_after_discount'] if day['price']['discount_percentage'] is None else
+                        day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
                         day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
                     )
                 
@@ -444,7 +447,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # --- Pack rooms ---
         packs = []
-        passengers_list.sort()
+        passengers_list.sort()  # مرتب‌سازی passengers_list برای اطمینان از ترتیب ثابت در تولید پک‌ها
         room_candidates = {}
         for p in set(passengers_list):
             room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
@@ -468,10 +471,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
                         )
                     room['selected_passenger'] = p
-                    pack_rooms.append(room)
+                    pack_rooms.append(room)  # بدون مرتب‌سازی اتاق‌ها
                     pack_total_price += room['price']['total_price_discount']
                 packs.append({
-                    "pack_rooms": pack_rooms,
+                    "pack_rooms": pack_rooms,  # اتاق‌ها به ترتیب اضافه شدن
                     "total_price": pack_total_price,
                     "night_count": night_count,
                     "room_count": len(current_pack)
@@ -496,12 +499,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
         seen = set()
         unique_packs = []
         for pack in packs:
-            key = tuple((r['id'], r['selected_passenger']) for r in pack['pack_rooms'])
+            key = tuple(sorted((r['id'], r['selected_passenger']) for r in pack['pack_rooms']))
             if key not in seen:
                 seen.add(key)
                 unique_packs.append(pack)
 
-        # حفظ سورت ساده بر اساس total_price از کم به زیاد
+        # مرتب‌سازی پک‌ها بر اساس total_price از کم به زیاد
         unique_packs.sort(key=lambda x: x['total_price'])
 
         return Response(unique_packs)
