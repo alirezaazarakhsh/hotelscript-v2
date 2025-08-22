@@ -447,7 +447,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # --- Pack rooms ---
         packs = []
-        passengers_list.sort()  # مرتب‌سازی passengers_list برای اطمینان از ترتیب ثابت در تولید پک‌ها
+        passengers_list.sort()
         room_candidates = {}
         for p in set(passengers_list):
             room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
@@ -471,10 +471,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
                         )
                     room['selected_passenger'] = p
-                    pack_rooms.append(room)  # بدون مرتب‌سازی اتاق‌ها
+                    pack_rooms.append(room)
                     pack_total_price += room['price']['total_price_discount']
                 packs.append({
-                    "pack_rooms": pack_rooms,  # اتاق‌ها به ترتیب اضافه شدن
+                    "pack_rooms": pack_rooms,
                     "total_price": pack_total_price,
                     "night_count": night_count,
                     "room_count": len(current_pack)
@@ -504,9 +504,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 seen.add(key)
                 unique_packs.append(pack)
 
-        # مرتب‌سازی پک‌ها بر اساس total_price از کم به زیاد
         unique_packs.sort(key=lambda x: x['total_price'])
-
         return Response(unique_packs)
     
     
