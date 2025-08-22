@@ -1735,6 +1735,8 @@ class BestHotelspageAPI(generics.ListAPIView):
     serializer_class = UpdatedHotelListSerializer
     pagination_class = PageNumberPagination
     queryset = Hotel.objects.none()
+    swagger_tags = ["best-hotel"]  
+
 
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
