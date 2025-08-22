@@ -249,10 +249,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
                 if not price_data.discount_date or price_data.discount_date <= date:
-                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
                     price_after_discount = price_data.price
                 else:
-                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
@@ -379,7 +377,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
-            # Only apply percentage discounts to total_price_discount
             total_price_discount = sum(
                 day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
                 day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
@@ -447,7 +444,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         # --- Pack rooms ---
         packs = []
-        passengers_list.sort()  # مرتب‌سازی passengers_list برای اطمینان از ترتیب ثابت در تولید پک‌ها
+        passengers_list.sort()
         room_candidates = {}
         for p in set(passengers_list):
             room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
@@ -471,10 +468,10 @@ class HotelRoomsView(generics.RetrieveAPIView):
                             day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
                         )
                     room['selected_passenger'] = p
-                    pack_rooms.append(room)  # بدون مرتب‌سازی اتاق‌ها
+                    pack_rooms.append(room)
                     pack_total_price += room['price']['total_price_discount']
                 packs.append({
-                    "pack_rooms": pack_rooms,  # اتاق‌ها به ترتیب اضافه شدن
+                    "pack_rooms": pack_rooms,
                     "total_price": pack_total_price,
                     "night_count": night_count,
                     "room_count": len(current_pack)
@@ -499,7 +496,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         seen = set()
         unique_packs = []
         for pack in packs:
-            key = tuple(sorted((r['id'], r['selected_passenger']) for r in pack['pack_rooms']))
+            # حذف مرتب‌سازی و فقط استفاده از tuple برای شناسایی پک‌های یکسان
+            key = tuple((r['id'], r['selected_passenger']) for r in pack['pack_rooms'])
             if key not in seen:
                 seen.add(key)
                 unique_packs.append(pack)
