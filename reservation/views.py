@@ -1630,36 +1630,13 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-import logging
-import sys
-import jdatetime
-from django.db.models import Avg, Prefetch
-from rest_framework import generics, serializers
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
-from drf_yasg.utils import swagger_auto_schema
-
-from .models import (
-    Hotel, Room, RoomDatePrice, HotelTagPublic, Comment, CommentPoint
-)
-from .serializers import HotelListSerializer, HotelTagPublicSerializer
-
-
 # --- logger fallback ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
-    logger = type(
-        'Logger', (), {
-            'info': logger_fallback,
-            'warning': logger_fallback,
-            'debug': logger_fallback
-        }
-    )()
-
+    logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
 # --- Serializer ---
 class UpdatedHotelListSerializer(HotelListSerializer):
@@ -1672,13 +1649,14 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     average_score = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta(HotelListSerializer.Meta):
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
-            'reservation_count', 'public_tags',
+            'reservation_count', 'public_tags', 'comment_count',
         )
 
     def get_price(self, obj):
@@ -1712,13 +1690,15 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     def get_night_count(self, obj):
         return self.context.get("night_count", 1)
 
+    def get_comment_count(self, obj):
+        return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = PageNumberPagination
-    queryset = Hotel.objects.none()  # برای جلوگیری از AssertionError
+    queryset = Hotel.objects.none()
 
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
@@ -1760,9 +1740,21 @@ class BestHotelspageAPI(generics.ListAPIView):
             "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
             "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
             "برای ارزان‌ترین اتاق نمایش داده می‌شود. "
-            "همچنین تعداد شب‌ها (night_count) محاسبه و نمایش داده می‌شود."
+            "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
-        tags=["best-hotel"],
+        tags=["best-hotels"],
+        manual_parameters=[
+            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='passenger-count', in_=openapi.IN_QUERY, description='تعداد مسافران', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='room-count', in_=openapi.IN_QUERY, description='تعداد اتاق‌ها', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='other-filters', in_=openapi.IN_QUERY, description='فیلترهای دیگر (شناسه تگ‌های عمومی)', type=openapi.TYPE_STRING, required=False),
+        ]
     )
     def list(self, request, *args, **kwargs):
         city = request.query_params.get('city')
@@ -1788,7 +1780,8 @@ class BestHotelspageAPI(generics.ListAPIView):
             'public_tags',
             Prefetch('rooms', queryset=Room.objects.prefetch_related(
                 Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
-            ))
+            )),
+            Prefetch('comments', queryset=Comment.objects.filter(is_approved=True))
         )
 
         if city:
@@ -1832,6 +1825,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         night_count = max((end_date_obj - start_date_obj).days, 1)
 
         hotel_min_price_map = {}
+        hotel_comment_count_map = {}
         for hotel in hotels_qs:
             rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=start_date_obj,
@@ -1840,6 +1834,10 @@ class BestHotelspageAPI(generics.ListAPIView):
             ).distinct()
             if not rooms.exists():
                 continue
+
+            # Calculate comment count
+            comment_count = hotel.comments.count()
+            hotel_comment_count_map[hotel.id] = comment_count
 
             min_price_data = None
             for room in rooms:
@@ -1868,6 +1866,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             context={
                 "request": request,
                 "hotel_min_price_map": hotel_min_price_map,
+                "hotel_comment_count_map": hotel_comment_count_map,
                 "night_count": night_count
             }
         )
