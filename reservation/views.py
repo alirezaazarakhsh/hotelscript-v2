@@ -333,10 +333,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = "میهمان"
 
-        # فیلتر اتاق‌ها برای حذف مواردی که تاریخ پایانشان گذشته است
+        # فیلتر اتاق‌ها با توجه به تاریخ پایان درخواستی
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=end_date_obj,
-            date_prices__end_date__gte=max(start_date_obj, current_date),
+            date_prices__end_date__gte=start_date_obj,
+            date_prices__end_date__lte=end_date_obj,  # محدود کردن به تاریخ پایان درخواستی
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
@@ -357,8 +358,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 ).order_by('-id').select_related('user_level').first()
                 closed_date = closed_dates.filter(date=date).first()
 
-                # بررسی اینکه آیا تاریخ پایان معتبر است یا خیر
-                status = "open" if price_data and not closed_date and price_data.end_date >= max(current_date, start_date_obj) else "close"
+                # بررسی وضعیت با توجه به تاریخ پایان درخواستی
+                status = "open" if price_data and not closed_date and date <= end_date_obj else "close"
 
                 try:
                     discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(
