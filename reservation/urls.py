@@ -1,9 +1,15 @@
 from django.urls import path
 from . import views
-from .views import CommentPointsAndSuggestionsView, HomeHotelByCityView, HotelCommentPointSummaryView, HotelCommentsBySlugView, CreateCommentView
-
-
-
+from .views import (
+    CommentPointsAndSuggestionsView,
+    HomeHotelByCityView,
+    HotelCommentPointSummaryView,
+    HotelCommentsBySlugView,
+    CreateCommentView,
+    SpecialOffersListView,
+    FlashSalesListView,
+    BestSellersListView,
+)
 
 app_name = 'reservation'
 
@@ -25,9 +31,12 @@ urlpatterns = [
     # ==== Hotel Listings ====
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
-    path('hotels/home/', views.HomeHotelListView.as_view(), name='home-hotel-list'),
+    path('hotels/special-offers/', SpecialOffersListView.as_view(), name='special-offers-list'),
+    path('hotels/flash-sales/', FlashSalesListView.as_view(), name='flash-sales-list'),
+    path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-list'),
     path('hotels/by-city/<str:city_name>/', HomeHotelByCityView.as_view(), name='hotels-by-city'),
     path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),
+
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
 
@@ -41,15 +50,12 @@ urlpatterns = [
     path('passengers/', views.PassengerListCreateView.as_view(), name='passenger-list-create'),
     path('passengers/<int:pk>/', views.PassengerRetrieveUpdateDestroyView.as_view(), name='passenger-detail'),
     
-     # ==== Comments ====
+    # ==== Comments ====
     path('hotels/<slug:slug>/comments/', HotelCommentsBySlugView.as_view(), name='hotel-comments-by-slug'),
     path('hotels/<slug:slug>/comments/create/', CreateCommentView.as_view(), name='hotel-comment-create'),
     path('hotels/<slug:slug>/comments/points-summary/', HotelCommentPointSummaryView.as_view(), name='hotel-comment-point-summary'),
     path('hotels/comments/points-and-suggestions/', CommentPointsAndSuggestionsView.as_view(), name='comment-points-and-suggestions'),
 
-
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
-
-
 ]
