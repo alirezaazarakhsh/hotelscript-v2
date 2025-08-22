@@ -1631,38 +1631,12 @@ class CreateCommentView(ListCreateAPIView):
     
 # ای پی ای صفحه بهترین هتل ها 
 # --- logger fallback ---
-import sys
-import logging
-from rest_framework import generics, serializers
-from rest_framework.permissions import AllowAny
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.response import Response
-from django.db.models import Avg, Prefetch
-import jdatetime
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-
-# تنظیم لاگر
 try:
     logger = logging.getLogger(__name__)
 except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
-
-# کلاس پیجینیشن سفارشی
-class Paginator(PageNumberPagination):
-    page_size = 8  # تعداد آیتم‌ها در هر صفحه
-    max_page_size = 100  # حداکثر تعداد صفحات
-    page_query_param = 'p'  # پارامتر صفحه‌بندی در URL
-
-    def get_paginated_response(self, data):
-        return Response({
-            'count': self.page.paginator.count,
-            'total_pages': min(self.page.paginator.num_pages, self.max_page_size),  # محدود کردن به 100 صفحه
-            'current_page': self.page.number,
-            'results': data
-        })
 
 # --- Serializer ---
 class UpdatedHotelListSerializer(HotelListSerializer):
@@ -1723,7 +1697,7 @@ class UpdatedHotelListSerializer(HotelListSerializer):
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
-    pagination_class = Paginator  # استفاده از Paginator سفارشی
+    pagination_class = PageNumberPagination
     queryset = Hotel.objects.none()
 
     def get_average_score(self, hotel):
@@ -1763,124 +1737,23 @@ class BestHotelspageAPI(generics.ListAPIView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
         operation_description=(
-            "این API لیست هتل‌ها را با توجه به فیلترهای مشخص‌شده بازمی‌گرداند. "
-            "قیمت اصلی (original_total_price) و قیمت با تخفیف (total_price) برای ارزان‌ترین اتاق نمایش داده می‌شود. "
-            "پارامتر passengers تعداد مسافران هر اتاق را به صورت کاما جدا شده مشخص می‌کند (مثل passengers=1,2). "
-            "پاسخ شامل حداکثر ۸ هتل در هر صفحه و تا ۱۰۰ صفحه است."
+            "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
+            "قیمت اصلی (original_total_price) و قیمت با تخفیف (total_price) "
+            "برای ارزان‌ترین اتاق نمایش داده می‌شود. "
+            "پارامتر passengers تعداد مسافران هر اتاق را به صورت کاما جدا شده مشخص می‌کند (مثل passengers=1,2)."
         ),
-        tags=["best-hotels"],  # اصلاح تگ به صورت جمع
+        tags=["best-hotels"],
         manual_parameters=[
-            openapi.Parameter(
-                name='city',
-                in_=openapi.IN_QUERY,
-                description='نام شهر (مثال: تهران)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='start-date',
-                in_=openapi.IN_QUERY,
-                description='تاریخ شروع به فرمت yyyy-mm-dd (مثال: 1404-06-01)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='end-date',
-                in_=openapi.IN_QUERY,
-                description='تاریخ پایان به فرمت yyyy-mm-dd (مثال: 1404-06-05)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='passengers',
-                in_=openapi.IN_QUERY,
-                description='تعداد مسافران برای هر اتاق به صورت کاما جدا شده (مثال: 1,2)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='star',
-                in_=openapi.IN_QUERY,
-                description='ستاره‌های هتل به صورت کاما جدا شده (مثال: 3,4,5)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='min-price',
-                in_=openapi.IN_QUERY,
-                description='حداقل قیمت (مثال: 1000000)',
-                type=openapi.TYPE_INTEGER,
-                required=False
-            ),
-            openapi.Parameter(
-                name='max-price',
-                in_=openapi.IN_QUERY,
-                description='حداکثر قیمت (مثال: 5000000)',
-                type=openapi.TYPE_INTEGER,
-                required=False
-            ),
-            openapi.Parameter(
-                name='residence-type',
-                in_=openapi.IN_QUERY,
-                description='شناسه نوع اقامتگاه به صورت کاما جدا شده (مثال: 1,2)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='other-filters',
-                in_=openapi.IN_QUERY,
-                description='شناسه تگ‌های عمومی به صورت کاما جدا شده (مثال: 1,2,3)',
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                name='p',
-                in_=openapi.IN_QUERY,
-                description='شماره صفحه (مثال: 1)',
-                type=openapi.TYPE_INTEGER,
-                required=False
-            ),
-        ],
-        responses={
-            200: openapi.Response(
-                description="لیست هتل‌ها با موفقیت بازگردانده شد.",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل هتل‌ها'),
-                        'total_pages': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل صفحات (حداکثر 100)'),
-                        'current_page': openapi.Schema(type=openapi.TYPE_INTEGER, description='صفحه فعلی'),
-                        'results': openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Items(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام هتل'),
-                                    'slug': openapi.Schema(type=openapi.TYPE_STRING, description='اسلاگ هتل'),
-                                    'city': openapi.Schema(type=openapi.TYPE_STRING, description='نام شهر'),
-                                    'address': openapi.Schema(type=openapi.TYPE_STRING, description='آدرس هتل'),
-                                    'main_image': openapi.Schema(type=openapi.TYPE_STRING, description='URL تصویر اصلی'),
-                                    'stars': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد ستاره‌ها'),
-                                    'type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع اقامتگاه'),
-                                    'original_total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت اصلی'),
-                                    'total_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت با تخفیف'),
-                                    'discount_percentage': openapi.Schema(type=openapi.TYPE_NUMBER, description='درصد تخفیف', nullable=True),
-                                    'discount_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ انقضای تخفیف', nullable=True),
-                                    'night_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد شب‌ها'),
-                                    'rating': openapi.Schema(type=openapi.TYPE_INTEGER, description='امتیاز هتل'),
-                                    'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description='میانگین امتیاز نظرات'),
-                                    'comment_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد نظرات'),
-                                    'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد رزروها'),
-                                    'public_tags': openapi.Schema(type=openapi.TYPE_ARRAY, description='تگ‌های عمومی', items=openapi.Items(type=openapi.TYPE_OBJECT)),
-                                }
-                            )
-                        )
-                    }
-                )
-            ),
-            400: openapi.Response(description="پارامترهای ورودی نامعتبر هستند."),
-            404: openapi.Response(description="هیچ هتلی یافت نشد.")
-        }
+            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='تعداد مسافران برای هر اتاق (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='other-filters', in_=openapi.IN_QUERY, description='فیلترهای دیگر (شناسه تگ‌های عمومی)', type=openapi.TYPE_STRING, required=False),
+        ]
     )
     def list(self, request, *args, **kwargs):
         city = request.query_params.get('city')
@@ -1963,7 +1836,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         for hotel in hotels_qs:
             rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=start_date_obj,
-                date_prices__end_date__gte=start_date_obj,
+                date_prices__end_date__gte=start_date_obj,  # استفاده از start_date_obj برای سازگاری با کد قبلی
                 inventory__gt=0
             ).distinct()
             logger.debug(f"Found {rooms.count()} rooms for hotel {hotel.id}")
