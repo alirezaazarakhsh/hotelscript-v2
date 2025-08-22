@@ -248,8 +248,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
-                if not price_data.discount_date or price_data.discount_date < date:
-                    # اگر تایمر صفر شده، تخفیف و تایمر برداشته می‌شه و قیمت اصلی نمایش داده می‌شه
+                if not price_data.discount_date or price_data.discount_date <= date:
+                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
                     price_after_discount = price_data.price
                 else:
                     # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
