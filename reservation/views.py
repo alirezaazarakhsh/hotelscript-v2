@@ -231,6 +231,17 @@ except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
+
+from rest_framework import generics
+from rest_framework.response import Response
+from rest_framework import status
+import jdatetime
+from copy import deepcopy
+from .models import Hotel, Room, ClosedDate, RoomDatePrice
+from .serializers import RoomSerializer
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -250,14 +261,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if not price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
                     raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را مشخص کنید.")
-                if price_data.discount_date >= date:
+                if price_data.discount_date >= date:  # فقط اگر تاریخ تخفیف معتبر باشد
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
                 else:
-                    logger.warning(f"Room {price_data.room.id} on {date}: Discount ignored due to expired discount_date {price_data.discount_date}")
-                    price_after_discount = int(price_data.price)
+                    logger.warning(f"Room {price_data.room.id} on {date}: Discount expired on {price_data.discount_date}, reverting to normal price")
+                    price_after_discount = int(price_data.price)  # بازگشت به قیمت عادی
             elif price_data.discount_type == 'fixed':
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
@@ -311,7 +322,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': 'پارامتر passengers باید به فرمت [2,3,5] یا 0 و شامل اعداد صحیح باشد.'}, status=400)
 
         try:
-            start_date_obj = jdatetime.date.today() if not start_date else jdatetime.date(*map(int, start_date.split('-')))
+            current_date = jdatetime.datetime.now().date()  # تاریخ فعلی
+            start_date_obj = current_date if not start_date else jdatetime.date(*map(int, start_date.split('-')))
             end_date_obj = jdatetime.date(*map(int, end_date.split('-'))) if end_date else start_date_obj + jdatetime.timedelta(days=30)
             if start_date_obj > end_date_obj:
                 return Response({'detail': 'تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.'}, status=400)
@@ -448,7 +460,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 pack_total_price = 0
                 pack_rooms = []
                 for orig_room, p in current_pack:
-                    room = copy.deepcopy(orig_room)
+                    room = deepcopy(orig_room)
                     if p > room['capacity']:
                         extra_passengers = p - room['capacity']
                         extra_price_per_night = room['price']['extra_capacity_price']
@@ -460,6 +472,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         room['price']['total_price_discount'] = sum(day['price']['price_after_discount'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
+                    # فقط تخفیف‌های درصدی معتبر اعمال شوند
                     pack_total_price += room['price']['total_price_discount']
                 packs.append({
                     "pack_rooms": pack_rooms,
