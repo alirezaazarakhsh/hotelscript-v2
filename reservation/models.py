@@ -3,13 +3,10 @@ import logging
 import os
 import re
 import uuid
-from django.dispatch import receiver
 import jdatetime
 from decimal import Decimal
 from datetime import timedelta
 from functools import cached_property
-from django.db.models.signals import pre_save
-
 
 # 🌐 Django
 from django.db import models
@@ -966,7 +963,7 @@ class RoomDatePrice(models.Model):
         related_name='date_prices',
     )
     user_level = models.ForeignKey(
-        UserLevel if 'UserLevel' in globals() else 'accounts.UserLevel',
+        UserLevel if UserLevel else 'accounts.UserLevel',
         on_delete=models.CASCADE,
         verbose_name=_('سطح کاربری'),
         related_name='room_date_prices',
@@ -1085,14 +1082,8 @@ class RoomDatePrice(models.Model):
 
     def __str__(self):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
-
-@receiver(pre_save, sender=RoomDatePrice)
-def check_expired_discount(sender, instance, **kwargs):
-    current_date = jdatetime.datetime.now().date()
-    if instance.discount_type == 'percentage' and instance.discount_date and instance.discount_date < current_date:
-        instance.discount_type = 'none'
-        instance.discount_value = 0
-        instance.discount_date = None
+    
+    
     
     
     

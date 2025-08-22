@@ -12,8 +12,3 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 
 # کشف خودکار وظایف از اپلیکیشن‌های Django
 app.autodiscover_tasks()
-
-@app.task(bind=True, ignore_result=True)
-def debug_task(self):
-    """تسک دیباگ برای تست اولیه Celery"""
-    print(f'Request: {self.request!r}')

@@ -248,17 +248,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
-                if not price_data.discount_date:
-                    logger.error(f"Room {price_data.room.id} on {date}: Percentage discount requires a discount_date")
-                    raise ValueError("تخفیف درصدی باید تاریخ انقضا داشته باشد. لطفاً تاریخ انقضا را مشخص کنید.")
-                if price_data.discount_date >= date:
-                    discount_amount = int(price_data.price * price_data.discount_value / 100)
-                    discount_percentage = price_data.discount_value
-                    discount_date = price_data.discount_date.strftime('%Y/%m/%d')
-                    price_after_discount = int(max(price_data.price - discount_amount, 0))
-                else:
-                    logger.warning(f"Room {price_data.room.id} on {date}: Discount ignored due to expired discount_date {price_data.discount_date}")
-                    price_after_discount = int(price_data.price)
+                discount_amount = int(price_data.price * price_data.discount_value / 100)
+                discount_percentage = price_data.discount_value
+                price_after_discount = int(max(price_data.price - discount_amount, 0))
             elif price_data.discount_type == 'fixed':
                 if price_data.discount_date:
                     logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
