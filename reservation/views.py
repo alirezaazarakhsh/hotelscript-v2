@@ -216,7 +216,7 @@ class AllFacilitiesView(ListAPIView):
     pagination_class = None  
 
     @swagger_auto_schema(
-        operation_summary="دریافت امکانات هتل",
+        operation_summary=" امکانات هتل",
         operation_description="این API لیست تمام امکانات هتل را برای شما باز می گرداند بدون صفحه بندی.",
         tags=['best-hotel']
     )
@@ -825,7 +825,7 @@ class AllRoomFacilitiesView(ListAPIView):
 
 
     @swagger_auto_schema(
-        operation_summary="دریافت امکانات اتاق‌ها",
+        operation_summary=" امکانات اتاق‌ها",
         operation_description="این API لیست تمام امکانات اتاق‌ها را بدون توجه به هتل برمی‌گرداند.",
         tags=['best-hotel'],
         responses={200: RoomFacilitiesSimpleSerializer(many=True)}
