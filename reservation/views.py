@@ -1796,7 +1796,6 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
 # --- API View ---
-# --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
@@ -1849,7 +1848,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها یا لیست مثل 1,2)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
@@ -1875,7 +1874,12 @@ class BestHotelspageAPI(generics.ListAPIView):
         hotel_facilities = request.query_params.get('hotel-facilities')
 
         try:
-            passengers = int(passengers) if passengers is not None else 1
+            # passengers می‌تواند یک عدد یا لیستی از اعداد باشد
+            if passengers:
+                passenger_values = [int(x) for x in passengers.split(',')]
+            else:
+                passenger_values = [1]
+
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
         except ValueError:
@@ -1946,9 +1950,9 @@ class BestHotelspageAPI(generics.ListAPIView):
                 inventory__gt=0,
             )
 
-            # فقط اگر passengers > 0 باشد ظرفیت اعمال می‌شود
-            if passengers > 0:
-                rooms_qs = rooms_qs.filter(room_capacity__lte=passengers)
+            # passengers=0 یعنی همه هتل‌ها بدون فیلتر ظرفیت
+            if not (len(passenger_values) == 1 and passenger_values[0] == 0):
+                rooms_qs = rooms_qs.filter(room_capacity__in=passenger_values)
 
             rooms = rooms_qs.distinct()
             if not rooms.exists():
