@@ -29,7 +29,7 @@ class UserAuthBackend(ModelBackend):
             if not phone or not otp:
                 return None
             user = BaseUser.objects.get(phone_number=phone)
-            last_user_otp = user.opts.latest('created')
+            last_user_otp = user.otps.latest('created')  # اصلاح از opts به otps
             is_authenticated = last_user_otp.check_code(otp) and timezone.now() <= last_user_otp.expired
             if is_authenticated:
                 user.last_login = jdatetime.datetime.now()
@@ -37,6 +37,8 @@ class UserAuthBackend(ModelBackend):
                 last_user_otp.delete()
                 return user
         except (BaseUser.DoesNotExist, OTP.DoesNotExist):
+            return None
+        except Exception:  # مدیریت خطاهای غیرمنتظره
             return None
 
     def get_user(self, user_id):
