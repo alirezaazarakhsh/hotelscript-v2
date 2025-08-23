@@ -1,8 +1,9 @@
-from datetime import timezone
+# admin.py
 from django.contrib import admin
 from django import forms
 from django_jalali.db import models as jmodels
 from jalali_date.widgets import AdminJalaliDateWidget  
+from django.utils import timezone  # ← استفاده صحیح
 import jdatetime
 from .models import (
     BaseUser,
@@ -21,6 +22,7 @@ from .forms import (
     JuridicalProfileForm,
     NaturalProfileForm,
 )
+
 
 # فرم سفارشی برای اینلاین پترن‌های پیامکی
 class AdminSMSPatternInlineForm(forms.ModelForm):
