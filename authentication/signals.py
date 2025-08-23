@@ -15,7 +15,7 @@ def create_natural_profile(sender, instance, created, **kwargs):
             base_user=instance,
             defaults={
                 'first_name': 'میهمان',
-                'last_name': '.',
+                'last_name': 'عزیز',
                 'level': guest_level
             }
         )
