@@ -191,6 +191,14 @@ class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
         fields = ('id', 'title', 'icon')
+        
+        
+#all facility
+class FacilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilities
+        fields = ['id', 'title']   
+
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
     icon = IconShortcutSerializer(read_only=True)
