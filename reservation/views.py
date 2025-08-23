@@ -205,6 +205,26 @@ class HotelFacilitiesView(RetrieveAPIView):
 
 
 
+
+# ای پی ای امکانات رفاهی تفریحی به صورت کلی 
+class AllFacilitiesView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = FacilitiesSerializer   # ✅ سریالایزر مربوط به امکانات
+    queryset = Facilities.objects.all()
+
+    @swagger_auto_schema(
+        operation_summary="دریافت تمامی امکانات رفاهی و تفریحی",
+        operation_description="این API لیست تمام امکانات رفاهی و تفریحی که ادمین تعریف کرده را باز می‌گرداند.",
+        tags=['facility']
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+
+
+
+
 # ای پی ای لیست خدمات اتاق ها 
 class RoomServiceListView(ListAPIView):
     permission_classes = (AllowAny,)
