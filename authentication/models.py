@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.contrib.auth import password_validation
 from django.utils.crypto import salted_hmac
+from django_jalali.db import models as jmodels
 from django.contrib.auth.hashers import (
     check_password,
     make_password,
@@ -36,21 +37,31 @@ LEGAL_PROFILE_STATUSES = (
 
 
 #مدل کاربران وب سایت 
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+import jdatetime
+
+# فرض می‌کنیم validate_phone_number و UserManager قبلاً تعریف شده‌اند
+from .validators import validate_phone_number
+from .managers import UserManager
+
+
+#مدل کاربران وب سایت 
+from django_jalali.db import models as jmodels
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.utils.translation import gettext_lazy as _
+
+
+
 class BaseUser(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
         max_length=11,
-        validators=(
-            validate_phone_number,
-        ),
+        validators=(validate_phone_number,),
         unique=True,
     )
-    last_login = models.DateTimeField(
-        verbose_name=_("last login"),
-        blank=True,
-        null=True,
-    )
-    date_joined = models.DateTimeField(
+    date_joined = jmodels.jDateTimeField(
         verbose_name=_('تاریخ ثبت نام'),
         auto_now_add=True,
     )
@@ -87,6 +98,19 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         elif hasattr(self, 'natural_profile'):
             return self.natural_profile.last_name
         return None
+
+    @property
+    def date_joined_jalali(self):
+        if self.date_joined:
+            return self.date_joined.strftime('%Y/%m/%d %H:%M:%S')
+        return None
+
+    @property
+    def last_login_jalali(self):
+        if self.last_login:
+            return self.last_login.strftime('%Y/%m/%d %H:%M:%S')
+        return None
+
 
 
 

@@ -1,5 +1,8 @@
 from django.contrib import admin
 from django import forms
+from django_jalali.db import models as jmodels
+from jalali_date.widgets import AdminJalaliDateWidget  
+from jalali_date import datetime2jalali
 from .models import (
     BaseUser,
     Admin,
@@ -31,12 +34,12 @@ class AdminSMSPatternInlineForm(forms.ModelForm):
     )
 
 # اینلاین برای نمایش و ویرایش پترن‌های پیامکی
-class AdminSMSPatternInline(admin.TabularInline):
-    model = Admin.sms_patterns.through
-    form = AdminSMSPatternInlineForm
-    verbose_name = "پترن پیامکی"
-    verbose_name_plural = "پترن‌های پیامکی"
-    extra = 1
+# class AdminSMSPatternInline(admin.TabularInline):
+#     model = Admin.sms_patterns.through
+#     form = AdminSMSPatternInlineForm
+#     verbose_name = "پترن پیامکی"
+#     verbose_name_plural = "پترن‌های پیامکی"
+#     extra = 1
 
 # به‌روزرسانی AdminAdmin برای اضافه کردن اینلاین
 @admin.register(Admin)
@@ -56,11 +59,13 @@ class AdminAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
-    inlines = [AdminSMSPatternInline]
+    # inlines = [AdminSMSPatternInline]
 
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
     base_user__phone_number.short_description = 'موبایل'
+
+
 
 # بقیه کدهای admin.py بدون تغییر
 @admin.register(BaseUser)
@@ -71,7 +76,8 @@ class BaseUserAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'phone_number',
-        'date_joined',
+        'date_joined_jalali',
+        'last_login_jalali',
     )
     search_fields = (
         'phone_number',
@@ -80,24 +86,36 @@ class BaseUserAdmin(admin.ModelAdmin):
         '-id',
     )
 
-@admin.register(SuperUser)
-class SuperUserAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'base_user__phone_number',
-    )
-    search_fields = (
-        'base_user__phone_number',
-    )
-    ordering = (
-        '-id',
-    )
+    formfield_overrides = {
+        jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
+    }
 
-    def base_user__phone_number(self, obj):
-        return obj.base_user.phone_number
-    base_user__phone_number.short_description = 'موبایل'
+    readonly_fields = ('last_login_date', 'last_login_time')
 
+    def date_joined_jalali(self, obj):
+        if obj.date_joined:
+            return datetime2jalali(obj.date_joined).strftime('%Y/%m/%d %H:%M:%S')
+        return "-"
+    date_joined_jalali.short_description = 'تاریخ ثبت‌نام'
 
+    def last_login_jalali(self, obj):
+        if obj.last_login:
+            return datetime2jalali(obj.last_login).strftime('%Y/%m/%d %H:%M:%S')
+        return "-"
+    last_login_jalali.short_description = 'آخرین ورود'
+
+    def last_login_date(self, obj):
+        if obj.last_login:
+            return datetime2jalali(obj.last_login).strftime('%Y/%m/%d')
+        return "-"
+    last_login_date.short_description = 'تاریخ آخرین ورود'
+
+    def last_login_time(self, obj):
+        if obj.last_login:
+            return obj.last_login.strftime('%H:%M:%S')
+        return "-"
+    last_login_time.short_description = 'زمان آخرین ورود'
+    
 
 
 class CardNumberInline(admin.TabularInline):
