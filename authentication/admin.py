@@ -183,6 +183,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'email',
         'national_code',
     )
+    autocomplete_fields = ['base_user']   
     ordering = ('-id',)
     inlines = [CardNumberInline]
 
@@ -241,6 +242,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'economical_code',
         'phone_number',
     )
+    autocomplete_fields = ['natural_profile']
     ordering = ('-id',)
     inlines = [JuridicalProfileDocumentInline, JuridicalCardNumberInline]  # افزودن اینلاین برای شماره‌های کارت
 

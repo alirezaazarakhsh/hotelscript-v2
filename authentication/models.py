@@ -222,6 +222,8 @@ class NaturalProfile(models.Model):
         BaseUser,
         on_delete=models.CASCADE,
         related_name='natural_profile',
+        verbose_name=_('کاربرگرامی'),
+
     )
     first_name = models.CharField(
         verbose_name=_('نام'),
