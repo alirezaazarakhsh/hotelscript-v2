@@ -2,6 +2,7 @@ from collections import defaultdict
 import itertools
 from datetime import datetime, timedelta
 import logging
+import math
 import sys
 import json
 import traceback
@@ -1664,12 +1665,41 @@ class CreateCommentView(ListCreateAPIView):
     
 # ای پی ای صفحه بهترین هتل ها 
 # --- logger fallback ---
+# --- Logger ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
     def logger_fallback(*args, **kwargs):
         print(*args, file=sys.stderr)
-    logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
+    logger = type('Logger', (), {
+        'info': logger_fallback,
+        'warning': logger_fallback,
+        'debug': logger_fallback
+    })()
+
+# --- Custom Pagination ---
+class BestHotelsPagination(PageNumberPagination):
+    page_size = 8               # تعداد آیتم در هر صفحه
+    max_page_size = 8
+    page_query_param = 'page'
+
+    def get_paginated_response(self, data):
+        total_items = self.page.paginator.count
+        total_pages = math.ceil(total_items / self.page_size)
+
+        # محدود کردن تعداد صفحات به 100
+        if total_pages > 100:
+            total_pages = 100
+            total_items = self.page_size * 100
+
+        return Response({
+            'count': total_items,
+            'total_pages': total_pages,
+            'current_page': self.page.number,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data,
+        })
 
 # --- Serializer ---
 class UpdatedHotelListSerializer(HotelListSerializer):
@@ -1683,7 +1713,6 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
-    
 
     class Meta(HotelListSerializer.Meta):
         fields = (
@@ -1728,11 +1757,10 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
 # --- API View ---
-# --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
-    pagination_class = PageNumberPagination
+    pagination_class = BestHotelsPagination
     queryset = Hotel.objects.none()
 
     def get_average_score(self, hotel):
