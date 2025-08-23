@@ -2,7 +2,7 @@ from django.contrib import admin
 from django import forms
 from django_jalali.db import models as jmodels
 from jalali_date.widgets import AdminJalaliDateWidget  
-from jalali_date import datetime2jalali
+import jdatetime
 from .models import (
     BaseUser,
     Admin,
@@ -70,21 +70,17 @@ class AdminAdmin(admin.ModelAdmin):
 # بقیه کدهای admin.py بدون تغییر
 @admin.register(BaseUser)
 class BaseUserAdmin(admin.ModelAdmin):
-    exclude = (
-        'is_superuser',
-    )
+    exclude = ('is_superuser',)
+    
     list_display = (
         'id',
         'phone_number',
         'date_joined_jalali',
         'last_login_jalali',
     )
-    search_fields = (
-        'phone_number',
-    )
-    ordering = (
-        '-id',
-    )
+    
+    search_fields = ('phone_number',)
+    ordering = ('-id',)
 
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
@@ -92,30 +88,33 @@ class BaseUserAdmin(admin.ModelAdmin):
 
     readonly_fields = ('last_login_date', 'last_login_time')
 
+    # نمایش تاریخ ثبت‌نام به صورت جلالی
     def date_joined_jalali(self, obj):
         if obj.date_joined:
-            return datetime2jalali(obj.date_joined).strftime('%Y/%m/%d %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=obj.date_joined).strftime('%Y/%m/%d %H:%M:%S')
         return "-"
     date_joined_jalali.short_description = 'تاریخ ثبت‌نام'
 
+    # نمایش آخرین ورود به صورت جلالی
     def last_login_jalali(self, obj):
         if obj.last_login:
-            return datetime2jalali(obj.last_login).strftime('%Y/%m/%d %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=obj.last_login).strftime('%Y/%m/%d %H:%M:%S')
         return "-"
     last_login_jalali.short_description = 'آخرین ورود'
 
+    # تاریخ آخرین ورود فقط تاریخ
     def last_login_date(self, obj):
         if obj.last_login:
-            return datetime2jalali(obj.last_login).strftime('%Y/%m/%d')
+            return jdatetime.datetime.fromgregorian(datetime=obj.last_login).strftime('%Y/%m/%d')
         return "-"
     last_login_date.short_description = 'تاریخ آخرین ورود'
 
+    # زمان آخرین ورود فقط ساعت
     def last_login_time(self, obj):
         if obj.last_login:
             return obj.last_login.strftime('%H:%M:%S')
         return "-"
     last_login_time.short_description = 'زمان آخرین ورود'
-    
 
 
 class CardNumberInline(admin.TabularInline):
