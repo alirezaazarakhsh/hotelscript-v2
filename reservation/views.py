@@ -1728,12 +1728,12 @@ class UpdatedHotelListSerializer(HotelListSerializer):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
 # --- API View ---
+# --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = PageNumberPagination
     queryset = Hotel.objects.none()
-    swagger_tags = ["best-hotel"]
 
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
@@ -1789,6 +1789,10 @@ class BestHotelspageAPI(generics.ListAPIView):
             openapi.Parameter(name='other-filters', in_=openapi.IN_QUERY, description='فیلترهای دیگر (شناسه تگ‌های عمومی)', type=openapi.TYPE_STRING, required=False),
         ]
     )
+    def get(self, request, *args, **kwargs):
+        """استفاده از get به جای list برای اینکه swagger درست زیر تگ best-hotel نمایش داده شود"""
+        return self.list(request, *args, **kwargs)
+
     def list(self, request, *args, **kwargs):
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
