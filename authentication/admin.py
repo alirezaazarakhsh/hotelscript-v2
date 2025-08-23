@@ -100,7 +100,7 @@ class BaseUserAdmin(admin.ModelAdmin):
     # نمایش آخرین ورود (جلالی و با timezone محلی)
     def last_login_jalali(self, obj):
         if obj.last_login:
-            local_dt = timezone.localtime(obj.last_login)
+            local_dt = timezone.localtime(obj.last_login)  # اصلاح شده
             return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d %H:%M:%S')
         return "-"
     last_login_jalali.short_description = 'آخرین ورود'
@@ -120,7 +120,6 @@ class BaseUserAdmin(admin.ModelAdmin):
             return local_dt.strftime('%H:%M:%S')
         return "-"
     last_login_time.short_description = 'زمان آخرین ورود'
-    
     
 
 
