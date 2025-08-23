@@ -163,7 +163,7 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
 class HotelTagPublicInline(admin.TabularInline):
     model = HotelTagPublic
     extra = 0  # No extra empty forms by default
-    max_num = 5  # Maximum of 5 tags
+    max_num = 3  # Maximum of 5 tags
     fields = ('title',)
     verbose_name = _('تگ عمومی')
     verbose_name_plural = _('تگ‌های عمومی')
