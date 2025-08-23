@@ -1,3 +1,4 @@
+from datetime import timezone
 from django.contrib import admin
 from django import forms
 from django_jalali.db import models as jmodels
@@ -67,6 +68,7 @@ class AdminAdmin(admin.ModelAdmin):
 
 
 
+
 # بقیه کدهای admin.py بدون تغییر
 @admin.register(BaseUser)
 class BaseUserAdmin(admin.ModelAdmin):
@@ -88,33 +90,38 @@ class BaseUserAdmin(admin.ModelAdmin):
 
     readonly_fields = ('last_login_date', 'last_login_time')
 
-    # نمایش تاریخ ثبت‌نام به صورت جلالی
+    # نمایش تاریخ ثبت‌نام (جلالی)
     def date_joined_jalali(self, obj):
         if obj.date_joined:
-            return jdatetime.datetime.fromgregorian(datetime=obj.date_joined).strftime('%Y/%m/%d %H:%M:%S')
+            return obj.date_joined.strftime('%Y/%m/%d %H:%M:%S')
         return "-"
     date_joined_jalali.short_description = 'تاریخ ثبت‌نام'
 
-    # نمایش آخرین ورود به صورت جلالی
+    # نمایش آخرین ورود (جلالی و با timezone محلی)
     def last_login_jalali(self, obj):
         if obj.last_login:
-            return jdatetime.datetime.fromgregorian(datetime=obj.last_login).strftime('%Y/%m/%d %H:%M:%S')
+            local_dt = timezone.localtime(obj.last_login)
+            return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d %H:%M:%S')
         return "-"
     last_login_jalali.short_description = 'آخرین ورود'
 
     # تاریخ آخرین ورود فقط تاریخ
     def last_login_date(self, obj):
         if obj.last_login:
-            return jdatetime.datetime.fromgregorian(datetime=obj.last_login).strftime('%Y/%m/%d')
+            local_dt = timezone.localtime(obj.last_login)
+            return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d')
         return "-"
     last_login_date.short_description = 'تاریخ آخرین ورود'
 
     # زمان آخرین ورود فقط ساعت
     def last_login_time(self, obj):
         if obj.last_login:
-            return obj.last_login.strftime('%H:%M:%S')
+            local_dt = timezone.localtime(obj.last_login)
+            return local_dt.strftime('%H:%M:%S')
         return "-"
     last_login_time.short_description = 'زمان آخرین ورود'
+    
+    
 
 
 class CardNumberInline(admin.TabularInline):

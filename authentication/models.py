@@ -54,11 +54,18 @@ from django.utils.translation import gettext_lazy as _
 
 
 
+# models.py
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django_jalali.db import models as jmodels
+from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
+from .managers import UserManager
+
 class BaseUser(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
         max_length=11,
-        validators=(validate_phone_number,),
         unique=True,
     )
     date_joined = jmodels.jDateTimeField(
@@ -99,17 +106,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
             return self.natural_profile.last_name
         return None
 
-    @property
-    def date_joined_jalali(self):
-        if self.date_joined:
-            return self.date_joined.strftime('%Y/%m/%d %H:%M:%S')
-        return None
-
-    @property
-    def last_login_jalali(self):
-        if self.last_login:
-            return self.last_login.strftime('%Y/%m/%d %H:%M:%S')
-        return None
 
 
 
