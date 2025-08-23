@@ -216,8 +216,8 @@ class AllFacilitiesView(ListAPIView):
     pagination_class = None  
 
     @swagger_auto_schema(
-        operation_summary="دریافت تمامی امکانات رفاهی و تفریحی",
-        operation_description="این API لیست تمام امکانات رفاهی و تفریحی که ادمین تعریف کرده را باز می‌گرداند.",
+        operation_summary="دریافت امکانات هتل",
+        operation_description="این API لیست تمام امکانات هتل را برای شما باز می گرداند بدون صفحه بندی.",
         tags=['best-hotel']
     )
     def get(self, request, *args, **kwargs):
@@ -825,7 +825,7 @@ class AllRoomFacilitiesView(ListAPIView):
 
 
     @swagger_auto_schema(
-        operation_summary="دریافت تمامی امکانات اتاق‌ها",
+        operation_summary="دریافت امکانات اتاق‌ها",
         operation_description="این API لیست تمام امکانات اتاق‌ها را بدون توجه به هتل برمی‌گرداند.",
         tags=['best-hotel'],
         responses={200: RoomFacilitiesSimpleSerializer(many=True)}
@@ -1705,8 +1705,6 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-# --- logger fallback ---
-# --- Logger ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1850,12 +1848,13 @@ class BestHotelspageAPI(generics.ListAPIView):
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passenger', in_=openapi.IN_QUERY, description='ظرفیت مسافر برای فیلتر اتاق‌ها (مثلاً 1 برای یک نفر در یک اتاق، 2 برای دو نفر در یک اتاق یا مجموع چند اتاق)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (مثلاً 1 برای یک نفر در یک اتاق، 2 برای دو نفر در یک اتاق یا مجموع چند اتاق)', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
             openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='other-filters', in_=openapi.IN_QUERY, description='فیلترهای دیگر (شناسه تگ‌های عمومی)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='room-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات اتاق‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='hotel-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات هتل‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -1866,15 +1865,16 @@ class BestHotelspageAPI(generics.ListAPIView):
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
-        passenger = request.query_params.get('passenger')
+        passengers = request.query_params.get('passengers')
         star = request.query_params.get('star')
         min_price = request.query_params.get('min-price')
         max_price = request.query_params.get('max-price')
         residence_type = request.query_params.get('residence-type')
-        other_filters = request.query_params.get('other-filters')
+        room_facilities = request.query_params.get('room-facilities')
+        hotel_facilities = request.query_params.get('hotel-facilities')
 
         try:
-            passenger = int(passenger) if passenger else 1
+            passengers = int(passengers) if passengers else 1
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
         except ValueError:
@@ -1905,12 +1905,19 @@ class BestHotelspageAPI(generics.ListAPIView):
             except ValueError:
                 return Response({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'}, status=400)
 
-        if other_filters:
+        if room_facilities:
             try:
-                facility_ids = [int(x) for x in other_filters.split(',')]
-                hotels_qs = hotels_qs.filter(public_tags__id__in=facility_ids).distinct()
+                room_facility_ids = [int(x) for x in room_facilities.split(',')]
+                hotels_qs = hotels_qs.filter(rooms__facilities__id__in=room_facility_ids).distinct()
             except ValueError:
-                return Response({'detail': 'شناسه‌های تگ‌های عمومی نامعتبر است.'}, status=400)
+                return Response({'detail': 'شناسه‌های امکانات اتاق نامعتبر است.'}, status=400)
+
+        if hotel_facilities:
+            try:
+                hotel_facility_ids = [int(x) for x in hotel_facilities.split(',')]
+                hotels_qs = hotels_qs.filter(public_tags__id__in=hotel_facility_ids).distinct()
+            except ValueError:
+                return Response({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'}, status=400)
 
         today = jdatetime.date.today()
         start_date_obj = today
@@ -1935,7 +1942,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                 date_prices__start_date__lte=start_date_obj,
                 date_prices__end_date__gte=end_date_obj,
                 inventory__gt=0,
-                room_capacity__lte=passenger,
+                room_capacity__lte=passengers,
             ).distinct()
             if not rooms.exists():
                 continue
