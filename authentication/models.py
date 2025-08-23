@@ -49,16 +49,12 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         verbose_name=_('تاریخ ثبت نام'),
         auto_now_add=True,
     )
-    last_login = jmodels.jDateTimeField(  
+    last_login = jmodels.jDateTimeField(
         verbose_name=_('آخرین ورود'),
         null=True,
         blank=True,
     )
     password = None
-
-    @property
-    def is_staff(self):
-        return self.is_superuser
 
     objects = UserManager()
 
@@ -70,23 +66,35 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         verbose_name_plural = "کاربران"
 
     def __str__(self):
+        profile_name = ""
+        if hasattr(self, 'natural_profile') and self.natural_profile:
+            profile_name = f"{self.natural_profile.first_name or ''} {self.natural_profile.last_name or ''}".strip()
+        elif hasattr(self, 'admin') and self.admin:
+            profile_name = f"{self.admin.first_name or ''} {self.admin.last_name or ''}".strip()
+        
+        if profile_name:
+            return f"{self.phone_number} ({profile_name})"
         return self.phone_number
 
     @property
     def first_name(self):
-        if hasattr(self, 'admin'):
+        if hasattr(self, 'admin') and self.admin:
             return self.admin.first_name
-        elif hasattr(self, 'natural_profile'):
+        elif hasattr(self, 'natural_profile') and self.natural_profile:
             return self.natural_profile.first_name
         return None
 
     @property
     def last_name(self):
-        if hasattr(self, 'admin'):
+        if hasattr(self, 'admin') and self.admin:
             return self.admin.last_name
-        elif hasattr(self, 'natural_profile'):
+        elif hasattr(self, 'natural_profile') and self.natural_profile:
             return self.natural_profile.last_name
         return None
+
+    @property
+    def is_staff(self):
+        return self.is_superuser
 
 
 
@@ -161,6 +169,7 @@ class Admin(models.Model):
         BaseUser,  
         on_delete=models.CASCADE,
         related_name='admin',
+        verbose_name=_('کاربر گرامی '),
     )
     first_name = models.CharField(
         verbose_name=_('نام'),

@@ -1,8 +1,11 @@
 # admin.py
 from django.contrib import admin
 from django import forms
+from django.http import JsonResponse
+from django.urls import path
 from django_jalali.db import models as jmodels
 from jalali_date.widgets import AdminJalaliDateWidget  
+from django.utils.html import format_html
 from django.utils import timezone  
 import jdatetime
 from .models import (
@@ -44,31 +47,67 @@ class AdminSMSPatternInlineForm(forms.ModelForm):
 #     verbose_name_plural = "پترن‌های پیامکی"
 #     extra = 1
 
-# به‌روزرسانی AdminAdmin برای اضافه کردن اینلاین
 @admin.register(Admin)
 class AdminAdmin(admin.ModelAdmin):
     form = AdminForm
     list_display = (
         'id',
-        'base_user__phone_number',
-        'first_name',
-        'last_name',
+        'base_user_info',
+        'admin_avatar',   # 👈 نمایش عکس پروفایل
+       
     )
     search_fields = (
         'base_user__phone_number',
-        'first_name',
-        'last_name',
+        
     )
-    ordering = (
-        '-id',
-    )
-    # inlines = [AdminSMSPatternInline]
+    autocomplete_fields = ['base_user']
+    ordering = ('-id',)
 
-    def base_user__phone_number(self, obj):
-        return obj.base_user.phone_number
-    base_user__phone_number.short_description = 'موبایل'
+    def base_user_info(self, obj):
+        profile_name = ""
+        if hasattr(obj.base_user, 'natural_profile') and obj.base_user.natural_profile:
+            profile_name = f"{obj.base_user.natural_profile.first_name or ''} {obj.base_user.natural_profile.last_name or ''}".strip()
+        return f"{obj.base_user.phone_number} ({profile_name or 'پروفایل موجود نیست'})"
+    base_user_info.short_description = 'موبایل و نام'
 
+    def admin_avatar(self, obj):
+        if obj.image:  # 👈 فرض بر این است فیلد image در مدل Admin وجود دارد
+            return format_html('<img src="{}" style="width:50px; height:50px; border-radius:10%;" />', obj.image.url)
+        return "—"
+    admin_avatar.short_description = "عکس پروفایل"
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'base-user-autocomplete/',
+                self.admin_site.admin_view(self.base_user_autocomplete),
+                name='base_user_autocomplete',
+            ),
+        ]
+        return custom_urls + urls
+
+    def base_user_autocomplete(self, request):
+        query = request.GET.get('q', '')
+        users = BaseUser.objects.filter(
+            Q(phone_number__icontains=query) |
+            Q(natural_profile__first_name__icontains=query) |
+            Q(natural_profile__last_name__icontains=query)
+        )[:10]
+
+        results = []
+        for user in users:
+            profile_name = ""
+            if hasattr(user, 'natural_profile') and user.natural_profile:
+                profile_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
+            results.append({
+                'id': user.id,
+                'text': f"{user.phone_number} ({profile_name})" if profile_name else user.phone_number
+            })
+
+        return JsonResponse({'results': results})
+    
+    
 
 
 @admin.register(BaseUser)
