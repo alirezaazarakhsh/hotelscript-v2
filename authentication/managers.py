@@ -31,7 +31,7 @@ class UserManager(BaseUserManager):
                 base_user=user,
                 defaults={
                     'first_name': 'میهمان',
-                    'last_name': '.',
+                    'last_name': 'عزیز',
                     'level': guest_level
                 }
             )
