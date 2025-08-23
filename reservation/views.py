@@ -98,6 +98,7 @@ from .serializers import (
     HotelTagSerializer,
     HotelTypeSerializer,
     RoomFacilitiesSerializer,
+    RoomFacilitiesSimpleSerializer,
     RoomSerializer,
     RoomServiceSerializer,
     HotelFAQListSerializer,
@@ -212,6 +213,7 @@ class AllFacilitiesView(ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = FacilitySerializer
     queryset = Facilities.objects.all()
+    pagination_class = None  
 
     @swagger_auto_schema(
         operation_summary="دریافت تمامی امکانات رفاهی و تفریحی",
@@ -815,7 +817,21 @@ class HotelRoomFacilitiesListView(ListAPIView):
     
 
 #ای پی ای امکانات اتاق ها به صورت کلی 
+class AllRoomFacilitiesView(ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = RoomFacilitiesSimpleSerializer
+    queryset = RoomFacilities.objects.all().order_by('id')
+    pagination_class = None
 
+
+    @swagger_auto_schema(
+        operation_summary="دریافت تمامی امکانات اتاق‌ها",
+        operation_description="این API لیست تمام امکانات اتاق‌ها را بدون توجه به هتل برمی‌گرداند.",
+        tags=['best-hotel'],
+        responses={200: RoomFacilitiesSimpleSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
     
     
     

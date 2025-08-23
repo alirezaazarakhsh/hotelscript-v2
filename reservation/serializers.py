@@ -198,6 +198,12 @@ class FacilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
         fields = ['id', 'title']   
+        
+
+class RoomFacilitiesSimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoomFacilities
+        fields = ['id', 'title']  
 
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
