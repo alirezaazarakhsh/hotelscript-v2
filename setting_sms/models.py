@@ -8,6 +8,8 @@ PATTERN_SECTIONS = [
     ('roomavailability', 'موجودی اتاق برای ادمین'),
     ('walletincrease', 'افزایش کیف پول کاربر'),
     ('discountcode', 'ارسال کد تخفیف به کاربران'),  
+    ('customerclubpoint', 'افزایش امتیاز باشگاه مشتریان'),
+
 ]
 
 # مدل تنظیمات سامانه پیامکی کاوه نگار 
