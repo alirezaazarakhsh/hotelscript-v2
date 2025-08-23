@@ -1,5 +1,6 @@
 from django.contrib.auth.backends import ModelBackend
 from django.utils import timezone
+import jdatetime
 from .models import BaseUser, OTP
 
 class AdminAuthBackend(ModelBackend):
@@ -9,8 +10,11 @@ class AdminAuthBackend(ModelBackend):
                 username_field = BaseUser.USERNAME_FIELD
                 if username:
                     user = BaseUser.objects.get(**{username_field: username})
-                if user.superuser.check_password(password):
-                    return user
+                    # فرض می‌کنیم ادمین‌ها از رمز عبور استفاده می‌کنند
+                    if user.check_password(password):
+                        user.last_login = jdatetime.datetime.now()
+                        user.save()
+                        return user
             except BaseUser.DoesNotExist:
                 return None
     
@@ -22,15 +26,17 @@ class UserAuthBackend(ModelBackend):
         try:
             phone = kwargs.get('phone')
             otp = kwargs.get('otp')
-            user = BaseUser.objects.get_by_phone(phone)
-            last_user_otp = user.otps.latest('created')
-            is_authentecated = last_user_otp.check_code(otp) and timezone.now() <= last_user_otp.expired
-            if is_authentecated:
+            if not phone or not otp:
+                return None
+            user = BaseUser.objects.get(phone_number=phone)
+            last_user_otp = user.opts.latest('created')
+            is_authenticated = last_user_otp.check_code(otp) and timezone.now() <= last_user_otp.expired
+            if is_authenticated:
+                user.last_login = jdatetime.datetime.now()
+                user.save()
                 last_user_otp.delete()
                 return user
-        except BaseUser.DoesNotExist:
-            return None
-        except OTP.DoesNotExist:
+        except (BaseUser.DoesNotExist, OTP.DoesNotExist):
             return None
 
     def get_user(self, user_id):

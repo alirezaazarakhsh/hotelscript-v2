@@ -1,26 +1,26 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
+from .managers import UserManager
+from setting_sms.models import SMSPattern
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
+from django_jalali.db import models as jmodels
+from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import password_validation
 from django.utils.crypto import salted_hmac
-from django_jalali.db import models as jmodels
 from django.contrib.auth.hashers import (
     check_password,
     make_password,
 )
 
-from setting_sms.models import SMSPattern
-from .managers import UserManager
-from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
-from django.conf import settings
 from django.core.validators import (
     MinLengthValidator,
     MaxLengthValidator,
 )
+
 from .validators import (
-    validate_phone_number,
     validate_national_code,
     validate_postal_code,
     FileSizeValidator,
@@ -29,6 +29,8 @@ from config.models import (
     UserLevel,
 )
 
+
+
 LEGAL_PROFILE_STATUSES = (
     ('checking','در حال بررسی'),
     ('accpeted','تایید شده'),
@@ -36,31 +38,6 @@ LEGAL_PROFILE_STATUSES = (
 )
 
 
-#مدل کاربران وب سایت 
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.db import models
-from django.utils.translation import gettext_lazy as _
-import jdatetime
-
-# فرض می‌کنیم validate_phone_number و UserManager قبلاً تعریف شده‌اند
-from .validators import validate_phone_number
-from .managers import UserManager
-
-
-#مدل کاربران وب سایت 
-from django_jalali.db import models as jmodels
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.utils.translation import gettext_lazy as _
-
-
-
-# models.py
-from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django_jalali.db import models as jmodels
-from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
-from .managers import UserManager
 
 class BaseUser(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(
@@ -71,6 +48,11 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
     date_joined = jmodels.jDateTimeField(
         verbose_name=_('تاریخ ثبت نام'),
         auto_now_add=True,
+    )
+    last_login = jmodels.jDateTimeField(  
+        verbose_name=_('آخرین ورود'),
+        null=True,
+        blank=True,
     )
     password = None
 
@@ -105,7 +87,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         elif hasattr(self, 'natural_profile'):
             return self.natural_profile.last_name
         return None
-
 
 
 
@@ -472,6 +453,7 @@ class JuridicalProfileDocument(models.Model):
     
     
     
+    
 # مدل شماره کارت های حقیقی 
 # اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
 validate_card_number = RegexValidator(
@@ -543,6 +525,9 @@ class CardNumber(models.Model):
         profile_str = f'Profile-{self.profile.pk}' if self.profile_id else "بدون پروفایل"
         return f'{self.card_number} - {self.account_holder_name} - {profile_str}'
 
+    
+    
+    
     
     
 # مدل شماره کارت های حقوقی 
