@@ -1,65 +1,46 @@
-import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 
-logger = logging.getLogger(__name__)
-
-def send_customer_club_point_sms(user, added_points, pattern_section='customerclubpoint'):
-    """
-    ارسال پیامک به کاربر وقتی امتیاز باشگاه مشتریان او افزایش پیدا می‌کند.
-    """
+def send_customer_club_point_sms(phone_number, user_name, added_points, total_points, pattern_section='customerclubpoint'):
     try:
-        # دریافت تنظیمات Kavenegar
+        # گرفتن تنظیمات سامانه فعال
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            logger.error("KavenegarSMSSetting not found.")
+            print("KavenegarSMSSetting not found")
             return False
 
-        # دریافت پترن مطابق بخش
+        # پیدا کردن پترن متناسب با بخش
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            logger.error(f"SMSPattern for section '{pattern_section}' not found.")
+            print(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
-        # شماره تلفن کاربر
-        phone_number = getattr(user, 'phone_number', None)
-        if not phone_number:
-            logger.error(f"No phone number found for user {user}.")
-            return False
-
-        # اطمینان از فرمت شماره ایران (مثال: 98912xxxxxxx)
+        # اصلاح فرمت شماره ایران
         if phone_number.startswith("0"):
             phone_number = "98" + phone_number[1:]
 
         api = KavenegarAPI(api_setting.api_token)
 
-        # آماده کردن پارامترها مطابق پترن
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user.first_name or "کاربر",
+            'token': user_name,
             'token2': str(added_points),
-            'token3': str(user.customer_points.points),
+            'token3': str(total_points),
             'type': 'sms',
         }
 
-        logger.debug(f"Sending SMS to {phone_number} with params: {params}")
+        response = api.verify_lookup(params)
+        print("Response from Kavenegar:", response)
 
-        try:
-            response = api.verify_lookup(params)
-            logger.info(f"SMS sent to {phone_number}. Response: {response}")
-            print(f"Kavenegar response: {response}")  # چاپ مستقیم برای دیباگ
-            return True
-        except APIException as e:
-            logger.error(f"APIException for {phone_number}: {str(e)}")
-        except HTTPException as e:
-            logger.error(f"HTTPException for {phone_number}: {str(e)}")
+        return True
 
-        return False
+    except APIException as e:
+        print(f'APIException: {e}')
+    except HTTPException as e:
+        print(f'HTTPException: {e}')
 
-    except Exception as e:
-        logger.error(f"Unexpected error in send_customer_club_point_sms: {str(e)}", exc_info=True)
-        return False
+    return False
