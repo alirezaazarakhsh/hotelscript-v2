@@ -9,28 +9,34 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
     ارسال پیامک به کاربر وقتی امتیاز باشگاه مشتریان او افزایش پیدا می‌کند.
     """
     try:
+        # دریافت تنظیمات Kavenegar
         api_setting = KavenegarSMSSetting.objects.first()
-        logger.debug(f"API Setting: {api_setting}")
         if not api_setting:
             logger.error("KavenegarSMSSetting not found.")
             return False
 
+        # دریافت پترن مطابق بخش
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
-        logger.debug(f"SMSPattern: {template_obj}")
         if not template_obj:
             logger.error(f"SMSPattern for section '{pattern_section}' not found.")
             return False
 
+        # شماره تلفن کاربر
         phone_number = getattr(user, 'phone_number', None)
         if not phone_number:
             logger.error(f"No phone number found for user {user}.")
             return False
 
+        # اطمینان از فرمت شماره ایران (مثال: 98912xxxxxxx)
+        if phone_number.startswith("0"):
+            phone_number = "98" + phone_number[1:]
+
         api = KavenegarAPI(api_setting.api_token)
 
+        # آماده کردن پارامترها مطابق پترن
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
@@ -39,11 +45,13 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
             'token3': str(user.customer_points.points),
             'type': 'sms',
         }
+
         logger.debug(f"Sending SMS to {phone_number} with params: {params}")
 
         try:
             response = api.verify_lookup(params)
             logger.info(f"SMS sent to {phone_number}. Response: {response}")
+            print(f"Kavenegar response: {response}")  # چاپ مستقیم برای دیباگ
             return True
         except APIException as e:
             logger.error(f"APIException for {phone_number}: {str(e)}")
