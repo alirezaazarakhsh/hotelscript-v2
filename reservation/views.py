@@ -1742,9 +1742,13 @@ class BestHotelsPagination(PageNumberPagination):
             'results': data,
         })
 
+# --- Serializers ---
+class HotelTagPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelTagPublic
+        fields = ['id', 'title']
 
-# --- Serializer ---
-class UpdatedHotelListSerializer(HotelListSerializer):
+class UpdatedHotelListSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
     price_after_discount = serializers.SerializerMethodField()
     discount_percentage = serializers.SerializerMethodField()
@@ -1756,7 +1760,8 @@ class UpdatedHotelListSerializer(HotelListSerializer):
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
 
-    class Meta(HotelListSerializer.Meta):
+    class Meta:
+        model = Hotel
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'price', 'price_after_discount', 'discount_percentage',
@@ -1797,7 +1802,6 @@ class UpdatedHotelListSerializer(HotelListSerializer):
 
     def get_comment_count(self, obj):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
-
 
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
@@ -1868,7 +1872,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         operation_description=(
             "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
             "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
-            "برای ارزان‌ترین اتاق در کل بازه نمایش داده می‌شود. "
+            "برای ارزان‌ترین پک یا اتاق در کل بازه نمایش داده می‌شود. "
             "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
@@ -1976,32 +1980,61 @@ class BestHotelspageAPI(generics.ListAPIView):
                 inventory__gt=0,
             ).distinct()
 
-            if not (len(passenger_values) == 1 and passenger_values[0] == 0):
-                rooms_qs = rooms_qs.filter(room_capacity__in=passenger_values)
-
             if not rooms_qs.exists():
                 continue
 
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
 
-            min_price_data = None
-            for room in rooms_qs:
-                summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
-                if not summed:
-                    continue
+            # اگر فقط یک ظرفیت یا همه ظرفیت‌ها (passenger_values=[0]) باشد
+            if len(passenger_values) == 1 and passenger_values[0] == 0:
+                min_price_data = None
+                for room in rooms_qs:
+                    summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                    if not summed:
+                        continue
+                    price_info = {
+                        'total_price': summed['total_price'],
+                        'original_total_price': summed['original_total_price'],
+                        'discount_percentage': summed['discount_percentage'],
+                        'discount_date': summed['discount_date'],
+                        'rating': hotel.rating,
+                        'reservation_count': hotel.reservation_count,
+                        'average_score': self.get_average_score(hotel),
+                    }
+                    if (min_price_data is None) or (price_info['total_price'] < min_price_data['total_price']):
+                        min_price_data = price_info
+            else:
+                # محاسبه کمترین پک برای چندین ظرفیت
+                room_candidates = {}
+                for p in set(passenger_values):
+                    room_candidates[p] = [r for r in rooms_qs if r.room_capacity <= p <= r.room_capacity + r.extra_capacity and r.inventory > 0]
 
-                price_info = {
-                    'total_price': summed['total_price'],
-                    'original_total_price': summed['original_total_price'],
-                    'discount_percentage': summed['discount_percentage'],
-                    'discount_date': summed['discount_date'],
-                    'rating': hotel.rating,
-                    'reservation_count': hotel.reservation_count,
-                    'average_score': self.get_average_score(hotel),
-                }
+                def calculate_min_pack_price(remaining_passengers):
+                    if not remaining_passengers:
+                        return 0
+                    p = remaining_passengers[0]
+                    min_pack_price = float('inf')
+                    for room in room_candidates.get(p, []):
+                        if room.inventory > 0:
+                            summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                            if summed:
+                                sub_price = summed['total_price']
+                                if len(remaining_passengers) > 1:
+                                    sub_price += calculate_min_pack_price(remaining_passengers[1:])
+                                min_pack_price = min(min_pack_price, sub_price)
+                    return min_pack_price
 
-                if (min_price_data is None) or (price_info['total_price'] < min_price_data['total_price']):
-                    min_price_data = price_info
+                min_pack_price = calculate_min_pack_price(passenger_values)
+                if min_pack_price != float('inf'):
+                    min_price_data = {
+                        'total_price': min_pack_price,
+                        'original_total_price': min_pack_price,  # برای سادگی، فرض می‌کنیم تخفیف اعمال نشده
+                        'discount_percentage': None,
+                        'discount_date': None,
+                        'rating': hotel.rating,
+                        'reservation_count': hotel.reservation_count,
+                        'average_score': self.get_average_score(hotel),
+                    }
 
             if min_price_data:
                 if min_price is not None and min_price_data['total_price'] < min_price:
