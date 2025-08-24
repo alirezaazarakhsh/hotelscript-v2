@@ -1705,7 +1705,6 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-#تنظیم لاگ‌ها
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1851,10 +1850,6 @@ class BestHotelspageAPI(generics.ListAPIView):
                 else:
                     price_after = price_raw
 
-            # تخفیف ثابت (fixed) کاملاً نادیده گرفته می‌شود
-            # elif price_data.discount_type == 'fixed':
-            #     pass  # این بخش غیرفعال است
-
             total_price_raw += price_raw
             total_price_discounted += price_after
 
@@ -1912,11 +1907,16 @@ class BestHotelspageAPI(generics.ListAPIView):
         except ValueError:
             raise ValidationError({'detail': 'پارامترهای عددی معتبر نیستند.'})
 
+        # افزودن annotate برای محاسبه کمترین قیمت
+        rooms_with_min_price = Room.objects.annotate(
+            min_price=Min('date_prices__price')
+        ).order_by('min_price')
+
         hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
             'public_tags',
-            Prefetch('rooms', queryset=Room.objects.prefetch_related(
+            Prefetch('rooms', queryset=rooms_with_min_price.prefetch_related(
                 Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
-            ).order_by('price')),
+            )),
             Prefetch('comments', queryset=Comment.objects.filter(is_approved=True))
         ).order_by('rating').distinct()
 
