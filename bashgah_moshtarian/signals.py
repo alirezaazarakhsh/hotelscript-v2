@@ -19,7 +19,7 @@ def send_club_points_sms(sender, instance, created, **kwargs):
     added_points = instance.points - getattr(instance, '_previous_points', 0)
     if added_points > 0:
         send_customer_club_sms(
-            phone_number=instance.user.mobile_number,
+            phone_number=instance.user.phone_number,
             user_name=instance.user.first_name,
             added_points=added_points,
             current_points=instance.points
