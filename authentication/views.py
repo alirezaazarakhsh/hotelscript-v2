@@ -15,6 +15,9 @@ from django.utils.translation import gettext_lazy as _
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
+from authentication.tasks import send_welcome_and_gift_sms
+from bashgah_moshtarian.models import CustomerClubPoint
+
 from .serializers import (
     AuthSerializer,
     JuridicalProfileDocumentSerializer,
@@ -143,6 +146,7 @@ class AuthView(APIView):
 
 
 
+
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
         operation_summary="ورود با کد تایید OTP",
@@ -169,13 +173,16 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # گرفتن شماره تلفن و نام کامل کاربر (فرض بر این است که در serializer این داده‌ها هست)
-        user = serializer.user  # فرض می‌کنیم serializer بعد از اعتبارسنجی، user رو داره
+        # گرفتن کاربر
+        user = serializer.user
         phone_number = user.phone_number
-        full_name = f"{user.first_name}{user.last_name}".strip()
+        full_name = f"{user.first_name} {user.last_name}".strip()
 
-        # ارسال پیام خوش آمدگویی
-        send_welcome_sms(phone_number, full_name)
+        # بررسی اینکه کاربر جدید است یا خیر
+        is_new_user = not CustomerClubPoint.objects.filter(user=user).exists()
+
+        # فراخوانی تسک برای ارسال SMS
+        send_welcome_and_gift_sms.delay(phone_number, full_name, is_new_user)
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 

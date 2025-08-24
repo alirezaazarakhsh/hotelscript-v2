@@ -4,12 +4,11 @@ from django.db import transaction
 from .models import BaseUser, NaturalProfile
 from config.models import UserLevel
 from bashgah_moshtarian.models import CustomerClubPoint
-from bashgah_moshtarian.sms.sms import send_registration_gift_sms
 
 @receiver(post_save, sender=BaseUser)
 def create_user_related_records(sender, instance, created, **kwargs):
     if not created:
-        return  # فقط زمانی که کاربر جدید ساخته شده اجرا شود
+        return  # فقط برای کاربران جدید
 
     print(f"سیگنال post_save برای کاربر {instance.phone_number} اجرا شد. created={created}")
 
@@ -35,16 +34,10 @@ def create_user_related_records(sender, instance, created, **kwargs):
             defaults={'points': 0}
         )
 
-        if created_points and customer_points.points == 0:  # فقط اگر رکورد جدید باشد و امتیاز صفر باشد
+        if created_points:
             initial_points = 300
             customer_points.points += initial_points
             customer_points.save()
-
-            # ارسال SMS هدیه ثبت‌نام
-            sms_result = send_registration_gift_sms(instance, initial_points)
-            if sms_result:
-                print(f"امتیاز 300 برای {instance.phone_number} اضافه شد و SMS هدیه ثبت‌نام ارسال شد.")
-            else:
-                print(f"امتیاز 300 برای {instance.phone_number} اضافه شد اما SMS هدیه ثبت‌نام ارسال نشد.")
+            print(f"امتیاز {initial_points} برای {instance.phone_number} اضافه شد.")
         else:
-            print(f"کاربر {instance.phone_number} قبلاً امتیاز دریافت کرده است یا امتیاز غیرصفر دارد: {customer_points.points}")
+            print(f"کاربر {instance.phone_number} قبلاً امتیاز دارد: {customer_points.points}")
