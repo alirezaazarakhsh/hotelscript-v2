@@ -103,15 +103,14 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
             print(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
+        print(f"Pattern code: {template_obj.pattern_code}")  # برای دیباگ
         api = KavenegarAPI(api_setting.api_token)
 
-        # آماده‌سازی پارامترها
+        # آماده‌سازی پارامترها (فقط token برای امتیاز)
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user.first_name or "کاربر",
-            'token2': str(added_points),
-            'token3': str(customer_points.points),
+            'token': str(added_points),
             'type': 'sms',
         }
 
