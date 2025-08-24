@@ -1707,6 +1707,7 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
+# تنظیم لاگ‌ها
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1736,7 +1737,6 @@ class BestHotelsPagination(PageNumberPagination):
 
         return Response({
             'count': total_items,
-            'total_pages': total_pages,
             'current_page': self.page.number,
             'next': self.get_next_link(),
             'previous': self.get_previous_link(),
@@ -1762,6 +1762,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
+    city = serializers.SerializerMethodField()  # اضافه کردن فیلد شهر به‌صورت سفارشی
 
     class Meta:
         model = Hotel
@@ -1806,6 +1807,10 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     def get_comment_count(self, obj):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
+    def get_city(self, obj):
+        """نمایش نام شهر به‌جای ایدی."""
+        return obj.city.name if obj.city else None
+
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
     """API برای دریافت لیست بهترین هتل‌ها با فیلترهای مختلف."""
@@ -1838,6 +1843,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             ).order_by('-id').select_related('user_level', 'room').first()
 
             if not price_data:
+                logger.warning(f"No price data found for room {room.id} on date {d}")
                 return None
 
             price_raw = price_data.price
@@ -1849,12 +1855,14 @@ class BestHotelspageAPI(generics.ListAPIView):
                     price_after = max(price_raw - disc_amount, 0)
                     remembered_discount_percentage = price_data.discount_value
                     remembered_discount_date = price_data.discount_date.strftime('%Y-%m-%d')
+                    logger.debug(f"Applied {disc_amount} discount for room {room.id} on {d}")
                 else:
                     price_after = price_raw
 
             total_price_raw += price_raw
             total_price_discounted += price_after
 
+        logger.info(f"Room {room.id}: Raw price = {total_price_raw}, Discounted price = {total_price_discounted}")
         return {
             'original_total_price': int(total_price_raw),
             'total_price': int(total_price_discounted),
@@ -1955,18 +1963,8 @@ class BestHotelspageAPI(generics.ListAPIView):
 
         # مدیریت تاریخ
         today = jdatetime.date.today()
-        start_date_obj = today
-        end_date_obj = today + jdatetime.timedelta(days=1)
-        if start_date_str:
-            try:
-                start_date_obj = jdatetime.date(*map(int, start_date_str.split('-')))
-            except ValueError:
-                raise ValidationError({'detail': 'فرمت start-date نامعتبر است (yyyy-mm-dd).'})
-        if end_date_str:
-            try:
-                end_date_obj = jdatetime.date(*map(int, end_date_str.split('-')))
-            except ValueError:
-                raise ValidationError({'detail': 'فرمت end-date نامعتبر است (yyyy-mm-dd).'})
+        start_date_obj = today if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
+        end_date_obj = today + jdatetime.timedelta(days=1) if not end_date_str else jdatetime.date(*map(int, end_date_str.split('-')))
         if end_date_obj <= start_date_obj:
             end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
 
@@ -1983,6 +1981,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             ).distinct()
 
             if not rooms_qs.exists():
+                logger.warning(f"No available rooms for hotel {hotel.id} in date range {start_date_obj} to {end_date_obj}")
                 continue
 
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
@@ -1992,6 +1991,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                 for room in rooms_qs:
                     summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                     if not summed:
+                        logger.warning(f"Failed to calculate price for room {room.id}")
                         continue
                     price_info = {
                         'total_price': summed['total_price'],
@@ -2002,6 +2002,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                         'reservation_count': hotel.reservation_count or 0,
                         'average_score': self.get_average_score(hotel),
                     }
+                    logger.debug(f"Room {room.id} - Total: {price_info['total_price']}, Original: {price_info['original_total_price']}")
                     if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
                         min_price_data = price_info
             else:
@@ -2028,7 +2029,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                 if min_pack_price != float('inf'):
                     min_price_data = {
                         'total_price': min_pack_price,
-                        'original_total_price': min_pack_price,
+                        'original_total_price': min_pack_price,  # فرض می‌کنیم تخفیف برای پک‌ها اعمال نشده
                         'discount_percentage': None,
                         'discount_date': None,
                         'rating': hotel.rating or 0,
@@ -2038,10 +2039,13 @@ class BestHotelspageAPI(generics.ListAPIView):
 
             if min_price_data:
                 if min_price is not None and min_price_data['total_price'] < min_price:
+                    logger.debug(f"Hotel {hotel.id} filtered out due to min_price {min_price}")
                     continue
                 if max_price is not None and min_price_data['total_price'] > max_price:
+                    logger.debug(f"Hotel {hotel.id} filtered out due to max_price {max_price}")
                     continue
                 hotel_min_price_map[hotel.id] = min_price_data
+                logger.info(f"Hotel {hotel.id} - Min price: {min_price_data['total_price']}")
 
         queryset = hotels_qs.filter(id__in=hotel_min_price_map.keys())
 
