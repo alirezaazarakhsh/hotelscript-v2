@@ -98,3 +98,42 @@ def send_discount_code_sms(discount_code, pattern_section='discountcode'):
     except Exception as e:
         logger.error(f"Unexpected error in send_discount_code_sms: {str(e)}", exc_info=True)
         return False
+    
+    
+    
+# اس ام اس  هدیه ثبت نام 
+def send_registration_gift_sms(phone_number, points, pattern_section='registrationgift'):
+    try:
+        api_setting = KavenegarSMSSetting.objects.first()
+        if not api_setting:
+            print("KavenegarSMSSetting not found")
+            return False
+
+        template_obj = SMSPattern.objects.filter(
+            sms_setting=api_setting,
+            name_fa=pattern_section
+        ).first()
+        if not template_obj:
+            print(f"SMSPattern for section '{pattern_section}' not found")
+            return False
+
+        api = KavenegarAPI(api_setting.api_token)
+
+        params = {
+            'receptor': phone_number,
+            'template': template_obj.pattern_code,
+            'token': points,  # مقدار امتیاز را می‌دهیم
+            'type': 'sms',
+        }
+
+        response = api.verify_lookup(params)
+        print("Response from Kavenegar (registration gift):", response)
+
+        return True
+
+    except APIException as e:
+        print(f'APIException: {e}')
+    except HTTPException as e:
+        print(f'HTTPException: {e}')
+
+    return False

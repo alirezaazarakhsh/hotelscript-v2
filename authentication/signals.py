@@ -4,14 +4,17 @@ from django.db import transaction
 from .models import BaseUser, NaturalProfile
 from config.models import UserLevel
 from bashgah_moshtarian.models import CustomerClubPoint
+from bashgah_moshtarian.sms.sms import send_registration_gift_sms  # ایمپورت تابع پیامک
 import logging
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=BaseUser)
 def create_user_related_records(sender, instance, created, **kwargs):
     if not created:
-        return  # فقط برای کاربران جدید
+        return  # فقط کاربران جدید
 
     logger.info(f"Running post_save signal for user {instance.phone_number}, created={created}")
 
@@ -42,5 +45,12 @@ def create_user_related_records(sender, instance, created, **kwargs):
             customer_points.points += initial_points
             customer_points.save()
             logger.info(f"Added {initial_points} points for {instance.phone_number}")
+
+            # ارسال پیامک هدیه ثبت‌نام بعد از ۵ ثانیه با Threading
+            def send_gift_later():
+                time.sleep(5)
+                send_registration_gift_sms(instance.phone_number, initial_points)
+
+            threading.Thread(target=send_gift_later).start()
         else:
             logger.info(f"User {instance.phone_number} already has points: {customer_points.points}")
