@@ -17,6 +17,9 @@ class AdminAuthBackend(ModelBackend):
                             return user
             except BaseUser.DoesNotExist:
                 return None
+    
+    def user_can_authenticate(self, user):
+        return user.is_superuser
 
 class UserAuthBackend(ModelBackend):
     def authenticate(self, request, **kwargs):
