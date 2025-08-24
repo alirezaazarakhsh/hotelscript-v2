@@ -49,6 +49,8 @@ from django.db.models import (
     Sum,
     Count,
     Avg,
+    Min,
+    Prefetch,
     Case,
     When,
     PositiveBigIntegerField,
