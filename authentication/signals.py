@@ -4,13 +4,16 @@ from django.db import transaction
 from .models import BaseUser, NaturalProfile
 from config.models import UserLevel
 from bashgah_moshtarian.models import CustomerClubPoint
+import logging
+
+logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=BaseUser)
 def create_user_related_records(sender, instance, created, **kwargs):
     if not created:
         return  # فقط برای کاربران جدید
 
-    print(f"سیگنال post_save برای کاربر {instance.phone_number} اجرا شد. created={created}")
+    logger.info(f"Running post_save signal for user {instance.phone_number}, created={created}")
 
     # ۱. ساخت سطح میهمان
     guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
@@ -25,7 +28,7 @@ def create_user_related_records(sender, instance, created, **kwargs):
         }
     )
     if created_profile:
-        print(f"پروفایل جدید برای کاربر {instance.phone_number} ساخته شد.")
+        logger.info(f"Created new profile for user {instance.phone_number}")
 
     # ۳. ایجاد رکورد باشگاه مشتریان و اضافه کردن امتیاز اولیه
     with transaction.atomic():
@@ -38,6 +41,6 @@ def create_user_related_records(sender, instance, created, **kwargs):
             initial_points = 300
             customer_points.points += initial_points
             customer_points.save()
-            print(f"امتیاز {initial_points} برای {instance.phone_number} اضافه شد.")
+            logger.info(f"Added {initial_points} points for {instance.phone_number}")
         else:
-            print(f"کاربر {instance.phone_number} قبلاً امتیاز دارد: {customer_points.points}")
+            logger.info(f"User {instance.phone_number} already has points: {customer_points.points}")

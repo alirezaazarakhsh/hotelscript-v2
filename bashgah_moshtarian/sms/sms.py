@@ -1,3 +1,5 @@
+import logging
+from venv import logger
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from bashgah_moshtarian.models import CustomerClubPoint
@@ -66,25 +68,29 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
 
 
 # اس ام اس دریافت هدیه ثبت‌نام برای باشگاه مشتریان
+logger = logging.getLogger(__name__)
+
 def send_registration_gift_sms(user, added_points, pattern_section='registrationgift'):
     """
     ارسال SMS هدیه ثبت‌نام بدون تغییر امتیاز
     """
+    logger.info(f"Attempting to send registration gift SMS to user {user}")
     try:
         # شماره تلفن
         phone_number = getattr(user, 'phone_number', None)
         if not phone_number:
-            print(f"No phone number found for user {user}")
+            logger.error(f"No phone number found for user {user}")
             return False
 
         # تبدیل شماره به فرمت بین‌المللی
         if phone_number.startswith("0"):
             phone_number = "98" + phone_number[1:]
+        logger.debug(f"Converted phone number to {phone_number}")
 
         # تنظیمات Kavenegar
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            print("KavenegarSMSSetting not found")
+            logger.error("KavenegarSMSSetting not found")
             return False
 
         # پترن پیامک
@@ -93,10 +99,10 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
+            logger.error(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
-        print(f"Pattern code: {template_obj.pattern_code}")  # برای دیباگ
+        logger.debug(f"Using pattern code: {template_obj.pattern_code}")
         api = KavenegarAPI(api_setting.api_token)
 
         # آماده‌سازی پارامترها
@@ -109,14 +115,15 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
 
         # ارسال SMS
         response = api.verify_lookup(params)
-        print(f"Kavenegar response for {phone_number}: {response}")
+        logger.info(f"Kavenegar response for {phone_number}: {response}")
         return True
 
     except APIException as e:
-        print(f"APIException: {e}")
+        logger.error(f"APIException in send_registration_gift_sms: {e}")
+        return False
     except HTTPException as e:
-        print(f"HTTPException: {e}")
+        logger.error(f"HTTPException in send_registration_gift_sms: {e}")
+        return False
     except Exception as e:
-        print(f"Unexpected error: {e}")
-
-    return False
+        logger.error(f"Unexpected error in send_registration_gift_sms: {e}")
+        return False
