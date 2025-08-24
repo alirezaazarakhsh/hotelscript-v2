@@ -1705,7 +1705,7 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-# --- Logger setup ---
+#تنظیم لاگ‌ها
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1717,8 +1717,7 @@ except Exception:
         'debug': logger_fallback
     })()
 
-
-# ----- Custom Pagination ---
+# --- Custom Pagination ---
 class BestHotelsPagination(PageNumberPagination):
     """صفحه‌بندی سفارشی برای لیست هتل‌ها با حداکثر 8 آیتم در هر صفحه."""
     page_size = 8
@@ -1824,7 +1823,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         return round(overall_average or 0, 1)
 
     def _sum_prices_over_range(self, room, start_date, end_date):
-        """محاسبه مجموع قیمت‌ها برای یک بازه زمانی با اعمال تخفیف درصدی."""
+        """محاسبه مجموع قیمت‌ها برای یک بازه زمانی با اعمال فقط تخفیف درصدی."""
         date_range = [start_date + jdatetime.timedelta(days=i) for i in range((end_date - start_date).days or 1)]
         total_price_raw = 0
         total_price_discounted = 0
@@ -1852,9 +1851,9 @@ class BestHotelspageAPI(generics.ListAPIView):
                 else:
                     price_after = price_raw
 
-            # تخفیف ثابت (fixed) نادیده گرفته می‌شود
+            # تخفیف ثابت (fixed) کاملاً نادیده گرفته می‌شود
             # elif price_data.discount_type == 'fixed':
-            #     pass  # غیرفعال کردن تخفیف ثابت
+            #     pass  # این بخش غیرفعال است
 
             total_price_raw += price_raw
             total_price_discounted += price_after
@@ -1866,6 +1865,29 @@ class BestHotelspageAPI(generics.ListAPIView):
             'discount_date': remembered_discount_date,
         }
 
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
+        operation_description=(
+            "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
+            "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
+            "برای ارزان‌ترین پک یا اتاق در کل بازه نمایش داده می‌شود. "
+            "تنها تخفیف‌های درصدی اعمال می‌شوند و تخفیف‌های ثابت تأثیر ندارند. "
+            "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
+        ),
+        tags=["best-hotel"],
+        manual_parameters=[
+            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها یا لیست مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='room-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات اتاق‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='hotel-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات هتل‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+        ]
+    )
     def get(self, request, *args, **kwargs):
         """پردازش درخواست GET برای دریافت لیست هتل‌ها."""
         return self.list(request, *args, **kwargs)
