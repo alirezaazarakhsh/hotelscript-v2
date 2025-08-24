@@ -1,4 +1,3 @@
-import logging
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
@@ -15,9 +14,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-
-from authentication.tasks import send_welcome_and_gift_sms
-from bashgah_moshtarian.models import CustomerClubPoint
 
 from .serializers import (
     AuthSerializer,
@@ -147,9 +143,6 @@ class AuthView(APIView):
 
 
 
-
-logger = logging.getLogger(__name__)
-
 class TokenObtainPairView(JwtTokenObtainPairView):
     @swagger_auto_schema(
         operation_summary="ورود با کد تایید OTP",
@@ -162,7 +155,6 @@ class TokenObtainPairView(JwtTokenObtainPairView):
     )
     def post(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            logger.warning(f"User already authenticated: {request.user}")
             return Response(
                 {"detail": _("شما قبلاً وارد شده‌اید.")},
                 status=status.HTTP_403_FORBIDDEN,
@@ -172,26 +164,20 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
-            logger.error(f"Token error: {e}")
             return Response(
                 {"detail": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # گرفتن کاربر
-        user = serializer.user
+        # گرفتن شماره تلفن و نام کامل کاربر (فرض بر این است که در serializer این داده‌ها هست)
+        user = serializer.user  # فرض می‌کنیم serializer بعد از اعتبارسنجی، user رو داره
         phone_number = user.phone_number
-        full_name = f"{user.first_name} {user.last_name}".strip()
+        full_name = f"{user.first_name}{user.last_name}".strip()
 
-        # بررسی اینکه کاربر جدید است یا خیر
-        is_new_user = not CustomerClubPoint.objects.filter(user=user).exists()
-        logger.info(f"Sending welcome and gift SMS for {phone_number}, is_new_user={is_new_user}")
-
-        # فراخوانی تسک برای ارسال SMS
-        send_welcome_and_gift_sms.delay(phone_number, full_name, is_new_user)
+        # ارسال پیام خوش آمدگویی
+        send_welcome_sms(phone_number, full_name)
 
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
-
 
 
 

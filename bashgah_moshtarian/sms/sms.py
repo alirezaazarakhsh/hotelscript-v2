@@ -1,123 +1,100 @@
 import logging
-from venv import logger
 from kavenegar import KavenegarAPI, APIException, HTTPException
+from django.db.models import Q
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
-from bashgah_moshtarian.models import CustomerClubPoint
-from celery import shared_task
+from authentication.models import BaseUser
+from ..models import RoomDiscountCode, ShoppingCenterDiscountCode
 
-
-def send_customer_club_point_sms(user, added_points, pattern_section='customerclubpoint'):
-    """
-    افزایش امتیاز کاربر و ارسال SMS
-    """
-    try:
-        # دریافت یا ایجاد رکورد امتیاز کاربر
-        customer_points, created = CustomerClubPoint.objects.get_or_create(user=user)
-
-        # افزایش امتیاز
-        customer_points.points += added_points
-        customer_points.save()
-
-        # شماره تلفن
-        phone_number = getattr(user, 'phone_number', None)
-        if not phone_number:
-            print(f"No phone number found for user {user}")
-            return False
-
-        if phone_number.startswith("0"):
-            phone_number = "98" + phone_number[1:]
-
-        # تنظیمات Kavenegar
-        api_setting = KavenegarSMSSetting.objects.first()
-        if not api_setting:
-            print("KavenegarSMSSetting not found")
-            return False
-
-        # پترن پیامک
-        template_obj = SMSPattern.objects.filter(
-            sms_setting=api_setting,
-            name_fa=pattern_section
-        ).first()
-        if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
-            return False
-
-        api = KavenegarAPI(api_setting.api_token)
-
-        params = {
-            'receptor': phone_number,
-            'template': template_obj.pattern_code,
-            'token': user.first_name or "کاربر",
-            'token2': str(added_points),
-            'token3': str(customer_points.points),
-            'type': 'sms',
-        }
-
-        response = api.verify_lookup(params)
-        print("Kavenegar response:", response)
-        return True
-
-    except APIException as e:
-        print(f"APIException: {e}")
-    except HTTPException as e:
-        print(f"HTTPException: {e}")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-
-    return False
-
-
-
-
-# اس ام اس دریافت هدیه ثبت‌نام برای باشگاه مشتریان
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=10)
-def send_registration_gift_sms(self, phone_number, added_points, pattern_section='registrationgift'):
-    """
-    ارسال SMS هدیه ثبت‌نام با retry خودکار در صورت خطا
-    """
-    logger.info(f"Starting send_registration_gift_sms task for {phone_number} with points={added_points}")
+def limit_spaces(text, max_spaces=5):
+    spaces_count = text.count(' ')
+    if spaces_count <= max_spaces:
+        return text
+    parts = text.split()
+    limited_text = ' '.join(parts[:max_spaces+1])  # max_spaces فاصله ایجاد می‌کند
+    return limited_text
+
+def send_discount_code_sms(discount_code, pattern_section='discountcode'):
 
     try:
-        # تبدیل شماره به فرمت بین‌المللی
-        if phone_number.startswith("0"):
-            phone_number = "98" + phone_number[1:]
-        logger.debug(f"Converted phone number to {phone_number}")
-
-        # گرفتن تنظیمات Kavenegar
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            logger.error("KavenegarSMSSetting not found")
-            raise self.retry(countdown=10, exc=Exception("KavenegarSMSSetting missing"))
+            logger.error("KavenegarSMSSetting not found.")
+            return False
 
-        # پیدا کردن template پیامک
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            logger.error(f"SMSPattern for section '{pattern_section}' not found")
-            raise self.retry(countdown=10, exc=Exception(f"Template '{pattern_section}' missing"))
+            logger.error(f"SMSPattern for section '{pattern_section}' not found.")
+            return False
 
-        logger.debug(f"Using template code: {template_obj.pattern_code}")
         api = KavenegarAPI(api_setting.api_token)
+        any_success = False
 
-        params = {
-            'receptor': phone_number,
-            'template': template_obj.pattern_code,
-            'token': str(added_points),
-            'type': 'sms',
-        }
+        # بررسی وجود فیلد user_level در مدل BaseUser
+        baseuser_has_user_level = hasattr(BaseUser, 'user_level')
 
-        # ارسال SMS
-        response = api.verify_lookup(params)
-        logger.info(f"Gift SMS sent successfully to {phone_number}. Response: {response}")
-        return True
+        if discount_code.is_public:
+            # اگر فیلد user_level موجود است، فیلتر کن، در غیر این صورت بدون آن فیلتر کن
+            if baseuser_has_user_level and discount_code.user_level is not None:
+                users = BaseUser.objects.filter(
+                    Q(customer_points__points__gte=discount_code.required_points) &
+                    (Q(user_level=discount_code.user_level) | Q(user_level__isnull=True))
+                ).distinct()
+            else:
+                users = BaseUser.objects.filter(
+                    customer_points__points__gte=discount_code.required_points
+                ).distinct()
+        else:
+            if not discount_code.user:
+                logger.error("No user specified for private discount code.")
+                return False
+            users = [discount_code.user]
 
-    except (APIException, HTTPException) as e:
-        logger.error(f"Kavenegar API error for {phone_number}: {e}")
-        raise self.retry(exc=e)
+        if isinstance(discount_code, RoomDiscountCode):
+            try:
+                location_name = f"اتاق {discount_code.room.name} از هتل {discount_code.room.hotel.name}"[:50]
+            except AttributeError:
+                location_name = f"اتاق {discount_code.room.name}"[:50]
+        else:
+            location_name = f"مرکز خرید {discount_code.shopping_center_name}"[:50]
+
+        location_name = limit_spaces(location_name, max_spaces=5)
+
+        for user in users:
+            phone_number = getattr(user, 'phone_number', None)
+            if not phone_number:
+                logger.warning(f"No phone number found for user {user}. Skipping.")
+                continue
+
+            user_name = f"{user.first_name or ''}{user.last_name or ''}".strip() or "کاربر"
+            user_name = ''.join(user_name.split())[:20]  # حذف فاصله‌ها و محدود به 20 کاراکتر
+            discount_code_str = ''.join(discount_code.code.split())[:8]  # حذف فاصله‌ها در کد تخفیف
+
+            params = {
+                'receptor': phone_number,
+                'template': template_obj.pattern_code,
+                'token': user_name,
+                'token2': discount_code_str,
+                'token10': location_name,
+                'type': 'sms',
+            }
+
+            try:
+                response = api.verify_lookup(params)
+                logger.info(f"SMS sent to {phone_number}. Response: {response}")
+                any_success = True
+                discount_code.activated_users.add(user)
+            except APIException as e:
+                logger.error(f"APIException for {phone_number}: {str(e)}")
+            except HTTPException as e:
+                logger.error(f"HTTPException for {phone_number}: {str(e)}")
+
+        return any_success
+
     except Exception as e:
-        logger.error(f"Unexpected error in send_registration_gift_sms for {phone_number}: {e}")
-        raise self.retry(exc=e)
+        logger.error(f"Unexpected error in send_discount_code_sms: {str(e)}", exc_info=True)
+        return False
