@@ -67,34 +67,24 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
 
 # اس ام اس دریافت هدیه ثبت‌نام برای باشگاه مشتریان
 def send_registration_gift_sms(user, added_points, pattern_section='registrationgift'):
-    """
-    افزایش امتیاز کاربر و ارسال SMS هدیه ثبت‌نام
-    """
     try:
-        # دریافت یا ایجاد رکورد امتیاز کاربر
         customer_points, created = CustomerClubPoint.objects.get_or_create(user=user)
-
-        # افزایش امتیاز
         customer_points.points += added_points
         customer_points.save()
 
-        # شماره تلفن
         phone_number = getattr(user, 'phone_number', None)
         if not phone_number:
             print(f"No phone number found for user {user}")
             return False
 
-        # تبدیل شماره به فرمت بین‌المللی
         if phone_number.startswith("0"):
             phone_number = "98" + phone_number[1:]
 
-        # تنظیمات Kavenegar
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
             print("KavenegarSMSSetting not found")
             return False
 
-        # پترن پیامک
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
@@ -106,7 +96,6 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
         print(f"Pattern code: {template_obj.pattern_code}")  # برای دیباگ
         api = KavenegarAPI(api_setting.api_token)
 
-        # آماده‌سازی پارامترها (فقط token برای امتیاز)
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
@@ -114,7 +103,6 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
             'type': 'sms',
         }
 
-        # ارسال SMS
         response = api.verify_lookup(params)
         print("Kavenegar response:", response)
         return True
