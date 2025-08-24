@@ -1,6 +1,7 @@
 from celery import shared_task
 import time
-from .sms import send_registration_gift_sms, send_welcome_sms
+from bashgah_moshtarian.sms import send_registration_gift_sms
+from authentication.sms import send_welcome_sms
 from .models import BaseUser
 
 @shared_task
