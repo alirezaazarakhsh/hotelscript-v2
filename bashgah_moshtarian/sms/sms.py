@@ -47,7 +47,7 @@ def send_registration_gift_sms(phone_number, points, pattern_section='registrati
 
 
 #اس ام اس افزایش و موجودی امتیاز های کاربر در باشگاه مشتریان
-ogger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 def send_customer_club_sms(phone_number, user_name, added_points, current_points, pattern_section='customerclubpoint'):
     try:
