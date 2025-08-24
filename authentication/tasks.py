@@ -1,6 +1,6 @@
 from celery import shared_task
 import logging
-from bashgah_moshtarian.sms.sms import send_registration_gift_sms
+from bashgah_moshtarian.sms.sms import send_registration_gift_sms as send_gift_sms
 from authentication.sms.sms import send_welcome_sms
 from .models import BaseUser
 
@@ -17,12 +17,19 @@ def send_welcome_and_gift_sms(phone_number, full_name, is_new_user):
     success = send_welcome_sms(phone_number, full_name)
     if not success:
         logger.error(f"Failed to send welcome SMS to {phone_number}")
+    else:
+        logger.info(f"Welcome SMS sent successfully to {phone_number}")
     
     # اگر کاربر جدید است، SMS هدیه ثبت‌نام را با تأخیر ۵ ثانیه ارسال کن
     if is_new_user:
         try:
-            user = BaseUser.objects.get(phone_number=phone_number)
-            send_registration_gift_sms.apply_async((user, 300), countdown=5)
+            send_gift_sms.apply_async((phone_number, 300), countdown=5)
             logger.info(f"Scheduled gift SMS for {phone_number} with 5-second delay")
-        except BaseUser.DoesNotExist:
-            logger.error(f"User with phone number {phone_number} not found")
+        except Exception as e:
+            logger.error(f"Failed to schedule gift SMS for {phone_number}: {e}")
+
+# تسک تستی برای بررسی ارتباط Celery
+@shared_task
+def debug_task(x, y):
+    logger.warning("🔥 Celery is working! %s + %s", x, y)
+    return x + y

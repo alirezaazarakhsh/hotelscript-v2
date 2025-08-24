@@ -3,6 +3,8 @@ from venv import logger
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from bashgah_moshtarian.models import CustomerClubPoint
+from celery import shared_task
+
 
 def send_customer_club_point_sms(user, added_points, pattern_section='customerclubpoint'):
     """
@@ -69,19 +71,13 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
 
 # اس ام اس دریافت هدیه ثبت‌نام برای باشگاه مشتریان
 logger = logging.getLogger(__name__)
-
-def send_registration_gift_sms(user, added_points, pattern_section='registrationgift'):
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def send_registration_gift_sms(self, phone_number, added_points, pattern_section='registrationgift'):
     """
-    ارسال SMS هدیه ثبت‌نام بدون تغییر امتیاز
+    ارسال SMS هدیه ثبت‌نام
     """
-    logger.info(f"Attempting to send registration gift SMS to user {user}")
+    logger.info(f"Attempting to send registration gift SMS to {phone_number}")
     try:
-        # شماره تلفن
-        phone_number = getattr(user, 'phone_number', None)
-        if not phone_number:
-            logger.error(f"No phone number found for user {user}")
-            return False
-
         # تبدیل شماره به فرمت بین‌المللی
         if phone_number.startswith("0"):
             phone_number = "98" + phone_number[1:]
@@ -118,12 +114,9 @@ def send_registration_gift_sms(user, added_points, pattern_section='registration
         logger.info(f"Kavenegar response for {phone_number}: {response}")
         return True
 
-    except APIException as e:
-        logger.error(f"APIException in send_registration_gift_sms: {e}")
-        return False
-    except HTTPException as e:
-        logger.error(f"HTTPException in send_registration_gift_sms: {e}")
-        return False
+    except (APIException, HTTPException) as e:
+        logger.error(f"Error sending gift SMS to {phone_number}: {e}")
+        raise self.retry(exc=e)
     except Exception as e:
         logger.error(f"Unexpected error in send_registration_gift_sms: {e}")
-        return False
+        raise self.retry(exc=e)

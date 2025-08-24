@@ -1,6 +1,7 @@
 import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
+from celery import shared_task
 
 
 #ارسال otp به شماره تلفن همراه با استفاده از پترن‌های سامانه کاوه نگار
@@ -47,9 +48,10 @@ def send_otp_sms(phone_number, code, pattern_section='otp'):
 # ارسال پیامک خوش‌آمدگویی پس از لاگین کاربر به شماره تلفن همراه با استفاده از پترن‌های سامانه کاوه نگار
 logger = logging.getLogger(__name__)
 
-def send_welcome_sms(phone_number, full_name, pattern_section='welcome'):
+@shared_task(bind=True, max_retries=3, default_retry_delay=10)
+def send_welcome_sms(self, phone_number, full_name, pattern_section='welcome'):
     """
-    ارسال SMS خوش‌آمدگویی
+    ارسال SMS خوش‌آمدگویی با retry خودکار در صورت خطا
     """
     logger.info(f"Attempting to send welcome SMS to {phone_number} with full_name={full_name}")
     try:
@@ -80,17 +82,12 @@ def send_welcome_sms(phone_number, full_name, pattern_section='welcome'):
         logger.info(f"Kavenegar response for {phone_number}: {response}")
         return True
 
-    except APIException as e:
-        logger.error(f"APIException in send_welcome_sms: {e}")
-        return False
-    except HTTPException as e:
-        logger.error(f"HTTPException in send_welcome_sms: {e}")
-        return False
+    except (APIException, HTTPException) as e:
+        logger.error(f"Error sending welcome SMS to {phone_number}: {e}")
+        raise self.retry(exc=e)
     except Exception as e:
         logger.error(f"Unexpected error in send_welcome_sms: {e}")
-        return False
-
-
+        raise self.retry(exc=e)
 
 
 
