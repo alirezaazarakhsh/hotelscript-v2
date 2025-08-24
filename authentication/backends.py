@@ -10,16 +10,13 @@ class AdminAuthBackend(ModelBackend):
                 username_field = BaseUser.USERNAME_FIELD
                 if username:
                     user = BaseUser.objects.get(**{username_field: username})
-                    # فرض می‌کنیم ادمین‌ها از رمز عبور استفاده می‌کنند
-                    if user.check_password(password):
-                        user.last_login = jdatetime.datetime.now()
-                        user.save()
-                        return user
+
+                    # بررسی وجود superuser و پسورد معتبر
+                    if hasattr(user, 'superuser') and user.superuser.password:
+                        if user.superuser.check_password(password):
+                            return user
             except BaseUser.DoesNotExist:
                 return None
-    
-    def user_can_authenticate(self, user):
-        return user.is_superuser
 
 class UserAuthBackend(ModelBackend):
     def authenticate(self, request, **kwargs):
