@@ -71,37 +71,38 @@ def send_customer_club_point_sms(user, added_points, pattern_section='customercl
 
 # اس ام اس دریافت هدیه ثبت‌نام برای باشگاه مشتریان
 logger = logging.getLogger(__name__)
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=10)
 def send_registration_gift_sms(self, phone_number, added_points, pattern_section='registrationgift'):
     """
-    ارسال SMS هدیه ثبت‌نام
+    ارسال SMS هدیه ثبت‌نام با retry خودکار در صورت خطا
     """
-    logger.info(f"Attempting to send registration gift SMS to {phone_number}")
+    logger.info(f"Starting send_registration_gift_sms task for {phone_number} with points={added_points}")
+
     try:
         # تبدیل شماره به فرمت بین‌المللی
         if phone_number.startswith("0"):
             phone_number = "98" + phone_number[1:]
         logger.debug(f"Converted phone number to {phone_number}")
 
-        # تنظیمات Kavenegar
+        # گرفتن تنظیمات Kavenegar
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
             logger.error("KavenegarSMSSetting not found")
-            return False
+            raise self.retry(countdown=10, exc=Exception("KavenegarSMSSetting missing"))
 
-        # پترن پیامک
+        # پیدا کردن template پیامک
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
         if not template_obj:
             logger.error(f"SMSPattern for section '{pattern_section}' not found")
-            return False
+            raise self.retry(countdown=10, exc=Exception(f"Template '{pattern_section}' missing"))
 
-        logger.debug(f"Using pattern code: {template_obj.pattern_code}")
+        logger.debug(f"Using template code: {template_obj.pattern_code}")
         api = KavenegarAPI(api_setting.api_token)
 
-        # آماده‌سازی پارامترها
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
@@ -111,12 +112,12 @@ def send_registration_gift_sms(self, phone_number, added_points, pattern_section
 
         # ارسال SMS
         response = api.verify_lookup(params)
-        logger.info(f"Kavenegar response for {phone_number}: {response}")
+        logger.info(f"Gift SMS sent successfully to {phone_number}. Response: {response}")
         return True
 
     except (APIException, HTTPException) as e:
-        logger.error(f"Error sending gift SMS to {phone_number}: {e}")
+        logger.error(f"Kavenegar API error for {phone_number}: {e}")
         raise self.retry(exc=e)
     except Exception as e:
-        logger.error(f"Unexpected error in send_registration_gift_sms: {e}")
+        logger.error(f"Unexpected error in send_registration_gift_sms for {phone_number}: {e}")
         raise self.retry(exc=e)
