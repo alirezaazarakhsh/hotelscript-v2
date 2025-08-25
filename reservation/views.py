@@ -1778,8 +1778,17 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
 
     def get_city(self, obj):
-        """نمایش نام شهر به‌جای ایدی."""
-        return obj.city.name if obj.city else None
+        """نمایش اطلاعات کامل شهر به‌صورت دیکشنری."""  # اصلاح‌شده: بازگشت دیکشنری کامل
+        if obj.city:
+            return {
+                "id": obj.city.id,
+                "image": obj.city.image.url if obj.city.image else "http://cps.safarnameh24.com/media/cities/default.jpg",  # فرض بر وجود image؛ اگر نه، پیش‌فرض بگذارید
+                "name": obj.city.name,
+                "province": obj.city.province.name if obj.city.province else None,
+                "slug": obj.city.slug,
+                "hotels_number": Hotel.objects.filter(city=obj.city).count(),  # محاسبه تعداد هتل‌ها
+            }
+        return None
 
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
@@ -1852,8 +1861,6 @@ class BestHotelspageAPI(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         """فیلتر و پردازش لیست هتل‌ها بر اساس پارامترهای ورودی."""
-        from itertools import combinations
-
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
@@ -1866,7 +1873,12 @@ class BestHotelspageAPI(generics.ListAPIView):
         hotel_facilities = request.query_params.get('hotel-facilities')
 
         try:
-            passenger_values = [int(x) for x in (passengers.split(',') if passengers else ['1'])]
+            # اصلاح‌شده: پشتیبانی از جداکننده '-' (مانند URL) و حذف مقادیر خالی
+            if passengers:
+                passengers = re.sub(r'[-]', ',', passengers)  # تبدیل - به , برای سازگاری
+                passenger_values = [int(x) for x in passengers.split(',') if x.strip()]
+            else:
+                passenger_values = [1]
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
         except ValueError:
@@ -1961,28 +1973,43 @@ class BestHotelspageAPI(generics.ListAPIView):
                         if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
                             min_price_data = price_info
             else:
-                # حالت پک
-                best_pack_price = float('inf')
+                # حالت پک - اصلاح‌شده: محاسبه جداگانه original و مدیریت تخفیف‌ها
+                best_pack_discounted = float('inf')
+                best_pack_original = float('inf')
+                best_discount_percentage = None
+                best_discount_date = None
                 for r in range(1, len(rooms_qs) + 1):
                     for combo in combinations(rooms_qs, r):
-                        total_capacity = sum([c.room_capacity + c.extra_capacity for c in combo])
+                        total_capacity = sum(room.room_capacity + room.extra_capacity for room in combo)
                         if total_capacity >= sum(passenger_values):
-                            total_price = 0
+                            total_discounted = 0
+                            total_original = 0
                             valid = True
+                            discount_percentages = set()
+                            discount_dates = set()
                             for room in combo:
                                 summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                                 if not summed:
                                     valid = False
                                     break
-                                total_price += summed['total_price']
-                            if valid and total_price < best_pack_price:
-                                best_pack_price = total_price
-                if best_pack_price != float('inf'):
+                                total_original += summed['original_total_price']
+                                total_discounted += summed['total_price']
+                                if summed['discount_percentage']:
+                                    discount_percentages.add(summed['discount_percentage'])
+                                if summed['discount_date']:
+                                    discount_dates.add(summed['discount_date'])
+                            if valid and total_discounted < best_pack_discounted:
+                                best_pack_discounted = total_discounted
+                                best_pack_original = total_original
+                                # اگر همه درصد تخفیف‌ها یکسان باشند، استفاده کن؛ иначе None
+                                best_discount_percentage = list(discount_percentages)[0] if len(discount_percentages) == 1 else None
+                                best_discount_date = list(discount_dates)[0] if len(discount_dates) == 1 else None
+                if best_pack_discounted != float('inf'):
                     min_price_data = {
-                        'total_price': best_pack_price,
-                        'original_total_price': best_pack_price,
-                        'discount_percentage': None,
-                        'discount_date': None,
+                        'total_price': best_pack_discounted,
+                        'original_total_price': best_pack_original,
+                        'discount_percentage': best_discount_percentage,
+                        'discount_date': best_discount_date,
                         'rating': hotel.rating or 0,
                         'reservation_count': hotel.reservation_count or 0,
                         'average_score': self.get_average_score(hotel),
