@@ -2,13 +2,11 @@ from django.db import models
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils.translation import gettext_lazy as _
-
-
-
+from django.conf import settings
 
 class FavoriteCollection(models.Model):
     user = models.ForeignKey(
-        'auth.User',  # فرض بر استفاده از مدل User پیش‌فرض جنگو
+        settings.AUTH_USER_MODEL,  # استفاده از مدل کاربر سفارشی
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
         related_name='favorite_lists',
@@ -23,7 +21,7 @@ class FavoriteCollection(models.Model):
         verbose_name_plural = 'لیست‌های علاقمندی'
 
     def __str__(self):
-        return f'{self.title}'
+        return self.title
 
 class Favorite(models.Model):
     list = models.ForeignKey(
@@ -35,14 +33,8 @@ class Favorite(models.Model):
     item_content_type = models.ForeignKey(
         ContentType,
         limit_choices_to={
-            'model__in': [
-                'article',
-                'hotel',
-            ], 
-            'app_label__in': [
-                'blog',
-                'reservation',
-            ]
+            'model__in': ['article', 'hotel'],
+            'app_label__in': ['blog', 'reservation']
         },
         on_delete=models.CASCADE,
         verbose_name=_('آیتم'),
@@ -53,10 +45,9 @@ class Favorite(models.Model):
         'item_object_id',
     )
 
-
     class Meta:
         verbose_name = 'علاقمندی'
         verbose_name_plural = 'علاقمندی‌ها'
 
     def __str__(self):
-        return  f'{self.item} - {self.list}'
+        return f'{self.item} - {self.list}'
