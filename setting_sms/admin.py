@@ -16,6 +16,8 @@ class SMSPatternInline(admin.TabularInline):
     verbose_name = "پترن پیامک"
     verbose_name_plural = "پترن‌های پیامک"
     fields = ['name_fa', 'pattern_code']
+    autocomplete_fields = ['name_fa']   
+
 
 
 @admin.register(KavenegarSMSSetting)
