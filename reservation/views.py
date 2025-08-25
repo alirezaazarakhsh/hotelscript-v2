@@ -1708,7 +1708,6 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-# --- Logger ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1720,9 +1719,9 @@ except Exception:
         'debug': logger_fallback
     })()
 
-# --- Custom Pagination ---
+
+# --- Pagination ---
 class BestHotelsPagination(PageNumberPagination):
-    """صفحه‌بندی سفارشی برای لیست هتل‌ها با حداکثر 8 آیتم در هر صفحه."""
     page_size = 8
     max_page_size = 8
     page_query_param = 'page'
@@ -1730,12 +1729,9 @@ class BestHotelsPagination(PageNumberPagination):
     def get_paginated_response(self, data):
         total_items = self.page.paginator.count
         total_pages = math.ceil(total_items / self.page_size)
-
-        # محدود کردن تعداد صفحات به 100
         if total_pages > 100:
             total_pages = 100
             total_items = self.page_size * 100
-
         return Response({
             'count': total_items,
             'current_page': self.page.number,
@@ -1744,16 +1740,9 @@ class BestHotelsPagination(PageNumberPagination):
             'results': data,
         })
 
-# --- Serializers ---
-class HotelTagPublicSerializer(serializers.ModelSerializer):
-    """سریالایزر برای تگ‌های عمومی هتل."""
-    class Meta:
-        model = HotelTagPublic
-        fields = ['id', 'title']
 
-
+# --- Serializer ---
 class UpdatedHotelListSerializer(serializers.ModelSerializer):
-    """سریالایزر برای نمایش اطلاعات هتل‌ها با فیلدهای محاسبه‌شده."""
     price = serializers.SerializerMethodField()
     price_after_discount = serializers.SerializerMethodField()
     discount_percentage = serializers.SerializerMethodField()
@@ -1813,16 +1802,30 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
         return obj.city.name if obj.city else None
 
 
+# --- Utility function برای اعمال تخفیف درصدی فقط ---
+def apply_percentage_discount(price, discount_type, discount_value, discount_date=None, date=None):
+    """
+    price: قیمت اصلی
+    discount_type: 'percentage' یا 'fixed'
+    discount_value: مقدار تخفیف
+    discount_date: تاریخ انقضای درصدی
+    date: تاریخ محاسبه
+    """
+    final_price = price
+    if discount_type == 'percentage' and discount_date and discount_date >= date:
+        final_price = int(price - (price * discount_value / 100))
+    # تخفیف ثابت روی قیمت کل اعمال نمیشه
+    return max(final_price, 0)
+
+
 # --- API View ---
 class BestHotelspageAPI(generics.ListAPIView):
-    """API برای دریافت لیست بهترین هتل‌ها با فیلترهای مختلف."""
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = BestHotelsPagination
     queryset = Hotel.objects.none()
 
     def get_average_score(self, hotel):
-        """محاسبه میانگین امتیاز هتل بر اساس نظرات تأییدشده."""
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
         if not comments.exists():
             return 0.0
@@ -1831,45 +1834,36 @@ class BestHotelspageAPI(generics.ListAPIView):
         return round(overall_average or 0, 1)
 
     def _sum_prices_over_range(self, room, start_date, end_date):
-        """محاسبه مجموع قیمت‌ها برای یک بازه زمانی با اعمال فقط تخفیف درصدی."""
         date_range = [start_date + jdatetime.timedelta(days=i) for i in range((end_date - start_date).days or 1)]
         total_price_raw = 0
         total_price_discounted = 0
-        remembered_discount_percentage = None
-        remembered_discount_date = None
+        discount_percentage = None
+        discount_date_str = None
 
         for d in date_range:
-            price_data = room.date_prices.filter(
-                start_date__lte=d,
-                end_date__gte=d
-            ).order_by('-id').select_related('user_level', 'room').first()
-
+            price_data = room.date_prices.filter(start_date__lte=d, end_date__gte=d).order_by('-id').select_related('user_level').first()
             if not price_data:
-                logger.warning(f"No price data found for room {room.id} on date {d}")
                 return None
 
-            price_raw = price_data.price
-            price_after = price_raw
-
-            if price_data.discount_type == 'percentage' and price_data.discount_date and price_data.discount_date >= d:
-                disc_amount = int(price_raw * price_data.discount_value / 100)
-                price_after = max(price_raw - disc_amount, 0)
-                remembered_discount_percentage = price_data.discount_value
-                remembered_discount_date = price_data.discount_date.strftime('%Y-%m-%d')
-                logger.debug(f"Applied {disc_amount} discount for room {room.id} on {d}")
-
-            total_price_raw += price_raw
+            total_price_raw += price_data.price
+            price_after = apply_percentage_discount(
+                price_data.price, price_data.discount_type,
+                price_data.discount_value, price_data.discount_date, d
+            )
             total_price_discounted += price_after
+
+            if price_data.discount_type == 'percentage':
+                discount_percentage = price_data.discount_value
+                discount_date_str = price_data.discount_date.strftime('%Y-%m-%d') if price_data.discount_date else None
 
         return {
             'original_total_price': int(total_price_raw),
             'total_price': int(total_price_discounted),
-            'discount_percentage': remembered_discount_percentage,
-            'discount_date': remembered_discount_date,
+            'discount_percentage': discount_percentage,
+            'discount_date': discount_date_str
         }
 
     def calculate_min_pack_price(self, remaining_passengers, available_rooms, start_date_obj, end_date_obj):
-        """بازنویسی تابع پک‌بندی برای محاسبه کمترین ترکیب ممکن"""
         if not remaining_passengers:
             return 0, 0
 
@@ -2014,29 +2008,30 @@ class BestHotelspageAPI(generics.ListAPIView):
                         'average_score': self.get_average_score(hotel),
                     }
                 else:
-                    min_price_data = None
-
-            if min_price_data:
-                if min_price is not None and min_price_data['total_price'] < min_price:
                     continue
-                if max_price is not None and min_price_data['total_price'] > max_price:
-                    continue
-                hotel_min_price_map[hotel.id] = min_price_data
 
-        queryset = hotels_qs.filter(id__in=hotel_min_price_map.keys())
+            hotel_min_price_map[hotel.id] = min_price_data
 
-        page = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(
-            page, many=True,
-            context={
-                "request": request,
-                "hotel_min_price_map": hotel_min_price_map,
-                "hotel_comment_count_map": hotel_comment_count_map,
-                "night_count": night_count
-            }
-        )
-        return self.get_paginated_response(serializer.data)
-    
+        serializer = self.get_serializer(hotels_qs, many=True, context={
+            'hotel_min_price_map': hotel_min_price_map,
+            'hotel_comment_count_map': hotel_comment_count_map,
+            'night_count': night_count,
+            'request': request,
+        })
+
+        page = self.paginate_queryset(hotels_qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={
+                'hotel_min_price_map': hotel_min_price_map,
+                'hotel_comment_count_map': hotel_comment_count_map,
+                'night_count': night_count,
+                'request': request,
+            })
+            return self.get_paginated_response(serializer.data)
+
+        return Response(serializer.data)
+
+
 
 
 
