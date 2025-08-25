@@ -1701,10 +1701,8 @@ class BestHotelsPagination(PageNumberPagination):
 
     def get_paginated_response(self, data):
         total_items = self.page.paginator.count
-        # محدود کردن تعداد کل آیتم‌ها به 800 (100 صفحه * 8 آیتم)
         if total_items > 800:
             total_items = 800
-
         return Response({
             'count': total_items,
             'current_page': self.page.number,
@@ -1800,15 +1798,11 @@ class BestHotelspageAPI(generics.ListAPIView):
                     discount_date = price_data.discount_date.strftime('%Y-%m-%d')
                     price_after_discount = int(max(price_data.price - discount_amount, 0))
             elif price_data.discount_type == 'fixed':
-                if price_data.discount_date:
-                    logger.error(f"Room {price_data.room.id} on {date}: Fixed discount should not have a discount_date")
-                    raise ValueError("تخفیف ثابت نمی‌تواند تاریخ انقضا داشته باشد.")
-                if price_data.is_fixed_discount_one_time and fixed_discount_applied:
-                    discount_amount = 0
-                else:
+                # تخفیف ثابت فقط یک‌بار اعمال می‌شه و روی پک تأثیر نمی‌ذاره
+                if not fixed_discount_applied:
                     discount_amount = int(price_data.discount_value)
                     fixed_discount_applied = price_data.is_fixed_discount_one_time
-                price_after_discount = int(max(price_data.price - discount_amount, 0))
+                price_after_discount = price_data.price  # قیمت خام برای پک
         else:
             discount_amount = 0
 
@@ -1817,9 +1811,7 @@ class BestHotelspageAPI(generics.ListAPIView):
     def _sum_prices_over_range(self, room, start_date, end_date):
         """
         جمع قیمت خام و پس از تخفیف برای کل شب‌ها.
-        - اگر حتی یک شب قیمت نداشت => None (اتاق نامعتبر برای این بازه)
-        - تخفیف درصدی فقط وقتی اعمال می‌شود که discount_date آن شب >= همان شب باشد.
-        - تخفیف ثابت: اگر is_fixed_discount_one_time=True فقط یک‌بار در کل اقامت اعمال می‌شود.
+        - برای پک، فقط تخفیف درصدی اعمال می‌شه.
         """
         date_range = [start_date + jdatetime.timedelta(days=i) for i in range((end_date - start_date).days or 1)]
         total_price_raw = 0
@@ -1840,8 +1832,8 @@ class BestHotelspageAPI(generics.ListAPIView):
 
             price_raw = price_data.price
             discount_amount, price_after, discount_percentage, discount_date, fixed_discount_applied_once = self.calculate_discount(price_data, d, fixed_discount_applied_once)
-            total_price_raw += price_raw
-            total_price_discounted += price_after
+            total_price_raw += price_raw * len(date_range)  # قیمت خام ضربدر تعداد شب‌ها
+            total_price_discounted += price_after * len(date_range) if discount_percentage else total_price_raw  # فقط تخفیف درصدی اعمال می‌شه
 
             if discount_percentage and not remembered_discount_percentage:
                 remembered_discount_percentage = discount_percentage
@@ -1892,11 +1884,10 @@ class BestHotelspageAPI(generics.ListAPIView):
         hotel_facilities = request.query_params.get('hotel-facilities')
 
         try:
-            # passengers می‌تواند یک عدد یا لیستی از اعداد باشد
             if passengers:
                 passenger_values = [int(x) for x in passengers.split(',') if x.strip() != ""]
                 if not passenger_values:
-                    passenger_values = [1]  # پیش‌فرض اگر لیست خالی باشه
+                    passenger_values = [1]
             else:
                 passenger_values = [1]
 
@@ -1944,12 +1935,10 @@ class BestHotelspageAPI(generics.ListAPIView):
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'}, status=400)
 
-        # تاریخ‌ها
-        today = jdatetime.date(2025, 8, 26)  # تاریخ فعلی بر اساس سیستم (03:07 AM +04)
+        today = jdatetime.date(2025, 8, 26)  # تاریخ فعلی (03:32 AM +04)
         start_date_obj = today if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
         end_date_obj = today + jdatetime.timedelta(days=1) if not end_date_str else jdatetime.date(*map(int, end_date_str.split('-')))
 
-        # اعتبارسنجی تاریخ
         if end_date_obj <= start_date_obj:
             end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
         night_count = (end_date_obj - start_date_obj).days
@@ -1977,7 +1966,6 @@ class BestHotelspageAPI(generics.ListAPIView):
             if len(passenger_values) == 1:
                 p = passenger_values[0]
                 if p == 0:
-                    # نمایش همه اتاق‌ها بدون فیلتر ظرفیت
                     for room in rooms_qs:
                         summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                         if summed:
@@ -1991,7 +1979,6 @@ class BestHotelspageAPI(generics.ListAPIView):
                                 'average_score': self.get_average_score(hotel),
                             })
                 else:
-                    # فقط اتاق‌هایی که ظرفیتشون برابر یا بیشتر از p باشه
                     valid_rooms = rooms_qs.filter(room_capacity__gte=p)
                     for room in valid_rooms:
                         summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
@@ -2006,19 +1993,18 @@ class BestHotelspageAPI(generics.ListAPIView):
                                 'average_score': self.get_average_score(hotel),
                             })
             else:
-                # گزینه‌های پک‌بندی
-                # حداکثر 3 اتاق برای پک‌بندی
+                # گزینه‌های پک‌بندی (حداکثر 3 اتاق)
                 for r in range(1, min(len(rooms_qs) + 1, 3)):
                     for combo in combinations(rooms_qs, r):
                         total_capacity = sum(room.room_capacity + room.extra_capacity for room in combo)
                         if total_capacity >= total_passengers:
-                            total_discounted = 0
                             total_original = 0
+                            total_discounted = 0
                             valid = True
                             discount_percentages = set()
                             discount_dates = set()
                             for room in combo:
-                                summed = self._sum_prices_over_range(room, start_date, end_date)
+                                summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                                 if not summed:
                                     valid = False
                                     break
@@ -2039,9 +2025,10 @@ class BestHotelspageAPI(generics.ListAPIView):
                                     'average_score': self.get_average_score(hotel),
                                 })
 
-            # انتخاب ارزان‌ترین گزینه
             if all_options:
                 min_price_data = min(all_options, key=lambda x: x['total_price'])
+            else:
+                min_price_data = None  # اگه هیچ گزینه‌ای نباشه، رد می‌شه
 
             if min_price_data:
                 if min_price is not None and min_price_data['total_price'] < min_price:
@@ -2062,7 +2049,6 @@ class BestHotelspageAPI(generics.ListAPIView):
             }
         )
         return self.get_paginated_response(serializer.data)
-
 
 
 
