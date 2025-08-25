@@ -22,7 +22,6 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'expires_at',
         'get_activated_users_display',
     )
-    list_filter = ('user_level',)
     search_fields = (
         'code',
         'room__title',

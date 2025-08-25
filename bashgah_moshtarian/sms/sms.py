@@ -131,6 +131,8 @@ def send_customer_club_deduct_sms(phone_number, user_name, deducted_points, curr
 
 
 
+
+
 logger = logging.getLogger(__name__)
 
 # ارسال SMS تخفیف برای اتاق
