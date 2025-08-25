@@ -2018,7 +2018,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                             discount_percentages = set()
                             discount_dates = set()
                             for room in combo:
-                                summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                                summed = self._sum_prices_over_range(room, start_date, end_date)
                                 if not summed:
                                     valid = False
                                     break
