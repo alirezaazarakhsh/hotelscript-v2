@@ -20,4 +20,3 @@ class FavoriteAdmin(admin.ModelAdmin):
         'id',
         'item',
     )
-    autocomplete_fields = ['item']
