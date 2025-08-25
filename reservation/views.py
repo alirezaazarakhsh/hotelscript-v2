@@ -1812,6 +1812,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         else:
             discount_amount = 0
 
+        logger.info(f"Date: {date}, Price: {price_data.price}, After Discount: {price_after_discount}, Discount: {discount_percentage}%")
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
     def _sum_prices_over_range(self, room, start_date, end_date):
@@ -1847,6 +1848,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                 remembered_discount_percentage = discount_percentage
                 remembered_discount_date = discount_date
 
+        logger.info(f"Room {room.id} - Total Raw: {total_price_raw}, Total Discounted: {total_price_discounted}")
         return {
             'original_total_price': int(total_price_raw),
             'total_price': int(total_price_discounted),
