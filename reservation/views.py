@@ -1677,8 +1677,7 @@ class CreateCommentView(ListCreateAPIView):
     
     
     
-    # ای پی ای صفحه بهترین هتل ها 
-# تنظیم لاگ‌ها
+# ای پی ای صفحه بهترین هتل ها 
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1826,14 +1825,9 @@ class BestHotelspageAPI(generics.ListAPIView):
                     price_after = max(price_raw - disc_amount, 0)
                     remembered_discount_percentage = price_data.discount_value
                     remembered_discount_date = price_data.discount_date.strftime('%Y-%m-%d')
-                    logger.debug(f"Applied {disc_amount} discount for room {room.id} on {d}")
-                else:
-                    price_after = price_raw
-
             total_price_raw += price_raw
             total_price_discounted += price_after
 
-        logger.info(f"Room {room.id}: Raw price = {total_price_raw}, Discounted price = {total_price_discounted}")
         return {
             'original_total_price': int(total_price_raw),
             'total_price': int(total_price_discounted),
@@ -1851,18 +1845,6 @@ class BestHotelspageAPI(generics.ListAPIView):
             "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
-        manual_parameters=[
-            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها یا لیست مثل 1,2)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='room-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات اتاق‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='hotel-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات هتل‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
-        ]
     )
     def get(self, request, *args, **kwargs):
         """پردازش درخواست GET برای دریافت لیست هتل‌ها."""
@@ -1870,6 +1852,8 @@ class BestHotelspageAPI(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         """فیلتر و پردازش لیست هتل‌ها بر اساس پارامترهای ورودی."""
+        from itertools import combinations
+
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
@@ -1888,7 +1872,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         except ValueError:
             raise ValidationError({'detail': 'پارامترهای عددی معتبر نیستند.'})
 
-        # افزودن annotate برای محاسبه کمترین قیمت
+        # annotate کمترین قیمت
         rooms_with_min_price = Room.objects.annotate(
             min_price=Min('date_prices__price')
         ).order_by('min_price')
@@ -1903,42 +1887,25 @@ class BestHotelspageAPI(generics.ListAPIView):
 
         if city:
             hotels_qs = hotels_qs.filter(city__name__iexact=city)
-
         if star:
-            try:
-                star_values = [int(x) for x in star.split(',')]
-                hotels_qs = hotels_qs.filter(stars__in=star_values)
-            except ValueError:
-                raise ValidationError({'detail': 'مقدار star باید عدد یا لیست جدا شده با کاما باشد.'})
-
+            star_values = [int(x) for x in star.split(',')]
+            hotels_qs = hotels_qs.filter(stars__in=star_values)
         if residence_type:
-            try:
-                residence_types = [int(x) for x in residence_type.split(',')]
-                hotels_qs = hotels_qs.filter(type__id__in=residence_types)
-            except ValueError:
-                raise ValidationError({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'})
-
+            residence_types = [int(x) for x in residence_type.split(',')]
+            hotels_qs = hotels_qs.filter(type__id__in=residence_types)
         if room_facilities:
-            try:
-                room_facility_ids = [int(x) for x in room_facilities.split(',')]
-                hotels_qs = hotels_qs.filter(rooms__facilities__id__in=room_facility_ids).distinct()
-            except ValueError:
-                raise ValidationError({'detail': 'شناسه‌های امکانات اتاق نامعتبر است.'})
-
+            room_facility_ids = [int(x) for x in room_facilities.split(',')]
+            hotels_qs = hotels_qs.filter(rooms__facilities__id__in=room_facility_ids).distinct()
         if hotel_facilities:
-            try:
-                hotel_facility_ids = [int(x) for x in hotel_facilities.split(',')]
-                hotels_qs = hotels_qs.filter(public_tags__id__in=hotel_facility_ids).distinct()
-            except ValueError:
-                raise ValidationError({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'})
+            hotel_facility_ids = [int(x) for x in hotel_facilities.split(',')]
+            hotels_qs = hotels_qs.filter(public_tags__id__in=hotel_facility_ids).distinct()
 
-        # مدیریت تاریخ
+        # تاریخ
         today = jdatetime.date.today()
         start_date_obj = today if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
         end_date_obj = today + jdatetime.timedelta(days=1) if not end_date_str else jdatetime.date(*map(int, end_date_str.split('-')))
         if end_date_obj <= start_date_obj:
             end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
-
         night_count = (end_date_obj - start_date_obj).days
 
         hotel_min_price_map = {}
@@ -1950,58 +1917,70 @@ class BestHotelspageAPI(generics.ListAPIView):
                 date_prices__end_date__gte=end_date_obj,
                 inventory__gt=0,
             ).distinct()
-
             if not rooms_qs.exists():
-                logger.warning(f"No available rooms for hotel {hotel.id} in date range {start_date_obj} to {end_date_obj}")
                 continue
 
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
-
             min_price_data = None
-            if len(passenger_values) == 1 and passenger_values[0] == 0:
-                # حالت تک اتاق
-                for room in rooms_qs:
-                    summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
-                    if not summed:
-                        logger.warning(f"Failed to calculate price for room {room.id}")
-                        continue
-                    price_info = {
-                        'total_price': summed['total_price'],
-                        'original_total_price': summed['original_total_price'],
-                        'discount_percentage': summed['discount_percentage'],
-                        'discount_date': summed['discount_date'],
-                        'rating': hotel.rating or 0,
-                        'reservation_count': hotel.reservation_count or 0,
-                        'average_score': self.get_average_score(hotel),
-                    }
-                    if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
-                        min_price_data = price_info
+
+            # حالت passengers
+            if len(passenger_values) == 1:
+                p = passenger_values[0]
+                if p == 0:
+                    # همه اتاق‌ها
+                    for room in rooms_qs:
+                        summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                        if not summed:
+                            continue
+                        price_info = {
+                            'total_price': summed['total_price'],
+                            'original_total_price': summed['original_total_price'],
+                            'discount_percentage': summed['discount_percentage'],
+                            'discount_date': summed['discount_date'],
+                            'rating': hotel.rating or 0,
+                            'reservation_count': hotel.reservation_count or 0,
+                            'average_score': self.get_average_score(hotel),
+                        }
+                        if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
+                            min_price_data = price_info
+                else:
+                    valid_rooms = rooms_qs.filter(room_capacity__lte=p, room_capacity__gte=p - F('extra_capacity'))
+                    for room in valid_rooms:
+                        summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                        if not summed:
+                            continue
+                        price_info = {
+                            'total_price': summed['total_price'],
+                            'original_total_price': summed['original_total_price'],
+                            'discount_percentage': summed['discount_percentage'],
+                            'discount_date': summed['discount_date'],
+                            'rating': hotel.rating or 0,
+                            'reservation_count': hotel.reservation_count or 0,
+                            'average_score': self.get_average_score(hotel),
+                        }
+                        if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
+                            min_price_data = price_info
             else:
-                # حالت پک مسافران
-                room_candidates = {}
-                for p in set(passenger_values):
-                    room_candidates[p] = [r for r in rooms_qs if r.room_capacity <= p <= r.room_capacity + r.extra_capacity and r.inventory > 0]
-
-                def calculate_min_pack_price(remaining_passengers):
-                    if not remaining_passengers:
-                        return 0
-                    p = remaining_passengers[0]
-                    min_pack_price = float('inf')
-                    for room in room_candidates.get(p, []):
-                        if room.inventory > 0:
-                            summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
-                            if summed:
-                                sub_price = summed['total_price']
-                                if len(remaining_passengers) > 1:
-                                    sub_price += calculate_min_pack_price(remaining_passengers[1:])
-                                min_pack_price = min(min_pack_price, sub_price)
-                    return min_pack_price
-
-                min_pack_price = calculate_min_pack_price(passenger_values)
-                if min_pack_price != float('inf'):
+                # حالت پک
+                best_pack_price = float('inf')
+                for r in range(1, len(rooms_qs) + 1):
+                    for combo in combinations(rooms_qs, r):
+                        total_capacity = sum([c.room_capacity + c.extra_capacity for c in combo])
+                        if total_capacity >= sum(passenger_values):
+                            total_price = 0
+                            valid = True
+                            for room in combo:
+                                summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                                if not summed:
+                                    valid = False
+                                    break
+                                total_price += summed['total_price']
+                            if valid and total_price < best_pack_price:
+                                best_pack_price = total_price
+                if best_pack_price != float('inf'):
                     min_price_data = {
-                        'total_price': min_pack_price,
-                        'original_total_price': min_pack_price,  # فرض می‌کنیم تخفیف برای پک‌ها اعمال نشده
+                        'total_price': best_pack_price,
+                        'original_total_price': best_pack_price,
                         'discount_percentage': None,
                         'discount_date': None,
                         'rating': hotel.rating or 0,
@@ -2015,10 +1994,8 @@ class BestHotelspageAPI(generics.ListAPIView):
                 if max_price is not None and min_price_data['total_price'] > max_price:
                     continue
                 hotel_min_price_map[hotel.id] = min_price_data
-                logger.info(f"Hotel {hotel.id} - Min price: {min_price_data['total_price']}")
 
         queryset = hotels_qs.filter(id__in=hotel_min_price_map.keys())
-
         page = self.paginate_queryset(queryset)
         serializer = self.get_serializer(
             page, many=True,
@@ -2030,10 +2007,6 @@ class BestHotelspageAPI(generics.ListAPIView):
             }
         )
         return self.get_paginated_response(serializer.data)
-
-
-
-
 
 
 
