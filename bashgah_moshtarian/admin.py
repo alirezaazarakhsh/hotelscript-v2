@@ -19,7 +19,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'required_points',
         'user_level',
         'expires_at',
-        'get_activated_users_display',
+       
     )
     search_fields = (
         'code',
@@ -108,7 +108,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'required_points',
         'user_level',
         'expires_at',
-        'get_activated_users_display',
     )
     search_fields = (
         'code',
