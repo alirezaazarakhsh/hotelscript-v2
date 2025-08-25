@@ -1699,12 +1699,10 @@ class BestHotelsPagination(PageNumberPagination):
     def get_paginated_response(self, data):
         """پاسخ صفحه‌بندی‌شده با اطلاعات اضافی برای فرانت‌اند."""
         total_items = self.page.paginator.count
-        total_pages = math.ceil(total_items / self.page_size)
 
-        # محدود کردن تعداد صفحات به 100
-        if total_pages > 100:
-            total_pages = 100
-            total_items = self.page_size * 100
+        # محدود کردن تعداد کل آیتم‌ها به 800 (100 صفحه * 8 آیتم)
+        if total_items > 800:
+            total_items = 800
 
         # تبدیل داده‌ها به فرمت مناسب برای فرانت‌اند
         formatted_data = [
@@ -1733,10 +1731,9 @@ class BestHotelsPagination(PageNumberPagination):
         return Response({
             'count': total_items,
             'current_page': self.page.number,
-            'total_pages': total_pages,
             'next': self.get_next_link(),
             'previous': self.get_previous_link(),
-            'results': formatted_data,  # داده‌ها با برچسب‌های خوانا و بدون تکرار واحد
+            'results': formatted_data,
         })
 
 # --- Serializers ---
@@ -1843,10 +1840,8 @@ class BestHotelspageAPI(generics.ListAPIView):
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
                 if not price_data.discount_date or price_data.discount_date <= date:
-                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
                     price_after_discount = price_data.price
                 else:
-                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
@@ -1867,7 +1862,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
     def _sum_prices_over_range(self, room, start_date, end_date):
-        """محاسبه مجموع قیمت‌ها برای یک بازه زمانی با اعمال فقط تخفیف درصدی."""
+        """محاسبه مجموع قیمت‌ها برای یک بازه زمانی با اعمال تخفیف."""
         date_range = [start_date + jdatetime.timedelta(days=i) for i in range((end_date - start_date).days or 1)]
         total_price_raw = 0
         total_price_discounted = 0
@@ -1875,22 +1870,21 @@ class BestHotelspageAPI(generics.ListAPIView):
         remembered_discount_date = None
         fixed_discount_applied = False
 
-        for d in date_range:
+        for date in date_range:
             price_data = room.date_prices.filter(
-                start_date__lte=d,
-                end_date__gte=d
+                start_date__lte=date,
+                end_date__gte=date
             ).order_by('-id').select_related('user_level', 'room').first()
 
             if not price_data:
-                logger.warning(f"No price data found for room {room.id} on date {d}")
+                logger.warning(f"No price data found for room {room.id} on date {date}")
                 return None
 
-            price_raw = price_data.price
-            _, price_after, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, d, fixed_discount_applied)
-            total_price_raw += price_raw
-            total_price_discounted += price_after
+            discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
+            total_price_raw += price_data.price
+            total_price_discounted += price_after_discount
 
-            if discount_percentage:
+            if discount_percentage and not remembered_discount_percentage:
                 remembered_discount_percentage = discount_percentage
                 remembered_discount_date = discount_date
 
@@ -1989,7 +1983,7 @@ class BestHotelspageAPI(generics.ListAPIView):
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
             min_price_data = None
 
-            total_passengers = sum(passenger_values)  # جمع کل مسافران برای پک
+            total_passengers = sum(passenger_values)
             if len(passenger_values) == 1:
                 p = passenger_values[0]
                 if p == 0:
@@ -2009,7 +2003,6 @@ class BestHotelspageAPI(generics.ListAPIView):
                         if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
                             min_price_data = price_info
                 else:
-                    # فقط اتاق‌هایی که ظرفیتشون حداقل برابر با تعداد مسافر باشه
                     valid_rooms = rooms_qs.filter(room_capacity__gte=p)
                     for room in valid_rooms:
                         summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
@@ -2053,7 +2046,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                     best_pack_original = float('inf')
                     best_discount_percentage = None
                     best_discount_date = None
-                    for r in range(1, len(rooms_qs) + 1):
+                    for r in range(1, min(len(rooms_qs) + 1, 3)):  # حداکثر 3 اتاق
                         for combo in combinations(rooms_qs, r):
                             total_capacity = sum(room.room_capacity + room.extra_capacity for room in combo)
                             if total_capacity >= total_passengers:
