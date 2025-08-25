@@ -71,6 +71,9 @@ INSTALLED_APPS = [
     'setting_sms',
     'notification',
     'setting_payment',
+    'favorite',
+    
+    
     'tinymce',
     'channels',
 ]
