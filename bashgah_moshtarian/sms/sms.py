@@ -85,3 +85,45 @@ def send_customer_club_sms(phone_number, user_name, added_points, current_points
         print(f'HTTPException: {e}')
 
     return False
+
+
+# اس ام اس کاهش امتیاز باشگاه مشتریان 
+
+logger = logging.getLogger(__name__)
+
+def send_customer_club_deduct_sms(phone_number, user_name, deducted_points, current_points, pattern_section='customerclubpointdeduct'):
+    try:
+        api_setting = KavenegarSMSSetting.objects.first()
+        if not api_setting:
+            print("KavenegarSMSSetting not found")
+            return False
+
+        template_obj = SMSPattern.objects.filter(
+            sms_setting=api_setting,
+            name_fa=pattern_section
+        ).first()
+        if not template_obj:
+            print(f"SMSPattern for section '{pattern_section}' not found")
+            return False
+
+        api = KavenegarAPI(api_setting.api_token)
+
+        params = {
+            'receptor': phone_number,
+            'template': template_obj.pattern_code,
+            'token': user_name,         
+            'token2': deducted_points,  
+            'token3': current_points,   
+            'type': 'sms',
+        }
+
+        response = api.verify_lookup(params)
+        print("Response from Kavenegar (deduct customer club):", response)
+        return True
+
+    except APIException as e:
+        print(f'APIException: {e}')
+    except HTTPException as e:
+        print(f'HTTPException: {e}')
+
+    return False

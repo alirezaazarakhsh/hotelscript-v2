@@ -10,6 +10,8 @@ PATTERN_SECTIONS = [
     ('discountcode', 'ارسال کد تخفیف به کاربران'),  
     ('customerclubpoint', 'افزایش امتیاز باشگاه مشتریان'),
     ('registrationgift', 'دریافت هدیه ثبت‌نام برای باشگاه مشتریان'), 
+    ('customerclubpointdeduct', 'کاهش امتیاز باشگاه مشتریان'),  # ✅ جدید
+
 
 
 ]

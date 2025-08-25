@@ -1762,7 +1762,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
-    city = serializers.SerializerMethodField()  # اضافه کردن فیلد شهر به‌صورت سفارشی
+    city = CitySerializer(read_only=True)  # 👈 جایگزین شد
 
     class Meta:
         model = Hotel
