@@ -713,6 +713,7 @@ class HotelPriceRangeSerializer(serializers.ModelSerializer):
     city = CitySerializer()  # استفاده از سریالایزر تودرتو برای شهر
     price = serializers.SerializerMethodField()  # قیمت اصلی (قبل از تخفیف)
     price_after_discount = serializers.SerializerMethodField()  # قیمت با تخفیف
+    discount_percentage = serializers.SerializerMethodField()  # درصد تخفیف
     rating = serializers.FloatField()  # امتیاز هتل
     average_score = serializers.FloatField()  # میانگین امتیاز
     reservation_count = serializers.IntegerField()  # تعداد رزروها
@@ -749,6 +750,11 @@ class HotelPriceRangeSerializer(serializers.ModelSerializer):
         """دریافت قیمت با تخفیف از context."""
         min_price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
         return min_price_data.get('total_price', 0) if min_price_data else 0
+
+    def get_discount_percentage(self, obj):
+        """دریافت درصد تخفیف از context."""
+        min_price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return min_price_data.get('discount_percentage', 0) if min_price_data else 0
 
     def to_representation(self, instance):
         """سفارشی‌سازی خروجی برای اطمینان از فرمت درست."""
