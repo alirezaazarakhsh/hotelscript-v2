@@ -1708,12 +1708,26 @@ class BestHotelsPagination(PageNumberPagination):
             total_pages = 100
             total_items = self.page_size * 100
 
-        # تبدیل داده‌ها به فرمت مناسب برای فرانت‌اند با نام‌های جدید
+        # تبدیل داده‌ها به فرمت مناسب برای فرانت‌اند
         formatted_data = [
             {
-                **item,
+                'name': item['name'],
+                'slug': item['slug'],
+                'city': item['city'],
+                'address': item['address'],
+                'main_image': item['main_image'],
+                'stars': item['stars'],
+                'type': item['type'],
                 'price': f'{item["price"]:,} تومان' if item["price"] else 'ناموجود',  # قیمت اصلی
                 'after_discount_price': f'{item["price_after_discount"]:,} تومان' if item["price_after_discount"] else 'ناموجود',  # قیمت بعد از تخفیف
+                'discount_percentage': item['discount_percentage'],
+                'discount_date': item['discount_date'],
+                'night_count': item['night_count'],
+                'rating': item['rating'],
+                'average_score': item['average_score'],
+                'comment_count': item['comment_count'],
+                'reservation_count': item['reservation_count'],
+                'public_tags': item['public_tags'],
                 'discount_label': f'{item["discount_percentage"]}% تخفیف' if item["discount_percentage"] else 'بدون تخفیف',
                 'rating_label': f'امتیاز: {item["average_score"]}/5' if item["average_score"] else 'بدون امتیاز',
                 'night_count_label': f'تعداد شب: {item["night_count"]}',
@@ -1727,7 +1741,7 @@ class BestHotelsPagination(PageNumberPagination):
             'total_pages': total_pages,
             'next': self.get_next_link(),
             'previous': self.get_previous_link(),
-            'results': formatted_data,  # داده‌ها با برچسب‌های خوانا
+            'results': formatted_data,  # داده‌ها با برچسب‌های خوانا و بدون تکرار واحد
         })
 
 # --- Serializers ---
@@ -1842,7 +1856,7 @@ class BestHotelspageAPI(generics.ListAPIView):
                 logger.warning(f"No price data found for room {room.id} on date {d}")
                 return None
 
-            price_raw = price_data.price
+            price_raw = price_data.price  # فرض می‌کنیم قیمت به تومان هست
             price_after = price_raw
 
             if price_data.discount_type == 'percentage':
@@ -2069,9 +2083,9 @@ class BestHotelspageAPI(generics.ListAPIView):
             }
         )
         return self.get_paginated_response(serializer.data)
-
-
-
+    
+    
+    
 
 
 #ای پی ای فیلتر محدوده قیمت بهترین هتل ها 
