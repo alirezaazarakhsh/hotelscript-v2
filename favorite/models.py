@@ -12,7 +12,7 @@ class FavoriteCollection(models.Model):
         related_name='favorite_lists',
     )
     title = models.CharField(
-        verbose_name=_('عنوان'),
+        verbose_name=_('نام لیست'),
         max_length=128,
     )
 
@@ -21,8 +21,11 @@ class FavoriteCollection(models.Model):
         verbose_name_plural = 'لیست‌های علاقمندی'
 
     def __str__(self):
-        return self.title
-
+      return f"{self.title} - {self.user}"
+  
+  
+  
+  
 class Favorite(models.Model):
     list = models.ForeignKey(
         FavoriteCollection,

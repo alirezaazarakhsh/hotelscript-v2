@@ -3,7 +3,7 @@ from . import views
 from .views import (
     AmazingHotelsListView,
     CommentPointsAndSuggestionsView,
-    GetPriceRangeAPI,
+    # GetPriceRangeAPI,
     HomeHotelByCityView,
     HotelCommentPointSummaryView,
     HotelCommentsBySlugView,
@@ -37,7 +37,7 @@ urlpatterns = [
     path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-list'),
     path('hotels/by-city/<str:city_name>/', HomeHotelByCityView.as_view(), name='hotels-by-city'),
     path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),
-    path('best-hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
+    # path('best-hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
 
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),

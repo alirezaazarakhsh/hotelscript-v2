@@ -14,9 +14,13 @@ class FavoriteCollectionAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ['user']
 
+
 @admin.register(Favorite)
 class FavoriteAdmin(admin.ModelAdmin):
     list_display = (
         'id',
+        'item_content_type',
         'item',
+        'list',
+        
     )
