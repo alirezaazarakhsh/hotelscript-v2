@@ -94,6 +94,7 @@ from .serializers import (
     HotelIntroductionSerializer,
     HotelListSerializer,
     CitySerializer,
+    HotelPriceRangeSerializer,
     HotelRulesSerializer,
     HotelSearchSerializer,
     HotelTagPublicSerializer,
@@ -1848,15 +1849,15 @@ class BestHotelspageAPI(generics.ListAPIView):
             price_raw = price_data.price
             price_after = price_raw
 
-            if price_data.discount_type == 'percentage':
-                if price_data.discount_date and price_data.discount_date >= d:
-                    disc_amount = int(price_raw * price_data.discount_value / 100)
-                    price_after = max(price_raw - disc_amount, 0)
-                    remembered_discount_percentage = price_data.discount_value
-                    remembered_discount_date = price_data.discount_date.strftime('%Y-%m-%d')
-                    logger.debug(f"Applied {disc_amount} discount for room {room.id} on {d}")
-                else:
-                    price_after = price_raw
+            # فقط تخفیف‌های درصدی اعمال شوند، تخفیف ثابت (fixed) نادیده گرفته شود
+            if price_data.discount_type == 'percentage' and price_data.discount_date and price_data.discount_date >= d:
+                disc_amount = int(price_raw * price_data.discount_value / 100)
+                price_after = max(price_raw - disc_amount, 0)
+                remembered_discount_percentage = price_data.discount_value
+                remembered_discount_date = price_data.discount_date.strftime('%Y-%m-%d')
+                logger.debug(f"Applied {disc_amount} discount for room {room.id} on {d}")
+            else:
+                price_after = price_raw  # اگر تخفیف ثابت باشد یا تاریخ تخفیف گذشته باشد، قیمت بدون تغییر باقی می‌ماند
 
             total_price_raw += price_raw
             total_price_discounted += price_after
@@ -2001,29 +2002,41 @@ class BestHotelspageAPI(generics.ListAPIView):
                 # حالت پک‌شده یا تکی
                 def calculate_min_pack_price(remaining_passengers, available_rooms):
                     if not remaining_passengers:
-                        return 0
+                        return 0, 0  # (discounted, original)
+
                     p = remaining_passengers[0]
-                    min_pack_price = float('inf')
+                    min_discounted = float('inf')
+                    min_original = float('inf')
+                    best_pair = (None, None)
 
                     for room in available_rooms:
                         if room.inventory > 0 and p <= room.room_capacity + room.extra_capacity:
                             summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                             if summed:
-                                sub_price = summed['total_price']
+                                sub_discounted = summed['total_price']
+                                sub_original = summed['original_total_price']
                                 if len(remaining_passengers) > 1:
                                     # کپی کردن اتاق‌های باقی‌مانده برای جلوگیری از تداخل
                                     remaining_rooms = available_rooms.exclude(id=room.id)
-                                    sub_price += calculate_min_pack_price(remaining_passengers[1:], remaining_rooms)
-                                if sub_price < min_pack_price:
-                                    min_pack_price = sub_price
+                                    sub_d, sub_o = calculate_min_pack_price(remaining_passengers[1:], remaining_rooms)
+                                    if sub_d is None:  # اگر زیرپک ناممکن باشد، ادامه نده
+                                        continue
+                                    sub_discounted += sub_d
+                                    sub_original += sub_o
+                                if sub_discounted < min_discounted:
+                                    min_discounted = sub_discounted
+                                    min_original = sub_original
+                                    best_pair = (min_discounted, min_original)
 
-                    return min_pack_price if min_pack_price != float('inf') else None
+                    if best_pair == (None, None):
+                        return None, None
+                    return best_pair
 
-                min_pack_price = calculate_min_pack_price(passenger_values, rooms_qs)
-                if min_pack_price is not None:
+                min_discounted, min_original = calculate_min_pack_price(passenger_values, rooms_qs)
+                if min_discounted is not None:
                     min_price_data = {
-                        'total_price': min_pack_price,
-                        'original_total_price': min_pack_price,  # فرض می‌کنیم تخفیف برای پک‌ها اعمال نشده (قابل تغییر)
+                        'total_price': min_discounted,
+                        'original_total_price': min_original,
                         'discount_percentage': None,
                         'discount_date': None,
                         'rating': hotel.rating or 0,
@@ -2055,9 +2068,7 @@ class BestHotelspageAPI(generics.ListAPIView):
         )
         return self.get_paginated_response(serializer.data)
     
-    
-    
-    
+
 
 
 #ای پی ای فیلتر محدوده قیمت بهترین هتل ها 
@@ -2072,10 +2083,11 @@ except Exception:
         'debug': logger_fallback
     })()
 
-class GetPriceRangeAPI(generics.GenericAPIView):
-    """API برای دریافت حداقل و حداکثر قیمت هتل‌ها بر اساس فیلترهای اعمال‌شده."""
+
+class GetPriceRangeAPI(generics.ListAPIView):
+    """API برای دریافت لیست هتل‌ها بر اساس محدوده قیمت و فیلترهای اعمال‌شده."""
     permission_classes = [AllowAny]
-    queryset = Hotel.objects.none()
+    serializer_class = HotelPriceRangeSerializer
 
     def get_average_score(self, hotel):
         """محاسبه میانگین امتیاز هتل بر اساس نظرات تأییدشده."""
@@ -2129,12 +2141,11 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         }
 
     @swagger_auto_schema(
-        operation_summary="دریافت حداقل و حداکثر قیمت هتل‌ها بر اساس فیلترها",
+        operation_summary="فیلتر محدوده قیمت هتل ",
         operation_description=(
-            "این API حداقل و حداکثر قیمت (بر اساس قیمت نهایی با تخفیف درصدی برای ارزان‌ترین پک یا اتاق در کل بازه) "
-            "را از لیست هتل‌های فیلترشده بازمی‌گرداند. "
-            "قیمت‌ها بر اساس مجموع قیمت کل بازه محاسبه می‌شوند. "
-            "این API به همه فیلترهای BestHotelspageAPI وابسته است و فقط min_price و max_price را برمی‌گرداند."
+            "این API لیست هتل‌ها را با توجه به فیلترها و محدوده قیمت (بر اساس قیمت نهایی با تخفیف درصدی) "
+            "بازمی‌گرداند. قیمت‌ها بر اساس مجموع قیمت کل بازه، تاریخ، تعداد شب‌ها، و ظرفیت مسافران محاسبه می‌شوند. "
+            "حداقل و حداکثر قیمت کل هتل‌های فیلترشده نیز نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
         manual_parameters=[
@@ -2151,7 +2162,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         ]
     )
     def get(self, request, *args, **kwargs):
-        """پردازش درخواست GET برای دریافت محدوده قیمت."""
         city = request.query_params.get('city')
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
@@ -2170,7 +2180,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         except ValueError:
             raise ValidationError({'detail': 'پارامترهای عددی معتبر نیستند.'})
 
-        # افزودن annotate برای محاسبه کمترین قیمت
         rooms_with_min_price = Room.objects.annotate(
             min_price=Min('date_prices__price')
         ).order_by('min_price')
@@ -2221,7 +2230,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         if end_date_obj <= start_date_obj:
             end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
 
-        hotel_prices = []
+        hotel_min_price_map = {}
+        filtered_hotels = []
 
         for hotel in hotels_qs:
             rooms_qs = hotel.rooms.filter(
@@ -2234,15 +2244,12 @@ class GetPriceRangeAPI(generics.GenericAPIView):
                 continue
 
             if len(passenger_values) == 1 and passenger_values[0] == 0:
-                # حالت بدون فیلتر مسافر (همه اتاق‌ها)
                 min_price_data = None
                 for room in rooms_qs:
                     summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                     if summed and (min_price_data is None or summed['total_price'] < min_price_data['total_price']):
                         min_price_data = summed
-
             else:
-                # حالت پک‌شده یا تکی
                 def calculate_min_pack_price(remaining_passengers, available_rooms):
                     if not remaining_passengers:
                         return 0
@@ -2268,16 +2275,26 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
             if min_price_data:
                 total_price = min_price_data['total_price']
-                if min_price_param is not None and total_price < min_price_param:
-                    continue
-                if max_price_param is not None and total_price > max_price_param:
-                    continue
-                hotel_prices.append(total_price)
+                if (min_price_param is None or total_price >= min_price_param) and (max_price_param is None or total_price <= max_price_param):
+                    hotel_min_price_map[hotel.id] = min_price_data
+                    filtered_hotels.append(hotel)
 
-        if not hotel_prices:
-            return Response({'min_price': 0, 'max_price': 0})
+        if not filtered_hotels:
+            return Response({
+                'detail': 'هیچ هتلی در این محدوده قیمت یافت نشد.',
+                'min_price': 0,
+                'max_price': 0
+            })
 
-        min_price = min(hotel_prices)
-        max_price = max(hotel_prices)
+        # محاسبه حداقل و حداکثر قیمت از هتل‌های فیلترشده
+        hotel_prices = [hotel_min_price_map[hotel.id]['total_price'] for hotel in filtered_hotels]
+        min_price = min(hotel_prices) if hotel_prices else 0
+        max_price = max(hotel_prices) if hotel_prices else 0
 
-        return Response({'min_price': min_price, 'max_price': max_price})
+        serializer = self.get_serializer(filtered_hotels, many=True, context={'hotel_min_price_map': hotel_min_price_map})
+        response_data = {
+            'hotels': serializer.data,
+            'min_price': min_price,
+            'max_price': max_price
+        }
+        return Response(response_data)

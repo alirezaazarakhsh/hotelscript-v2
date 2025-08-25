@@ -706,3 +706,56 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
         fields = ('id', 'title')
         
         
+
+
+class HotelPriceRangeSerializer(serializers.ModelSerializer):
+    """سریالایزر برای نمایش اطلاعات هتل‌ها با قیمت‌ها در محدوده مشخص."""
+    city = CitySerializer()  # استفاده از سریالایزر تودرتو برای شهر
+    price = serializers.SerializerMethodField()  # قیمت اصلی (قبل از تخفیف)
+    price_after_discount = serializers.SerializerMethodField()  # قیمت با تخفیف
+    rating = serializers.FloatField()  # امتیاز هتل
+    average_score = serializers.FloatField()  # میانگین امتیاز
+    reservation_count = serializers.IntegerField()  # تعداد رزروها
+
+    class Meta:
+        model = Hotel
+        fields = [
+            'id',
+            'name',
+            'slug',
+            'city',
+            'address',
+            'main_image',
+            'stars',
+            'type',
+            'is_special_offer',
+            'is_flash_sale',
+            'is_best_seller',
+            'price',
+            'price_after_discount',
+            'rating',
+            'discount_percentage',
+            'discount_expiry',
+            'reservation_count',
+            'average_score'
+        ]
+
+    def get_price(self, obj):
+        """دریافت قیمت اصلی (قبل از تخفیف) از context."""
+        min_price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return min_price_data.get('original_total_price', 0) if min_price_data else 0
+
+    def get_price_after_discount(self, obj):
+        """دریافت قیمت با تخفیف از context."""
+        min_price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return min_price_data.get('total_price', 0) if min_price_data else 0
+
+    def to_representation(self, instance):
+        """سفارشی‌سازی خروجی برای اطمینان از فرمت درست."""
+        representation = super().to_representation(instance)
+        # اطمینان از اینکه فیلدهای خالی یا ناموجود به null تبدیل نشن
+        if not representation['main_image']:
+            representation['main_image'] = None
+        if representation['discount_expiry'] is None:
+            representation['discount_expiry'] = None
+        return representation
