@@ -1707,7 +1707,6 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-# تنظیم لاگ‌ها
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1987,49 +1986,44 @@ class BestHotelspageAPI(generics.ListAPIView):
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
 
             if len(passenger_values) == 1 and passenger_values[0] == 0:
+                # حالت بدون فیلتر مسافر (همه اتاق‌ها)
                 min_price_data = None
                 for room in rooms_qs:
                     summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
-                    if not summed:
-                        logger.warning(f"Failed to calculate price for room {room.id}")
-                        continue
-                    price_info = {
-                        'total_price': summed['total_price'],
-                        'original_total_price': summed['original_total_price'],
-                        'discount_percentage': summed['discount_percentage'],
-                        'discount_date': summed['discount_date'],
-                        'rating': hotel.rating or 0,
-                        'reservation_count': hotel.reservation_count or 0,
-                        'average_score': self.get_average_score(hotel),
-                    }
-                    logger.debug(f"Room {room.id} - Total: {price_info['total_price']}, Original: {price_info['original_total_price']}")
-                    if min_price_data is None or price_info['total_price'] < min_price_data['total_price']:
-                        min_price_data = price_info
+                    if summed and (min_price_data is None or summed['total_price'] < min_price_data['total_price']):
+                        min_price_data = summed.copy()
+                        min_price_data.update({
+                            'rating': hotel.rating or 0,
+                            'reservation_count': hotel.reservation_count or 0,
+                            'average_score': self.get_average_score(hotel),
+                        })
             else:
-                room_candidates = {}
-                for p in set(passenger_values):
-                    room_candidates[p] = [r for r in rooms_qs if r.room_capacity <= p <= r.room_capacity + r.extra_capacity and r.inventory > 0]
-
-                def calculate_min_pack_price(remaining_passengers):
+                # حالت پک‌شده یا تکی
+                def calculate_min_pack_price(remaining_passengers, available_rooms):
                     if not remaining_passengers:
                         return 0
                     p = remaining_passengers[0]
                     min_pack_price = float('inf')
-                    for room in room_candidates.get(p, []):
-                        if room.inventory > 0:
+
+                    for room in available_rooms:
+                        if room.inventory > 0 and p <= room.room_capacity + room.extra_capacity:
                             summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
                             if summed:
                                 sub_price = summed['total_price']
                                 if len(remaining_passengers) > 1:
-                                    sub_price += calculate_min_pack_price(remaining_passengers[1:])
-                                min_pack_price = min(min_pack_price, sub_price)
-                    return min_pack_price
+                                    # کپی کردن اتاق‌های باقی‌مانده برای جلوگیری از تداخل
+                                    remaining_rooms = available_rooms.exclude(id=room.id)
+                                    sub_price += calculate_min_pack_price(remaining_passengers[1:], remaining_rooms)
+                                if sub_price < min_pack_price:
+                                    min_pack_price = sub_price
 
-                min_pack_price = calculate_min_pack_price(passenger_values)
-                if min_pack_price != float('inf'):
+                    return min_pack_price if min_pack_price != float('inf') else None
+
+                min_pack_price = calculate_min_pack_price(passenger_values, rooms_qs)
+                if min_pack_price is not None:
                     min_price_data = {
                         'total_price': min_pack_price,
-                        'original_total_price': min_pack_price,  # فرض می‌کنیم تخفیف برای پک‌ها اعمال نشده
+                        'original_total_price': min_pack_price,  # فرض می‌کنیم تخفیف برای پک‌ها اعمال نشده (قابل تغییر)
                         'discount_percentage': None,
                         'discount_date': None,
                         'rating': hotel.rating or 0,
