@@ -1863,26 +1863,30 @@ class BestHotelspageAPI(generics.ListAPIView):
             'discount_date': discount_date_str
         }
 
-    def calculate_min_pack_price(self, remaining_passengers, available_rooms, start_date_obj, end_date_obj, rooms_selected=0):
+    def calculate_min_pack_price(self, remaining_passengers, available_rooms_list, start_date_obj, end_date_obj, rooms_selected=0):
         """
         محاسبه کمترین قیمت پک با محدودیت ۳ اتاق و ۸ مسافر
         """
         MAX_ROOMS = 3
         MAX_PASSENGERS = 8
 
-        if rooms_selected >= MAX_ROOMS or not remaining_passengers or sum(remaining_passengers) > MAX_PASSENGERS:
+        total_pax = sum(remaining_passengers)
+        if rooms_selected >= MAX_ROOMS or total_pax > MAX_PASSENGERS:
             return None, None
+
+        if not remaining_passengers:
+            return 0, 0  # Fixed: Base case for no remaining passengers
 
         p = remaining_passengers[0]
         best_result = None
 
-        for room in available_rooms:
-            if room.inventory <= 0:
+        for room_dict in available_rooms_list:
+            if room_dict['inventory'] <= 0:
                 continue
-            if p > room.room_capacity + room.extra_capacity:
+            if p > room_dict['capacity']:
                 continue
 
-            summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+            summed = self._sum_prices_over_range(room_dict['room'], start_date_obj, end_date_obj)
             if not summed:
                 continue
 
@@ -1890,8 +1894,14 @@ class BestHotelspageAPI(generics.ListAPIView):
             sub_original = summed['original_total_price']
 
             if len(remaining_passengers) > 1:
-                remaining_rooms = available_rooms.exclude(id=room.id)
-                sub_d, sub_o = self.calculate_min_pack_price(remaining_passengers[1:], remaining_rooms, start_date_obj, end_date_obj, rooms_selected + 1)
+                # Fixed: Copy list and decrement inventory for the chosen room type
+                sub_available = [d.copy() for d in available_rooms_list]
+                for d in sub_available:
+                    if d['id'] == room_dict['id']:
+                        d['inventory'] -= 1
+                        break  # No need to remove if <=0, as loop will skip
+
+                sub_d, sub_o = self.calculate_min_pack_price(remaining_passengers[1:], sub_available, start_date_obj, end_date_obj, rooms_selected + 1)
                 if sub_d is None:
                     continue
                 sub_discounted += sub_d
@@ -1922,7 +1932,11 @@ class BestHotelspageAPI(generics.ListAPIView):
         hotel_facilities = request.query_params.get('hotel-facilities')
 
         try:
-            passenger_values = [int(x) for x in (passengers.split(',') if passengers else ['1'])]
+            # Fixed: Handle floats like '2.0' by converting via float first
+            passenger_strs = passengers.split(',') if passengers else ['1']
+            passenger_values = [int(float(x.strip())) for x in passenger_strs if x.strip()]
+            if not passenger_values:
+                passenger_values = [1]
             if sum(passenger_values) > 8:
                 passenger_values = passenger_values[:3]  # حداکثر ۳ اتاق
             min_price = int(min_price) if min_price else None
@@ -1950,10 +1964,13 @@ class BestHotelspageAPI(generics.ListAPIView):
         today = jdatetime.date.today()
         start_date_obj = today if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
         end_date_obj = today + jdatetime.timedelta(days=1) if not end_date_str else jdatetime.date(*map(int, end_date_str.split('-')))
-        if end_date_obj <= start_date_obj:
-            end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
 
+        # Fixed: Removed forced end_date +1; calculate nights strictly
         night_count = (end_date_obj - start_date_obj).days
+
+        # Fixed: If 0 or negative nights (same or invalid dates), return empty results
+        if night_count <= 0:
+            return self.paginator.get_paginated_response([])
 
         hotel_min_price_map = {}
         hotel_comment_count_map = {}
@@ -1970,7 +1987,17 @@ class BestHotelspageAPI(generics.ListAPIView):
 
             hotel_comment_count_map[hotel.id] = hotel.comments.count()
 
-            min_discounted, min_original = self.calculate_min_pack_price(passenger_values, rooms_qs, start_date_obj, end_date_obj)
+            # Fixed: Prepare list of dicts for available rooms to handle inventory decrement
+            available_rooms_list = [
+                {
+                    'id': room.id,
+                    'inventory': room.inventory,
+                    'capacity': room.room_capacity + room.extra_capacity,
+                    'room': room
+                } for room in rooms_qs
+            ]
+
+            min_discounted, min_original = self.calculate_min_pack_price(passenger_values, available_rooms_list, start_date_obj, end_date_obj)
             if min_discounted is None:
                 continue
 
