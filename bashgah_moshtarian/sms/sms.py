@@ -127,3 +127,86 @@ def send_customer_club_deduct_sms(phone_number, user_name, deducted_points, curr
         print(f'HTTPException: {e}')
 
     return False
+
+
+
+
+logger = logging.getLogger(__name__)
+
+# ارسال SMS تخفیف برای اتاق
+def send_room_discount_sms(phone_number, user_name, discount_code, room_name, pattern_section='discountcode'):
+    try:
+        api_setting = KavenegarSMSSetting.objects.first()
+        if not api_setting:
+            print("KavenegarSMSSetting not found")
+            return False
+
+        template_obj = SMSPattern.objects.filter(
+            sms_setting=api_setting,
+            name_fa=pattern_section
+        ).first()
+        if not template_obj:
+            print(f"SMSPattern for section '{pattern_section}' not found")
+            return False
+
+        api = KavenegarAPI(api_setting.api_token)
+
+        params = {
+            'receptor': phone_number,
+            'template': template_obj.pattern_code,
+            'token': user_name,         # اسم کاربر
+            'token2': discount_code,    # کد تخفیف
+            'token3': room_name,        # نام اتاق یا هتل
+            'type': 'sms',
+        }
+
+        response = api.verify_lookup(params)
+        print("Response from Kavenegar (room discount):", response)
+        return True
+
+    except APIException as e:
+        print(f'APIException: {e}')
+    except HTTPException as e:
+        print(f'HTTPException: {e}')
+
+    return False
+
+
+
+# ارسال SMS تخفیف برای مرکز خرید
+def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_center_name, pattern_section='discountcode'):
+    try:
+        api_setting = KavenegarSMSSetting.objects.first()
+        if not api_setting:
+            print("KavenegarSMSSetting not found")
+            return False
+
+        template_obj = SMSPattern.objects.filter(
+            sms_setting=api_setting,
+            name_fa=pattern_section
+        ).first()
+        if not template_obj:
+            print(f"SMSPattern for section '{pattern_section}' not found")
+            return False
+
+        api = KavenegarAPI(api_setting.api_token)
+
+        params = {
+            'receptor': phone_number,
+            'template': template_obj.pattern_code,
+            'token': user_name,              # اسم کاربر
+            'token2': discount_code,         # کد تخفیف
+            'token3': shopping_center_name,  # نام مرکز خرید
+            'type': 'sms',
+        }
+
+        response = api.verify_lookup(params)
+        print("Response from Kavenegar (shopping discount):", response)
+        return True
+
+    except APIException as e:
+        print(f'APIException: {e}')
+    except HTTPException as e:
+        print(f'HTTPException: {e}')
+
+    return False
