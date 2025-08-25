@@ -135,12 +135,18 @@ def send_customer_club_deduct_sms(phone_number, user_name, deducted_points, curr
 
 logger = logging.getLogger(__name__)
 
-# ارسال SMS تخفیف برای اتاق
+def clean_token(value):
+    """حذف فاصله از توکن‌های مجاز بدون Space"""
+    if value:
+        return str(value).replace(" ", "")
+    return value
+
 def send_room_discount_sms(phone_number, user_name, discount_code, room_name, pattern_section='discountcode'):
+    """ارسال SMS تخفیف برای اتاق"""
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            print("KavenegarSMSSetting not found")
+            logger.error("KavenegarSMSSetting not found")
             return False
 
         template_obj = SMSPattern.objects.filter(
@@ -148,7 +154,7 @@ def send_room_discount_sms(phone_number, user_name, discount_code, room_name, pa
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
+            logger.error(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
         api = KavenegarAPI(api_setting.api_token)
@@ -156,31 +162,30 @@ def send_room_discount_sms(phone_number, user_name, discount_code, room_name, pa
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user_name,         # اسم کاربر
-            'token2': discount_code,    # کد تخفیف
-            'token10': room_name,        # نام اتاق یا هتل
+            'token': clean_token(user_name),         # حذف Space
+            'token2': clean_token(discount_code),    # حذف Space
+            'token10': room_name,                     # نام اتاق، Space مجاز
             'type': 'sms',
         }
 
         response = api.verify_lookup(params)
-        print("Response from Kavenegar (room discount):", response)
+        logger.info(f"Response from Kavenegar (room discount): {response}")
         return True
 
     except APIException as e:
-        print(f'APIException: {e}')
+        logger.error(f'APIException: {e}')
     except HTTPException as e:
-        print(f'HTTPException: {e}')
+        logger.error(f'HTTPException: {e}')
 
     return False
 
 
-
-# ارسال SMS تخفیف برای مرکز خرید
 def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_center_name, pattern_section='discountcode'):
+    """ارسال SMS تخفیف برای مرکز خرید"""
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
-            print("KavenegarSMSSetting not found")
+            logger.error("KavenegarSMSSetting not found")
             return False
 
         template_obj = SMSPattern.objects.filter(
@@ -188,7 +193,7 @@ def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_
             name_fa=pattern_section
         ).first()
         if not template_obj:
-            print(f"SMSPattern for section '{pattern_section}' not found")
+            logger.error(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
         api = KavenegarAPI(api_setting.api_token)
@@ -196,19 +201,19 @@ def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user_name,              # اسم کاربر
-            'token2': discount_code,         # کد تخفیف
-            'token10': shopping_center_name,  # نام مرکز خرید
+            'token': clean_token(user_name),              # حذف Space
+            'token2': clean_token(discount_code),         # حذف Space
+            'token10': shopping_center_name,              # نام مرکز خرید، Space مجاز
             'type': 'sms',
         }
 
         response = api.verify_lookup(params)
-        print("Response from Kavenegar (shopping discount):", response)
+        logger.info(f"Response from Kavenegar (shopping discount): {response}")
         return True
 
     except APIException as e:
-        print(f'APIException: {e}')
+        logger.error(f'APIException: {e}')
     except HTTPException as e:
-        print(f'HTTPException: {e}')
+        logger.error(f'HTTPException: {e}')
 
     return False
