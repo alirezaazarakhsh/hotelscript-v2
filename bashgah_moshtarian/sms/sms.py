@@ -156,7 +156,7 @@ def send_room_discount_sms(phone_number, user_name, discount_code, room_name, pa
             'template': template_obj.pattern_code,
             'token': user_name,         # اسم کاربر
             'token2': discount_code,    # کد تخفیف
-            'token3': room_name,        # نام اتاق یا هتل
+            'token10': room_name,        # نام اتاق یا هتل
             'type': 'sms',
         }
 
@@ -196,7 +196,7 @@ def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_
             'template': template_obj.pattern_code,
             'token': user_name,              # اسم کاربر
             'token2': discount_code,         # کد تخفیف
-            'token3': shopping_center_name,  # نام مرکز خرید
+            'token10': shopping_center_name,  # نام مرکز خرید
             'type': 'sms',
         }
 
