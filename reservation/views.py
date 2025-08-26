@@ -1685,20 +1685,6 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-import copy
-import jdatetime
-import logging
-import sys
-from django.db.models import Avg, Prefetch
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.generics import ListAPIView
-from rest_framework.pagination import PageNumberPagination
-from rest_framework import serializers
-from django.db.models import Q
-from .models import Hotel, Room, RoomDatePrice, ClosedDate, Comment, CommentPoint, HotelTagPublic, City
-from .serializers import CitySerializer, HotelTagPublicSerializer
-
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1744,7 +1730,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
     city = CitySerializer()
-    residence_type = serializers.CharField(source='type.title')  # اصلاح به type.title
+    residence_type = serializers.CharField(source='type.title')
 
     class Meta:
         model = Hotel
@@ -2091,7 +2077,9 @@ class BestHotelspageAPI(ListAPIView):
         if residence_type:
             try:
                 residence_ids = [int(x.strip()) for x in residence_type.split(',') if x.strip()]
-                hotels_qs = hotels_qs.filter(type__id__in=residence_ids)
+                logger.info(f"Filtering by residence_type IDs: {residence_ids}")
+                if residence_ids:  # فقط اگر لیست residence_ids خالی نباشد، فیلتر اعمال شود
+                    hotels_qs = hotels_qs.filter(type__id__in=residence_ids)
             except ValueError:
                 return Response({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'}, status=400)
         if room_facilities:
