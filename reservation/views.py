@@ -1767,7 +1767,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
         return HotelTagPublicSerializer(public_tags, many=True, context={'request': self.context.get('request')}).data
 
     def get_night_count(self, obj):
-        return self.context.get("night_count", 1)
+        return self.context.get("night_count", 0)
 
     def get_comment_count(self, obj):
         return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
@@ -1797,10 +1797,8 @@ class BestHotelspageAPI(ListAPIView):
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
                 if not price_data.discount_date or price_data.discount_date <= date:
-                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
                     price_after_discount = price_data.price
                 else:
-                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
@@ -1821,11 +1819,9 @@ class BestHotelspageAPI(ListAPIView):
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
     def get_room_data(self, hotel, start_date_obj, end_date_obj, passengers_list):
-        # Similar to HotelRoomsView logic, but simplified to compute min price only
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
 
-        # Filter rooms similar to HotelRoomsView
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=start_date_obj,
             date_prices__end_date__gte=end_date_obj,
@@ -1850,8 +1846,8 @@ class BestHotelspageAPI(ListAPIView):
 
                 try:
                     discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
-                except ValueError as e:
-                    continue  # Skip invalid discounts
+                except ValueError:
+                    continue
 
                 price_calendar.append({
                     "status": status,
@@ -1867,7 +1863,7 @@ class BestHotelspageAPI(ListAPIView):
                 })
 
             if has_zero_price or not price_calendar or all(day['status'] != "open" for day in price_calendar):
-                continue  # Skip rooms with zero price or unavailable
+                continue
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
             total_price_discount = sum(
@@ -1876,7 +1872,7 @@ class BestHotelspageAPI(ListAPIView):
             )
 
             if total_price == 0 or total_price_discount == 0:
-                continue  # Skip if total is zero
+                continue
 
             first_price_data = room.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).order_by('-id').select_related('user_level').first()
             if not first_price_data:
@@ -1905,10 +1901,8 @@ class BestHotelspageAPI(ListAPIView):
 
         room_data = list(room_dict.values())
 
-        min_price_data = None
-
-        # If passengers_list is empty or not specified, find the cheapest room regardless of capacity
-        if not passengers_list:
+        # If passengers_list is empty or [0], find the cheapest room regardless of capacity
+        if not passengers_list or passengers_list == [0]:
             if not room_data:
                 return None
             min_room = min(room_data, key=lambda x: x['price']['total_price_discount'] or float('inf'))
@@ -2026,6 +2020,7 @@ class BestHotelspageAPI(ListAPIView):
             "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
             "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
             "برای ارزان‌ترین اتاق یا پک در کل بازه نمایش داده می‌شود. "
+            "اگر passengers=0 یا خالی باشد، تمام هتل‌ها با ارزان‌ترین اتاق نمایش داده می‌شوند. "
             "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
@@ -2051,6 +2046,8 @@ class BestHotelspageAPI(ListAPIView):
                 passenger_values = [int(x.strip()) for x in passengers.split(',') if x.strip()]
                 if len(passenger_values) > 3 or sum(passenger_values) > 8 or any(p < 0 for p in passenger_values):
                     return Response({'detail': 'پارامتر passengers نامعتبر است.'}, status=400)
+                if passenger_values == [0]:
+                    passenger_values = []  # Treat passengers=0 as no passenger constraint
             except ValueError:
                 return Response({'detail': 'پارامتر passengers باید لیست اعداد صحیح باشد.'}, status=400)
 
@@ -2107,7 +2104,7 @@ class BestHotelspageAPI(ListAPIView):
         except Exception:
             return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
-        night_count = max((end_date_obj - start_date_obj).days, 1)
+        night_count = max((end_date_obj - start_date_obj).days, 0) if start_date_str or end_date_str else 0
 
         hotel_min_price_map = {}
         for hotel in hotels_qs:
@@ -2115,12 +2112,8 @@ class BestHotelspageAPI(ListAPIView):
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
-        # If no dates and no passengers, still include all hotels, but perhaps with price 0 or skip price calculation if needed
-        # But according to the code, it will try to compute, and if no rooms, skip
-        # To include all, we can add hotels without price if no params
-
+        # If no dates and no passengers (or passengers=0), include all hotels
         if not start_date_str and not end_date_str and not passengers:
-            # If no dates and no passengers, include all hotels regardless of price availability
             for hotel in hotels_qs:
                 if hotel.id not in hotel_min_price_map:
                     hotel_min_price_map[hotel.id] = {
@@ -2133,7 +2126,7 @@ class BestHotelspageAPI(ListAPIView):
                         'average_score': self.get_average_score(hotel),
                     }
         else:
-            # Filter hotels that have min_price_data
+            # Filter hotels that have valid min_price_data
             filtered_hotel_ids = list(hotel_min_price_map.keys())
             hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
 
@@ -2159,7 +2152,7 @@ class BestHotelspageAPI(ListAPIView):
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'hotel_comment_count_map': hotel_comment_count_map,
-            'night_count': night_count if start_date_str or end_date_str else 0,
+            'night_count': night_count,
         }
 
         page = self.paginate_queryset(sorted_hotels)
@@ -2169,7 +2162,6 @@ class BestHotelspageAPI(ListAPIView):
 
         serializer = self.get_serializer(sorted_hotels, many=True, context=context)
         return Response(serializer.data)
-
 
 
 
