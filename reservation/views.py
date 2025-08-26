@@ -2066,6 +2066,8 @@ class BestHotelspageAPI(generics.ListAPIView):
 
 
 
+
+
 #ای پی ای فیلتر محدوده قیمت بهترین هتل ها 
 # try:
 #     logger = logging.getLogger(__name__)
