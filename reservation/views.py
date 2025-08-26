@@ -1768,7 +1768,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
 
 
 # --- API View ---
-class BestHotelspageAIAPI(ListAPIView):
+class BestHotelspageAPI(ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = BestHotelsPagination
