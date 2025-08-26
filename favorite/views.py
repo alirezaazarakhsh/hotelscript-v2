@@ -38,7 +38,8 @@ class FavoriteCollectionListCreateView(ListCreateAPIView):
         """,
         responses={
             200: FavoriteCollectionListSerializer(many=True),
-        }
+        },
+        tags=['Favorite']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -49,7 +50,8 @@ class FavoriteCollectionListCreateView(ListCreateAPIView):
         با استفاده از این API می‌توانید یک مجموعه علاقه‌مندی جدید با عنوان مشخص ایجاد کنید.
         """,
         request_body=FavoriteCollectionListSerializer,
-        responses={201: FavoriteCollectionListSerializer()}
+        responses={201: FavoriteCollectionListSerializer()},
+        tags=['Favorite']
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
@@ -81,7 +83,8 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
         """,
         responses={
             200: FavoriteCollectionRetrieveSerializer(),
-        }
+        },
+        tags=['Favorite']
     )
     def get(self, request, *args, **kwargs):
         collection = self.get_object()
@@ -131,7 +134,8 @@ class FavoriteCollectionRetrieveDestroyView(RetrieveDestroyAPIView):
         operation_description="""
         با استفاده از این API می‌توانید یک مجموعه علاقه‌مندی را حذف کنید.
         """,
-        responses={204: 'No Content'}
+        responses={204: 'No Content'},
+        tags=['Favorite']
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
@@ -155,7 +159,8 @@ class FavoriteCreateView(CreateAPIView):
         در صورت وجود آیتم در یکی از لیست‌های علاقه‌مندی کاربر یا عدم وجود آیتم، خطا دریافت خواهید کرد.
         """,
         request_body=FavoriteCreateSerializer,
-        responses={201: FavoriteSerializer()}
+        responses={201: FavoriteSerializer()},
+        tags=['Favorite']
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
@@ -196,7 +201,8 @@ class FavoriteDestroyView(DestroyAPIView):
         operation_description="""
         با استفاده از این API می‌توانید یک آیتم را از لیست علاقه‌مندی حذف کنید.
         """,
-        responses={204: 'No Content'}
+        responses={204: 'No Content'},
+        tags=['Favorite']
     )
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
