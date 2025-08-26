@@ -4,7 +4,6 @@ from .views import (
     AmazingHotelsListView,
     CommentPointsAndSuggestionsView,
     # GetPriceRangeAPI,
-    HomeHotelByCityView,
     HomeHotelByHotelSlugView,
     HotelCommentPointSummaryView,
     HotelCommentsBySlugView,
