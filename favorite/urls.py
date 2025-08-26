@@ -6,7 +6,7 @@ from .views import (
     FavoriteDestroyView,
 )
 
-app_name = 'favorites'
+app_name = 'favorite'
 
 urlpatterns = [
     path(
