@@ -1731,12 +1731,12 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
     city = CitySerializer()
-    residence_type = serializers.CharField(source='type.name')  # تغییر به نام اقامتگاه
+    residence-type = serializers.CharField(source='type.name')  # تغییر به نام اقامتگاه
 
     class Meta:
         model = Hotel
         fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence_type',  
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence-type',  
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
             'comment_count', 'reservation_count', 'public_tags',
