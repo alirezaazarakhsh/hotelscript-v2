@@ -330,6 +330,11 @@ class PassengerSerializer(serializers.ModelSerializer):
             'identification_code',
             'phone_number',
         )
+        
+        
+
+from rest_framework import serializers
+from .models import BestHotels, Hotel
 
 class BestHotelsSerializer(serializers.ModelSerializer):
     hotel_slug = serializers.SerializerMethodField()
@@ -340,16 +345,17 @@ class BestHotelsSerializer(serializers.ModelSerializer):
         fields = ['order', 'title_logo', 'image_logo_hotel', 'hotel_slug', 'hotel_url']
 
     def get_hotel_slug(self, obj):
-        # استخراج اسلاگ از مدل Hotel مرتبط
-        return obj.hotel.slug if obj.hotel and hasattr(obj.hotel, 'slug') else None
+        # استفاده از title_logo به جای hotel
+        return obj.title_logo.slug if obj.title_logo and hasattr(obj.title_logo, 'slug') else None
 
     def get_hotel_url(self, obj):
         # تولید URL کامل برای هتل با استفاده از slug
-        if obj.hotel and hasattr(obj.hotel, 'slug'):
+        if obj.title_logo and hasattr(obj.title_logo, 'slug'):
             request = self.context.get('request')
-            return request.build_absolute_uri(f'/hotels/{obj.hotel.slug}/')
+            return request.build_absolute_uri(f'/hotels/{obj.title_logo.slug}/')
         return None
-
+    
+    
 class HotelTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelTag
