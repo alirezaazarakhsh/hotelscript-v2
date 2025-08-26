@@ -1905,103 +1905,112 @@ class BestHotelspageAPI(ListAPIView):
 
         room_data = list(room_dict.values())
 
-        if not passengers_list or passengers_list == [0]:
-            passengers_list = [1]  # Default to single passenger if not specified
-
         min_price_data = None
 
-        # --- Single room ---
-        if len(passengers_list) == 1:
-            required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
-            if not filtered_rooms:
+        # If passengers_list is empty or not specified, find the cheapest room regardless of capacity
+        if not passengers_list:
+            if not room_data:
                 return None
-
-            for room in filtered_rooms:
-                if required_capacity > room['capacity']:
-                    extra_passengers = required_capacity - room['capacity']
-                    extra_price_per_night = room['price']['extra_capacity_price']
-                    for day in room['price_calendar']:
-                        if day['status'] == "open" and day['price']:
-                            day['price']['price'] += extra_passengers * extra_price_per_night
-                            day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
-                    room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                    room['price']['total_price_discount'] = sum(
-                        day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
-                        day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
-                    )
-
-            min_room = min(filtered_rooms, key=lambda x: x['price']['total_price_discount'] or float('inf'))
+            min_room = min(room_data, key=lambda x: x['price']['total_price_discount'] or float('inf'))
             min_price_data = {
                 'original_total_price': min_room['price']['total_price'],
                 'total_price': min_room['price']['total_price_discount'],
                 'discount_percentage': min_room['price']['discount_percentage'],
                 'discount_date': min_room['price']['discount_date'],
             }
-
-        # --- Pack rooms ---
         else:
-            packs = []
-            passengers_list.sort()
-            room_candidates = {}
-            for p in set(passengers_list):
-                room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
+            # --- Single room ---
+            if len(passengers_list) == 1:
+                required_capacity = passengers_list[0]
+                filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
+                if not filtered_rooms:
+                    return None
 
-            def generate_packs(current_pack, remaining_groups, used_rooms):
-                if not remaining_groups:
-                    pack_total_price = 0
-                    pack_total_original = 0
-                    pack_discount_percentages = set()
-                    pack_discount_dates = set()
-                    for orig_room, p in current_pack:
-                        room = copy.deepcopy(orig_room)
-                        if p > room['capacity']:
-                            extra_passengers = p - room['capacity']
-                            extra_price_per_night = room['price']['extra_capacity_price']
-                            for day in room['price_calendar']:
-                                if day['status'] == "open" and day['price']:
-                                    day['price']['price'] += extra_passengers * extra_price_per_night
-                                    day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
-                            room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                            room['price']['total_price_discount'] = sum(
-                                day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
-                                day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
-                            )
-                        pack_total_original += room['price']['total_price']
-                        pack_total_price += room['price']['total_price_discount']
-                        if room['price']['discount_percentage']:
-                            pack_discount_percentages.add(room['price']['discount_percentage'])
-                        if room['price']['discount_date']:
-                            pack_discount_dates.add(room['price']['discount_date'])
-                    packs.append({
-                        "total_price": pack_total_price,
-                        "original_total_price": pack_total_original,
-                        "discount_percentage": list(pack_discount_percentages)[0] if len(pack_discount_percentages) == 1 else None,
-                        "discount_date": list(pack_discount_dates)[0] if len(pack_discount_dates) == 1 else None,
-                    })
-                    return
+                for room in filtered_rooms:
+                    if required_capacity > room['capacity']:
+                        extra_passengers = required_capacity - room['capacity']
+                        extra_price_per_night = room['price']['extra_capacity_price']
+                        for day in room['price_calendar']:
+                            if day['status'] == "open" and day['price']:
+                                day['price']['price'] += extra_passengers * extra_price_per_night
+                                day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
+                        room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                        room['price']['total_price_discount'] = sum(
+                            day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
+                            day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
+                        )
 
-                p = remaining_groups[0]
-                for room in room_candidates.get(p, []):
-                    room_id = room['id']
-                    used_count = used_rooms.get(room_id, 0)
-                    if used_count < room['room_number']:
-                        new_used = used_rooms.copy()
-                        new_used[room_id] = used_count + 1
-                        generate_packs(current_pack + [(room, p)], remaining_groups[1:], new_used)
+                min_room = min(filtered_rooms, key=lambda x: x['price']['total_price_discount'] or float('inf'))
+                min_price_data = {
+                    'original_total_price': min_room['price']['total_price'],
+                    'total_price': min_room['price']['total_price_discount'],
+                    'discount_percentage': min_room['price']['discount_percentage'],
+                    'discount_date': min_room['price']['discount_date'],
+                }
 
-            generate_packs([], passengers_list, {})
+            # --- Pack rooms ---
+            else:
+                packs = []
+                passengers_list.sort()
+                room_candidates = {}
+                for p in set(passengers_list):
+                    room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
 
-            if not packs:
-                return None
+                def generate_packs(current_pack, remaining_groups, used_rooms):
+                    if not remaining_groups:
+                        pack_total_price = 0
+                        pack_total_original = 0
+                        pack_discount_percentages = set()
+                        pack_discount_dates = set()
+                        for orig_room, p in current_pack:
+                            room = copy.deepcopy(orig_room)
+                            if p > room['capacity']:
+                                extra_passengers = p - room['capacity']
+                                extra_price_per_night = room['price']['extra_capacity_price']
+                                for day in room['price_calendar']:
+                                    if day['status'] == "open" and day['price']:
+                                        day['price']['price'] += extra_passengers * extra_price_per_night
+                                        day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
+                                room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
+                                room['price']['total_price_discount'] = sum(
+                                    day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
+                                    day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
+                                )
+                            pack_total_original += room['price']['total_price']
+                            pack_total_price += room['price']['total_price_discount']
+                            if room['price']['discount_percentage']:
+                                pack_discount_percentages.add(room['price']['discount_percentage'])
+                            if room['price']['discount_date']:
+                                pack_discount_dates.add(room['price']['discount_date'])
+                        packs.append({
+                            "total_price": pack_total_price,
+                            "original_total_price": pack_total_original,
+                            "discount_percentage": list(pack_discount_percentages)[0] if len(pack_discount_percentages) == 1 else None,
+                            "discount_date": list(pack_discount_dates)[0] if len(pack_discount_dates) == 1 else None,
+                        })
+                        return
 
-            min_pack = min(packs, key=lambda x: x['total_price'])
-            min_price_data = {
-                'original_total_price': min_pack['original_total_price'],
-                'total_price': min_pack['total_price'],
-                'discount_percentage': min_pack['discount_percentage'],
-                'discount_date': min_pack['discount_date'],
-            }
+                    p = remaining_groups[0]
+                    for room in room_candidates.get(p, []):
+                        room_id = room['id']
+                        used_count = used_rooms.get(room_id, 0)
+                        if used_count < room['room_number']:
+                            new_used = used_rooms.copy()
+                            new_used[room_id] = used_count + 1
+                            generate_packs(current_pack + [(room, p)], remaining_groups[1:], new_used)
+
+                generate_packs([], passengers_list, {})
+
+                if not packs:
+                    return None
+
+                min_pack = min(packs, key=lambda x: x['total_price'])
+                min_price_data = {
+                    'original_total_price': min_pack['original_total_price'],
+                    'total_price': min_pack['total_price'],
+                    'discount_percentage': min_pack['discount_percentage'],
+                    'discount_date': min_pack['discount_date'],
+                }
 
         if min_price_data:
             min_price_data.update({
@@ -2036,10 +2045,16 @@ class BestHotelspageAPI(ListAPIView):
         room_facilities = request.query_params.get('room-facilities')
         hotel_facilities = request.query_params.get('hotel-facilities')
 
+        passenger_values = []
+        if passengers:
+            try:
+                passenger_values = [int(x.strip()) for x in passengers.split(',') if x.strip()]
+                if len(passenger_values) > 3 or sum(passenger_values) > 8 or any(p < 0 for p in passenger_values):
+                    return Response({'detail': 'پارامتر passengers نامعتبر است.'}, status=400)
+            except ValueError:
+                return Response({'detail': 'پارامتر passengers باید لیست اعداد صحیح باشد.'}, status=400)
+
         try:
-            passenger_values = [int(x.strip()) for x in passengers.split(',') if x.strip()] if passengers else [1]
-            if len(passenger_values) > 3 or sum(passenger_values) > 8 or any(p < 0 for p in passenger_values):
-                return Response({'detail': 'پارامتر passengers نامعتبر است.'}, status=400)
             min_price = int(min_price) if min_price else None
             max_price = int(max_price) if max_price else None
         except ValueError:
@@ -2055,6 +2070,7 @@ class BestHotelspageAPI(ListAPIView):
 
         if city:
             hotels_qs = hotels_qs.filter(city__name__iexact=city)
+
         if star:
             try:
                 star_values = [int(x) for x in star.split(',') if x.strip()]
@@ -2099,15 +2115,38 @@ class BestHotelspageAPI(ListAPIView):
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
-        # Filter hotels based on min/max price
-        filtered_hotel_ids = [
-            hid for hid, data in hotel_min_price_map.items()
-            if (min_price is None or data['total_price'] >= min_price) and
-               (max_price is None or data['total_price'] <= max_price)
-        ]
-        hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
+        # If no dates and no passengers, still include all hotels, but perhaps with price 0 or skip price calculation if needed
+        # But according to the code, it will try to compute, and if no rooms, skip
+        # To include all, we can add hotels without price if no params
 
-        # Sort hotels by min total_price_discount ascending
+        if not start_date_str and not end_date_str and not passengers:
+            # If no dates and no passengers, include all hotels regardless of price availability
+            for hotel in hotels_qs:
+                if hotel.id not in hotel_min_price_map:
+                    hotel_min_price_map[hotel.id] = {
+                        'original_total_price': 0,
+                        'total_price': 0,
+                        'discount_percentage': None,
+                        'discount_date': None,
+                        'rating': hotel.rating or 0,
+                        'reservation_count': hotel.reservation_count or 0,
+                        'average_score': self.get_average_score(hotel),
+                    }
+        else:
+            # Filter hotels that have min_price_data
+            filtered_hotel_ids = list(hotel_min_price_map.keys())
+            hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
+
+        # Apply min/max price filter if applicable
+        if min_price is not None or max_price is not None:
+            filtered_hotel_ids = [
+                hid for hid, data in hotel_min_price_map.items()
+                if (min_price is None or data['total_price'] >= min_price) and
+                   (max_price is None or data['total_price'] <= max_price)
+            ]
+            hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
+
+        # Sort hotels by min total_price ascending
         sorted_hotels = sorted(
             hotels_qs,
             key=lambda h: hotel_min_price_map.get(h.id, {}).get('total_price', float('inf'))
@@ -2120,7 +2159,7 @@ class BestHotelspageAPI(ListAPIView):
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'hotel_comment_count_map': hotel_comment_count_map,
-            'night_count': night_count,
+            'night_count': night_count if start_date_str or end_date_str else 0,
         }
 
         page = self.paginate_queryset(sorted_hotels)
