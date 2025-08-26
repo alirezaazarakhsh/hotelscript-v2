@@ -1713,7 +1713,7 @@ class BestHotelsPagination(PageNumberPagination):
             'total_pages': total_pages,
             'current_page': self.page.number,
             'next': self.get_next_link(),
-            'previous': self.get_previous_link(),
+            'previous': get_previous_link(),
             'results': data,
         })
 
@@ -1731,12 +1731,12 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
     city = CitySerializer()
-    residence-type = serializers.CharField(source='type.name')  # تغییر به نام اقامتگاه
+    residence_type = serializers.CharField(source='type.name')  # اصلاح به residence_type
 
     class Meta:
         model = Hotel
         fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence-type',  
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence_type',  
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
             'comment_count', 'reservation_count', 'public_tags',
@@ -2077,7 +2077,7 @@ class BestHotelspageAPI(ListAPIView):
                 return Response({'detail': 'مقدار star باید عدد یا لیست جدا شده با کاما باشد.'}, status=400)
         if residence_type:
             try:
-                residence_ids = [int(x) for x in residence_type.split(',') if x.strip()]
+                residence_ids = [int(x.strip()) for x in residence_type.split(',') if x.strip()]
                 hotels_qs = hotels_qs.filter(type__id__in=residence_ids)
             except ValueError:
                 return Response({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'}, status=400)
