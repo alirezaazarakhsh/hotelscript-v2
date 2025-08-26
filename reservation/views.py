@@ -1685,7 +1685,20 @@ class CreateCommentView(ListCreateAPIView):
     
     
 # ای پی ای صفحه بهترین هتل ها 
-# --- Logger Setup ---
+import copy
+import jdatetime
+import logging
+import sys
+from django.db.models import Avg, Prefetch
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import serializers
+from django.db.models import Q
+from .models import Hotel, Room, RoomDatePrice, ClosedDate, Comment, CommentPoint, HotelTagPublic, City
+from .serializers import CitySerializer, HotelTagPublicSerializer
+
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -1736,7 +1749,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence_type',  
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence_type',
             'price', 'price_after_discount', 'discount_percentage',
             'discount_date', 'night_count', 'rating', 'average_score',
             'comment_count', 'reservation_count', 'public_tags',
@@ -2058,7 +2071,7 @@ class BestHotelspageAPI(ListAPIView):
         except ValueError:
             return Response({'detail': 'پارامترهای عددی معتبر نیستند.'}, status=400)
 
-        hotels_qs = Hotel.objects.all().select_related('city__province').prefetch_related(
+        hotels_qs = Hotel.objects.all().select_related('city__province', 'type').prefetch_related(
             'public_tags',
             Prefetch('rooms', queryset=Room.objects.prefetch_related(
                 Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
@@ -2112,6 +2125,12 @@ class BestHotelspageAPI(ListAPIView):
             min_price_data = self.get_room_data(hotel, start_date_obj, end_date_obj, passenger_values)
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
+
+        # فیلتر هتل‌هایی که قیمت صفر دارند
+        hotel_min_price_map = {
+            hotel_id: data for hotel_id, data in hotel_min_price_map.items()
+            if data.get('total_price', 0) > 0 and data.get('original_total_price', 0) > 0
+        }
 
         # If no dates and no passengers (or passengers=0), include all hotels
         if not start_date_str and not end_date_str and not passengers:
