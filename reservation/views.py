@@ -1727,7 +1727,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     public_tags = serializers.SerializerMethodField()
 
     class Meta:
-        model = Hotel  # <-- اینجا مدل مشخص شد
+        model = Hotel  # اضافه شد
         fields = (
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
             'price', 'price_after_discount', 'discount_percentage',
@@ -1844,6 +1844,18 @@ class BestHotelspageAPI(ListAPIView):
             "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
         ),
         tags=["best-hotel"],
+        manual_parameters=[
+            openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها یا لیست مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='star', in_=openapi.IN_QUERY, description='ستاره‌های هتل (مثل 3,4,5)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت (بر اساس قیمت نهایی کل بازه)', type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter(name='residence-type', in_=openapi.IN_QUERY, description='نوع اقامتگاه', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='room-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات اتاق‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter(name='hotel-facilities', in_=openapi.IN_QUERY, description='شناسه امکانات هتل‌ها (مثل 1,2)', type=openapi.TYPE_STRING, required=False),
+        ]
     )
     def get(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)
@@ -1860,7 +1872,6 @@ class BestHotelspageAPI(ListAPIView):
         room_facilities = request.query_params.get('room-facilities')
         hotel_facilities = request.query_params.get('hotel-facilities')
 
-        # --- Parse Parameters ---
         try:
             passenger_values = [int(x) for x in passengers.split(',')] if passengers else [1]
             min_price = int(min_price) if min_price else None
@@ -1876,6 +1887,7 @@ class BestHotelspageAPI(ListAPIView):
             Prefetch('comments', queryset=Comment.objects.filter(is_approved=True))
         )
 
+        # --- Filtering ---
         if city:
             hotels_qs = hotels_qs.filter(city__name__iexact=city)
         if star:
@@ -1997,7 +2009,6 @@ class BestHotelspageAPI(ListAPIView):
             }
         )
         return self.get_paginated_response(serializer.data)
-
 
 
 
