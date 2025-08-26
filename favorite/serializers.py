@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+from django.conf import settings
 from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
 
@@ -13,35 +15,35 @@ class FavoriteCollectionListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FavoriteCollection
-        fields = (
-            'id',
-            'title',
-            'images',
-        )
-        extra_kwargs = {
-            'id': {
-                'read_only': True,
-            },
-        }
-    
+        fields = ('id', 'title', 'images')
+
+    def _abs(self, url: str) -> str:
+        if not url:
+            return url
+        # اگر از قبل absolute است، دست نمی‌زنیم
+        if urlparse(url).scheme:
+            return url
+        # دامنه‌ی هدف: safarnameh24.com
+        base = getattr(settings, 'PUBLIC_BASE_URL', 'https://safarnameh24.com').rstrip('/')
+        return urljoin(base + '/', url.lstrip('/'))
+
     def get_images(self, obj):
-        """
-        دریافت تصاویر مرتبط با آیتم‌های موجود در مجموعه علاقه‌مندی.
-        """
         images = []
         hotel_type = ContentType.objects.get_for_model(Hotel)
         article_type = ContentType.objects.get_for_model(Article)
-        
+
         for fav in obj.favorites.all()[:3]:
             if fav.item_content_type_id == hotel_type.id:
                 hotel = fav.item
-                if hotel and hasattr(hotel, 'main_image') and hotel.main_image:
-                    images.append(hotel.main_image.url)
+                if hotel and getattr(hotel, 'main_image', None):
+                    images.append(self._abs(hotel.main_image.url))
             elif fav.item_content_type_id == article_type.id:
                 article = fav.item
-                if article and hasattr(article, 'thumbnail') and article.thumbnail:
-                    images.append(article.thumbnail.url)
+                if article and getattr(article, 'thumbnail', None):
+                    images.append(self._abs(article.thumbnail.url))
         return images
+    
+    
 
 
 class FavoriteCollectionRetrieveSerializer(serializers.ModelSerializer):
