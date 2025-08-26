@@ -1196,8 +1196,10 @@ class BestSellersListView(BaseHotelListView):
 
 
 
-# ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس شهر 
-class HomeHotelByCityView(APIView):
+
+
+# ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس اسلاگ هتل 
+class HomeHotelByHotelSlugView(APIView):
     permission_classes = (AllowAny,)
 
     def get_average_score(self, hotel):
@@ -1256,21 +1258,21 @@ class HomeHotelByCityView(APIView):
         return hotel_min_price_map
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست هتل‌ها بر اساس نام شهر در صفحه داخلی هتل",
-        operation_description="این API لیستی از هتل‌های یک شهر خاص را بر اساس نام شهر (فارسی یا لاتین) بازمی‌گرداند. اگر شهر یافت نشود، خطای 404 برگردانده می‌شود.",
+        operation_summary="دریافت لیست هتل‌های پیشنهادی بر اساس اسلاگ هتل در صفحه داخلی هتل",
+        operation_description="این API لیستی از هتل‌های یک شهر خاص را بر اساس اسلاگ هتل ورودی بازمی‌گرداند. شهر هتل ورودی پیدا می‌شود و هتل‌های دیگر آن شهر (به جز هتل ورودی) پیشنهاد می‌شوند. اگر هتل یافت نشود، خطای 404 برگردانده می‌شود.",
         tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
-                'city_name',
+                'hotel_slug',
                 openapi.IN_PATH,
-                description="نام شهر (مثال: تهران)",
+                description="اسلاگ هتل (مثال: hotel-tehran-1)",
                 type=openapi.TYPE_STRING,
                 required=True
             )
         ],
         responses={
             200: openapi.Response(
-                description="لیست هتل‌ها برای شهر مشخص‌شده",
+                description="لیست هتل‌های پیشنهادی برای شهر هتل مشخص‌شده",
                 schema=openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(
@@ -1309,7 +1311,7 @@ class HomeHotelByCityView(APIView):
                 )
             ),
             404: openapi.Response(
-                description="شهر یافت نشد",
+                description="هتل یافت نشد",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
@@ -1319,11 +1321,12 @@ class HomeHotelByCityView(APIView):
             )
         }
     )
-    def get(self, request, city_name, *args, **kwargs):
+    def get(self, request, hotel_slug, *args, **kwargs):
         try:
-            city_name = city_name.strip()
-            city = City.objects.get(name=city_name)
-            hotels = Hotel.objects.filter(city=city).select_related('city', 'type').distinct()
+            hotel_slug = hotel_slug.strip()
+            input_hotel = Hotel.objects.get(slug=hotel_slug)
+            city = input_hotel.city
+            hotels = Hotel.objects.filter(city=city).exclude(slug=hotel_slug).select_related('city', 'type').distinct()
             hotel_min_price_map = self.get_hotel_min_price_map(hotels)
             context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
@@ -1334,9 +1337,8 @@ class HomeHotelByCityView(APIView):
                 serialized_hotels.append(serialized)
 
             return Response(serialized_hotels)
-        except City.DoesNotExist:
-            return Response({'error': 'City not found'}, status=404)
-        
+        except Hotel.DoesNotExist:
+            return Response({'error': 'Hotel not found'}, status=404)
         
         
         

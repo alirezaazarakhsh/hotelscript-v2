@@ -5,6 +5,7 @@ from .views import (
     CommentPointsAndSuggestionsView,
     # GetPriceRangeAPI,
     HomeHotelByCityView,
+    HomeHotelByHotelSlugView,
     HotelCommentPointSummaryView,
     HotelCommentsBySlugView,
     CreateCommentView,
@@ -35,7 +36,7 @@ urlpatterns = [
     path('hotels/suggested-hotels/', SuggesteHotelListView.as_view(), name='suggested-hotels'),
     path('hotels/amazing-hotels/', AmazingHotelsListView.as_view(), name='amazing-hotels'),
     path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-list'),
-    path('hotels/by-city/<str:city_name>/', HomeHotelByCityView.as_view(), name='hotels-by-city'),
+    path('hotels/by-hotel-slug/<str:hotel_slug>/', HomeHotelByHotelSlugView.as_view(), name='hotels-by-hotel-slug'),
     path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),
     # path('best-hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
 
