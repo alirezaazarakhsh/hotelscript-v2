@@ -1696,6 +1696,7 @@ except Exception:
         'error': logger_fallback,
     })()
 
+
 # --- Custom Pagination ---
 class BestHotelsPagination(PageNumberPagination):
     page_size = 8
@@ -1725,6 +1726,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     comment_count = serializers.SerializerMethodField()
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
+    city = CitySerializer()
 
     class Meta:
         model = Hotel
@@ -1768,7 +1770,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
 
 
 # --- API View ---
-class BestHotelspageAPI(ListAPIView):
+class BestHotelspageAIAPI(ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = UpdatedHotelListSerializer
     pagination_class = BestHotelsPagination
@@ -1835,47 +1837,6 @@ class BestHotelspageAPI(ListAPIView):
             'discount_date': remembered_discount_date,
         }
 
-    def find_min_price_combination(self, rooms, total_passengers, start_date_obj, end_date_obj):
-        """
-        الگوریتم هوشمند برای پیدا کردن کمترین قیمت کل بازه برای ترکیب اتاق‌ها.
-        """
-        rooms = sorted(rooms, key=lambda r: r.room_capacity + r.extra_capacity, reverse=True)
-        best_price_data = None
-        best_total_price = float('inf')
-
-        # Greedy AI approach: انتخاب اتاق‌هایی که بیشترین ظرفیت/کمترین قیمت دارند
-        for i, room in enumerate(rooms):
-            remaining_passengers = total_passengers
-            combo_price = 0
-            combo_original = 0
-            discount_percentages = set()
-            discount_dates = set()
-            selected_rooms = []
-            for r in rooms[i:]:
-                if remaining_passengers <= 0:
-                    break
-                summed = self._sum_prices_over_range(r, start_date_obj, end_date_obj)
-                if not summed or summed['total_price'] <= 0:
-                    continue
-                selected_rooms.append(r)
-                combo_price += summed['total_price']
-                combo_original += summed['original_total_price']
-                if summed['discount_percentage']:
-                    discount_percentages.add(summed['discount_percentage'])
-                if summed['discount_date']:
-                    discount_dates.add(summed['discount_date'])
-                remaining_passengers -= r.room_capacity + r.extra_capacity
-
-            if remaining_passengers <= 0 and combo_price < best_total_price:
-                best_total_price = combo_price
-                best_price_data = {
-                    'total_price': combo_price,
-                    'original_total_price': combo_original,
-                    'discount_percentage': list(discount_percentages)[0] if len(discount_percentages) == 1 else None,
-                    'discount_date': list(discount_dates)[0] if len(discount_dates) == 1 else None,
-                }
-        return best_price_data
-
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
         operation_description=(
@@ -1901,7 +1862,6 @@ class BestHotelspageAPI(ListAPIView):
         room_facilities = request.query_params.get('room-facilities')
         hotel_facilities = request.query_params.get('hotel-facilities')
 
-        # --- Parse Parameters ---
         try:
             passenger_values = [int(x) for x in passengers.split(',')] if passengers else [1]
             min_price = int(min_price) if min_price else None
@@ -1944,52 +1904,73 @@ class BestHotelspageAPI(ListAPIView):
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'}, status=400)
 
-        # --- Date Parsing ---
         today = jdatetime.date.today()
         start_date_obj = today if not start_date_str else jdatetime.date(*map(int, start_date_str.split('-')))
         end_date_obj = today + jdatetime.timedelta(days=1) if not end_date_str else jdatetime.date(*map(int, end_date_str.split('-')))
-        if end_date_obj <= start_date_obj:
-            end_date_obj = start_date_obj + jdatetime.timedelta(days=1)
-        night_count = (end_date_obj - start_date_obj).days
 
         hotel_min_price_map = {}
-        hotel_comment_count_map = {}
-
         for hotel in hotels_qs:
-            rooms_qs = hotel.rooms.filter(
-                date_prices__start_date__lte=start_date_obj,
-                date_prices__end_date__gte=end_date_obj,
-                inventory__gt=0
-            ).distinct()
-
-            if not rooms_qs.exists():
-                continue
-
-            hotel_comment_count_map[hotel.id] = hotel.comments.count()
+            rooms_qs = hotel.rooms.all()
             all_options = []
 
-            total_passengers = sum(passenger_values)
-            min_price_data = self.find_min_price_combination(rooms_qs, total_passengers, start_date_obj, end_date_obj)
-            if min_price_data:
-                if (min_price is not None and min_price_data['total_price'] < min_price) or (max_price is not None and min_price_data['total_price'] > max_price):
-                    continue
-                min_price_data['rating'] = hotel.rating or 0
-                min_price_data['reservation_count'] = hotel.reservation_count or 0
-                min_price_data['average_score'] = self.get_average_score(hotel)
+            # Single rooms
+            for room in rooms_qs:
+                summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                if summed and summed['total_price'] > 0:
+                    all_options.append({
+                        'total_price': summed['total_price'],
+                        'original_total_price': summed['original_total_price'],
+                        'discount_percentage': summed['discount_percentage'],
+                        'discount_date': summed['discount_date'],
+                        'rating': hotel.rating or 0,
+                        'reservation_count': hotel.reservation_count or 0,
+                        'average_score': self.get_average_score(hotel),
+                    })
+
+            # Package rooms
+            from itertools import combinations
+            for r in range(2, min(len(rooms_qs) + 1, 4)):
+                for combo in combinations(rooms_qs, r):
+                    total_capacity = sum(room.room_capacity + room.extra_capacity for room in combo)
+                    if total_capacity >= sum(passenger_values):
+                        total_original = 0
+                        total_discounted = 0
+                        discount_percentages = set()
+                        discount_dates = set()
+                        valid = True
+                        for room in combo:
+                            summed = self._sum_prices_over_range(room, start_date_obj, end_date_obj)
+                            if not summed or summed['total_price'] <= 0:
+                                valid = False
+                                break
+                            total_original += summed['original_total_price']
+                            total_discounted += summed['total_price']
+                            if summed['discount_percentage']:
+                                discount_percentages.add(summed['discount_percentage'])
+                            if summed['discount_date']:
+                                discount_dates.add(summed['discount_date'])
+                        if valid:
+                            all_options.append({
+                                'total_price': total_discounted,
+                                'original_total_price': total_original,
+                                'discount_percentage': list(discount_percentages)[0] if len(discount_percentages) == 1 else None,
+                                'discount_date': list(discount_dates)[0] if len(discount_dates) == 1 else None,
+                                'rating': hotel.rating or 0,
+                                'reservation_count': hotel.reservation_count or 0,
+                                'average_score': self.get_average_score(hotel),
+                            })
+
+            if all_options:
+                min_price_data = min(all_options, key=lambda x: x['total_price'])
                 hotel_min_price_map[hotel.id] = min_price_data
 
-        queryset = hotels_qs.filter(id__in=hotel_min_price_map.keys())
-        page = self.paginate_queryset(queryset)
-        serializer = self.get_serializer(
-            page, many=True,
-            context={
-                "request": request,
-                "hotel_min_price_map": hotel_min_price_map,
-                "hotel_comment_count_map": hotel_comment_count_map,
-                "night_count": night_count
-            }
-        )
-        return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(hotels_qs, many=True, context={'request': request, 'hotel_min_price_map': hotel_min_price_map})
+        page = self.paginate_queryset(hotels_qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request, 'hotel_min_price_map': hotel_min_price_map})
+            return self.get_paginated_response(serializer.data)
+
+        return Response(serializer.data)
 
 
 
