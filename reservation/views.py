@@ -2085,15 +2085,17 @@ class BestHotelspageAPI(ListAPIView):
         if room_facilities:
             try:
                 room_fac_ids = [int(x) for x in room_facilities.split(',') if x.strip()]
-                hotels_qs = hotels_qs.filter(rooms__facilities__id__in=room_fac_ids).distinct()
+                hotels_qs = hotels_qs.filter(room_facilities__id__in=room_fac_ids).distinct()
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات اتاق نامعتبر است.'}, status=400)
+
         if hotel_facilities:
             try:
                 hotel_fac_ids = [int(x) for x in hotel_facilities.split(',') if x.strip()]
-                hotels_qs = hotels_qs.filter(public_tags__id__in=hotel_fac_ids).distinct()
+                hotels_qs = hotels_qs.filter(facilities__id__in=hotel_fac_ids).distinct()
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'}, status=400)
+
 
         today = jdatetime.date.today()
         try:
