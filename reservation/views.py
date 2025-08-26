@@ -1713,7 +1713,7 @@ class BestHotelsPagination(PageNumberPagination):
             'total_pages': total_pages,
             'current_page': self.page.number,
             'next': self.get_next_link(),
-            'previous': get_previous_link(),
+            'previous': self.get_previous_link(),
             'results': data,
         })
 
@@ -1731,7 +1731,7 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
     reservation_count = serializers.SerializerMethodField()
     public_tags = serializers.SerializerMethodField()
     city = CitySerializer()
-    residence_type = serializers.CharField(source='type.name')  # اصلاح به residence_type
+    residence_type = serializers.CharField(source='type.title')  # اصلاح به type.title
 
     class Meta:
         model = Hotel
