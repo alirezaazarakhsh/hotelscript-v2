@@ -1,5 +1,8 @@
 from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
+
+from blog.models import Article
+from reservation.models import Hotel
 from .models import FavoriteCollection, Favorite
 from blog.serializers import FavoriteArticleSerializer
 from reservation.serializers import FavoriteHotelSerializer
