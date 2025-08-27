@@ -2,78 +2,81 @@ import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 
+
 logger = logging.getLogger(__name__)
-
-
 
 def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincrease'):
     try:
         logger.debug(f"Starting send_wallet_increase_sms for user: {user}, amount: {amount_increased}")
         if amount_increased <= 0:
-            logger.warning("Amount increased is zero or negative. Skipping SMS.")
+            print(f"Amount increased is zero or negative ({amount_increased}). Skipping SMS.")
             return False
 
+        # دریافت تنظیمات API
         api_setting = KavenegarSMSSetting.objects.filter(is_active=True).first()
         if not api_setting:
-            logger.error("No active KavenegarSMSSetting found.")
+            print("KavenegarSMSSetting not found or not active")
             return False
-        logger.debug(f"API setting found: {api_setting.api_token}")
 
+        # دریافت الگوی SMS
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
         ).first()
         if not template_obj or not template_obj.pattern_code:
-            logger.error(f"Invalid SMSPattern for section '{pattern_section}'.")
+            print(f"SMSPattern for section '{pattern_section}' not found or invalid pattern_code")
             return False
-        logger.debug(f"Template found: {template_obj.pattern_code}")
 
-        # وارد کردن Wallet در داخل تابع برای جلوگیری از حلقه وارداتی
-        from finance.models import Wallet
-        if not Wallet.objects.filter(user=user).exists():
-            logger.error(f"No wallet found for user {user}.")
+        # دریافت موجودی کیف پول
+        wallet = Wallet.objects.filter(user=user).first()
+        if not wallet:
+            print(f"No wallet found for user {user}")
             return False
-        wallet = Wallet.objects.get(user=user)
         new_balance = wallet.balance
-        logger.debug(f"Wallet balance: {new_balance}")
 
+        # دریافت شماره تلفن
         phone_number = getattr(user, 'phone_number', None)
         if not phone_number:
-            logger.error("User phone number not found.")
+            print("User phone number not found")
             return False
-        
+
         # اصلاح فرمت شماره تلفن
         if not phone_number.startswith('+98'):
             phone_number = '+98' + phone_number.lstrip('0')
         logger.debug(f"Formatted phone number: {phone_number}")
 
+        # آماده‌سازی نام کاربر
         user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
         user_name = user_name[:20]
         amount_str = f"{amount_increased:,}"[:20]
         balance_str = f"{new_balance:,}"[:20]
-        logger.debug(f"User name: {user_name}, Amount: {amount_str}, Balance: {balance_str}")
 
+        # آماده‌سازی درخواست API
         api = KavenegarAPI(api_setting.api_token)
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user_name,
-            'token2': amount_str,
-            'token3': balance_str,
+            'token': user_name,      # %token -> نام کاربر
+            'token2': amount_str,    # %token2 -> مبلغ افزایش‌یافته
+            'token3': balance_str,   # %token3 -> موجودی فعلی
             'type': 'sms',
         }
-        logger.debug(f"Sending SMS with params: {params}")
 
+        # ارسال درخواست
         response = api.verify_lookup(params)
+        print(f"Response from Kavenegar (wallet increase): {response}")
         logger.info(f"SMS sent to {phone_number}. Response: {response}")
         return True
 
     except APIException as e:
-        logger.error(f"APIException for {phone_number}: {str(e)} - Response: {e.response.text if e.response else 'No response'}")
+        print(f"APIException in send_wallet_increase_sms: {str(e)}")
+        logger.error(f"APIException for {phone_number}: {str(e)}")
         return False
     except HTTPException as e:
-        logger.error(f"HTTPException for {phone_number}: {str(e)} - Response: {e.response.text if e.response else 'No response'}")
+        print(f"HTTPException in send_wallet_increase_sms: {str(e)}")
+        logger.error(f"HTTPException for {phone_number}: {str(e)}")
         return False
     except Exception as e:
-        logger.error(f"Unexpected error in send_wallet_increase_sms: {str(e)}", exc_info=True)
+        print(f"Unexpected error in send_wallet_increase_sms: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return False

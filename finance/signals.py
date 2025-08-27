@@ -13,18 +13,19 @@ def wallet_balance_changed(sender, instance, created, **kwargs):
     """
     try:
         if created:
-            # اگر کیف پول جدید ایجاد شده، فرض می‌کنیم موجودی اولیه صفر بوده است
             old_balance = 0
         else:
-            # گرفتن نسخه قبلی کیف پول از دیتابیس
-            old_wallet = Wallet.objects.get(pk=instance.pk)
-            old_balance = old_wallet.balance
+            old_wallet = Wallet.objects.filter(pk=instance.pk).first()
+            old_balance = old_wallet.balance if old_wallet else 0
 
         if instance.balance != old_balance:
             amount_increased = instance.balance - old_balance
-            logger.debug(f"Wallet balance changed for user {instance.user}. Old: {old_balance}, New: {instance.balance}, Difference: {amount_increased}")
-            send_wallet_increase_sms(instance.user, amount_increased)
-    except Wallet.DoesNotExist:
-        logger.error(f"Wallet with pk {instance.pk} does not exist for user {instance.user}.")
+            print(f"Wallet balance changed for user {instance.user.phone_number}. Old: {old_balance}, New: {instance.balance}, Difference: {amount_increased}")
+            success = send_wallet_increase_sms(instance.user, amount_increased)
+            if not success:
+                print(f"Failed to send SMS for user {instance.user.phone_number} with amount {amount_increased}")
+        else:
+            print(f"No balance change for user {instance.user.phone_number}. Balance: {instance.balance}")
     except Exception as e:
-        logger.error(f"Error in wallet_balance_changed signal: {str(e)}", exc_info=True)
+        print(f"Error in wallet_balance_changed signal for user {instance.user.phone_number}: {str(e)}")
+        logger.error(f"Error in signal: {str(e)}", exc_info=True)

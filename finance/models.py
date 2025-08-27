@@ -51,8 +51,7 @@ class Wallet(models.Model):
             return f'{self.user.phone_number} (بدون پروفایل)'
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)  # فقط ذخیره مدل، بدون منطق اضافی
-            
+        super().save(*args, **kwargs)
 
 
 
