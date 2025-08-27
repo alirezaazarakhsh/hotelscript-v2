@@ -33,7 +33,7 @@ urlpatterns = [
         path('setting_sms/', include('setting_sms.urls', namespace='setting_sms')),
         path('notification/', include('notification.urls', namespace='notification')),
         path('crm/', include('bashgah_moshtarian.urls', namespace='bashgah')), 
-        path('favorite/', include('favorite.urls', namespace='favorites')),
+        # path('favorite/', include('favorite.urls', namespace='favorites')),
 
     ])),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
