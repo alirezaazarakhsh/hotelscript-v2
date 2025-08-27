@@ -801,7 +801,7 @@ class ComingSoonAdmin(admin.ModelAdmin):
 
     def export_as_json(self, request, queryset):
         # Create a BytesIO buffer to hold the ZIP file
-        buffer = io.BytesIO()
+        buffer = BytesIO()
         with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             # Prepare JSON data
             data = []
@@ -833,7 +833,9 @@ class ComingSoonAdmin(admin.ModelAdmin):
         return response
 
     export_as_json.short_description = "بکاپ ZIP از داده‌های انتخاب شده"
-
+    
+    
+    
 
 
 @admin.register(UserLevel)
@@ -1093,6 +1095,13 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             field = model_class._meta.get_field(field_name)
                             if field.many_to_one and value is not None:
                                 related_model = field.remote_field.model
+                                if not isinstance(value, (int, str)) or (isinstance(value, str) and not value.isdigit()):
+                                    self.message_user(
+                                        request,
+                                        f"مقدار نامعتبر برای ForeignKey {field_name}: {value} (انتظار یک عدد بود)",
+                                        level='error'
+                                    )
+                                    return
                                 try:
                                     related_instance = related_model.objects.get(id=value)
                                     setattr(new_obj, field_name, related_instance)
