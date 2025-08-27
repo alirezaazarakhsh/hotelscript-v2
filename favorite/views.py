@@ -1,92 +1,73 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.shortcuts import get_object_or_404
+from rest_framework import generics, permissions
 from .models import FavoriteCollection, Favorite
-from .serializers import FavoriteCollectionSerializer, FavoriteDetailSerializer
-from django.contrib.contenttypes.models import ContentType
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from blog.models import Article
-from reservation.models import Hotel
+from .serializers import FavoriteCollectionSerializer, FavoriteSerializer
 
-class FavoriteCollectionListView(APIView):
-    """
-    دریافت لیست تمام مجموعه‌های علاقمندی کاربر جاری.
-    این API تمام مجموعه‌های کاربر را با حداکثر سه تصویر از آیتم‌های هر مجموعه برمی‌گرداند.
-    """
-    @swagger_auto_schema(
-        operation_summary="لیست مجموعه‌های علاقمندی",
-        operation_description="دریافت لیست تمام مجموعه‌های علاقمندی کاربر جاری با حداکثر سه تصویر از آیتم‌های هر مجموعه",
-        responses={200: FavoriteCollectionSerializer(many=True)},
-        tags=['Favorite-panel']
-    )
-    def get(self, request):
-        collections = FavoriteCollection.objects.filter(user=request.user)
-        serializer = FavoriteCollectionSerializer(collections, many=True)
-        response_data = {
-            'count': collections.count(),
-            'total_pages': 1,  # برای سادگی، فرض می‌کنیم صفحه‌بندی نداریم
-            'current_page': 1,
-            'results': serializer.data
-        }
-        return Response(response_data, status=status.HTTP_200_OK)
 
-class FavoriteCollectionDetailView(APIView):
-    """
-    دریافت جزئیات آیتم‌های یک مجموعه علاقمندی بر اساس نوع محتوا (blog یا hotel).
-    این API آیتم‌های مورد علاقه (مقاله یا هتل) را برای یک مجموعه خاص فیلتر می‌کند.
-    """
-    @swagger_auto_schema(
-        operation_summary="جزئیات مجموعه علاقمندی",
-        operation_description="دریافت جزئیات آیتم‌های یک مجموعه علاقمندی بر اساس نوع محتوا (blog یا hotel)",
-        responses={200: FavoriteDetailSerializer(many=True)},
-        tags=['Favorite-panel']
-    )
-    def get(self, request, collection_id, content_type):
-        collection = get_object_or_404(FavoriteCollection, id=collection_id, user=request.user)
-        
-        # فیلتر کردن بر اساس نوع محتوا
-        content_type_map = {
-            'blog': 'article',
-            'hotel': 'hotel'
-        }
-        
-        if content_type not in content_type_map:
-            return Response({'error': 'نوع محتوا نامعتبر است'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        model = content_type_map[content_type]
-        try:
-            content_type_obj = ContentType.objects.get_for_model(Hotel if model == 'hotel' else Article)
-        except ContentType.DoesNotExist:
-            return Response({'error': f'نوع محتوا {model} یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
-        
-        favorites = Favorite.objects.filter(
-            list=collection,
-            item_content_type=content_type_obj
-        )
-        
-        serializer = FavoriteDetailSerializer(favorites, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+# ------------------- FavoriteCollection Views -------------------
 
-class FavoriteCollectionDeleteView(APIView):
+class FavoriteCollectionListCreateView(generics.ListCreateAPIView):
     """
-    حذف یک مجموعه علاقمندی توسط کاربر مالک آن.
-    این API مجموعه مورد نظر را حذف می‌کند، مشروط بر اینکه کاربر درخواست‌دهنده مالک آن باشد.
+    📌 ویو برای مشاهده لیست لیست‌های علاقمندی و ایجاد یک لیست جدید.
+
+    - متد GET: لیست همه لیست‌های علاقمندی کاربر وارد شده را برمی‌گرداند.
+    - متد POST: یک لیست علاقمندی جدید برای کاربر ایجاد می‌کند.
     """
-    @swagger_auto_schema(
-        operation_summary="حذف مجموعه علاقمندی",
-        operation_description="حذف یک مجموعه علاقمندی توسط کاربر مالک آن",
-        responses={
-            204: 'مجموعه با موفقیت حذف شد',
-            403: 'کاربر مجاز به حذف این مجموعه نیست',
-            404: 'مجموعه یافت نشد'
-        },
-        tags=['Favorite-panel']
-    )
-    def delete(self, request, collection_id):
-        collection = get_object_or_404(FavoriteCollection, id=collection_id)
-        if collection.user != request.user:
-            return Response({'error': 'شما مجاز به حذف این مجموعه نیستید'}, status=status.HTTP_403_FORBIDDEN)
-        collection.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    serializer_class = FavoriteCollectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return FavoriteCollection.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class FavoriteCollectionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    📌 ویو برای مشاهده، ویرایش و حذف یک لیست علاقمندی خاص.
+
+    - متد GET: نمایش جزئیات یک لیست خاص.
+    - متد PUT/PATCH: ویرایش اطلاعات لیست.
+    - متد DELETE: حذف لیست.
+    """
+    serializer_class = FavoriteCollectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return FavoriteCollection.objects.filter(user=self.request.user)
+
+
+# ------------------- Favorite Views -------------------
+
+class FavoriteListCreateView(generics.ListCreateAPIView):
+    """
+    📌 ویو برای مشاهده و اضافه کردن آیتم به لیست علاقمندی‌ها.
+
+    - متد GET: نمایش همه آیتم‌های داخل یک لیست علاقمندی مشخص.
+    - متد POST: اضافه کردن یک آیتم جدید به لیست علاقمندی.
+    """
+    serializer_class = FavoriteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        list_id = self.kwargs.get('list_id')
+        return Favorite.objects.filter(list__id=list_id, list__user=self.request.user)
+
+    def perform_create(self, serializer):
+        list_id = self.kwargs.get('list_id')
+        favorite_list = FavoriteCollection.objects.get(id=list_id, user=self.request.user)
+        serializer.save(list=favorite_list)
+
+
+class FavoriteDetailView(generics.RetrieveDestroyAPIView):
+    """
+    📌 ویو برای مشاهده جزئیات یا حذف یک آیتم علاقمندی.
+
+    - متد GET: نمایش جزئیات آیتم.
+    - متد DELETE: حذف آیتم از لیست علاقمندی.
+    """
+    serializer_class = FavoriteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Favorite.objects.filter(list__user=self.request.user)

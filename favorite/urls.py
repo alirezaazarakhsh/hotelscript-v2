@@ -1,10 +1,17 @@
 from django.urls import path
-from .views import FavoriteCollectionListView, FavoriteCollectionDetailView, FavoriteCollectionDeleteView
-
-app_name = 'favorites'
+from .views import (
+    FavoriteCollectionListCreateView,
+    FavoriteCollectionDetailView,
+    FavoriteListCreateView,
+    FavoriteDetailView
+)
 
 urlpatterns = [
-    path('collections/', FavoriteCollectionListView.as_view(), name='favorite-collections'),
-    path('collections-<str:content_type>/<int:collection_id>/', FavoriteCollectionDetailView.as_view(), name='favorite-collection-detail'),
-    path('collections/<int:collection_id>/delete/', FavoriteCollectionDeleteView.as_view(), name='favorite-collection-delete'),
+    # لیست علاقمندی‌ها
+    path('collections/', FavoriteCollectionListCreateView.as_view(), name='favorite-collection-list-create'),
+    path('collections/<int:pk>/', FavoriteCollectionDetailView.as_view(), name='favorite-collection-detail'),
+
+    # آیتم‌های داخل هر لیست
+    path('collections/<int:list_id>/favorites/', FavoriteListCreateView.as_view(), name='favorite-list-create'),
+    path('favorites/<int:pk>/', FavoriteDetailView.as_view(), name='favorite-detail'),
 ]
