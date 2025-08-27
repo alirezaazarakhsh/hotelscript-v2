@@ -4,6 +4,8 @@ from setting_sms.models import KavenegarSMSSetting, SMSPattern
 
 logger = logging.getLogger(__name__)
 
+
+
 def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincrease'):
     try:
         logger.debug(f"Starting send_wallet_increase_sms for user: {user}, amount: {amount_increased}")
