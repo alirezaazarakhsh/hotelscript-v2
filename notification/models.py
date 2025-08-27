@@ -3,6 +3,8 @@ from django.utils.translation import gettext_lazy as _
 from django_jalali.db import models as jmodels
 from authentication.models import BaseUser
 
+
+
 class Notification(models.Model):
     class StatusChoices(models.TextChoices):
         NEW = 'new', _('جدید')
@@ -40,7 +42,8 @@ class Notification(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
         if self.send_to_all and is_new:
-            all_users = BaseUser.objects.all()
+            # فقط کاربرانی که قبل از ایجاد اعلان ثبت‌نام کرده‌اند
+            all_users = BaseUser.objects.filter(date_joined__lte=self.created_at)
             self.users.set(all_users)
 
     def get_users_with_names(self):

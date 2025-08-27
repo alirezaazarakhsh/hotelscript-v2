@@ -18,19 +18,24 @@ class NotificationListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return Notification.objects.filter(
-            models.Q(users=user) | models.Q(send_to_all=True)
+            models.Q(users=user) | 
+            models.Q(send_to_all=True, created_at__gte=user.date_joined)
         ).distinct().order_by('-created_at')
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست اعلان‌ها",
         operation_description="""
         این API تمام اعلان‌های مربوط به کاربر فعلی را برمی‌گرداند.
-        اعلان‌هایی که به‌صورت جداگانه برای کاربر ارسال شده‌اند یا برای همه کاربران ارسال شده‌اند نمایش داده می‌شوند.
+        اعلان‌هایی که به‌صورت جداگانه برای کاربر ارسال شده‌اند یا برای همه کاربران ارسال شده‌اند
+        و بعد از ثبت‌نام کاربر ایجاد شده‌اند، نمایش داده می‌شوند.
         """,
         responses={200: NotificationSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+    
+    
+
 
 class NotificationDeleteView(generics.DestroyAPIView):
     permission_classes = (permissions.IsAuthenticated,)
@@ -55,6 +60,10 @@ class NotificationDeleteView(generics.DestroyAPIView):
     def delete(self, request, *args, **kwargs):
         return super().delete(request, *args, **kwargs)
 
+
+
+
+
 class NotificationUpdateStatusView(generics.UpdateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
     serializer_class = NotificationSerializer
@@ -63,7 +72,8 @@ class NotificationUpdateStatusView(generics.UpdateAPIView):
     def get_queryset(self):
         user = self.request.user
         return Notification.objects.filter(
-            models.Q(users=user) | models.Q(send_to_all=True)
+            models.Q(users=user) | 
+            models.Q(send_to_all=True, created_at__gte=user.date_joined)
         )
 
     @swagger_auto_schema(
