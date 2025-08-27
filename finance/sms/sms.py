@@ -1,7 +1,7 @@
 import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
-
+from finance.models import Wallet
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,11 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
             phone_number = '+98' + phone_number.lstrip('0')
         logger.debug(f"Formatted phone number: {phone_number}")
 
-        # آماده‌سازی نام کاربر
-        user_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip() or phone_number[:20]
-        user_name = user_name[:20]
+        # آماده‌سازی نام کاربر بدون فاصله
+        first_name = user.natural_profile.first_name or ''
+        last_name = user.natural_profile.last_name or ''
+        user_name = f"{first_name}{last_name}".strip() or phone_number[:20]  # حذف فاصله
+        user_name = user_name[:20]  # محدود کردن طول
         amount_str = f"{amount_increased:,}"[:20]
         balance_str = f"{new_balance:,}"[:20]
 
@@ -56,7 +58,7 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': user_name,      # %token -> نام کاربر
+            'token': user_name,      # %token -> نام کاربر بدون فاصله
             'token2': amount_str,    # %token2 -> مبلغ افزایش‌یافته
             'token3': balance_str,   # %token3 -> موجودی فعلی
             'type': 'sms',
