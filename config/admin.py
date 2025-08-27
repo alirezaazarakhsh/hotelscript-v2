@@ -797,45 +797,34 @@ class ComingSoonAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return not ComingSoon.objects.exists()
 
+    # =======================
+    # اکشن بکاپ JSON
+    # =======================
     actions = ['export_as_json']
 
     def export_as_json(self, request, queryset):
-        # Create a BytesIO buffer to hold the ZIP file
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Prepare JSON data
-            data = []
-            for obj in queryset:
-                image_path = obj.image.name if hasattr(obj, 'image') and obj.image else None
-                data.append({
-                    'id': obj.id,
-                    'title': obj.title,
-                    'subtitle': obj.subtitle,
-                    'end_date': obj.end_date.isoformat() if obj.end_date else None,
-                    'copyright_text': obj.copyright_text,
-                    'is_active': obj.is_active,
-                    'image': image_path,
-                })
-                # Add image to ZIP if it exists
-                if image_path and default_storage.exists(image_path):
-                    with default_storage.open(image_path, 'rb') as img_file:
-                        zip_file.writestr(f"images/{os.path.basename(image_path)}", img_file.read())
-
-            # Add JSON data to ZIP
-            zip_file.writestr('comingsoon_backup.json', json.dumps(data, ensure_ascii=False, indent=4))
-
-        # Prepare HTTP response with ZIP file
+        data = []
+        for obj in queryset:
+            data.append({
+                'id': obj.id,
+                'title': obj.title,
+                'subtitle': obj.subtitle,
+                'end_date': obj.end_date.isoformat() if obj.end_date else None,
+                'copyright_text': obj.copyright_text,
+                'is_active': obj.is_active,
+            })
+        from django.http import HttpResponse
+        import json
         response = HttpResponse(
-            buffer.getvalue(),
-            content_type='application/zip'
+            json.dumps(data, ensure_ascii=False, indent=4),
+            content_type='application/json'
         )
-        response['Content-Disposition'] = 'attachment; filename=comingsoon_backup.zip'
+        response['Content-Disposition'] = 'attachment; filename=comingsoon_backup.json'
         return response
 
-    export_as_json.short_description = "بکاپ ZIP از داده‌های انتخاب شده"
-    
-    
-    
+    export_as_json.short_description = "بکاپ JSON از داده‌های انتخاب شده"
+
+
 
 
 @admin.register(UserLevel)
@@ -1021,24 +1010,11 @@ class AppRestoreAdmin(admin.ModelAdmin):
 
         try:
             with obj.backup_json.open('rb') as f:
-                if obj.backup_json.name.endswith('.zip'):
-                    # Handle ZIP file
-                    with zipfile.ZipFile(f, 'r') as zip_file:
-                        # Extract JSON data
-                        json_data = zip_file.read('comingsoon_backup.json').decode('utf-8')
-                        data = json.loads(json_data)
-                        # Extract images to temporary storage
-                        image_files = {}
-                        for file_name in zip_file.namelist():
-                            if file_name.startswith('images/') and file_name != 'images/':
-                                image_files[os.path.basename(file_name)] = zip_file.read(file_name)
-                else:
-                    # Handle plain JSON file
-                    data = json.loads(f.read().decode('utf-8'))
-                    image_files = {}
+                content = f.read().decode('utf-8')
+                data = json.loads(content)
                 self.message_user(request, "داده‌های JSON خوانده شد.", level='info')
         except Exception as e:
-            self.message_user(request, f"خطا در خواندن فایل: {e}", level='error')
+            self.message_user(request, f"خطا در خواندن فایل JSON: {e}", level='error')
             return
 
         if not obj.apps.exists():
@@ -1095,13 +1071,6 @@ class AppRestoreAdmin(admin.ModelAdmin):
                             field = model_class._meta.get_field(field_name)
                             if field.many_to_one and value is not None:
                                 related_model = field.remote_field.model
-                                if not isinstance(value, (int, str)) or (isinstance(value, str) and not value.isdigit()):
-                                    self.message_user(
-                                        request,
-                                        f"مقدار نامعتبر برای ForeignKey {field_name}: {value} (انتظار یک عدد بود)",
-                                        level='error'
-                                    )
-                                    return
                                 try:
                                     related_instance = related_model.objects.get(id=value)
                                     setattr(new_obj, field_name, related_instance)
@@ -1113,17 +1082,11 @@ class AppRestoreAdmin(admin.ModelAdmin):
                                     )
                                     return
                             elif field.get_internal_type() == 'ImageField':
-                                if value and value in image_files:
-                                    # Save image from ZIP
-                                    image_content = image_files[value]
-                                    setattr(new_obj, field_name, File(BytesIO(image_content), name=value))
-                                elif value and default_storage.exists(value):
-                                    # Fallback to existing storage
+                                if value and default_storage.exists(value):
                                     with default_storage.open(value, 'rb') as f_img:
                                         setattr(new_obj, field_name, File(f_img, name=os.path.basename(value)))
                                 else:
-                                    # Default image if none found
-                                    default_image_content = b''
+                                    default_image_content = b''  # جایگزین با محتوای واقعی تصویر اگر موجود است
                                     setattr(new_obj, field_name, ContentFile(default_image_content, name='default.jpg'))
                                     self.message_user(request, f"تصویر پیش‌فرض برای فیلد {field_name} تنظیم شد.", level='warning')
                             else:
