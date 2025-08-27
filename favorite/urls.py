@@ -6,12 +6,11 @@ from .views import (
     FavoriteDetailView
 )
 
-urlpatterns = [
-    # لیست علاقمندی‌ها
-    path('collections/', FavoriteCollectionListCreateView.as_view(), name='favorite-collection-list-create'),
-    path('collections/<int:pk>/', FavoriteCollectionDetailView.as_view(), name='favorite-collection-detail'),
+app_name = "favorite"  
 
-    # آیتم‌های داخل هر لیست
+urlpatterns = [
+    path('collections/', FavoriteCollectionListCreateView.as_view(), name='collection-list-create'),
+    path('collections/<int:pk>/', FavoriteCollectionDetailView.as_view(), name='collection-detail'),
     path('collections/<int:list_id>/favorites/', FavoriteListCreateView.as_view(), name='favorite-list-create'),
     path('favorites/<int:pk>/', FavoriteDetailView.as_view(), name='favorite-detail'),
 ]
