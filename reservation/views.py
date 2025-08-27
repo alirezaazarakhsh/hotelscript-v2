@@ -2096,17 +2096,20 @@ class BestHotelspageAPI(ListAPIView):
         if room_facilities:
             try:
                 room_fac_ids = [int(x) for x in room_facilities.split(',') if x.strip()]
-                hotels_qs = hotels_qs.filter(room_facilities__id__in=room_fac_ids).distinct()
+                for fac_id in room_fac_ids:
+                    hotels_qs = hotels_qs.filter(room_facilities__id=fac_id)
+                hotels_qs = hotels_qs.distinct()
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات اتاق نامعتبر است.'}, status=400)
 
         if hotel_facilities:
             try:
                 hotel_fac_ids = [int(x) for x in hotel_facilities.split(',') if x.strip()]
-                hotels_qs = hotels_qs.filter(facilities__id__in=hotel_fac_ids).distinct()
+                for fac_id in hotel_fac_ids:
+                    hotels_qs = hotels_qs.filter(facilities__id=fac_id)
+                hotels_qs = hotels_qs.distinct()
             except ValueError:
                 return Response({'detail': 'شناسه‌های امکانات هتل نامعتبر است.'}, status=400)
-
 
         today = jdatetime.date.today()
         try:
@@ -2183,7 +2186,6 @@ class BestHotelspageAPI(ListAPIView):
 
         serializer = self.get_serializer(sorted_hotels, many=True, context=context)
         return Response(serializer.data)
-
 
 
 
