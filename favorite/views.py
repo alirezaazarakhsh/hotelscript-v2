@@ -4,7 +4,7 @@ from rest_framework import permissions, status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-from .models import FavoriteCollection, Favorite
+from .models import FavoriteCollection
 from .serializers import FavoriteCollectionSerializer, FavoriteCollectionCreateSerializer
 
 
@@ -14,13 +14,12 @@ class HotelFavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست و ایجاد کالکشن هتل‌ها",
+        operation_summary="لیست کالکشن‌های هتل",
         operation_description="""
-        - **GET**: دریافت تمام لیست‌های علاقمندی هتل متعلق به کاربر وارد شده  
-        - **POST**: ایجاد کالکشن جدید برای هتل‌ها (فقط نام لیست لازم است)
+        دریافت تمام کالکشن‌های هتل متعلق به کاربر وارد شده.  
+        - هر کالکشن شامل آیتم‌های مرتبط با هتل می‌باشد.
         """,
-        tags=["favorites-hotels"],
-        request_body=FavoriteCollectionCreateSerializer,
+        tags=["favorites-panel"],
         responses={200: FavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
@@ -30,6 +29,13 @@ class HotelFavoriteCollectionListCreateAPI(APIView):
         serializer = FavoriteCollectionSerializer(collections, many=True, context={"request": request})
         return Response(serializer.data)
 
+    @swagger_auto_schema(
+        operation_summary="ایجاد کالکشن هتل",
+        operation_description="ایجاد یک کالکشن جدید برای هتل‌ها. تنها نام کالکشن مورد نیاز است.",
+        tags=["favorites-panel"],
+        request_body=FavoriteCollectionCreateSerializer,
+        responses={201: FavoriteCollectionSerializer},
+    )
     def post(self, request):
         serializer = FavoriteCollectionCreateSerializer(data=request.data)
         if serializer.is_valid():
@@ -43,8 +49,8 @@ class HotelFavoriteCollectionDetailAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="جزئیات یک کالکشن هتل",
-        operation_description="دریافت جزئیات و آیتم‌های داخل یک کالکشن هتل (بر اساس id کالکشن)",
-        tags=["favorites-hotels"],
+        operation_description="دریافت جزئیات و آیتم‌های داخل یک کالکشن هتل بر اساس شناسه کالکشن",
+        tags=["favorites-panel"],
         responses={200: FavoriteCollectionSerializer},
     )
     def get(self, request, pk):
@@ -59,11 +65,13 @@ class HotelFavoriteCollectionDetailAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف کالکشن هتل",
-        operation_description="حذف کامل یک کالکشن هتل (تمام آیتم‌های داخل آن نیز حذف می‌شوند)",
-        tags=["favorites-hotels"],
+        operation_description="حذف کامل یک کالکشن هتل و تمام آیتم‌های داخل آن",
+        tags=["favorites-panel"],
     )
     def delete(self, request, pk):
-        collection = FavoriteCollection.objects.filter(user=request.user, id=pk).first()
+        collection = FavoriteCollection.objects.filter(
+            user=request.user, id=pk, favorites__item_content_type__model="hotel"
+        ).first()
         if not collection:
             return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         collection.delete()
@@ -76,13 +84,12 @@ class ArticleFavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست و ایجاد کالکشن مقالات",
+        operation_summary="لیست کالکشن‌های مقاله",
         operation_description="""
-        - **GET**: دریافت تمام لیست‌های علاقمندی مقاله متعلق به کاربر وارد شده  
-        - **POST**: ایجاد کالکشن جدید برای مقالات (فقط نام لیست لازم است)
+        دریافت تمام کالکشن‌های مقاله متعلق به کاربر وارد شده.  
+        - هر کالکشن شامل آیتم‌های مرتبط با مقاله می‌باشد.
         """,
-        tags=["favorites-articles"],
-        request_body=FavoriteCollectionCreateSerializer,
+        tags=["favorites-panel"],
         responses={200: FavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
@@ -92,6 +99,13 @@ class ArticleFavoriteCollectionListCreateAPI(APIView):
         serializer = FavoriteCollectionSerializer(collections, many=True, context={"request": request})
         return Response(serializer.data)
 
+    @swagger_auto_schema(
+        operation_summary="ایجاد کالکشن مقاله",
+        operation_description="ایجاد یک کالکشن جدید برای مقالات. تنها نام کالکشن مورد نیاز است.",
+        tags=["favorites-panel"],
+        request_body=FavoriteCollectionCreateSerializer,
+        responses={201: FavoriteCollectionSerializer},
+    )
     def post(self, request):
         serializer = FavoriteCollectionCreateSerializer(data=request.data)
         if serializer.is_valid():
@@ -105,8 +119,8 @@ class ArticleFavoriteCollectionDetailAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="جزئیات یک کالکشن مقاله",
-        operation_description="دریافت جزئیات و آیتم‌های داخل یک کالکشن مقاله (بر اساس id کالکشن)",
-        tags=["favorites-articles"],
+        operation_description="دریافت جزئیات و آیتم‌های داخل یک کالکشن مقاله بر اساس شناسه کالکشن",
+        tags=["favorites-panel"],
         responses={200: FavoriteCollectionSerializer},
     )
     def get(self, request, pk):
@@ -121,11 +135,13 @@ class ArticleFavoriteCollectionDetailAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف کالکشن مقاله",
-        operation_description="حذف کامل یک کالکشن مقاله (تمام آیتم‌های داخل آن نیز حذف می‌شوند)",
-        tags=["favorites-articles"],
+        operation_description="حذف کامل یک کالکشن مقاله و تمام آیتم‌های داخل آن",
+        tags=["favorites-panel"],
     )
     def delete(self, request, pk):
-        collection = FavoriteCollection.objects.filter(user=request.user, id=pk).first()
+        collection = FavoriteCollection.objects.filter(
+            user=request.user, id=pk, favorites__item_content_type__model="article"
+        ).first()
         if not collection:
             return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         collection.delete()
