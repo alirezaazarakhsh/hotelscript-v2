@@ -17,12 +17,12 @@ class NotificationListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # استفاده از date_joined از مدل BaseUser
-        user_join_date = user.date_joined
+        # Convert Jalali date_joined to Gregorian datetime
+        user_join_date = user.date_joined.togregorian() if user.date_joined else user.date_joined
         
         return Notification.objects.filter(
-            models.Q(users=user) |  # اعلان‌های اختصاصی برای کاربر
-            models.Q(send_to_all=True, created_at__gte=user_join_date)  # اعلان‌های عمومی بعد از عضویت کاربر
+            models.Q(users=user) |  # Notifications assigned to the user
+            models.Q(send_to_all=True, created_at__gte=user_join_date)  # Public notifications after user joined
         ).distinct().order_by('-created_at')
 
     @swagger_auto_schema(
