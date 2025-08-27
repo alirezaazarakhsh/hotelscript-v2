@@ -1,7 +1,6 @@
 import logging
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
-from finance.models import Wallet
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,8 @@ def send_wallet_increase_sms(user, amount_increased, pattern_section='walletincr
             print(f"SMSPattern for section '{pattern_section}' not found or invalid pattern_code")
             return False
 
-        # دریافت موجودی کیف پول
+        # وارد کردن Wallet در داخل تابع برای جلوگیری از حلقه وارداتی
+        from finance.models import Wallet
         wallet = Wallet.objects.filter(user=user).first()
         if not wallet:
             print(f"No wallet found for user {user}")
