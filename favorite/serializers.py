@@ -3,7 +3,8 @@ from django.contrib.contenttypes.models import ContentType
 from .models import FavoriteCollection, Favorite
 from blog.models import Article  # مدل مقاله برای ذخیره اطلاعات مقالات
 from reservation.models import Hotel  # مدل هتل برای ذخیره اطلاعات هتل‌ها
-from persian_tools import jalali_converter  # برای تبدیل تاریخ میلادی به شمسی
+from datetime import datetime
+from jdatetime import datetime as jdatetime  # استفاده از jdatetime برای تبدیل به شمسی
 
 class ArticleSerializer(serializers.ModelSerializer):
     """
@@ -28,7 +29,10 @@ class ArticleSerializer(serializers.ModelSerializer):
         """
         تبدیل تاریخ میلادی به شمسی برای مقاله.
         """
-        return jalali_converter(obj.created_at)  # فرض بر وجود فیلد created_at
+        if obj.created_at:
+            jalali_date = jdatetime.fromgregorian(datetime=obj.created_at)
+            return jalali_date.strftime('%Y/%m/%d')
+        return None
 
 class HotelSerializer(serializers.ModelSerializer):
     """
