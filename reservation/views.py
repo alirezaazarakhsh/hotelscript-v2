@@ -2191,7 +2191,6 @@ class BestHotelspageAPI(ListAPIView):
 
 
 #ای پی ای فیلتر محدوده قیمت بهترین هتل ها 
-# --- Logger fallback ---
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -2203,7 +2202,6 @@ except Exception:
         'debug': logger_fallback,
         'error': logger_fallback,
     })()
-
 
 class GetPriceRangeAPI(generics.GenericAPIView):
     """
@@ -2433,8 +2431,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='end-date', in_=openapi.IN_QUERY, description='تاریخ پایان به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='passengers', in_=openapi.IN_QUERY, description='ظرفیت مسافران برای فیلتر اتاق‌ها (0 برای نمایش همه هتل‌ها یا لیست مثل 1,2)', type=openapi.TYPE_STRING, required=False),
-            openapi.Parameter(name='min-price', in_=openapi.IN_QUERY, description='حداقل قیمت', type=openapi.TYPE_INTEGER, required=False),
-            openapi.Parameter(name='max-price', in_=openapi.IN_QUERY, description='حداکثر قیمت', type=openapi.TYPE_INTEGER, required=False),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -2442,8 +2438,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         start_date_str = request.query_params.get('start-date')
         end_date_str = request.query_params.get('end-date')
         passengers = request.query_params.get('passengers')
-        min_price = request.query_params.get('min-price')
-        max_price = request.query_params.get('max-price')
 
         # parse passengers
         try:
@@ -2455,13 +2449,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
                     return Response({'detail': 'پارامتر passengers نامعتبر است.'}, status=400)
         except ValueError:
             return Response({'detail': 'پارامتر passengers باید لیست اعداد صحیح باشد.'}, status=400)
-
-        # parse prices
-        try:
-            min_price = int(min_price) if min_price else None
-            max_price = int(max_price) if max_price else None
-        except ValueError:
-            return Response({'detail': 'پارامترهای عددی معتبر نیستند.'}, status=400)
 
         # parse dates
         today = jdatetime.date.today()
@@ -2494,14 +2481,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
                 total_price = min_price_data.get('total_price', 0)
                 if total_price > 0:
                     prices.append(total_price)
-
-        # Apply min/max price filter if applicable
-        if min_price is not None or max_price is not None:
-            prices = [
-                price for price in prices
-                if (min_price is None or price >= min_price) and
-                   (max_price is None or price <= max_price)
-            ]
 
         if not prices:
             return Response({"min_price": 0, "max_price": 0})
