@@ -1,32 +1,10 @@
 from django.urls import path
-from .views import (
-    FavoriteCollectionListCreateView,
-    FavoriteCollectionRetrieveDestroyView,
-    FavoriteCreateView,
-    FavoriteDestroyView,
-)
+from .views import FavoriteCollectionListView, FavoriteCollectionDetailView, FavoriteCollectionDeleteView
 
-app_name = 'favorite'
+app_name = 'favorites'
 
 urlpatterns = [
-    path(
-        'collections/',
-        FavoriteCollectionListCreateView.as_view(),
-        name='favorite-collection-list-create',
-    ),
-    path(
-        'collections/<int:pk>/',
-        FavoriteCollectionRetrieveDestroyView.as_view(),
-        name='favorite-collection-retrieve-destroy',
-    ),
-    path(
-        'favorites/',
-        FavoriteCreateView.as_view(),
-        name='favorite-create',
-    ),
-    path(
-        'favorites/<int:pk>/',
-        FavoriteDestroyView.as_view(),
-        name='favorite-destroy',
-    ),
+    path('collections/', FavoriteCollectionListView.as_view(), name='favorite-collections'),
+    path('collections-<str:content_type>/<int:collection_id>/', FavoriteCollectionDetailView.as_view(), name='favorite-collection-detail'),
+    path('collections/<int:collection_id>/delete/', FavoriteCollectionDeleteView.as_view(), name='favorite-collection-delete'),
 ]
