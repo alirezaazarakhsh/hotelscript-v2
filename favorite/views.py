@@ -7,6 +7,8 @@ from .serializers import FavoriteCollectionSerializer, FavoriteDetailSerializer
 from django.contrib.contenttypes.models import ContentType
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from blog.models import Article
+from reservation.models import Hotel
 
 class FavoriteCollectionListView(APIView):
     """
@@ -14,6 +16,7 @@ class FavoriteCollectionListView(APIView):
     این API تمام مجموعه‌های کاربر را با حداکثر سه تصویر از آیتم‌های هر مجموعه برمی‌گرداند.
     """
     @swagger_auto_schema(
+        operation_summary="لیست مجموعه‌های علاقمندی",
         operation_description="دریافت لیست تمام مجموعه‌های علاقمندی کاربر جاری با حداکثر سه تصویر از آیتم‌های هر مجموعه",
         responses={200: FavoriteCollectionSerializer(many=True)},
         tags=['Favorite-panel']
@@ -35,6 +38,7 @@ class FavoriteCollectionDetailView(APIView):
     این API آیتم‌های مورد علاقه (مقاله یا هتل) را برای یک مجموعه خاص فیلتر می‌کند.
     """
     @swagger_auto_schema(
+        operation_summary="جزئیات مجموعه علاقمندی",
         operation_description="دریافت جزئیات آیتم‌های یک مجموعه علاقمندی بر اساس نوع محتوا (blog یا hotel)",
         responses={200: FavoriteDetailSerializer(many=True)},
         tags=['Favorite-panel']
@@ -52,7 +56,10 @@ class FavoriteCollectionDetailView(APIView):
             return Response({'error': 'نوع محتوا نامعتبر است'}, status=status.HTTP_400_BAD_REQUEST)
         
         model = content_type_map[content_type]
-        content_type_obj = ContentType.objects.get(app_label='blog' if model == 'article' else 'reservation', model=model)
+        try:
+            content_type_obj = ContentType.objects.get_for_model(Hotel if model == 'hotel' else Article)
+        except ContentType.DoesNotExist:
+            return Response({'error': f'نوع محتوا {model} یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
         
         favorites = Favorite.objects.filter(
             list=collection,
@@ -68,6 +75,7 @@ class FavoriteCollectionDeleteView(APIView):
     این API مجموعه مورد نظر را حذف می‌کند، مشروط بر اینکه کاربر درخواست‌دهنده مالک آن باشد.
     """
     @swagger_auto_schema(
+        operation_summary="حذف مجموعه علاقمندی",
         operation_description="حذف یک مجموعه علاقمندی توسط کاربر مالک آن",
         responses={
             204: 'مجموعه با موفقیت حذف شد',
@@ -82,6 +90,3 @@ class FavoriteCollectionDeleteView(APIView):
             return Response({'error': 'شما مجاز به حذف این مجموعه نیستید'}, status=status.HTTP_403_FORBIDDEN)
         collection.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
-    
-    

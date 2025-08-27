@@ -1,43 +1,41 @@
 from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
 from .models import FavoriteCollection, Favorite
-from blog.models import Article  # مدل مقاله برای ذخیره اطلاعات مقالات
-from reservation.models import Hotel  # مدل هتل برای ذخیره اطلاعات هتل‌ها
-from datetime import datetime
-from jdatetime import datetime as jdatetime  # استفاده از jdatetime برای تبدیل به شمسی
+from blog.models import Article
+from reservation.models import Hotel
+from jdatetime import datetime as jdatetime
 
 class ArticleSerializer(serializers.ModelSerializer):
     """
     سریالایزر برای مدل Article.
-    این سریالایزر اطلاعات مقاله شامل تصویر اصلی، خلاصه، محتوا، اسلاگ و تاریخ شمسی را برمی‌گرداند.
+    اطلاعات مقاله شامل تصویر پیش‌نمایش، خلاصه، متن، اسلاگ و تاریخ انتشار شمسی را برمی‌گرداند.
     """
     jalali_date = serializers.SerializerMethodField()
 
     class Meta:
         model = Article
-        fields = ['id', 'main_image', 'summary', 'content', 'slug', 'jalali_date']
+        fields = ['id', 'thumbnail', 'summary', 'body', 'slug', 'jalali_date']
         extra_kwargs = {
             'id': {'help_text': 'شناسه یکتای مقاله'},
-            'main_image': {'help_text': 'تصویر اصلی مقاله'},
+            'thumbnail': {'help_text': 'تصویر پیش‌نمایش مقاله'},
             'summary': {'help_text': 'خلاصه مقاله'},
-            'content': {'help_text': 'محتوای کامل مقاله'},
+            'body': {'help_text': 'متن کامل مقاله (HTML)'},
             'slug': {'help_text': 'اسلاگ مقاله برای URL'},
             'jalali_date': {'help_text': 'تاریخ انتشار مقاله به فرمت شمسی'}
         }
 
     def get_jalali_date(self, obj):
         """
-        تبدیل تاریخ میلادی به شمسی برای مقاله.
+        تبدیل تاریخ انتشار به فرمت شمسی.
         """
-        if obj.created_at:
-            jalali_date = jdatetime.fromgregorian(datetime=obj.created_at)
-            return jalali_date.strftime('%Y/%m/%d')
+        if obj.published_date:
+            return obj.published_date.strftime('%Y/%m/%d')
         return None
 
 class HotelSerializer(serializers.ModelSerializer):
     """
     سریالایزر برای مدل Hotel.
-    این سریالایزر اطلاعات هتل شامل نام، اسلاگ، شهر، آدرس، تصویر اصلی، ستاره‌ها و سایر اطلاعات مرتبط را برمی‌گرداند.
+    اطلاعات هتل شامل نام، اسلاگ، شهر، آدرس، تصاویر، ستاره‌ها و سایر اطلاعات مرتبط را برمی‌گرداند.
     """
     city = serializers.SerializerMethodField()
 
@@ -45,9 +43,8 @@ class HotelSerializer(serializers.ModelSerializer):
         model = Hotel
         fields = [
             'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
-            'is_special_offer', 'is_flash_sale', 'is_best_seller', 'original_total_price',
-            'total_price', 'rating', 'discount_percentage', 'discount_expiry',
-            'reservation_count', 'average_score'
+            'is_special_offer', 'is_flash_sale', 'is_best_seller', 'rating',
+            'reservation_count', 'description'
         ]
         extra_kwargs = {
             'name': {'help_text': 'نام هتل'},
@@ -60,13 +57,9 @@ class HotelSerializer(serializers.ModelSerializer):
             'is_special_offer': {'help_text': 'آیا هتل پیشنهاد ویژه دارد؟'},
             'is_flash_sale': {'help_text': 'آیا هتل در فروش فوری است؟'},
             'is_best_seller': {'help_text': 'آیا هتل پرفروش است؟'},
-            'original_total_price': {'help_text': 'قیمت اصلی هتل'},
-            'total_price': {'help_text': 'قیمت نهایی هتل'},
             'rating': {'help_text': 'امتیاز هتل'},
-            'discount_percentage': {'help_text': 'درصد تخفیف'},
-            'discount_expiry': {'help_text': 'تاریخ انقضای تخفیف'},
             'reservation_count': {'help_text': 'تعداد رزروهای هتل'},
-            'average_score': {'help_text': 'امتیاز میانگین هتل'}
+            'description': {'help_text': 'توضیحات هتل'}
         }
 
     def get_city(self, obj):
@@ -86,7 +79,7 @@ class HotelSerializer(serializers.ModelSerializer):
 class FavoriteCollectionSerializer(serializers.ModelSerializer):
     """
     سریالایزر برای مدل FavoriteCollection.
-    این سریالایزر اطلاعات مجموعه علاقمندی شامل شناسه، عنوان و حداکثر سه تصویر از آیتم‌های داخل مجموعه را برمی‌گرداند.
+    اطلاعات مجموعه علاقمندی شامل شناسه، عنوان و حداکثر سه تصویر از آیتم‌های داخل مجموعه را برمی‌گرداند.
     """
     images = serializers.SerializerMethodField()
 
@@ -108,8 +101,8 @@ class FavoriteCollectionSerializer(serializers.ModelSerializer):
         for favorite in favorites:
             if favorite.item_content_type.model == 'article':
                 article = favorite.item
-                if article.main_image:
-                    images.append(article.main_image.url)
+                if article.thumbnail:
+                    images.append(article.thumbnail.url)
             elif favorite.item_content_type.model == 'hotel':
                 hotel = favorite.item
                 if hotel.main_image:
@@ -119,7 +112,7 @@ class FavoriteCollectionSerializer(serializers.ModelSerializer):
 class FavoriteDetailSerializer(serializers.ModelSerializer):
     """
     سریالایزر برای مدل Favorite.
-    این سریالایزر اطلاعات آیتم‌های مورد علاقه (مقاله یا هتل) را بر اساس نوع محتوا برمی‌گرداند.
+    اطلاعات آیتم‌های مورد علاقه (مقاله یا هتل) را بر اساس نوع محتوا برمی‌گرداند.
     """
     item = serializers.SerializerMethodField()
 
