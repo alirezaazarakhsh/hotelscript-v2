@@ -2,13 +2,15 @@ from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
 from .models import FavoriteCollection, Favorite
 from blog.models import Article
-from reservation.models import Hotel, City, Province
+from reservation.models import Hotel, City, Province, Tag   # فرض بر اینه که Tag همینجاست
+
 
 # ------------------ Province ------------------
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Province
         fields = ("id", "name")
+
 
 # ------------------ City ------------------
 class CitySerializer(serializers.ModelSerializer):
@@ -22,6 +24,14 @@ class CitySerializer(serializers.ModelSerializer):
     def get_hotels_number(self, obj):
         return obj.hotels.count()
 
+
+# ------------------ Public Tags ------------------
+class PublicTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ("id", "title")
+
+
 # ------------------ Hotel Summary ------------------
 class HotelSummarySerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
@@ -34,19 +44,30 @@ class HotelSummarySerializer(serializers.ModelSerializer):
     average_score = serializers.FloatField(source="get_average_score", read_only=True)
     comment_count = serializers.IntegerField(source="get_comment_count", read_only=True)
 
+    public_tags = PublicTagSerializer(many=True, read_only=True)
+
+    night_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Hotel
         fields = (
             "id", "name", "slug", "city", "address", "main_image", "stars", "residence_type",
             "price", "price_after_discount", "discount_percentage", "discount_date",
-            "rating", "average_score", "comment_count", "reservation_count", "public_tags"
+            "rating", "average_score", "comment_count", "reservation_count",
+            "public_tags", "night_count"
         )
+
+    def get_night_count(self, obj):
+        # اگر لاجیک خاصی داری اینجا بذار
+        return 0
+
 
 # ------------------ Article Summary ------------------
 class ArticleSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = ("id", "title", "slug", "summary", "thumbnail", "published_date")
+
 
 # ------------------ Favorite Item ------------------
 class FavoriteItemSerializer(serializers.ModelSerializer):
@@ -63,11 +84,13 @@ class FavoriteItemSerializer(serializers.ModelSerializer):
             return {"type": "article", **ArticleSummarySerializer(obj.item, context=self.context).data}
         return None
 
+
 # ------------------ Collection Create ------------------
 class FavoriteCollectionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FavoriteCollection
         fields = ("id", "title")
+
 
 # ------------------ Collection Base ------------------
 class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
@@ -85,6 +108,7 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
             elif isinstance(fav.item, Article) and fav.item.thumbnail:
                 thumbs.append(fav.item.thumbnail.url)
         return thumbs
+
 
 # ------------------ Collection With Items ------------------
 class FavoriteCollectionDetailSerializer(BaseFavoriteCollectionSerializer):

@@ -20,7 +20,7 @@ class FavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="📌 دریافت لیست کالکشن‌های علاقه‌مندی",
+        operation_summary="دریافت لیست کالکشن‌های علاقه‌مندی",
         operation_description="""
         این API تمامی کالکشن‌های علاقه‌مندی (چه هتل و چه مقاله) را نمایش می‌دهد.
         هر کالکشن شامل شناسه، عنوان و تعدادی تصویر thumbnail از آیتم‌های داخل لیست است.
@@ -34,7 +34,7 @@ class FavoriteCollectionListCreateAPI(APIView):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="➕ ایجاد کالکشن علاقه‌مندی جدید",
+        operation_summary="ایجاد کالکشن علاقه‌مندی جدید",
         operation_description="""
         با این API می‌توانید یک لیست علاقه‌مندی جدید ایجاد کنید.
         فقط کافی است عنوان (title) لیست را ارسال نمایید.
@@ -51,12 +51,14 @@ class FavoriteCollectionListCreateAPI(APIView):
         return Response(serializer.errors, status=400)
 
 
+
+
 # ------------------ جزئیات کالکشن ------------------
 class FavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="📖 جزئیات یک کالکشن",
+        operation_summary="جزئیات یک کالکشن",
         operation_description="""
         این API جزئیات کامل یک کالکشن خاص را برمی‌گرداند.
         شامل لیست کامل آیتم‌ها (مقالات یا هتل‌ها) به همراه اطلاعات خلاصه هر آیتم.
@@ -69,7 +71,7 @@ class FavoriteCollectionDetailAPI(APIView):
         return Response(FavoriteCollectionDetailSerializer(collection, context={"request": request}).data)
 
     @swagger_auto_schema(
-        operation_summary="🗑️ حذف یک کالکشن",
+        operation_summary="حذف یک کالکشن",
         operation_description="با این API می‌توانید یک کالکشن کامل را حذف کنید.",
         tags=["favorite-panel"],
     )
@@ -84,7 +86,7 @@ class FavoriteItemListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="📌 دریافت آیتم‌های داخل یک کالکشن",
+        operation_summary="دریافت آیتم‌های داخل یک کالکشن",
         operation_description="این API تمامی آیتم‌های (هتل یا مقاله) داخل یک کالکشن خاص را نمایش می‌دهد.",
         tags=["favorite-panel"],
         responses={200: FavoriteItemSerializer(many=True)},
@@ -94,7 +96,7 @@ class FavoriteItemListCreateAPI(APIView):
         return Response(FavoriteItemSerializer(collection.favorites.all(), many=True, context={"request": request}).data)
 
     @swagger_auto_schema(
-        operation_summary="➕ افزودن آیتم به یک کالکشن",
+        operation_summary="افزودن آیتم به یک کالکشن",
         operation_description="""
         برای افزودن آیتم جدید به یک کالکشن باید نوع (type) و شناسه (id) آیتم را ارسال کنید.
         - type: hotel یا article
@@ -125,7 +127,7 @@ class FavoriteItemDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="🗑️ حذف آیتم از کالکشن",
+        operation_summary="حذف آیتم از کالکشن",
         operation_description="این API یک آیتم خاص (هتل یا مقاله) را از داخل کالکشن حذف می‌کند.",
         tags=["favorite-panel"],
     )
