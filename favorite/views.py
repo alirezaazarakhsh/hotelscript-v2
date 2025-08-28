@@ -16,7 +16,9 @@ from .serializers import (
 from django.utils import timezone
 from datetime import datetime
 from jalali_date import date2jalali
+import logging
 
+logger = logging.getLogger(__name__)
 
 # ------------------ لیست کالکشن‌ها ------------------
 class FavoriteCollectionListCreateAPI(APIView):
@@ -72,13 +74,13 @@ class FavoriteCollectionDetailAPI(APIView):
                 start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
                 end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
             except ValueError:
-                pass
+                logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
 
         # Get user level if authenticated
         user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
+        logger.debug(f"User level: {user_level}")
 
         for hotel in hotels:
-            # Get all rooms for the hotel
             rooms = hotel.rooms.all()
             min_total_price = float('inf')
             min_price_data = {
@@ -89,13 +91,31 @@ class FavoriteCollectionDetailAPI(APIView):
                 'discount_date': None,
             }
 
+            # First try: filter by date range and user level
             for room in rooms:
-                # Get valid RoomDatePrice entries for the date range and user level
                 date_prices = room.date_prices.filter(
                     start_date__lte=start_date,
                     end_date__gte=end_date,
                     user_level=user_level if user_level else None
                 )
+                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
+
+                if not date_prices.exists() and user_level:
+                    # Fallback: try without user_level
+                    date_prices = room.date_prices.filter(
+                        start_date__lte=start_date,
+                        end_date__gte=end_date,
+                        user_level__isnull=True
+                    )
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
+
+                if not date_prices.exists():
+                    # Fallback: get any valid price for the room
+                    date_prices = room.date_prices.filter(
+                        end_date__gte=today,
+                        user_level__isnull=True
+                    ).order_by('price')
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
@@ -103,7 +123,6 @@ class FavoriteCollectionDetailAPI(APIView):
                     discount_value = date_price.discount_value or 0
                     total_price = original_price
 
-                    # Apply discount if valid
                     if discount_type == 'percentage' and date_price.discount_date and date_price.discount_date >= today:
                         total_price = original_price * (1 - discount_value / 100)
                     elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
@@ -118,6 +137,11 @@ class FavoriteCollectionDetailAPI(APIView):
                             'discount_value': discount_value,
                             'discount_date': date_price.discount_date,
                         }
+
+            if min_total_price == float('inf'):
+                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
+            else:
+                logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
 
             hotel_min_price_map[hotel.id] = min_price_data
 
@@ -184,10 +208,11 @@ class FavoriteItemListCreateAPI(APIView):
                 start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
                 end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
             except ValueError:
-                pass
+                logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
 
         # Get user level if authenticated
         user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
+        logger.debug(f"User level: {user_level}")
 
         for hotel in hotels:
             rooms = hotel.rooms.all()
@@ -206,6 +231,22 @@ class FavoriteItemListCreateAPI(APIView):
                     end_date__gte=end_date,
                     user_level=user_level if user_level else None
                 )
+                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
+
+                if not date_prices.exists() and user_level:
+                    date_prices = room.date_prices.filter(
+                        start_date__lte=start_date,
+                        end_date__gte=end_date,
+                        user_level__isnull=True
+                    )
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
+
+                if not date_prices.exists():
+                    date_prices = room.date_prices.filter(
+                        end_date__gte=today,
+                        user_level__isnull=True
+                    ).order_by('price')
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
@@ -227,6 +268,11 @@ class FavoriteItemListCreateAPI(APIView):
                             'discount_value': discount_value,
                             'discount_date': date_price.discount_date,
                         }
+
+            if min_total_price == float('inf'):
+                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
+            else:
+                logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
 
             hotel_min_price_map[hotel.id] = min_price_data
 
