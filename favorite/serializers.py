@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
 from .models import FavoriteCollection, Favorite
 from blog.models import Article
-from reservation.models import Hotel, City, Province, Tag   # فرض بر اینه که Tag همینجاست
+from reservation.models import Hotel, City, Province, Tag
 
 
 # ------------------ Province ------------------
@@ -36,17 +36,15 @@ class PublicTagSerializer(serializers.ModelSerializer):
 class HotelSummarySerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
     residence_type = serializers.CharField(source="type.title", read_only=True)
-
-    price = serializers.IntegerField(source="get_original_total_price", read_only=True)
-    price_after_discount = serializers.IntegerField(source="get_total_price", read_only=True)
-    discount_percentage = serializers.IntegerField(source="get_discount_percentage", read_only=True)
-    discount_date = serializers.DateTimeField(source="get_discount_expiry", read_only=True)
-    average_score = serializers.FloatField(source="get_average_score", read_only=True)
-    comment_count = serializers.IntegerField(source="get_comment_count", read_only=True)
-
+    price = serializers.IntegerField(source="get_original_total_price", read_only=True, default=0)
+    price_after_discount = serializers.IntegerField(source="get_total_price", read_only=True, default=0)
+    discount_percentage = serializers.IntegerField(source="get_discount_percentage", read_only=True, default=0)
+    discount_date = serializers.DateTimeField(source="get_discount_expiry", read_only=True, allow_null=True)
+    average_score = serializers.FloatField(source="get_average_score", read_only=True, default=0.0)
+    comment_count = serializers.IntegerField(source="get_comment_count", read_only=True, default=0)
     public_tags = PublicTagSerializer(many=True, read_only=True)
-
     night_count = serializers.SerializerMethodField()
+    rating = serializers.FloatField(read_only=True, default=0.0)  # اطمینان از اینکه rating عدد است
 
     class Meta:
         model = Hotel
@@ -58,8 +56,11 @@ class HotelSummarySerializer(serializers.ModelSerializer):
         )
 
     def get_night_count(self, obj):
-        # اگر لاجیک خاصی داری اینجا بذار
-        return 0
+        # فرض می‌کنیم تعداد شب‌ها از درخواست یا مدل محاسبه می‌شود
+        request = self.context.get("request")
+        if request and request.query_params.get("night_count"):
+            return int(request.query_params.get("night_count", 0))
+        return 0  # مقدار پیش‌فرض
 
 
 # ------------------ Article Summary ------------------
@@ -102,11 +103,15 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
 
     def get_thumbnails(self, obj):
         thumbs = []
+        request = self.context.get("request")
         for fav in obj.favorites.all()[:3]:
             if isinstance(fav.item, Hotel) and fav.item.main_image:
-                thumbs.append(fav.item.main_image.url)
+                # تولید URL کامل با استفاده از request
+                url = request.build_absolute_uri(fav.item.main_image.url) if request else fav.item.main_image.url
+                thumbs.append(url)
             elif isinstance(fav.item, Article) and fav.item.thumbnail:
-                thumbs.append(fav.item.thumbnail.url)
+                url = request.build_absolute_uri(fav.item.thumbnail.url) if request else fav.item.thumbnail.url
+                thumbs.append(url)
         return thumbs
 
 
