@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import permissions, status
 from drf_yasg.utils import swagger_auto_schema
 from django.shortcuts import get_object_or_404
+from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 
 from .models import FavoriteCollection, Favorite
