@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 from reservation.models import Hotel
+from reservation.views import BaseHotelListView
 from .models import FavoriteCollection, Favorite
 from .serializers import (
     FavoriteCollectionCreateSerializer,
@@ -13,26 +14,7 @@ from .serializers import (
     BaseFavoriteCollectionSerializer,
     FavoriteItemSerializer,
 )
-
-
-# Helper methods (assumed to be inherited or defined elsewhere, e.g., in BaseHotelListView)
-def get_hotel_min_price_map(self, hotels):
-    # Sample implementation; replace with actual logic from BaseHotelListView
-    hotel_min_price_map = {}
-    for hotel in hotels:
-        hotel_min_price_map[hotel.id] = {
-            'total_price': hotel.get_total_price() or 0,
-            'original_total_price': hotel.get_original_total_price() or 0,
-            'discount_type': 'percentage',  # Adjust based on actual logic
-            'discount_value': hotel.get_discount_percentage() or 0,
-            'discount_date': hotel.get_discount_expiry(),
-        }
-    return hotel_min_price_map
-
-
-def get_average_score(self, hotel):
-    # Sample implementation; replace with actual logic
-    return getattr(hotel, 'average_score', 0.0)
+from django.utils import timezone
 
 
 # ------------------ لیست کالکشن‌ها ------------------
@@ -72,23 +54,46 @@ class FavoriteCollectionListCreateAPI(APIView):
 
 
 # ------------------ جزئیات کالکشن ------------------
-class FavoriteCollectionDetailAPI(APIView):
+class FavoriteCollectionDetailAPI(APIView, BaseHotelListView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_average_score(self, hotel):
+        # Fallback if not defined in BaseHotelListView
+        return getattr(hotel, 'average_score', 0.0)
+
+    """
+    # Fallback implementation of get_hotel_min_price_map if not available in BaseHotelListView
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
         for hotel in hotels:
-            hotel_min_price_map[hotel.id] = {
-                'total_price': hotel.get_total_price() or 0,
-                'original_total_price': hotel.get_original_total_price() or 0,
-                'discount_type': 'percentage',
-                'discount_value': hotel.get_discount_percentage() or 0,
-                'discount_date': hotel.get_discount_expiry(),
-            }
+            rooms = hotel.rooms.all()  # Assuming a related 'rooms' field
+            if rooms.exists():
+                min_room = rooms.order_by('price').first()
+                original_price = min_room.price or 0
+                discount_value = min_room.discount_value or 0
+                discount_type = min_room.discount_type or 'none'
+                total_price = original_price
+                if discount_type == 'percentage':
+                    total_price = original_price * (1 - discount_value / 100)
+                elif discount_type == 'fixed':
+                    total_price = max(0, original_price - discount_value)
+                hotel_min_price_map[hotel.id] = {
+                    'total_price': int(total_price),
+                    'original_total_price': int(original_price),
+                    'discount_type': discount_type,
+                    'discount_value': discount_value,
+                    'discount_date': min_room.discount_expiry or timezone.now(),
+                }
+            else:
+                hotel_min_price_map[hotel.id] = {
+                    'total_price': 0,
+                    'original_total_price': 0,
+                    'discount_type': 'none',
+                    'discount_value': 0,
+                    'discount_date': None,
+                }
         return hotel_min_price_map
-
-    def get_average_score(self, hotel):
-        return getattr(hotel, 'average_score', 0.0)
+    """
 
     @swagger_auto_schema(
         operation_summary="جزئیات یک کالکشن",
@@ -101,14 +106,13 @@ class FavoriteCollectionDetailAPI(APIView):
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        # Fix: Query Favorite model to get related Hotel objects
         hotel_content_type = ContentType.objects.get_for_model(Hotel)
         favorite_hotels = Favorite.objects.filter(
             list=collection,
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)  # From BaseHotelListView
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
@@ -128,23 +132,46 @@ class FavoriteCollectionDetailAPI(APIView):
 
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
-class FavoriteItemListCreateAPI(APIView):
+class FavoriteItemListCreateAPI(APIView, BaseHotelListView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_average_score(self, hotel):
+        # Fallback if not defined in BaseHotelListView
+        return getattr(hotel, 'average_score', 0.0)
+
+    """
+    # Fallback implementation of get_hotel_min_price_map if not available in BaseHotelListView
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
         for hotel in hotels:
-            hotel_min_price_map[hotel.id] = {
-                'total_price': hotel.get_total_price() or 0,
-                'original_total_price': hotel.get_original_total_price() or 0,
-                'discount_type': 'percentage',
-                'discount_value': hotel.get_discount_percentage() or 0,
-                'discount_date': hotel.get_discount_expiry(),
-            }
+            rooms = hotel.rooms.all()  # Assuming a related 'rooms' field
+            if rooms.exists():
+                min_room = rooms.order_by('price').first()
+                original_price = min_room.price or 0
+                discount_value = min_room.discount_value or 0
+                discount_type = min_room.discount_type or 'none'
+                total_price = original_price
+                if discount_type == 'percentage':
+                    total_price = original_price * (1 - discount_value / 100)
+                elif discount_type == 'fixed':
+                    total_price = max(0, original_price - discount_value)
+                hotel_min_price_map[hotel.id] = {
+                    'total_price': int(total_price),
+                    'original_total_price': int(original_price),
+                    'discount_type': discount_type,
+                    'discount_value': discount_value,
+                    'discount_date': min_room.discount_expiry or timezone.now(),
+                }
+            else:
+                hotel_min_price_map[hotel.id] = {
+                    'total_price': 0,
+                    'original_total_price': 0,
+                    'discount_type': 'none',
+                    'discount_value': 0,
+                    'discount_date': None,
+                }
         return hotel_min_price_map
-
-    def get_average_score(self, hotel):
-        return getattr(hotel, 'average_score', 0.0)
+    """
 
     @swagger_auto_schema(
         operation_summary="دریافت آیتم‌های داخل یک کالکشن",
@@ -154,14 +181,13 @@ class FavoriteItemListCreateAPI(APIView):
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        # Fix: Query Favorite model to get related Hotel objects
         hotel_content_type = ContentType.objects.get_for_model(Hotel)
         favorite_hotels = Favorite.objects.filter(
             list=collection,
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)  # From BaseHotelListView
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,

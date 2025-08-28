@@ -46,6 +46,7 @@ class HotelSummarySerializer(serializers.ModelSerializer):
     public_tags = PublicTagSerializer(many=True, read_only=True)
     night_count = serializers.SerializerMethodField()
     rating = serializers.FloatField(read_only=True, default=0.0)
+    main_image = serializers.SerializerMethodField()  # Added to handle URLs consistently
 
     class Meta:
         model = Hotel
@@ -55,6 +56,11 @@ class HotelSummarySerializer(serializers.ModelSerializer):
             "rating", "average_score", "comment_count", "reservation_count",
             "public_tags", "night_count"
         )
+
+    def get_main_image(self, obj):
+        request = self.context.get('request')
+        image_url = obj.main_image.url if obj.main_image else ''
+        return request.build_absolute_uri(image_url) if request and image_url else f"https://safarnameh24.com{image_url}"
 
     def get_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
@@ -104,6 +110,7 @@ class HotelSummarySerializer(serializers.ModelSerializer):
                     pass
         return 1
 
+
 # ------------------ Article Summary ------------------
 class ArticleSummarySerializer(serializers.ModelSerializer):
     class Meta:
@@ -121,7 +128,6 @@ class FavoriteItemSerializer(serializers.ModelSerializer):
 
     def get_item_detail(self, obj):
         if isinstance(obj.item, Hotel):
-            # Pass the view context to HotelSummarySerializer
             context = self.context
             return {"type": "hotel", **HotelSummarySerializer(obj.item, context=context).data}
         elif isinstance(obj.item, Article):
@@ -149,10 +155,10 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         for fav in obj.favorites.all()[:3]:
             if isinstance(fav.item, Hotel) and fav.item.main_image:
-                url = request.build_absolute_uri(fav.item.main_image.url) if request else f"https://safarnameh24.com{fav.item.main_image.url}"
+                url = request.build_absolute_uri(fav.item.main_image.url) if request and fav.item.main_image.url else f"https://safarnameh24.com{fav.item.main_image.url if fav.item.main_image else ''}"
                 thumbs.append(url)
             elif isinstance(fav.item, Article) and fav.item.thumbnail:
-                url = request.build_absolute_uri(fav.item.thumbnail.url) if request else f"https://safarnameh24.com{fav.item.thumbnail.url}"
+                url = request.build_absolute_uri(fav.item.thumbnail.url) if request and fav.item.thumbnail.url else f"https://safarnameh24.com{fav.item.thumbnail.url if fav.item.thumbnail else ''}"
                 thumbs.append(url)
         return thumbs
 
