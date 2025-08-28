@@ -2,6 +2,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from drf_yasg.utils import swagger_auto_schema
+from django.contrib.contenttypes.models import ContentType
+
 from .models import FavoriteCollection
 from .serializers import (
     FavoriteCollectionCreateSerializer,
