@@ -125,7 +125,7 @@ class FavoriteCollectionDetailAPI(APIView):
 
     def get_average_score(self, hotel):
         from django.db.models import Avg
-        return hotel.comments.aggregate(Avg('score'))['score__avg'] or 0.0
+        return hotel.comments.aggregate(Avg('stars'))['stars__avg'] or 0.0
 
     def get_comment_count(self, hotel):
         return hotel.comments.count()
@@ -234,7 +234,7 @@ class FavoriteItemListCreateAPI(APIView):
 
     def get_average_score(self, hotel):
         from django.db.models import Avg
-        return hotel.comments.aggregate(Avg('score'))['score__avg'] or 0.0
+        return hotel.comments.aggregate(Avg('stars'))['stars__avg'] or 0.0
 
     def get_comment_count(self, hotel):
         return hotel.comments.count()
