@@ -15,17 +15,15 @@ from .serializers import (
 )
 
 
-# فرض می‌کنیم این متدها از BaseHotelListView یا جای دیگری در دسترس هستند
+# Helper methods (assumed to be inherited or defined elsewhere, e.g., in BaseHotelListView)
 def get_hotel_min_price_map(self, hotels):
-    # این متد باید پیاده‌سازی شود یا از BaseHotelListView ارث برده شود
-    # نمونه پیاده‌سازی ساده:
+    # Sample implementation; replace with actual logic from BaseHotelListView
     hotel_min_price_map = {}
     for hotel in hotels:
-        # فرض می‌کنیم متدهای مدل قیمت‌ها را برمی‌گردانند
         hotel_min_price_map[hotel.id] = {
             'total_price': hotel.get_total_price() or 0,
             'original_total_price': hotel.get_original_total_price() or 0,
-            'discount_type': 'percentage',  # یا از مدل/داده‌ها
+            'discount_type': 'percentage',  # Adjust based on actual logic
             'discount_value': hotel.get_discount_percentage() or 0,
             'discount_date': hotel.get_discount_expiry(),
         }
@@ -33,8 +31,8 @@ def get_hotel_min_price_map(self, hotels):
 
 
 def get_average_score(self, hotel):
-    # این متد باید پیاده‌سازی شود یا از مدل/کلاس والد ارث برده شود
-    return getattr(hotel, 'average_score', 0.0)  # یا منطق محاسبه امتیاز
+    # Sample implementation; replace with actual logic
+    return getattr(hotel, 'average_score', 0.0)
 
 
 # ------------------ لیست کالکشن‌ها ------------------
@@ -78,21 +76,18 @@ class FavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_hotel_min_price_map(self, hotels):
-        # استفاده از متد get_hotel_min_price_map (فرضاً از BaseHotelListView)
-        # اگر این متد در جای دیگری تعریف شده، آن را وارد کنید
         hotel_min_price_map = {}
         for hotel in hotels:
             hotel_min_price_map[hotel.id] = {
                 'total_price': hotel.get_total_price() or 0,
                 'original_total_price': hotel.get_original_total_price() or 0,
-                'discount_type': 'percentage',  # یا از مدل
+                'discount_type': 'percentage',
                 'discount_value': hotel.get_discount_percentage() or 0,
                 'discount_date': hotel.get_discount_expiry(),
             }
         return hotel_min_price_map
 
     def get_average_score(self, hotel):
-        # فرض می‌کنیم متد get_average_score در مدل یا جای دیگری وجود دارد
         return getattr(hotel, 'average_score', 0.0)
 
     @swagger_auto_schema(
@@ -106,13 +101,18 @@ class FavoriteCollectionDetailAPI(APIView):
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        # گرفتن هتل‌های مرتبط با کالکشن
-        hotels = Hotel.objects.filter(favorites__list=collection).select_related('city', 'type').distinct()
+        # Fix: Query Favorite model to get related Hotel objects
+        hotel_content_type = ContentType.objects.get_for_model(Hotel)
+        favorite_hotels = Favorite.objects.filter(
+            list=collection,
+            item_content_type=hotel_content_type
+        ).values_list('item_object_id', flat=True)
+        hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
-            'view': self  # برای دسترسی به get_average_score
+            'view': self
         }
         return Response(FavoriteCollectionDetailSerializer(collection, context=context).data)
 
@@ -132,7 +132,6 @@ class FavoriteItemListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_hotel_min_price_map(self, hotels):
-        # مشابه متد در FavoriteCollectionDetailAPI
         hotel_min_price_map = {}
         for hotel in hotels:
             hotel_min_price_map[hotel.id] = {
@@ -155,7 +154,13 @@ class FavoriteItemListCreateAPI(APIView):
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        hotels = Hotel.objects.filter(favorites__list=collection).select_related('city', 'type').distinct()
+        # Fix: Query Favorite model to get related Hotel objects
+        hotel_content_type = ContentType.objects.get_for_model(Hotel)
+        favorite_hotels = Favorite.objects.filter(
+            list=collection,
+            item_content_type=hotel_content_type
+        ).values_list('item_object_id', flat=True)
+        hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
             'request': request,
@@ -187,7 +192,6 @@ class FavoriteItemListCreateAPI(APIView):
         item_type = request.data.get("type")
         item_id = request.data.get("id")
 
-        # اعتبارسنجی نوع آیتم و وجود آن
         if item_type not in ["hotel", "article"]:
             return Response({"error": "نوع آیتم نامعتبر است"}, status=400)
 
@@ -197,7 +201,6 @@ class FavoriteItemListCreateAPI(APIView):
             return Response({"error": "آیتم با این شناسه یافت نشد"}, status=404)
 
         favorite = Favorite.objects.create(list=collection, item_content_type=content_type, item_object_id=item_id)
-        # برای خروجی دقیق، hotel_min_price_map را برای آیتم جدید اضافه می‌کنیم
         hotels = Hotel.objects.filter(id=item_id) if item_type == "hotel" else Hotel.objects.none()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {

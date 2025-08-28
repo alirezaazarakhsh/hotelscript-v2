@@ -37,11 +37,11 @@ class PublicTagSerializer(serializers.ModelSerializer):
 class HotelSummarySerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
     residence_type = serializers.CharField(source="type.title", read_only=True)
-    price = serializers.SerializerMethodField()  # Updated to match HotelListSerializer
-    price_after_discount = serializers.SerializerMethodField()  # Updated
-    discount_percentage = serializers.SerializerMethodField()  # Updated
-    discount_date = serializers.SerializerMethodField()  # Updated
-    average_score = serializers.SerializerMethodField()  # Updated to match AmazingHotelsListView
+    price = serializers.SerializerMethodField()
+    price_after_discount = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_date = serializers.SerializerMethodField()
+    average_score = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     public_tags = PublicTagSerializer(many=True, read_only=True)
     night_count = serializers.SerializerMethodField()
@@ -82,14 +82,12 @@ class HotelSummarySerializer(serializers.ModelSerializer):
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
 
     def get_average_score(self, obj):
-        # Assuming get_average_score is defined in the view or model
         view = self.context.get('view')
         if view and hasattr(view, 'get_average_score'):
             return view.get_average_score(obj)
-        return getattr(obj, 'average_score', 0.0)  # Fallback to model attribute or 0.0
+        return getattr(obj, 'average_score', 0.0)
 
     def get_comment_count(self, obj):
-        # Assuming get_comment_count is defined in the model or elsewhere
         return getattr(obj, 'get_comment_count', lambda: 0)()
 
     def get_night_count(self, obj):
@@ -104,8 +102,7 @@ class HotelSummarySerializer(serializers.ModelSerializer):
                     return (check_out_date - check_in_date).days
                 except ValueError:
                     pass
-        return 1  # Default to 1 night if not provided
-
+        return 1
 
 # ------------------ Article Summary ------------------
 class ArticleSummarySerializer(serializers.ModelSerializer):
