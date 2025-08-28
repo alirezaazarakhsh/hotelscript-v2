@@ -4,15 +4,13 @@ from .models import FavoriteCollection, Favorite
 from blog.models import Article
 from reservation.models import Hotel, City, Province
 
-
-# --- Province Serializer ---
+# ------------------ Province ------------------
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Province
         fields = ("id", "name")
 
-
-# --- City Serializer ---
+# ------------------ City ------------------
 class CitySerializer(serializers.ModelSerializer):
     province = serializers.CharField(source="province.name", read_only=True)
     hotels_number = serializers.SerializerMethodField()
@@ -24,36 +22,33 @@ class CitySerializer(serializers.ModelSerializer):
     def get_hotels_number(self, obj):
         return obj.hotels.count()
 
-
-# --- Hotel Summary Serializer ---
+# ------------------ Hotel Summary ------------------
 class HotelSummarySerializer(serializers.ModelSerializer):
     city = CitySerializer(read_only=True)
-    type = serializers.CharField(source="type.title", read_only=True)
+    residence_type = serializers.CharField(source="type.title", read_only=True)
 
-    original_total_price = serializers.IntegerField(source="get_original_total_price", read_only=True)
-    total_price = serializers.IntegerField(source="get_total_price", read_only=True)
+    price = serializers.IntegerField(source="get_original_total_price", read_only=True)
+    price_after_discount = serializers.IntegerField(source="get_total_price", read_only=True)
     discount_percentage = serializers.IntegerField(source="get_discount_percentage", read_only=True)
-    discount_expiry = serializers.DateTimeField(source="get_discount_expiry", read_only=True)
+    discount_date = serializers.DateTimeField(source="get_discount_expiry", read_only=True)
     average_score = serializers.FloatField(source="get_average_score", read_only=True)
+    comment_count = serializers.IntegerField(source="get_comment_count", read_only=True)
 
     class Meta:
         model = Hotel
         fields = (
-            "id", "name", "slug", "city", "address", "main_image", "stars", "type",
-            "is_special_offer", "is_flash_sale", "is_best_seller",
-            "original_total_price", "total_price", "discount_percentage", "discount_expiry",
-            "rating", "reservation_count", "average_score",
+            "id", "name", "slug", "city", "address", "main_image", "stars", "residence_type",
+            "price", "price_after_discount", "discount_percentage", "discount_date",
+            "rating", "average_score", "comment_count", "reservation_count", "public_tags"
         )
 
-
-# --- Article Summary Serializer ---
+# ------------------ Article Summary ------------------
 class ArticleSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = ("id", "title", "slug", "summary", "thumbnail", "published_date")
 
-
-# --- Favorite Item Serializer ---
+# ------------------ Favorite Item ------------------
 class FavoriteItemSerializer(serializers.ModelSerializer):
     item_detail = serializers.SerializerMethodField()
 
@@ -68,15 +63,13 @@ class FavoriteItemSerializer(serializers.ModelSerializer):
             return {"type": "article", **ArticleSummarySerializer(obj.item, context=self.context).data}
         return None
 
-
-# --- Favorite Collection Create Serializer ---
+# ------------------ Collection Create ------------------
 class FavoriteCollectionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FavoriteCollection
         fields = ("id", "title")
 
-
-# --- Base Collection Serializer (with thumbnails) ---
+# ------------------ Collection Base ------------------
 class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
     thumbnails = serializers.SerializerMethodField()
 
@@ -93,28 +86,9 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
                 thumbs.append(fav.item.thumbnail.url)
         return thumbs
 
-
-# --- Hotel Favorite Collection Serializer ---
-class HotelFavoriteCollectionSerializer(BaseFavoriteCollectionSerializer):
-    favorites = serializers.SerializerMethodField()
-
-    class Meta(BaseFavoriteCollectionSerializer.Meta):
-        fields = BaseFavoriteCollectionSerializer.Meta.fields + ("favorites",)
-
-    def get_favorites(self, obj):
-        hotel_type = ContentType.objects.get(app_label="reservation", model="hotel")
-        favorites = obj.favorites.filter(item_content_type=hotel_type)
-        return FavoriteItemSerializer(favorites, many=True, context=self.context).data
-
-
-# --- Article Favorite Collection Serializer ---
-class ArticleFavoriteCollectionSerializer(BaseFavoriteCollectionSerializer):
-    favorites = serializers.SerializerMethodField()
+# ------------------ Collection With Items ------------------
+class FavoriteCollectionDetailSerializer(BaseFavoriteCollectionSerializer):
+    favorites = FavoriteItemSerializer(many=True, read_only=True)
 
     class Meta(BaseFavoriteCollectionSerializer.Meta):
         fields = BaseFavoriteCollectionSerializer.Meta.fields + ("favorites",)
-
-    def get_favorites(self, obj):
-        article_type = ContentType.objects.get(app_label="blog", model="article")
-        favorites = obj.favorites.filter(item_content_type=article_type)
-        return FavoriteItemSerializer(favorites, many=True, context=self.context).data

@@ -1,26 +1,19 @@
 from django.urls import path
 from .views import (
-    HotelFavoriteCollectionListCreateAPI,
-    HotelFavoriteCollectionDetailAPI,
-    HotelFavoriteItemRemoveAPI,
-    ArticleFavoriteCollectionListCreateAPI,
-    ArticleFavoriteCollectionDetailAPI,
-    ArticleFavoriteItemRemoveAPI,
+    FavoriteCollectionListCreateAPI,
+    FavoriteCollectionDetailAPI,
+    FavoriteItemListCreateAPI,
+    FavoriteItemDetailAPI,
 )
+
 app_name = "favorites"
+
 urlpatterns = [
-    # هتل‌ها
-    path("hotels/", HotelFavoriteCollectionListCreateAPI.as_view(), name="hotel-favorite-collections"),
-    path("hotels/<int:pk>/", HotelFavoriteCollectionDetailAPI.as_view(), name="hotel-favorite-collection-detail"),
-    path("hotels/<int:collection_id>/items/<int:item_id>/remove/", HotelFavoriteItemRemoveAPI.as_view(), name="hotel-favorite-item-remove"),
+    # کالکشن‌ها
+    path("collections/", FavoriteCollectionListCreateAPI.as_view(), name="favorite-collections"),
+    path("collections/<int:pk>/", FavoriteCollectionDetailAPI.as_view(), name="favorite-collection-detail"),
 
-    # مقالات
-    path("articles/", ArticleFavoriteCollectionListCreateAPI.as_view(), name="article-favorite-collections"),
-    path("articles/<int:pk>/", ArticleFavoriteCollectionDetailAPI.as_view(), name="article-favorite-collection-detail"),
-    path("articles/<int:collection_id>/items/<int:item_id>/remove/", ArticleFavoriteItemRemoveAPI.as_view(), name="article-favorite-item-remove"),
+    # آیتم‌های داخل کالکشن
+    path("collections/<int:pk>/items/", FavoriteItemListCreateAPI.as_view(), name="favorite-items"),
+    path("collections/<int:pk>/items/<int:item_id>/", FavoriteItemDetailAPI.as_view(), name="favorite-item-detail"),
 ]
-
- 
- 
- 
- 
