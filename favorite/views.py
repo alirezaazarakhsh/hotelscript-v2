@@ -4,7 +4,7 @@ from rest_framework import permissions, status
 from drf_yasg.utils import swagger_auto_schema
 from django.contrib.contenttypes.models import ContentType
 
-from .models import FavoriteCollection
+from .models import FavoriteCollection, Favorite
 from .serializers import (
     FavoriteCollectionCreateSerializer,
     HotelFavoriteCollectionSerializer,
@@ -17,8 +17,8 @@ class HotelFavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست کالکشن‌های هتل",
-        tags=["favorites-panel"],
+        operation_summary="لیست علاقه‌مندی‌های هتل",
+        tags=["favorites"],
         responses={200: HotelFavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
@@ -29,8 +29,8 @@ class HotelFavoriteCollectionListCreateAPI(APIView):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="ایجاد کالکشن هتل",
-        tags=["favorites-panel"],
+        operation_summary="ایجاد علاقه‌مندی هتل",
+        tags=["favorites"],
         request_body=FavoriteCollectionCreateSerializer,
         responses={201: HotelFavoriteCollectionSerializer},
     )
@@ -47,8 +47,8 @@ class HotelFavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="جزئیات یک کالکشن هتل",
-        tags=["favorites-panel"],
+        operation_summary="جزئیات علاقه‌مندی هتل",
+        tags=["favorites"],
         responses={200: HotelFavoriteCollectionSerializer},
     )
     def get(self, request, pk):
@@ -56,21 +56,19 @@ class HotelFavoriteCollectionDetailAPI(APIView):
             user=request.user, id=pk, favorites__item_content_type__model="hotel"
         ).distinct().first()
         if not collection:
-            return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "لیست یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         serializer = HotelFavoriteCollectionSerializer(collection, context={"request": request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="حذف کالکشن هتل",
-        tags=["favorites-panel"],
+        operation_summary="حذف یک علاقه‌مندی هتل",
+        tags=["favorites"],
     )
     def delete(self, request, pk):
-        collection = FavoriteCollection.objects.filter(
-            user=request.user, id=pk, favorites__item_content_type__model="hotel"
-        ).first()
-        if not collection:
-            return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
-        collection.delete()
+        favorite = Favorite.objects.filter(id=pk, list__user=request.user).first()
+        if not favorite:
+            return Response({"detail": "آیتم یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        favorite.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -79,8 +77,8 @@ class ArticleFavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="لیست کالکشن‌های مقاله",
-        tags=["favorites-panel"],
+        operation_summary="لیست علاقه‌مندی‌های مقاله",
+        tags=["favorites"],
         responses={200: ArticleFavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
@@ -91,8 +89,8 @@ class ArticleFavoriteCollectionListCreateAPI(APIView):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="ایجاد کالکشن مقاله",
-        tags=["favorites-panel"],
+        operation_summary="ایجاد علاقه‌مندی مقاله",
+        tags=["favorites"],
         request_body=FavoriteCollectionCreateSerializer,
         responses={201: ArticleFavoriteCollectionSerializer},
     )
@@ -109,8 +107,8 @@ class ArticleFavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="جزئیات یک کالکشن مقاله",
-        tags=["favorites-panel"],
+        operation_summary="جزئیات علاقه‌مندی مقاله",
+        tags=["favorites"],
         responses={200: ArticleFavoriteCollectionSerializer},
     )
     def get(self, request, pk):
@@ -118,19 +116,17 @@ class ArticleFavoriteCollectionDetailAPI(APIView):
             user=request.user, id=pk, favorites__item_content_type__model="article"
         ).distinct().first()
         if not collection:
-            return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "لیست یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
         serializer = ArticleFavoriteCollectionSerializer(collection, context={"request": request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="حذف کالکشن مقاله",
-        tags=["favorites-panel"],
+        operation_summary="حذف یک علاقه‌مندی مقاله",
+        tags=["favorites"],
     )
     def delete(self, request, pk):
-        collection = FavoriteCollection.objects.filter(
-            user=request.user, id=pk, favorites__item_content_type__model="article"
-        ).first()
-        if not collection:
-            return Response({"detail": "کالکشن یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
-        collection.delete()
+        favorite = Favorite.objects.filter(id=pk, list__user=request.user).first()
+        if not favorite:
+            return Response({"detail": "آیتم یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        favorite.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

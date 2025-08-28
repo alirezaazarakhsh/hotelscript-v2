@@ -76,13 +76,27 @@ class FavoriteCollectionCreateSerializer(serializers.ModelSerializer):
         fields = ("id", "title")
 
 
-# --- Hotel Favorite Collection Serializer ---
-class HotelFavoriteCollectionSerializer(serializers.ModelSerializer):
-    favorites = serializers.SerializerMethodField()
+# --- Base Collection Serializer (with 3 thumbnails) ---
+class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
+    thumbnails = serializers.SerializerMethodField()
 
     class Meta:
         model = FavoriteCollection
-        fields = ("id", "title", "favorites")
+        fields = ("id", "title", "favorites", "thumbnails")
+
+    def get_thumbnails(self, obj):
+        thumbs = []
+        for fav in obj.favorites.all()[:3]:
+            if isinstance(fav.item, Hotel):
+                thumbs.append(fav.item.main_image.url if fav.item.main_image else None)
+            elif isinstance(fav.item, Article):
+                thumbs.append(fav.item.thumbnail.url if fav.item.thumbnail else None)
+        return [t for t in thumbs if t]
+
+
+# --- Hotel Favorite Collection Serializer ---
+class HotelFavoriteCollectionSerializer(BaseFavoriteCollectionSerializer):
+    favorites = serializers.SerializerMethodField()
 
     def get_favorites(self, obj):
         hotel_type = ContentType.objects.get(app_label="reservation", model="hotel")
@@ -91,12 +105,8 @@ class HotelFavoriteCollectionSerializer(serializers.ModelSerializer):
 
 
 # --- Article Favorite Collection Serializer ---
-class ArticleFavoriteCollectionSerializer(serializers.ModelSerializer):
+class ArticleFavoriteCollectionSerializer(BaseFavoriteCollectionSerializer):
     favorites = serializers.SerializerMethodField()
-
-    class Meta:
-        model = FavoriteCollection
-        fields = ("id", "title", "favorites")
 
     def get_favorites(self, obj):
         article_type = ContentType.objects.get(app_label="blog", model="article")
