@@ -6,7 +6,6 @@ from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 from reservation.models import Hotel
-from reservation.views import BaseHotelListView
 from .models import FavoriteCollection, Favorite
 from .serializers import (
     FavoriteCollectionCreateSerializer,
@@ -15,6 +14,8 @@ from .serializers import (
     FavoriteItemSerializer,
 )
 from django.utils import timezone
+from datetime import datetime
+from jalali_date import date2jalali
 
 
 # ------------------ لیست کالکشن‌ها ------------------
@@ -54,46 +55,80 @@ class FavoriteCollectionListCreateAPI(APIView):
 
 
 # ------------------ جزئیات کالکشن ------------------
-class FavoriteCollectionDetailAPI(APIView, BaseHotelListView):
+class FavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_average_score(self, hotel):
-        # Fallback if not defined in BaseHotelListView
-        return getattr(hotel, 'average_score', 0.0)
-
-    """
-    # Fallback implementation of get_hotel_min_price_map if not available in BaseHotelListView
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
+        today = date2jalali(timezone.now().date())
+        check_in = self.request.query_params.get('check_in')
+        check_out = self.request.query_params.get('check_out')
+        start_date = today
+        end_date = today
+
+        # Parse check_in and check_out if provided
+        if check_in and check_out:
+            try:
+                start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
+                end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+        # Get user level if authenticated
+        user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
+
         for hotel in hotels:
-            rooms = hotel.rooms.all()  # Assuming a related 'rooms' field
-            if rooms.exists():
-                min_room = rooms.order_by('price').first()
-                original_price = min_room.price or 0
-                discount_value = min_room.discount_value or 0
-                discount_type = min_room.discount_type or 'none'
-                total_price = original_price
-                if discount_type == 'percentage':
-                    total_price = original_price * (1 - discount_value / 100)
-                elif discount_type == 'fixed':
-                    total_price = max(0, original_price - discount_value)
-                hotel_min_price_map[hotel.id] = {
-                    'total_price': int(total_price),
-                    'original_total_price': int(original_price),
-                    'discount_type': discount_type,
-                    'discount_value': discount_value,
-                    'discount_date': min_room.discount_expiry or timezone.now(),
-                }
-            else:
-                hotel_min_price_map[hotel.id] = {
-                    'total_price': 0,
-                    'original_total_price': 0,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                }
+            # Get all rooms for the hotel
+            rooms = hotel.rooms.all()
+            min_total_price = float('inf')
+            min_price_data = {
+                'total_price': 0,
+                'original_total_price': 0,
+                'discount_type': 'none',
+                'discount_value': 0,
+                'discount_date': None,
+            }
+
+            for room in rooms:
+                # Get valid RoomDatePrice entries for the date range and user level
+                date_prices = room.date_prices.filter(
+                    start_date__lte=start_date,
+                    end_date__gte=end_date,
+                    user_level=user_level if user_level else None
+                )
+
+                for date_price in date_prices:
+                    original_price = date_price.price or 0
+                    discount_type = date_price.discount_type or 'none'
+                    discount_value = date_price.discount_value or 0
+                    total_price = original_price
+
+                    # Apply discount if valid
+                    if discount_type == 'percentage' and date_price.discount_date and date_price.discount_date >= today:
+                        total_price = original_price * (1 - discount_value / 100)
+                    elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
+                        total_price = max(0, original_price - discount_value)
+
+                    if total_price < min_total_price:
+                        min_total_price = total_price
+                        min_price_data = {
+                            'total_price': int(total_price),
+                            'original_total_price': int(original_price),
+                            'discount_type': discount_type,
+                            'discount_value': discount_value,
+                            'discount_date': date_price.discount_date,
+                        }
+
+            hotel_min_price_map[hotel.id] = min_price_data
+
         return hotel_min_price_map
-    """
+
+    def get_average_score(self, hotel):
+        from django.db.models import Avg
+        return hotel.comments.aggregate(Avg('score'))['score__avg'] or 0.0
+
+    def get_comment_count(self, hotel):
+        return hotel.comments.count()
 
     @swagger_auto_schema(
         operation_summary="جزئیات یک کالکشن",
@@ -112,7 +147,7 @@ class FavoriteCollectionDetailAPI(APIView, BaseHotelListView):
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)  # From BaseHotelListView
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
@@ -132,46 +167,77 @@ class FavoriteCollectionDetailAPI(APIView, BaseHotelListView):
 
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
-class FavoriteItemListCreateAPI(APIView, BaseHotelListView):
+class FavoriteItemListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_average_score(self, hotel):
-        # Fallback if not defined in BaseHotelListView
-        return getattr(hotel, 'average_score', 0.0)
-
-    """
-    # Fallback implementation of get_hotel_min_price_map if not available in BaseHotelListView
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
+        today = date2jalali(timezone.now().date())
+        check_in = self.request.query_params.get('check_in')
+        check_out = self.request.query_params.get('check_out')
+        start_date = today
+        end_date = today
+
+        # Parse check_in and check_out if provided
+        if check_in and check_out:
+            try:
+                start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
+                end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+        # Get user level if authenticated
+        user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
+
         for hotel in hotels:
-            rooms = hotel.rooms.all()  # Assuming a related 'rooms' field
-            if rooms.exists():
-                min_room = rooms.order_by('price').first()
-                original_price = min_room.price or 0
-                discount_value = min_room.discount_value or 0
-                discount_type = min_room.discount_type or 'none'
-                total_price = original_price
-                if discount_type == 'percentage':
-                    total_price = original_price * (1 - discount_value / 100)
-                elif discount_type == 'fixed':
-                    total_price = max(0, original_price - discount_value)
-                hotel_min_price_map[hotel.id] = {
-                    'total_price': int(total_price),
-                    'original_total_price': int(original_price),
-                    'discount_type': discount_type,
-                    'discount_value': discount_value,
-                    'discount_date': min_room.discount_expiry or timezone.now(),
-                }
-            else:
-                hotel_min_price_map[hotel.id] = {
-                    'total_price': 0,
-                    'original_total_price': 0,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                }
+            rooms = hotel.rooms.all()
+            min_total_price = float('inf')
+            min_price_data = {
+                'total_price': 0,
+                'original_total_price': 0,
+                'discount_type': 'none',
+                'discount_value': 0,
+                'discount_date': None,
+            }
+
+            for room in rooms:
+                date_prices = room.date_prices.filter(
+                    start_date__lte=start_date,
+                    end_date__gte=end_date,
+                    user_level=user_level if user_level else None
+                )
+
+                for date_price in date_prices:
+                    original_price = date_price.price or 0
+                    discount_type = date_price.discount_type or 'none'
+                    discount_value = date_price.discount_value or 0
+                    total_price = original_price
+
+                    if discount_type == 'percentage' and date_price.discount_date and date_price.discount_date >= today:
+                        total_price = original_price * (1 - discount_value / 100)
+                    elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
+                        total_price = max(0, original_price - discount_value)
+
+                    if total_price < min_total_price:
+                        min_total_price = total_price
+                        min_price_data = {
+                            'total_price': int(total_price),
+                            'original_total_price': int(original_price),
+                            'discount_type': discount_type,
+                            'discount_value': discount_value,
+                            'discount_date': date_price.discount_date,
+                        }
+
+            hotel_min_price_map[hotel.id] = min_price_data
+
         return hotel_min_price_map
-    """
+
+    def get_average_score(self, hotel):
+        from django.db.models import Avg
+        return hotel.comments.aggregate(Avg('score'))['score__avg'] or 0.0
+
+    def get_comment_count(self, hotel):
+        return hotel.comments.count()
 
     @swagger_auto_schema(
         operation_summary="دریافت آیتم‌های داخل یک کالکشن",
@@ -187,7 +253,7 @@ class FavoriteItemListCreateAPI(APIView, BaseHotelListView):
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)  # From BaseHotelListView
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
