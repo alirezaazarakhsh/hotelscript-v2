@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
 from .models import FavoriteCollection, Favorite
 from blog.models import Article
-from reservation.models import Hotel, City, Province, Tag
+from reservation.models import Hotel, City, Province, HotelTag  # Updated to import HotelTag
 
 
 # ------------------ Province ------------------
@@ -28,7 +28,7 @@ class CitySerializer(serializers.ModelSerializer):
 # ------------------ Public Tags ------------------
 class PublicTagSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Tag
+        model = HotelTag  # Updated to use HotelTag
         fields = ("id", "title")
 
 
@@ -44,7 +44,7 @@ class HotelSummarySerializer(serializers.ModelSerializer):
     comment_count = serializers.IntegerField(source="get_comment_count", read_only=True, default=0)
     public_tags = PublicTagSerializer(many=True, read_only=True)
     night_count = serializers.SerializerMethodField()
-    rating = serializers.FloatField(read_only=True, default=0.0)  # اطمینان از اینکه rating عدد است
+    rating = serializers.FloatField(read_only=True, default=0.0)  # Ensure rating is a float
 
     class Meta:
         model = Hotel
@@ -56,11 +56,9 @@ class HotelSummarySerializer(serializers.ModelSerializer):
         )
 
     def get_night_count(self, obj):
-        # فرض می‌کنیم تعداد شب‌ها از درخواست یا مدل محاسبه می‌شود
+        # Example: Get night_count from query params or default to 0
         request = self.context.get("request")
-        if request and request.query_params.get("night_count"):
-            return int(request.query_params.get("night_count", 0))
-        return 0  # مقدار پیش‌فرض
+        return int(request.query_params.get("night_count", 0)) if request else 0
 
 
 # ------------------ Article Summary ------------------
@@ -106,7 +104,6 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         for fav in obj.favorites.all()[:3]:
             if isinstance(fav.item, Hotel) and fav.item.main_image:
-                # تولید URL کامل با استفاده از request
                 url = request.build_absolute_uri(fav.item.main_image.url) if request else fav.item.main_image.url
                 thumbs.append(url)
             elif isinstance(fav.item, Article) and fav.item.thumbnail:
