@@ -398,7 +398,7 @@ class FavoriteHotelStatusAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="بررسی وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
-        operation_description="این API وضعیت فعال بودن (is_active) یک هتل خاص در لیست علاقه‌مندی‌ها را برمی‌گرداند.",
+        operation_description="این API بررسی می‌کند که یک هتل خاص در لیست علاقه‌مندی‌های کاربر فعال است یا خیر.",
         tags=["favorite-website"],
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -408,17 +408,21 @@ class FavoriteHotelStatusAPI(APIView):
         )}
     )
     def get(self, request, hotel_id):
+        content_type = ContentType.objects.get_for_model(Hotel)
+
+        # بررسی اینکه آیا هتل فعال در هر کالکشن کاربر وجود دارد یا خیر
         is_active = Favorite.objects.filter(
             list__user=request.user,
-            item_content_type=ContentType.objects.get_for_model(Hotel),
+            item_content_type=content_type,
             item_object_id=hotel_id,
-            is_active=True,   # 🔹 بررسی فقط روی رکوردهای فعال
+            is_active=True,
         ).exists()
+
         return Response({"is_active": is_active}, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_summary="ویرایش وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
-        operation_description="این API وضعیت فعال بودن (is_active) یک هتل خاص در لیست علاقه‌مندی‌ها را ویرایش می‌کند.",
+        operation_summary="تغییر وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
+        operation_description="این API وضعیت فعال بودن یک هتل خاص در لیست علاقه‌مندی‌ها را تغییر می‌دهد.",
         tags=["favorite-website"],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -430,24 +434,25 @@ class FavoriteHotelStatusAPI(APIView):
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده فعال بودن هتل")
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده هتل")
             }
         )}
     )
     def put(self, request, hotel_id):
-        favorite = Favorite.objects.filter(
+        content_type = ContentType.objects.get_for_model(Hotel)
+        favorites = Favorite.objects.filter(
             list__user=request.user,
-            item_content_type=ContentType.objects.get_for_model(Hotel),
+            item_content_type=content_type,
             item_object_id=hotel_id
-        ).first()
+        )
 
-        if not favorite:
+        if not favorites.exists():
             return Response({"error": "هتل در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
         is_active = request.data.get("is_active")
         if isinstance(is_active, bool):
-            favorite.is_active = is_active
-            favorite.save()
-            return Response({"is_active": favorite.is_active}, status=status.HTTP_200_OK)
+            # اعمال تغییر روی همه رکوردهای هتل برای این کاربر
+            favorites.update(is_active=is_active)
+            return Response({"is_active": is_active}, status=status.HTTP_200_OK)
 
         return Response({"error": "مقدار is_active معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
