@@ -392,7 +392,7 @@ class FavoriteItemDetailAPI(APIView):
     
     
     
-    
+#ای پی ای فیوریت هتل برای صفحه داخلی هتل     
 class FavoriteHotelStatusAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -409,7 +409,7 @@ class FavoriteHotelStatusAPI(APIView):
     )
     def get(self, request, hotel_id):
         favorite = Favorite.objects.filter(
-            user=request.user,
+            list__user=request.user,   # 🔹 تغییر داده شد
             item_content_type=ContentType.objects.get_for_model(Hotel),
             item_object_id=hotel_id
         ).first()
@@ -436,7 +436,7 @@ class FavoriteHotelStatusAPI(APIView):
     )
     def put(self, request, hotel_id):
         favorite = Favorite.objects.filter(
-            user=request.user,
+            list__user=request.user,   # 🔹 تغییر داده شد
             item_content_type=ContentType.objects.get_for_model(Hotel),
             item_object_id=hotel_id
         ).first()
@@ -445,8 +445,9 @@ class FavoriteHotelStatusAPI(APIView):
             return Response({"error": "هتل در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
         is_active = request.data.get("is_active")
-        if is_active is not None and isinstance(is_active, bool):
+        if isinstance(is_active, bool):
             favorite.is_active = is_active
             favorite.save()
             return Response({"is_active": favorite.is_active}, status=status.HTTP_200_OK)
+
         return Response({"error": "مقدار is_active معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
