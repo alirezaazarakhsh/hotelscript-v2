@@ -5,6 +5,7 @@ from drf_yasg.utils import swagger_auto_schema
 from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
+from rest_framework.pagination import PageNumberPagination
 from reservation.models import Hotel
 from .models import FavoriteCollection, Favorite
 from .serializers import (
@@ -21,22 +22,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ------------------ لیست کالکشن‌ها ------------------
+class FavoriteCollectionPagination(PageNumberPagination):
+    page_size = 10  # Number of collections per page
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class FavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = FavoriteCollectionPagination
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست کالکشن‌های علاقه‌مندی",
         operation_description="""
         این API تمامی کالکشن‌های علاقه‌مندی (چه هتل و چه مقاله) را نمایش می‌دهد.
         هر کالکشن شامل شناسه، عنوان و تعدادی تصویر thumbnail از آیتم‌های داخل لیست است.
+        پاسخ‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
         responses={200: BaseFavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
         collections = FavoriteCollection.objects.filter(user=request.user)
-        serializer = BaseFavoriteCollectionSerializer(collections, many=True, context={"request": request})
-        return Response(serializer.data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(collections, request)
+        serializer = BaseFavoriteCollectionSerializer(page, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ایجاد کالکشن علاقه‌مندی جدید",
@@ -56,9 +66,16 @@ class FavoriteCollectionListCreateAPI(APIView):
         return Response(serializer.errors, status=400)
 
 
+
 # ------------------ جزئیات کالکشن ------------------
+class FavoriteCollectionDetailPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class FavoriteCollectionDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = FavoriteCollectionDetailPagination
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
@@ -68,7 +85,6 @@ class FavoriteCollectionDetailAPI(APIView):
         start_date = today
         end_date = today
 
-        # Parse check_in and check_out if provided
         if check_in and check_out:
             try:
                 start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
@@ -76,7 +92,6 @@ class FavoriteCollectionDetailAPI(APIView):
             except ValueError:
                 logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
 
-        # Get user level if authenticated
         user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
         logger.debug(f"User level: {user_level}")
 
@@ -91,7 +106,6 @@ class FavoriteCollectionDetailAPI(APIView):
                 'discount_date': None,
             }
 
-            # First try: filter by date range and user level
             for room in rooms:
                 date_prices = room.date_prices.filter(
                     start_date__lte=start_date,
@@ -101,7 +115,6 @@ class FavoriteCollectionDetailAPI(APIView):
                 logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
 
                 if not date_prices.exists() and user_level:
-                    # Fallback: try without user_level
                     date_prices = room.date_prices.filter(
                         start_date__lte=start_date,
                         end_date__gte=end_date,
@@ -110,7 +123,6 @@ class FavoriteCollectionDetailAPI(APIView):
                     logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
 
                 if not date_prices.exists():
-                    # Fallback: get any valid price for the room
                     date_prices = room.date_prices.filter(
                         end_date__gte=today,
                         user_level__isnull=True
@@ -159,6 +171,7 @@ class FavoriteCollectionDetailAPI(APIView):
         operation_description="""
         این API جزئیات کامل یک کالکشن خاص را برمی‌گرداند.
         شامل لیست کامل آیتم‌ها (مقالات یا هتل‌ها) به همراه اطلاعات خلاصه هر آیتم.
+        آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
         responses={200: FavoriteCollectionDetailSerializer},
@@ -171,13 +184,18 @@ class FavoriteCollectionDetailAPI(APIView):
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+        
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(hotels, request)
+        
+        hotel_min_price_map = self.get_hotel_min_price_map(page)
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'view': self
         }
-        return Response(FavoriteCollectionDetailSerializer(collection, context=context).data)
+        serializer = FavoriteCollectionDetailSerializer(collection, context=context)
+        return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="حذف یک کالکشن",
@@ -188,7 +206,9 @@ class FavoriteCollectionDetailAPI(APIView):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
         collection.delete()
         return Response(status=204)
-
+    
+    
+    
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
 class FavoriteItemListCreateAPI(APIView):
