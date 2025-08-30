@@ -408,12 +408,12 @@ class FavoriteHotelStatusAPI(APIView):
         )}
     )
     def get(self, request, hotel_id):
-        favorite = Favorite.objects.filter(
-            list__user=request.user,   # 🔹 تغییر داده شد
+        is_active = Favorite.objects.filter(
+            list__user=request.user,
             item_content_type=ContentType.objects.get_for_model(Hotel),
-            item_object_id=hotel_id
-        ).first()
-        is_active = bool(favorite) and getattr(favorite, 'is_active', False)
+            item_object_id=hotel_id,
+            is_active=True,   # 🔹 بررسی فقط روی رکوردهای فعال
+        ).exists()
         return Response({"is_active": is_active}, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -436,7 +436,7 @@ class FavoriteHotelStatusAPI(APIView):
     )
     def put(self, request, hotel_id):
         favorite = Favorite.objects.filter(
-            list__user=request.user,   # 🔹 تغییر داده شد
+            list__user=request.user,
             item_content_type=ContentType.objects.get_for_model(Hotel),
             item_object_id=hotel_id
         ).first()
