@@ -7,6 +7,9 @@ from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.pagination import PageNumberPagination
 from reservation.models import Hotel
+from reservation.serializers import HotelListSerializer
+from django.db.models import Avg
+from datetime import timedelta, datetime  
 from .models import FavoriteCollection, Favorite
 from .serializers import (
     FavoriteCollectionCreateSerializer,
