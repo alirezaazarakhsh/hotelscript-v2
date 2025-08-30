@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.pagination import PageNumberPagination
+from blog.models import Article
 from reservation.models import Hotel
 from .serializers import (
     FavoriteCollectionCreateSerializer,
