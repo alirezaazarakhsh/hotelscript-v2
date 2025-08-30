@@ -2,9 +2,9 @@ from django.urls import path
 from .views import (
     FavoriteCollectionListCreateAPI,
     FavoriteCollectionDetailAPI,
-    FavoriteHotelStatusAPI,
     FavoriteItemListCreateAPI,
     FavoriteItemDetailAPI,
+    FavoriteItemStatusAPI,
 )
 
 app_name = "favorites"
@@ -19,5 +19,5 @@ urlpatterns = [
     path("collections/<int:pk>/items/<int:item_id>/", FavoriteItemDetailAPI.as_view(), name="favorite-item-detail"),
     
     # وضعیت هتل در علاقه‌مندی‌ها
-    path("hotels/<int:hotel_id>/status/", FavoriteHotelStatusAPI.as_view(), name="favorite-hotel-status"),
+path("favorites/<int:item_id>/status/", FavoriteItemStatusAPI.as_view(), name="favorite-item-status"),
 ]

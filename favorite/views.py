@@ -393,65 +393,84 @@ class FavoriteItemDetailAPI(APIView):
     
     
 #ای پی ای فیوریت هتل برای صفحه داخلی هتل     
-class FavoriteHotelStatusAPI(APIView):
+class FavoriteItemStatusAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="بررسی وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
-        operation_description="این API بررسی می‌کند که یک هتل خاص در لیست علاقه‌مندی‌های کاربر فعال است یا خیر.",
+        operation_summary="بررسی وضعیت فعال بودن آیتم در لیست علاقه‌مندی‌ها",
+        operation_description="این API بررسی می‌کند که یک آیتم (هتل یا مقاله) در لیست علاقه‌مندی‌های کاربر فعال است یا خیر.",
         tags=["favorite-website"],
+        manual_parameters=[
+            openapi.Parameter(
+                "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
+            )
+        ],
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت فعال بودن هتل")
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت فعال بودن آیتم")
             }
         )}
     )
-    def get(self, request, hotel_id):
-        content_type = ContentType.objects.get_for_model(Hotel)
+    def get(self, request, item_id):
+        item_type = request.query_params.get("type")
+        if item_type not in ["hotel", "article"]:
+            return Response({"error": "نوع آیتم معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی اینکه آیا هتل فعال در هر کالکشن کاربر وجود دارد یا خیر
+        model = Hotel if item_type == "hotel" else Article
+        content_type = ContentType.objects.get_for_model(model)
+
         is_active = Favorite.objects.filter(
             list__user=request.user,
             item_content_type=content_type,
-            item_object_id=hotel_id,
+            item_object_id=item_id,
             is_active=True,
         ).exists()
 
         return Response({"is_active": is_active}, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_summary="تغییر وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
-        operation_description="این API وضعیت فعال بودن یک هتل خاص در لیست علاقه‌مندی‌ها را تغییر می‌دهد.",
+        operation_summary="تغییر وضعیت فعال بودن آیتم در لیست علاقه‌مندی‌ها",
+        operation_description="این API وضعیت فعال بودن یک آیتم (هتل یا مقاله) را تغییر می‌دهد.",
         tags=["favorite-website"],
+        manual_parameters=[
+            openapi.Parameter(
+                "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
+            )
+        ],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید فعال بودن هتل")
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید فعال بودن آیتم")
             },
             required=["is_active"]
         ),
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده هتل")
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده آیتم")
             }
         )}
     )
-    def put(self, request, hotel_id):
-        content_type = ContentType.objects.get_for_model(Hotel)
+    def put(self, request, item_id):
+        item_type = request.query_params.get("type")
+        if item_type not in ["hotel", "article"]:
+            return Response({"error": "نوع آیتم معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
+
+        model = Hotel if item_type == "hotel" else Article
+        content_type = ContentType.objects.get_for_model(model)
+
         favorites = Favorite.objects.filter(
             list__user=request.user,
             item_content_type=content_type,
-            item_object_id=hotel_id
+            item_object_id=item_id
         )
 
         if not favorites.exists():
-            return Response({"error": "هتل در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "آیتم در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
         is_active = request.data.get("is_active")
         if isinstance(is_active, bool):
-            # اعمال تغییر روی همه رکوردهای هتل برای این کاربر
             favorites.update(is_active=is_active)
             return Response({"is_active": is_active}, status=status.HTTP_200_OK)
 
