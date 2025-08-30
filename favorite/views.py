@@ -398,8 +398,8 @@ class FavoriteItemStatusAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="بررسی وضعیت فعال بودن آیتم در لیست علاقه‌مندی‌ها",
-        operation_description="این API بررسی می‌کند که یک آیتم (هتل یا مقاله) در لیست علاقه‌مندی‌های کاربر فعال است یا خیر.",
+        operation_summary="بررسی وضعیت علاقه‌مندی آیتم",
+        operation_description="این API بررسی می‌کند که یک آیتم (هتل یا مقاله) در لیست علاقه‌مندی‌های کاربر موجود است یا خیر.",
         tags=["favorite-website"],
         manual_parameters=[
             openapi.Parameter(
@@ -409,7 +409,7 @@ class FavoriteItemStatusAPI(APIView):
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت فعال بودن آیتم")
+                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت علاقه‌مندی آیتم")
             }
         )}
     )
@@ -421,18 +421,18 @@ class FavoriteItemStatusAPI(APIView):
         model = Hotel if item_type == "hotel" else Article
         content_type = ContentType.objects.get_for_model(model)
 
-        is_active = Favorite.objects.filter(
+        is_favorited = Favorite.objects.filter(
             list__user=request.user,
             item_content_type=content_type,
             item_object_id=item_id,
-            is_active=True,
+            is_active=True,  # منطق داخلی همان است
         ).exists()
 
-        return Response({"is_active": is_active}, status=status.HTTP_200_OK)
+        return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_summary="تغییر وضعیت فعال بودن آیتم در لیست علاقه‌مندی‌ها",
-        operation_description="این API وضعیت فعال بودن یک آیتم (هتل یا مقاله) را تغییر می‌دهد.",
+        operation_summary="تغییر وضعیت علاقه‌مندی آیتم",
+        operation_description="این API وضعیت علاقه‌مندی یک آیتم (هتل یا مقاله) را تغییر می‌دهد.",
         tags=["favorite-website"],
         manual_parameters=[
             openapi.Parameter(
@@ -442,14 +442,14 @@ class FavoriteItemStatusAPI(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید فعال بودن آیتم")
+                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید علاقه‌مندی آیتم")
             },
-            required=["is_active"]
+            required=["is_favorited"]
         ),
         responses={200: openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده آیتم")
+                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده آیتم")
             }
         )}
     )
@@ -470,9 +470,9 @@ class FavoriteItemStatusAPI(APIView):
         if not favorites.exists():
             return Response({"error": "آیتم در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
-        is_active = request.data.get("is_active")
-        if isinstance(is_active, bool):
-            favorites.update(is_active=is_active)
-            return Response({"is_active": is_active}, status=status.HTTP_200_OK)
+        is_favorited = request.data.get("is_favorited")
+        if isinstance(is_favorited, bool):
+            favorites.update(is_active=is_favorited)  # منطق دیتابیس همان است
+            return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
-        return Response({"error": "مقدار is_active معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "مقدار is_favorited معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
