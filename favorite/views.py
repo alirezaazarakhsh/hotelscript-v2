@@ -68,6 +68,8 @@ class FavoriteCollectionListCreateAPI(APIView):
 
 
 # ------------------ جزئیات کالکشن ------------------
+logger = logging.getLogger(__name__)
+
 class FavoriteCollectionDetailPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -83,7 +85,7 @@ class FavoriteCollectionDetailAPI(APIView):
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
-        end_date = today
+        end_date = today + timedelta(days=1)  # پیش‌فرض: یک شب
 
         if check_in and check_out:
             try:
@@ -91,6 +93,8 @@ class FavoriteCollectionDetailAPI(APIView):
                 end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
             except ValueError:
                 logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
+                start_date = today
+                end_date = today + timedelta(days=1)
 
         user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
         logger.debug(f"User level: {user_level}")
@@ -104,6 +108,7 @@ class FavoriteCollectionDetailAPI(APIView):
                 'discount_type': 'none',
                 'discount_value': 0,
                 'discount_date': None,
+                'is_flash_sale': hotel.is_flash_sale
             }
 
             for room in rooms:
@@ -129,6 +134,10 @@ class FavoriteCollectionDetailAPI(APIView):
                     ).order_by('price')
                     logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
 
+                if hotel.is_flash_sale:
+                    date_prices = date_prices.filter(is_flash_sale=True)
+                    logger.debug(f"Hotel {hotel.id} is flash sale, filtering for flash sale prices: {date_prices.count()}")
+
                 for date_price in date_prices:
                     original_price = date_price.price or 0
                     discount_type = date_price.discount_type or 'none'
@@ -139,6 +148,8 @@ class FavoriteCollectionDetailAPI(APIView):
                         total_price = original_price * (1 - discount_value / 100)
                     elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
                         total_price = max(0, original_price - discount_value)
+                    elif hotel.is_flash_sale and hasattr(date_price, 'flash_sale_discount'):
+                        total_price = max(0, original_price - date_price.flash_sale_discount)
 
                     if total_price < min_total_price:
                         min_total_price = total_price
@@ -148,19 +159,19 @@ class FavoriteCollectionDetailAPI(APIView):
                             'discount_type': discount_type,
                             'discount_value': discount_value,
                             'discount_date': date_price.discount_date,
+                            'is_flash_sale': hotel.is_flash_sale
                         }
 
-            if min_total_price == float('inf'):
-                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
-            else:
-                logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
+                if min_total_price == float('inf'):
+                    logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
+                else:
+                    logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
 
             hotel_min_price_map[hotel.id] = min_price_data
 
         return hotel_min_price_map
 
     def get_average_score(self, hotel):
-        from django.db.models import Avg
         return hotel.comments.aggregate(Avg('stars'))['stars__avg'] or 0.0
 
     def get_comment_count(self, hotel):
@@ -170,7 +181,7 @@ class FavoriteCollectionDetailAPI(APIView):
         operation_summary="جزئیات یک کالکشن",
         operation_description="""
         این API جزئیات کامل یک کالکشن خاص را برمی‌گرداند.
-        شامل لیست کامل آیتم‌ها (مقالات یا هتل‌ها) به همراه اطلاعات خلاصه هر آیتم.
+        شامل لیست کامل هتل‌ها به همراه اطلاعات خلاصه هر هتل (مشابه لیست فروش شگفت‌انگیز).
         آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
@@ -184,18 +195,30 @@ class FavoriteCollectionDetailAPI(APIView):
             item_content_type=hotel_content_type
         ).values_list('item_object_id', flat=True)
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
-        
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(hotels, request)
-        
+
         hotel_min_price_map = self.get_hotel_min_price_map(page)
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
-            'view': self
         }
+
+        # سریال‌سازی هتل‌ها با اضافه کردن average_score و comment_count
+        hotels_data = []
+        for hotel in page:
+            serialized = HotelListSerializer(hotel, context=context).data
+            serialized['average_score'] = self.get_average_score(hotel)
+            serialized['comment_count'] = self.get_comment_count(hotel)
+            hotels_data.append(serialized)
+
+        # سریال‌سازی کل کالکشن
         serializer = FavoriteCollectionDetailSerializer(collection, context=context)
-        return paginator.get_paginated_response(serializer.data)
+        response_data = serializer.data
+        response_data['hotels'] = hotels_data
+
+        return paginator.get_paginated_response(response_data)
 
     @swagger_auto_schema(
         operation_summary="حذف یک کالکشن",
@@ -206,8 +229,7 @@ class FavoriteCollectionDetailAPI(APIView):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
         collection.delete()
         return Response(status=204)
-    
-    
+
     
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------

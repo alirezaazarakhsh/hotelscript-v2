@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
+
+from reservation.serializers import HotelListSerializer
 from .models import FavoriteCollection, Favorite
 from blog.models import Article
 from reservation.models import Hotel, City, Province, HotelTag
@@ -164,8 +166,24 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
 
 
 # ------------------ Collection With Items ------------------
-class FavoriteCollectionDetailSerializer(BaseFavoriteCollectionSerializer):
-    favorites = FavoriteItemSerializer(many=True, read_only=True)
+class FavoriteCollectionDetailSerializer(serializers.ModelSerializer):
+    hotels = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FavoriteCollection
+        fields = ('id', 'name', 'hotels')
+
+    def get_hotels(self, obj):
+        hotel_content_type = ContentType.objects.get_for_model(Hotel)
+        favorite_hotels = Favorite.objects.filter(
+            list=obj,
+            item_content_type=hotel_content_type
+        ).values_list('item_object_id', flat=True)
+        hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
+
+        context = self.context
+        serializer = HotelListSerializer(hotels, many=True, context=context)
+        return serializer.data
 
     class Meta(BaseFavoriteCollectionSerializer.Meta):
         fields = BaseFavoriteCollectionSerializer.Meta.fields + ("favorites",)
