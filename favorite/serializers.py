@@ -165,19 +165,21 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
 
 # ------------------ Collection With Items ------------------
 class FavoriteCollectionDetailSerializer(serializers.ModelSerializer):
-    hotels = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
 
     class Meta:
         model = FavoriteCollection
-        fields = ["id", "title", "hotels"]
+        fields = ["id", "title", "items"]
 
-    def get_hotels(self, obj):
-        hotel_content_type = ContentType.objects.get_for_model(Hotel)
-        favorite_hotels = Favorite.objects.filter(
-            list=obj,
-            item_content_type=hotel_content_type
-        ).values_list('item_object_id', flat=True)
-        hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
+    def get_items(self, obj):
+        favorites = Favorite.objects.filter(list=obj).select_related('item_content_type')
+        items_data = []
         context = self.context
-        serializer = HotelSummarySerializer(hotels, many=True, context=context)
-        return serializer.data
+        for favorite in favorites:
+            if isinstance(favorite.item, Hotel):
+                item_serializer = HotelSummarySerializer(favorite.item, context=context)
+                items_data.append({"type": "hotel", **item_serializer.data})
+            elif isinstance(favorite.item, Article):
+                item_serializer = ArticleSummarySerializer(favorite.item, context=context)
+                items_data.append({"type": "article", **item_serializer.data})
+        return items_data

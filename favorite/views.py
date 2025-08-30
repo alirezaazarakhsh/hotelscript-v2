@@ -109,7 +109,7 @@ class FavoriteCollectionDetailAPI(APIView):
             for room in rooms:
                 # تلاش برای یافتن قیمت‌ها با بازه دقیق
                 date_prices = room.date_prices.filter(
-                    start_date__lte=end_date,  # تغییر به end_date برای انعطاف بیشتر
+                    start_date__lte=end_date,
                     end_date__gte=start_date
                 )
                 logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices for range {start_date} to {end_date}")
@@ -175,7 +175,7 @@ class FavoriteCollectionDetailAPI(APIView):
         operation_summary="جزئیات یک کالکشن",
         operation_description="""
         این API جزئیات کامل یک کالکشن خاص را برمی‌گرداند.
-        شامل لیست کامل هتل‌ها به همراه اطلاعات خلاصه هر هتل (مشابه لیست فروش شگفت‌انگیز).
+        شامل لیست کامل آیتم‌ها (هتل یا مقاله) به همراه اطلاعات خلاصه هر آیتم.
         آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
@@ -183,35 +183,26 @@ class FavoriteCollectionDetailAPI(APIView):
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        hotel_content_type = ContentType.objects.get_for_model(Hotel)
-        favorite_hotels = Favorite.objects.filter(
-            list=collection,
-            item_content_type=hotel_content_type
-        ).values_list('item_object_id', flat=True)
-        hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
+        favorites = Favorite.objects.filter(list=collection).select_related('item_content_type')
 
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(hotels, request)
+        page = paginator.paginate_queryset(favorites, request)
 
-        hotel_min_price_map = self.get_hotel_min_price_map(page)
+        # فقط برای هتل‌ها قیمت‌ها را محاسبه می‌کنیم
+        hotel_ids = [f.item_object_id for f in page if isinstance(f.item, Hotel)]
+        hotel_min_price_map = {}
+        if hotel_ids:
+            hotels = Hotel.objects.filter(id__in=hotel_ids).select_related('city', 'type').distinct()
+            hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'view': self
         }
 
-        hotels_data = []
-        for hotel in page:
-            serialized = HotelSummarySerializer(hotel, context=context).data
-            serialized['average_score'] = self.get_average_score(hotel)
-            serialized['comment_count'] = self.get_comment_count(hotel)
-            hotels_data.append(serialized)
-
         serializer = FavoriteCollectionDetailSerializer(collection, context=context)
-        response_data = serializer.data
-        response_data['hotels'] = hotels_data
-
-        return paginator.get_paginated_response(response_data)
+        return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="حذف یک کالکشن",
