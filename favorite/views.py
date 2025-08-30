@@ -7,9 +7,9 @@ from drf_yasg import openapi
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.pagination import PageNumberPagination
 from reservation.models import Hotel
-from reservation.serializers import HotelListSerializer
+from reservation.serializers import HotelSummarySerializer
 from django.db.models import Avg
-from datetime import timedelta, datetime  
+from datetime import timedelta, datetime
 from .models import FavoriteCollection, Favorite
 from .serializers import (
     FavoriteCollectionCreateSerializer,
@@ -18,7 +18,6 @@ from .serializers import (
     FavoriteItemSerializer,
 )
 from django.utils import timezone
-from datetime import datetime
 from jalali_date import date2jalali
 import logging
 
@@ -68,12 +67,7 @@ class FavoriteCollectionListCreateAPI(APIView):
             return Response(BaseFavoriteCollectionSerializer(collection, context={"request": request}).data, status=201)
         return Response(serializer.errors, status=400)
 
-
-
 # ------------------ جزئیات کالکشن ------------------
-
-logger = logging.getLogger(__name__)
-
 class FavoriteCollectionDetailPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -189,7 +183,7 @@ class FavoriteCollectionDetailAPI(APIView):
         آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
-        responses={200: 'FavoriteCollectionDetailSerializer'},
+        responses={200: FavoriteCollectionDetailSerializer},
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
@@ -207,12 +201,13 @@ class FavoriteCollectionDetailAPI(APIView):
         context = {
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
+            'view': self
         }
 
         # سریال‌سازی هتل‌ها با اضافه کردن average_score و comment_count
         hotels_data = []
         for hotel in page:
-            serialized = HotelListSerializer(hotel, context=context).data
+            serialized = HotelSummarySerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             serialized['comment_count'] = self.get_comment_count(hotel)
             hotels_data.append(serialized)
@@ -233,7 +228,6 @@ class FavoriteCollectionDetailAPI(APIView):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
         collection.delete()
         return Response(status=204)
-    
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
 class FavoriteItemListCreateAPI(APIView):
