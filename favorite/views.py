@@ -71,6 +71,7 @@ class FavoriteCollectionListCreateAPI(APIView):
 
 
 # ------------------ جزئیات کالکشن ------------------
+
 logger = logging.getLogger(__name__)
 
 class FavoriteCollectionDetailPagination(PageNumberPagination):
@@ -188,7 +189,7 @@ class FavoriteCollectionDetailAPI(APIView):
         آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
-        responses={200: FavoriteCollectionDetailSerializer},
+        responses={200: 'FavoriteCollectionDetailSerializer'},
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
@@ -232,7 +233,6 @@ class FavoriteCollectionDetailAPI(APIView):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
         collection.delete()
         return Response(status=204)
-
     
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------

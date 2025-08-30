@@ -171,7 +171,7 @@ class FavoriteCollectionDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FavoriteCollection
-        fields = ('id', 'name', 'hotels')
+        fields = ['id', 'name', 'hotels']  
 
     def get_hotels(self, obj):
         hotel_content_type = ContentType.objects.get_for_model(Hotel)
