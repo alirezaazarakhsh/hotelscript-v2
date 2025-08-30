@@ -18,7 +18,6 @@ from django.db.models import Avg
 from datetime import timedelta, datetime
 from .models import FavoriteCollection, Favorite
 from django.utils import timezone
-from jalali_date import date2jalali
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,11 +78,11 @@ class FavoriteCollectionDetailAPI(APIView):
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = timezone.now().date()  # تغییر به تاریخ استاندارد
+        today = timezone.now().date()  # 2025-08-30
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
-        end_date = today + timedelta(days=1)  # پیش‌فرض: یک شب
+        end_date = today + timedelta(days=1)  # 2025-08-31
 
         if check_in and check_out:
             try:
@@ -94,8 +93,7 @@ class FavoriteCollectionDetailAPI(APIView):
                 start_date = today
                 end_date = today + timedelta(days=1)
 
-        user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
-        logger.debug(f"User level: {user_level}")
+        logger.debug(f"Processing hotels for price calculation. Start date: {start_date}, End date: {end_date}")
 
         for hotel in hotels:
             rooms = hotel.rooms.all()
@@ -106,67 +104,62 @@ class FavoriteCollectionDetailAPI(APIView):
                 'discount_type': 'none',
                 'discount_value': 0,
                 'discount_date': None,
-                'is_flash_sale': getattr(hotel, 'is_flash_sale', False)  # بررسی وجود فیلد
             }
 
             for room in rooms:
+                # تلاش برای یافتن قیمت‌ها با بازه دقیق
                 date_prices = room.date_prices.filter(
-                    start_date__lte=start_date,
-                    end_date__gte=end_date,
-                    user_level=user_level if user_level else None
+                    start_date__lte=end_date,  # تغییر به end_date برای انعطاف بیشتر
+                    end_date__gte=start_date
                 )
-                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
+                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices for range {start_date} to {end_date}")
 
-                # اگر با user_level داده‌ای پیدا نشد، به حالت عمومی برمی‌گردیم
-                if not date_prices.exists() and user_level:
-                    date_prices = room.date_prices.filter(
-                        start_date__lte=start_date,
-                        end_date__gte=end_date,
-                        user_level__isnull=True
-                    )
-                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
-
-                # اگر باز هم داده‌ای پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
+                # اگر هیچ قیمتی پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
                 if not date_prices.exists():
                     date_prices = room.date_prices.filter(
-                        end_date__gte=today,
-                        user_level__isnull=True
+                        end_date__gte=today
                     ).order_by('price')
-                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
-
-                # بررسی تخفیف‌های فروش شگفت‌انگیز
-                if getattr(hotel, 'is_flash_sale', False):
-                    date_prices = date_prices.filter(is_flash_sale=True)
-                    logger.debug(f"Hotel {hotel.id} is flash sale, filtering for flash sale prices: {date_prices.count()}")
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices after {today}")
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found price {original_price} for date range")
+                    total_price = original_price
                     discount_type = getattr(date_price, 'discount_type', 'none')
                     discount_value = getattr(date_price, 'discount_value', 0)
-                    total_price = original_price
+                    discount_date = getattr(date_price, 'discount_date', None)
 
-                    if discount_type == 'percentage' and getattr(date_price, 'discount_date', None) and date_price.discount_date >= today:
-                        total_price = original_price * (1 - discount_value / 100)
-                    elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
-                        total_price = max(0, original_price - discount_value)
-                    elif getattr(hotel, 'is_flash_sale', False) and hasattr(date_price, 'flash_sale_discount'):
-                        total_price = max(0, original_price - date_price.flash_sale_discount)
+                    if original_price > 0:  # فقط قیمت‌های غیرصفر را در نظر می‌گیریم
+                        if discount_type == 'percentage' and discount_date and discount_date >= today:
+                            total_price = original_price * (1 - discount_value / 100)
+                        elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
+                            total_price = max(0, original_price - discount_value)
 
-                    if total_price < min_total_price:
-                        min_total_price = total_price
-                        min_price_data = {
-                            'total_price': int(total_price),
-                            'original_total_price': int(original_price),
-                            'discount_type': discount_type,
-                            'discount_value': discount_value,
-                            'discount_date': getattr(date_price, 'discount_date', None),
-                            'is_flash_sale': getattr(hotel, 'is_flash_sale', False)
-                        }
+                        if total_price < min_total_price:
+                            min_total_price = total_price
+                            min_price_data = {
+                                'total_price': int(total_price),
+                                'original_total_price': int(original_price),
+                                'discount_type': discount_type,
+                                'discount_value': discount_value,
+                                'discount_date': discount_date,
+                            }
 
-                if min_total_price == float('inf'):
-                    logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
-                else:
-                    logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
+            if min_total_price == float('inf'):
+                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found with non-zero price")
+                # اگر هیچ قیمتی پیدا نشد، حداقل قیمت موجود را به عنوان پیش‌فرض استفاده می‌کنیم
+                fallback_prices = room.date_prices.filter(price__gt=0).order_by('price').first()
+                if fallback_prices:
+                    min_price_data = {
+                        'total_price': int(fallback_prices.price),
+                        'original_total_price': int(fallback_prices.price),
+                        'discount_type': 'none',
+                        'discount_value': 0,
+                        'discount_date': None,
+                    }
+                    logger.debug(f"Hotel {hotel.id}: Using fallback price {fallback_prices.price}")
+            else:
+                logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
 
             hotel_min_price_map[hotel.id] = min_price_data
 
@@ -207,7 +200,6 @@ class FavoriteCollectionDetailAPI(APIView):
             'view': self
         }
 
-        # سریال‌سازی هتل‌ها با اضافه کردن average_score و comment_count
         hotels_data = []
         for hotel in page:
             serialized = HotelSummarySerializer(hotel, context=context).data
@@ -215,7 +207,6 @@ class FavoriteCollectionDetailAPI(APIView):
             serialized['comment_count'] = self.get_comment_count(hotel)
             hotels_data.append(serialized)
 
-        # سریال‌سازی کل کالکشن
         serializer = FavoriteCollectionDetailSerializer(collection, context=context)
         response_data = serializer.data
         response_data['hotels'] = hotels_data
@@ -238,13 +229,12 @@ class FavoriteItemListCreateAPI(APIView):
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = timezone.now().date()
+        today = timezone.now().date()  # 2025-08-30
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
-        end_date = today
+        end_date = today + timedelta(days=1)  # 2025-08-31
 
-        # Parse check_in and check_out if provided
         if check_in and check_out:
             try:
                 start_date = datetime.strptime(check_in, '%Y-%m-%d').date()
@@ -252,9 +242,7 @@ class FavoriteItemListCreateAPI(APIView):
             except ValueError:
                 logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
 
-        # Get user level if authenticated
-        user_level = getattr(self.request.user, 'user_level', None) if self.request.user.is_authenticated else None
-        logger.debug(f"User level: {user_level}")
+        logger.debug(f"Processing hotels for price calculation. Start date: {start_date}, End date: {end_date}")
 
         for hotel in hotels:
             rooms = hotel.rooms.all()
@@ -268,51 +256,57 @@ class FavoriteItemListCreateAPI(APIView):
             }
 
             for room in rooms:
+                # تلاش برای یافتن قیمت‌ها با بازه دقیق
                 date_prices = room.date_prices.filter(
-                    start_date__lte=start_date,
-                    end_date__gte=end_date,
-                    user_level=user_level if user_level else None
+                    start_date__lte=end_date,
+                    end_date__gte=start_date
                 )
-                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
+                logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices for range {start_date} to {end_date}")
 
-                if not date_prices.exists() and user_level:
-                    date_prices = room.date_prices.filter(
-                        start_date__lte=start_date,
-                        end_date__gte=end_date,
-                        user_level__isnull=True
-                    )
-                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
-
+                # اگر هیچ قیمتی پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
                 if not date_prices.exists():
                     date_prices = room.date_prices.filter(
-                        end_date__gte=today,
-                        user_level__isnull=True
+                        end_date__gte=today
                     ).order_by('price')
-                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices after {today}")
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
+                    logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found price {original_price} for date range")
+                    total_price = original_price
                     discount_type = getattr(date_price, 'discount_type', 'none')
                     discount_value = getattr(date_price, 'discount_value', 0)
-                    total_price = original_price
+                    discount_date = getattr(date_price, 'discount_date', None)
 
-                    if discount_type == 'percentage' and getattr(date_price, 'discount_date', None) and date_price.discount_date >= today:
-                        total_price = original_price * (1 - discount_value / 100)
-                    elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
-                        total_price = max(0, original_price - discount_value)
+                    if original_price > 0:  # فقط قیمت‌های غیرصفر را در نظر می‌گیریم
+                        if discount_type == 'percentage' and discount_date and discount_date >= today:
+                            total_price = original_price * (1 - discount_value / 100)
+                        elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
+                            total_price = max(0, original_price - discount_value)
 
-                    if total_price < min_total_price:
-                        min_total_price = total_price
-                        min_price_data = {
-                            'total_price': int(total_price),
-                            'original_total_price': int(original_price),
-                            'discount_type': discount_type,
-                            'discount_value': discount_value,
-                            'discount_date': getattr(date_price, 'discount_date', None),
-                        }
+                        if total_price < min_total_price:
+                            min_total_price = total_price
+                            min_price_data = {
+                                'total_price': int(total_price),
+                                'original_total_price': int(original_price),
+                                'discount_type': discount_type,
+                                'discount_value': discount_value,
+                                'discount_date': discount_date,
+                            }
 
             if min_total_price == float('inf'):
-                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found")
+                logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found with non-zero price")
+                # اگر هیچ قیمتی پیدا نشد، حداقل قیمت موجود را به عنوان پیش‌فرض استفاده می‌کنیم
+                fallback_prices = room.date_prices.filter(price__gt=0).order_by('price').first()
+                if fallback_prices:
+                    min_price_data = {
+                        'total_price': int(fallback_prices.price),
+                        'original_total_price': int(fallback_prices.price),
+                        'discount_type': 'none',
+                        'discount_value': 0,
+                        'discount_date': None,
+                    }
+                    logger.debug(f"Hotel {hotel.id}: Using fallback price {fallback_prices.price}")
             else:
                 logger.debug(f"Hotel {hotel.id}: Min price data: {min_price_data}")
 
@@ -343,7 +337,6 @@ class FavoriteItemListCreateAPI(APIView):
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
-            ' ENVIRONMENT_VARIABLES'
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'view': self
