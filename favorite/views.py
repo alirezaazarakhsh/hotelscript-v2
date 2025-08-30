@@ -12,7 +12,7 @@ from .serializers import (
     FavoriteCollectionDetailSerializer,
     BaseFavoriteCollectionSerializer,
     FavoriteItemSerializer,
-    HotelSummarySerializer,  # ایمپورت از .serializers به جای reservation.serializers
+    HotelSummarySerializer,
 )
 from django.db.models import Avg
 from datetime import timedelta, datetime
@@ -79,7 +79,7 @@ class FavoriteCollectionDetailAPI(APIView):
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = date2jalali(timezone.now().date())
+        today = timezone.now().date()  # تغییر به تاریخ استاندارد
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
@@ -87,8 +87,8 @@ class FavoriteCollectionDetailAPI(APIView):
 
         if check_in and check_out:
             try:
-                start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
-                end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
+                start_date = datetime.strptime(check_in, '%Y-%m-%d').date()
+                end_date = datetime.strptime(check_out, '%Y-%m-%d').date()
             except ValueError:
                 logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
                 start_date = today
@@ -106,7 +106,7 @@ class FavoriteCollectionDetailAPI(APIView):
                 'discount_type': 'none',
                 'discount_value': 0,
                 'discount_date': None,
-                'is_flash_sale': hotel.is_flash_sale
+                'is_flash_sale': getattr(hotel, 'is_flash_sale', False)  # بررسی وجود فیلد
             }
 
             for room in rooms:
@@ -117,6 +117,7 @@ class FavoriteCollectionDetailAPI(APIView):
                 )
                 logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices with user_level={user_level}")
 
+                # اگر با user_level داده‌ای پیدا نشد، به حالت عمومی برمی‌گردیم
                 if not date_prices.exists() and user_level:
                     date_prices = room.date_prices.filter(
                         start_date__lte=start_date,
@@ -125,6 +126,7 @@ class FavoriteCollectionDetailAPI(APIView):
                     )
                     logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} date prices with user_level=None")
 
+                # اگر باز هم داده‌ای پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
                 if not date_prices.exists():
                     date_prices = room.date_prices.filter(
                         end_date__gte=today,
@@ -132,21 +134,22 @@ class FavoriteCollectionDetailAPI(APIView):
                     ).order_by('price')
                     logger.debug(f"Hotel {hotel.id}, Room {room.id}: Fallback to {date_prices.count()} valid date prices")
 
-                if hotel.is_flash_sale:
+                # بررسی تخفیف‌های فروش شگفت‌انگیز
+                if getattr(hotel, 'is_flash_sale', False):
                     date_prices = date_prices.filter(is_flash_sale=True)
                     logger.debug(f"Hotel {hotel.id} is flash sale, filtering for flash sale prices: {date_prices.count()}")
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
-                    discount_type = date_price.discount_type or 'none'
-                    discount_value = date_price.discount_value or 0
+                    discount_type = getattr(date_price, 'discount_type', 'none')
+                    discount_value = getattr(date_price, 'discount_value', 0)
                     total_price = original_price
 
-                    if discount_type == 'percentage' and date_price.discount_date and date_price.discount_date >= today:
+                    if discount_type == 'percentage' and getattr(date_price, 'discount_date', None) and date_price.discount_date >= today:
                         total_price = original_price * (1 - discount_value / 100)
-                    elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
+                    elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
                         total_price = max(0, original_price - discount_value)
-                    elif hotel.is_flash_sale and hasattr(date_price, 'flash_sale_discount'):
+                    elif getattr(hotel, 'is_flash_sale', False) and hasattr(date_price, 'flash_sale_discount'):
                         total_price = max(0, original_price - date_price.flash_sale_discount)
 
                     if total_price < min_total_price:
@@ -156,8 +159,8 @@ class FavoriteCollectionDetailAPI(APIView):
                             'original_total_price': int(original_price),
                             'discount_type': discount_type,
                             'discount_value': discount_value,
-                            'discount_date': date_price.discount_date,
-                            'is_flash_sale': hotel.is_flash_sale
+                            'discount_date': getattr(date_price, 'discount_date', None),
+                            'is_flash_sale': getattr(hotel, 'is_flash_sale', False)
                         }
 
                 if min_total_price == float('inf'):
@@ -235,7 +238,7 @@ class FavoriteItemListCreateAPI(APIView):
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = date2jalali(timezone.now().date())
+        today = timezone.now().date()
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
@@ -244,8 +247,8 @@ class FavoriteItemListCreateAPI(APIView):
         # Parse check_in and check_out if provided
         if check_in and check_out:
             try:
-                start_date = date2jalali(datetime.strptime(check_in, '%Y-%m-%d').date())
-                end_date = date2jalali(datetime.strptime(check_out, '%Y-%m-%d').date())
+                start_date = datetime.strptime(check_in, '%Y-%m-%d').date()
+                end_date = datetime.strptime(check_out, '%Y-%m-%d').date()
             except ValueError:
                 logger.warning(f"Invalid date format: check_in={check_in}, check_out={check_out}")
 
@@ -289,13 +292,13 @@ class FavoriteItemListCreateAPI(APIView):
 
                 for date_price in date_prices:
                     original_price = date_price.price or 0
-                    discount_type = date_price.discount_type or 'none'
-                    discount_value = date_price.discount_value or 0
+                    discount_type = getattr(date_price, 'discount_type', 'none')
+                    discount_value = getattr(date_price, 'discount_value', 0)
                     total_price = original_price
 
-                    if discount_type == 'percentage' and date_price.discount_date and date_price.discount_date >= today:
+                    if discount_type == 'percentage' and getattr(date_price, 'discount_date', None) and date_price.discount_date >= today:
                         total_price = original_price * (1 - discount_value / 100)
-                    elif discount_type == 'fixed' and date_price.is_fixed_discount_one_time:
+                    elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
                         total_price = max(0, original_price - discount_value)
 
                     if total_price < min_total_price:
@@ -305,7 +308,7 @@ class FavoriteItemListCreateAPI(APIView):
                             'original_total_price': int(original_price),
                             'discount_type': discount_type,
                             'discount_value': discount_value,
-                            'discount_date': date_price.discount_date,
+                            'discount_date': getattr(date_price, 'discount_date', None),
                         }
 
             if min_total_price == float('inf'):
@@ -340,6 +343,7 @@ class FavoriteItemListCreateAPI(APIView):
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
+            ' ENVIRONMENT_VARIABLES'
             'request': request,
             'hotel_min_price_map': hotel_min_price_map,
             'view': self
