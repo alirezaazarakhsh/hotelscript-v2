@@ -144,8 +144,8 @@ def clean_token(value):
         return "کاربر"  # مقدار پیش‌فرض
     return str(value).replace(" ", "").replace("+", "").replace("-", "")
 
-def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_center_name, pattern_section='discountcode'):
-    """ارسال SMS تخفیف برای مرکز خرید"""
+def send_discount_sms(phone_number, user_name, discount_code, location_name, pattern_section='discountcode'):
+    """ارسال SMS تخفیف برای اتاق یا مرکز خرید"""
     try:
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
@@ -165,15 +165,15 @@ def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_
         params = {
             'receptor': phone_number,
             'template': template_obj.pattern_code,
-            'token': clean_token(user_name),
-            'token2': clean_token(discount_code),
-            'token10': shopping_center_name,
+            'token': clean_token(user_name),      # %token -> نام کاربر
+            'token2': clean_token(discount_code), # %token2 -> کد تخفیف
+            'token10': location_name,             # %token10 -> نام اتاق یا مرکز خرید
             'type': 'sms',
         }
 
         logger.info(f"Sending SMS with params: {params}")
         response = api.verify_lookup(params)
-        logger.info(f"Response from Kavenegar (shopping discount): {response}")
+        logger.info(f"Response from Kavenegar (discount): {response}")
         return True
 
     except APIException as e:
@@ -182,25 +182,4 @@ def send_shopping_discount_sms(phone_number, user_name, discount_code, shopping_
         logger.error(f'HTTPException: {str(e)} - Details: {e.args}')
     except Exception as e:
         logger.error(f'Unexpected error: {str(e)}')
-
     return False
-
-@receiver(m2m_changed, sender=ShoppingCenterDiscountCode.users.through)
-def send_shopping_discount_sms_signal(sender, instance, action, pk_set, **kwargs):
-    if action == "post_add":
-        for user_id in pk_set:
-            try:
-                user = BaseUser.objects.get(pk=user_id)
-                profile = getattr(user, 'natural_profile', None)
-                full_name = (f"{profile.first_name or ''} {profile.last_name or ''}".strip()
-                             if profile else "کاربر")
-
-                send_shopping_discount_sms(
-                    phone_number=user.phone_number,
-                    user_name=full_name,
-                    discount_code=instance.code,
-                    shopping_center_name=instance.shopping_center_name
-                )
-            except BaseUser.DoesNotExist:
-                logger.warning(f"User with ID {user_id} does not exist")
-                continue
