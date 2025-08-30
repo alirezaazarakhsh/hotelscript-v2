@@ -388,3 +388,65 @@ class FavoriteItemDetailAPI(APIView):
         favorite = get_object_or_404(Favorite, id=item_id, list__id=pk, list__user=request.user)
         favorite.delete()
         return Response(status=204)
+    
+    
+    
+    
+    
+class FavoriteHotelStatusAPI(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="بررسی وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
+        operation_description="این API وضعیت فعال بودن (is_active) یک هتل خاص در لیست علاقه‌مندی‌ها را برمی‌گرداند.",
+        tags=["favorite-website"],
+        responses={200: openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت فعال بودن هتل")
+            }
+        )}
+    )
+    def get(self, request, hotel_id):
+        favorite = Favorite.objects.filter(
+            user=request.user,
+            item_content_type=ContentType.objects.get_for_model(Hotel),
+            item_object_id=hotel_id
+        ).first()
+        is_active = bool(favorite) and getattr(favorite, 'is_active', False)
+        return Response({"is_active": is_active}, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش وضعیت فعال بودن هتل در لیست علاقه‌مندی‌ها",
+        operation_description="این API وضعیت فعال بودن (is_active) یک هتل خاص در لیست علاقه‌مندی‌ها را ویرایش می‌کند.",
+        tags=["favorite-website"],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید فعال بودن هتل")
+            },
+            required=["is_active"]
+        ),
+        responses={200: openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "is_active": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده فعال بودن هتل")
+            }
+        )}
+    )
+    def put(self, request, hotel_id):
+        favorite = Favorite.objects.filter(
+            user=request.user,
+            item_content_type=ContentType.objects.get_for_model(Hotel),
+            item_object_id=hotel_id
+        ).first()
+
+        if not favorite:
+            return Response({"error": "هتل در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+
+        is_active = request.data.get("is_active")
+        if is_active is not None and isinstance(is_active, bool):
+            favorite.is_active = is_active
+            favorite.save()
+            return Response({"is_active": favorite.is_active}, status=status.HTTP_200_OK)
+        return Response({"error": "مقدار is_active معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
