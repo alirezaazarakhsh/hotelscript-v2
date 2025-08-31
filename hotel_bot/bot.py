@@ -5,15 +5,19 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
 import zipfile
-import shutil
 
 # ================= بارگذاری متغیرهای محیطی =================
-load_dotenv(dotenv_path="hotel_bot/.env")  # مسیر فایل .env
+# استفاده از مسیر مطلق داخل کانتینر
+ENV_PATH = "/app/hotel_bot/.env"
+if os.path.exists(ENV_PATH):
+    load_dotenv(dotenv_path=ENV_PATH)
+else:
+    print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
-PROJECT_DIR = os.getenv("PROJECT_DIR")
-BACKUP_DIR = os.getenv("BACKUP_DIR")
+PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/backups")
 TOKEN = os.getenv("BOT_TOKEN")
-ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS").split(",")))
+ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7  # حداکثر تعداد بکاپ نگهداری شده
 # ===========================================================
 
@@ -23,6 +27,8 @@ def is_allowed(user_id):
 
 # حذف بکاپ‌های قدیمی اگر تعداد بیش از MAX_BACKUPS شد
 def cleanup_old_backups():
+    if not os.path.exists(BACKUP_DIR):
+        os.makedirs(BACKUP_DIR)
     files = sorted(os.listdir(BACKUP_DIR))
     zip_files = [f for f in files if f.endswith(".zip")]
     while len(zip_files) > MAX_BACKUPS:
@@ -57,7 +63,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "backup_now":
         await query.edit_message_text("⏳ در حال گرفتن بکاپ...")
         
-        # نام فایل‌ها
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
         media_file = f"media_{DATE}.tar.gz"
@@ -65,10 +70,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         zip_path = os.path.join(BACKUP_DIR, zip_file)
 
         # گرفتن بکاپ دیتابیس
-        subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", 
-                       shell=True)
+        subprocess.run(
+            f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}",
+            shell=True
+        )
+
         # گرفتن بکاپ مدیا
-        subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True)
+        subprocess.run(
+            f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media",
+            shell=True
+        )
 
         # ایجاد فایل زیپ شامل هر دو
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -82,19 +93,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # حذف بکاپ‌های قدیمی
         cleanup_old_backups()
 
-        # ارسال لینک دانلود (برای ساده‌سازی فرض کردیم فایل در همان سرور قرار دارد)
-        await query.edit_message_text(f"✅ بکاپ گرفته شد! فایل زیپ آماده است:\n`{zip_file}`\nبرای دانلود می‌توانید از FTP یا ابزار مشابه استفاده کنید.")
+        await query.edit_message_text(
+            f"✅ بکاپ گرفته شد! فایل زیپ آماده است:\n`{zip_file}`\nبرای دانلود از FTP یا ابزار مشابه استفاده کنید."
+        )
 
     # لیست بکاپ‌ها
     elif query.data == "list_backups":
+        if not os.path.exists(BACKUP_DIR):
+            os.makedirs(BACKUP_DIR)
         files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")], reverse=True)
         if not files:
             await query.edit_message_text("هیچ بکاپی موجود نیست.")
             return
 
-        keyboard = []
-        for f in files:
-            keyboard.append([InlineKeyboardButton(f, callback_data=f"restore:{f}")])
+        keyboard = [[InlineKeyboardButton(f, callback_data=f"restore:{f}")] for f in files]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
 
@@ -108,12 +120,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(f"⏳ در حال ریستور بکاپ {filename} ...")
         
-        # استخراج فایل زیپ
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(BACKUP_DIR)
+            extracted_files = zf.namelist()
 
-        # مسیر فایل دیتابیس و مدیا
-        extracted_files = zf.namelist()
         db_file = next((f for f in extracted_files if f.endswith(".sql")), None)
         media_file = next((f for f in extracted_files if f.endswith(".tar.gz")), None)
 
@@ -124,18 +134,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db_path = os.path.join(BACKUP_DIR, db_file)
         media_path = os.path.join(BACKUP_DIR, media_file)
 
-        # اجرای ریستور دیتابیس
         subprocess.run(f"cat {db_path} | docker exec -i postgres_db psql -U postgres safarname24", shell=True)
-        # استخراج مدیا
         subprocess.run(f"tar -xzf {media_path} -C {PROJECT_DIR}", shell=True)
 
-        # پاک کردن فایل‌های استخراج شده
         os.remove(db_path)
         os.remove(media_path)
 
         await query.edit_message_text(f"🔄 ریستور انجام شد: {filename}")
 
-# Main
+# ======================== اجرای ربات ========================
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button))
