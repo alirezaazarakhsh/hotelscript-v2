@@ -27,6 +27,7 @@ services:
     networks:
       - app_network
 
+ 
   bot:
     build: .
     container_name: telegram_bot
@@ -48,6 +49,7 @@ services:
       - db
     networks:
       - app_network
+
 
 
     db:
