@@ -3,7 +3,7 @@ from django.dispatch import receiver
 from kavenegar import KavenegarAPI, APIException, HTTPException
 from django.db.models import Q
 from authentication.models import BaseUser
-from bashgah_moshtarian.models import ShoppingCenterDiscountCode
+from bashgah_moshtarian.models import RoomDiscountCode, ShoppingCenterDiscountCode
 from setting_sms.models import KavenegarSMSSetting, SMSPattern
 from django.db.models.signals import m2m_changed
 
@@ -138,20 +138,15 @@ def send_customer_club_deduct_sms(phone_number, user_name, deducted_points, curr
 # اس ام اس تخفیف برای اتاق و مراکز خرید 
 logger = logging.getLogger(__name__)
 
-def clean_token(value):
-    """حذف فاصله و کاراکترهای غیرمجاز از توکن‌های مجاز بدون Space"""
-    if not value:
-        return "کاربر"  # مقدار پیش‌فرض
-    return str(value).replace(" ", "").replace("+", "").replace("-", "")
-
-def send_discount_sms(phone_number, user_name, discount_code, location_name, pattern_section='discountcode'):
-    """ارسال SMS تخفیف برای اتاق یا مرکز خرید"""
+def send_discount_sms(discount_code, user=None, send_to_all=False, pattern_section='discountcode'):
     try:
+        # Get SMS settings
         api_setting = KavenegarSMSSetting.objects.first()
         if not api_setting:
             logger.error("KavenegarSMSSetting not found")
             return False
 
+        # Get SMS pattern
         template_obj = SMSPattern.objects.filter(
             sms_setting=api_setting,
             name_fa=pattern_section
@@ -160,26 +155,65 @@ def send_discount_sms(phone_number, user_name, discount_code, location_name, pat
             logger.error(f"SMSPattern for section '{pattern_section}' not found")
             return False
 
+        # Determine the target name (room or shopping center)
+        target_name = (discount_code.room.name if hasattr(discount_code, 'room')
+                       else discount_code.shopping_center_name)
+
+        # Initialize Kavenegar API
         api = KavenegarAPI(api_setting.api_token)
 
-        params = {
-            'receptor': phone_number,
-            'template': template_obj.pattern_code,
-            'token': clean_token(user_name),      # %token -> نام کاربر
-            'token2': clean_token(discount_code), # %token2 -> کد تخفیف
-            'token10': location_name,             # %token10 -> نام اتاق یا مرکز خرید
-            'type': 'sms',
-        }
+        # Handle single user or all users
+        target_users = [user] if user else discount_code.users.all()
+        if send_to_all and not user:
+            target_users = discount_code.users.all()
+        elif not target_users and user:
+            target_users = [user]
 
-        logger.info(f"Sending SMS with params: {params}")
-        response = api.verify_lookup(params)
-        logger.info(f"Response from Kavenegar (discount): {response}")
-        return True
+        if not target_users:
+            logger.error("No users specified or found in discount_code.users")
+            return False
 
-    except APIException as e:
-        logger.error(f'APIException: {str(e)} - Details: {e.args}')
-    except HTTPException as e:
-        logger.error(f'HTTPException: {str(e)} - Details: {e.args}')
+        success = False
+        for target_user in target_users:
+            # Prepare token values
+            user_name = (discount_code.get_users_with_names()[0] if discount_code.users.filter(id=target_user.id).exists()
+                         else target_user.phone_number)
+            params = {
+                'receptor': target_user.phone_number,
+                'template': template_obj.pattern_code,
+                'token': user_name,  # %token -> User name or phone number
+                'token2': discount_code.code,  # %token2 -> Discount code
+                'token3': discount_code.discount_value,  # %token3 -> Discount value
+                'token10': target_name,  # %token10 -> Room or Shopping Center name
+                'token20': (discount_code.expires_at.strftime('%Y/%m/%d') if discount_code.expires_at
+                            else 'نامحدود'),  # %token20 -> Expiry date
+                'type': 'sms',
+            }
+
+            try:
+                # Send SMS
+                response = api.verify_lookup(params)
+                logger.info(f"Response from Kavenegar for {target_user.phone_number}: {response}")
+                success = True
+            except APIException as e:
+                logger.error(f'APIException for {target_user.phone_number}: {e}')
+            except HTTPException as e:
+                logger.error(f'HTTPException for {target_user.phone_number}: {e}')
+
+        return success
+
     except Exception as e:
-        logger.error(f'Unexpected error: {str(e)}')
-    return False
+        logger.error(f'Unexpected error in send_discount_sms: {e}')
+        return False
+
+# Signal to send SMS when users are added to discount code
+@receiver(m2m_changed, sender=RoomDiscountCode.users.through)
+@receiver(m2m_changed, sender=ShoppingCenterDiscountCode.users.through)
+def send_discount_sms_on_users_added(sender, instance, action, pk_set, **kwargs):
+    """
+    Sends SMS to users added to a discount code's users field.
+    """
+    if action == 'post_add':
+        users = BaseUser.objects.filter(pk__in=pk_set)
+        for user in users:
+            send_discount_sms(instance, user=user)
