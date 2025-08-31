@@ -1,23 +1,26 @@
 FROM python:3.10
 
+# تنظیم مسیر کاری
 WORKDIR /app
 
+# جلوگیری از نوشتن فایل‌های pyc و فعال کردن خروجی فوری
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# نصب dependencies
+# کپی requirements و نصب آنها
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # کپی کل پروژه
 COPY . /app/
 
-# نصب system dependencies
+# نصب system dependencies برای Django و MySQL (در صورت نیاز)
 RUN apt-get update && \
-    apt-get install -y default-libmysqlclient-dev curl && \
+    apt-get install -y default-libmysqlclient-dev curl docker.io && \
     rm -rf /var/lib/apt/lists/*
 
-# اجرای start.sh
-RUN chmod +x /app/start.sh
+# دادن دسترسی اجرایی به اسکریپت‌ها
+RUN chmod +x /app/start.sh /app/backup.sh
 
-CMD ["sh", "-c", "exec ./start.sh"]
+# دستور پیش‌فرض برای اجرای Django
+CMD ["bash", "/app/start.sh"]
