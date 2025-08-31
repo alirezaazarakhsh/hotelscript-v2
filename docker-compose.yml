@@ -30,7 +30,7 @@ services:
   bot:
     build: .
     container_name: telegram_bot
-    command: bash /app/backup.sh
+    command: python /app/bot.py
     volumes:
       - /var/hotelscript-v2:/app
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
@@ -49,17 +49,18 @@ services:
     networks:
       - app_network
 
-  db:
-    image: postgres:15.2
-    container_name: postgres_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_DB: "safarname24"
-      POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "admin"
-    networks:
-      - app_network
+
+    db:
+      image: postgres:15.2
+      container_name: postgres_db
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+      environment:
+        POSTGRES_DB: "safarname24"
+        POSTGRES_USER: "postgres"
+        POSTGRES_PASSWORD: "admin"
+      networks:
+        - app_network
 
   pgadmin:
     image: dpage/pgadmin4:latest
