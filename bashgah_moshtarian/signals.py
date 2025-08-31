@@ -5,7 +5,7 @@ from django.dispatch import receiver
 
 from authentication.models import BaseUser
 from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
-from .sms.sms import send_customer_club_sms, send_customer_club_deduct_sms, send_room_discount_sms, send_shopping_discount_sms
+from .sms.sms import send_customer_club_sms, send_customer_club_deduct_sms, send_discount_sms
 
 # ذخیره مقدار قبلی قبل از تغییر
 @receiver(pre_save, sender=CustomerClubPoint)
