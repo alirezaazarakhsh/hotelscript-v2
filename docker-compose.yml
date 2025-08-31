@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   web:
     build: .
@@ -27,7 +29,6 @@ services:
     networks:
       - app_network
 
- 
   bot:
     build: .
     container_name: telegram_bot
@@ -50,19 +51,17 @@ services:
     networks:
       - app_network
 
-
-
-    db:
-      image: postgres:15.2
-      container_name: postgres_db
-      volumes:
-        - postgres_data:/var/lib/postgresql/data
-      environment:
-        POSTGRES_DB: "safarname24"
-        POSTGRES_USER: "postgres"
-        POSTGRES_PASSWORD: "admin"
-      networks:
-        - app_network
+  db:
+    image: postgres:15.2
+    container_name: postgres_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: "safarname24"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "admin"
+    networks:
+      - app_network
 
   pgadmin:
     image: dpage/pgadmin4:latest
