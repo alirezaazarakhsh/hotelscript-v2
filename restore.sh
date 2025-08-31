@@ -1,33 +1,38 @@
 #!/bin/bash
 
-BACKUP_DIR=/var/backups/sf24_9xkLp7
-
-# آرگومان اول: فایل SQL
 DB_FILE=$1
-# آرگومان دوم: فایل مدیا
 MEDIA_FILE=$2
 
-# چک کردن اگر dummy باشد، skip کند
-if [ "$DB_FILE" != "dummy_db" ] && [ -z "$DB_FILE" ]; then
-  echo "❌ مسیر فایل بکاپ دیتابیس را بدهید"
+# بررسی ورودی‌ها
+if [ "$DB_FILE" = "dummy_db" ] && [ "$MEDIA_FILE" = "dummy_media" ]; then
+  echo "❌ حداقل یکی از فایل‌های دیتابیس یا مدیا باید مشخص شود."
   exit 1
 fi
 
-if [ "$MEDIA_FILE" != "dummy_media" ] && [ -z "$MEDIA_FILE" ]; then
-  echo "❌ مسیر فایل بکاپ مدیا را بدهید"
-  exit 1
-fi
-
-# 1. ریستور دیتابیس اگر dummy نباشد
+# ریستور دیتابیس
 if [ "$DB_FILE" != "dummy_db" ]; then
-  echo "📦 ریستور دیتابیس..."
-  cat $DB_FILE | docker exec -i postgres_db psql -U postgres safarname24
+  if [ ! -f "$DB_FILE" ]; then
+    echo "❌ فایل دیتابیس $DB_FILE وجود ندارد."
+    exit 1
+  fi
+  echo "📦 در حال ریستور دیتابیس از $DB_FILE..."
+  if ! docker exec -i postgres_db psql -U postgres -d safarname24 < $DB_FILE 2>/tmp/restore_db_error.log; then
+    echo "❌ خطا در ریستور دیتابیس: $(cat /tmp/restore_db_error.log)"
+    exit 1
+  fi
 fi
 
-# 2. ریستور مدیا اگر dummy نباشد
+# ریستور مدیا
 if [ "$MEDIA_FILE" != "dummy_media" ]; then
-  echo "🖼 ریستور مدیا..."
-  tar -xzf $MEDIA_FILE -C /var/hotelscript-v2
+  if [ ! -f "$MEDIA_FILE" ]; then
+    echo "❌ فایل مدیا $MEDIA_FILE وجود ندارد."
+    exit 1
+  fi
+  echo "🖼 در حال ریستور مدیا از $MEDIA_FILE..."
+  if ! tar -xzf $MEDIA_FILE -C /var/hotelscript-v2 2>/tmp/restore_media_error.log; then
+    echo "❌ خطا در ریستور مدیا: $(cat /tmp/restore_media_error.log)"
+    exit 1
+  fi
 fi
 
-echo "✅ ریستور انجام شد"
+echo "✅ ریستور با موفقیت انجام شد."
