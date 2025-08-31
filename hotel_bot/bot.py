@@ -18,6 +18,10 @@ TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7
 
+# دیباگ: چاپ مسیرهای اصلی
+print(f"PROJECT_DIR: {PROJECT_DIR}")
+print(f"BACKUP_DIR: {BACKUP_DIR}")
+
 # ===========================================================
 
 def is_allowed(user_id):
@@ -28,12 +32,15 @@ def cleanup_old_backups():
         os.makedirs(BACKUP_DIR)
     files = sorted(os.listdir(BACKUP_DIR))
     zip_files = [f for f in files if f.endswith(".zip") or f.endswith(".tar.gz") or f.endswith(".sql")]
+    print(f"Backup files found: {zip_files}")  # دیباگ
     while len(zip_files) > MAX_BACKUPS:
         oldest = zip_files.pop(0)
+        print(f"Removing old backup: {oldest}")  # دیباگ
         os.remove(os.path.join(BACKUP_DIR, oldest))
 
 def latest_file(extension=None):
     files = [f for f in os.listdir(BACKUP_DIR) if (extension is None or f.endswith(extension))]
+    print(f"Files with extension {extension}: {files}")  # دیباگ
     return sorted(files, reverse=True)[0] if files else None
 
 # ======================== نمایش منوی اصلی ========================
@@ -89,15 +96,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------------- بکاپ کامل ----------------
     if data == "backup_full":
         await query.edit_message_text("⏳ در حال گرفتن بکاپ کامل...")
-        subprocess.run(f"{PROJECT_DIR}/backup.sh", shell=True)
+        print(f"Running backup.sh from {PROJECT_DIR}/backup.sh")  # دیباگ
+        result = subprocess.run(f"{PROJECT_DIR}/backup.sh", shell=True, capture_output=True, text=True)
+        print(f"backup.sh stdout: {result.stdout}")  # دیباگ
+        print(f"backup.sh stderr: {result.stderr}")  # دیباگ
         latest_db = latest_file(".sql")
         latest_media = latest_file(".tar.gz")
+        print(f"Latest DB: {latest_db}, Latest Media: {latest_media}")  # دیباگ
 
         # ارسال فایل‌ها مستقیم به تلگرام
         if latest_db:
-            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_db), "rb"))
+            try:
+                await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_db), "rb"))
+            except Exception as e:
+                print(f"Error sending DB file: {e}")  # دیباگ
+                await query.edit_message_text(f"❌ خطا در ارسال فایل دیتابیس: {e}")
         if latest_media:
-            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_media), "rb"))
+            try:
+                await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_media), "rb"))
+            except Exception as e:
+                print(f"Error sending Media file: {e}")  # دیباگ
+                await query.edit_message_text(f"❌ خطا در ارسال فایل مدیا: {e}")
 
         cleanup_old_backups()
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id, text_prefix="✅ بکاپ کامل انجام شد.\n\n")
@@ -116,8 +135,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⏳ در حال گرفتن بکاپ دیتابیس...")
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
-        subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True)
-        await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, db_file), "rb"))
+        print(f"Running pg_dump for {db_file}")  # دیباگ
+        result = subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True, capture_output=True, text=True)
+        print(f"pg_dump stdout: {result.stdout}")  # دیباگ
+        print(f"pg_dump stderr: {result.stderr}")  # دیباگ
+        try:
+            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, db_file), "rb"))
+        except Exception as e:
+            print(f"Error sending DB file: {e}")  # دیباگ
+            await query.edit_message_text(f"❌ خطا در ارسال فایل دیتابیس: {e}")
         cleanup_old_backups()
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id, text_prefix="✅ بکاپ دیتابیس انجام شد.\n\n")
 
@@ -125,8 +151,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⏳ در حال گرفتن بکاپ مدیا...")
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         media_file = f"media_{DATE}.tar.gz"
-        subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True)
-        await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, media_file), "rb"))
+        print(f"Running tar for {media_file}")  # دیباگ
+        result = subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True, capture_output=True, text=True)
+        print(f"tar stdout: {result.stdout}")  # دیباگ
+        print(f"tar stderr: {result.stderr}")  # دیباگ
+        try:
+            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, media_file), "rb"))
+        except Exception as e:
+            print(f"Error sending Media file: {e}")  # دیباگ
+            await query.edit_message_text(f"❌ خطا در ارسال فایل مدیا: {e}")
         cleanup_old_backups()
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id, text_prefix="✅ بکاپ مدیا انجام شد.\n\n")
 
@@ -135,6 +168,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
         files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".tar.gz") or f.endswith(".sql")], reverse=True)
+        print(f"Listing backups: {files}")  # دیباگ
         if not files:
             keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -164,7 +198,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ فایل پیدا نشد!")
             return
         await query.edit_message_text(f"⏳ در حال ریستور دیتابیس از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh {file_path} dummy_media", shell=True)
+        result = subprocess.run(f"{PROJECT_DIR}/restore.sh {file_path} dummy_media", shell=True, capture_output=True, text=True)
+        print(f"restore.sh stdout: {result.stdout}")  # دیباگ
+        print(f"restore.sh stderr: {result.stderr}")  # دیباگ
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id, text_prefix=f"✅ ریستور دیتابیس انجام شد: {filename}\n\n")
 
     # ---------------- ریستور مدیا ----------------
@@ -175,7 +211,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ فایل پیدا نشد!")
             return
         await query.edit_message_text(f"⏳ در حال ریستور مدیا از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {file_path}", shell=True)
+        result = subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {file_path}", shell=True, capture_output=True, text=True)
+        print(f"restore.sh stdout: {result.stdout}")  # دیباگ
+        print(f"restore.sh stderr: {result.stderr}")  # دیباگ
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id, text_prefix=f"✅ ریستور مدیا انجام شد: {filename}\n\n")
 
     # ---------------- بازگشت به منوی اصلی ----------------
