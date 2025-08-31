@@ -38,6 +38,8 @@ services:
       - .:/app
       - backups:/var/backups/sf24_9xkLp7
       - media_data:/var/hotelscript-v2/media
+      - ./backup.sh:/app/backup.sh          # mount مستقیم اسکریپت بکاپ
+      - ./restore.sh:/app/restore.sh        # mount مستقیم اسکریپت ریستور
     environment:
       BOT_TOKEN: "8454101111:AAFKanZZbaCRuPYb2YwFMWmn1kRed9ClzU0"
       ALLOWED_USERS: "5839876171,341564725"
