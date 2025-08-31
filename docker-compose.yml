@@ -32,7 +32,7 @@ services:
   bot:
     build: .
     container_name: telegram_bot
-    command: python /app/bot.py
+    command: python /app/hotel_bot/bot.py
     volumes:
       - /var/hotelscript-v2:/app
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
