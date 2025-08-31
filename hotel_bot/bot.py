@@ -15,7 +15,7 @@ else:
     print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
 PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/backups")
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/safarnameh")
 TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7  # حداکثر تعداد بکاپ نگهداری شده
