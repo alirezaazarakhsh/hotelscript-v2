@@ -1,41 +1,38 @@
 #!/bin/bash
-
-# مسیر پوشه بکاپ
-BACKUP_DIR=/var/backups/sf24_9xkLp7
-PROJECT_DIR=/var/hotelscript-v2
+# مسیر ذخیره بکاپ
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
+DB_NAME="${DB_NAME:-safarname24}"
+DB_USER="${DB_USER:-postgres}"
+DB_HOST="${DB_HOST:-db}"
+DB_PORT="${DB_PORT:-5432}"
 
-# ایجاد پوشه بکاپ اگر وجود نداشته باشد
 mkdir -p "$BACKUP_DIR"
-if [ ! -w "$BACKUP_DIR" ]; then
-  echo "❌ دسترسی نوشتن به $BACKUP_DIR وجود ندارد"
-  exit 1
-fi
 
-# ---------------- بکاپ دیتابیس ----------------
 echo "📦 در حال بکاپ گرفتن از دیتابیس..."
-DB_FILE="$BACKUP_DIR/db_$DATE.sql"
-if ! docker exec -i postgres_db pg_dump -U postgres safarname24 > "$DB_FILE" 2>/tmp/backup_db_error.log; then
-  echo "❌ خطا در بکاپ دیتابیس: $(cat /tmp/backup_db_error.log)"
-  exit 1
-fi
-echo "✅ بکاپ دیتابیس ذخیره شد: $DB_FILE"
 
-# ---------------- بکاپ مدیا ----------------
-MEDIA_SRC="$PROJECT_DIR/media"
-MEDIA_FILE="$BACKUP_DIR/media_$DATE.tar.gz"
+# بکاپ PostgreSQL
+PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$BACKUP_DIR/db_$DATE.sql"
 
-if [ ! -d "$MEDIA_SRC" ]; then
-  echo "❌ پوشه $MEDIA_SRC وجود ندارد"
-  exit 1
+if [ $? -eq 0 ]; then
+    echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $BACKUP_DIR/db_$DATE.sql"
+else
+    echo "❌ خطا در بکاپ دیتابیس!"
+    exit 1
 fi
 
-echo "🖼 در حال بکاپ گرفتن از مدیا..."
-if ! tar -czf "$MEDIA_FILE" -C "$PROJECT_DIR" media 2>/tmp/backup_media_error.log; then
-  echo "❌ خطا در بکاپ مدیا: $(cat /tmp/backup_media_error.log)"
-  exit 1
+# بکاپ فایل‌های مدیا
+MEDIA_DIR="/app/media"
+if [ -d "$MEDIA_DIR" ]; then
+    echo "📦 در حال بکاپ گرفتن از مدیا..."
+    zip -r "$BACKUP_DIR/media_$DATE.zip" "$MEDIA_DIR" > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "✅ بکاپ مدیا با موفقیت گرفته شد: $BACKUP_DIR/media_$DATE.zip"
+    else
+        echo "❌ خطا در بکاپ مدیا!"
+    fi
+else
+    echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_DIR"
 fi
-echo "✅ بکاپ مدیا ذخیره شد: $MEDIA_FILE"
 
-echo "✅ بکاپ کامل انجام شد: $BACKUP_DIR"
-ls -lh "$BACKUP_DIR"
+echo "🎉 بکاپ کامل انجام شد!"
