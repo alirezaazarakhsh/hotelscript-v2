@@ -7,25 +7,22 @@ from dotenv import load_dotenv
 import zipfile
 
 # ================= بارگذاری متغیرهای محیطی =================
-# استفاده از مسیر مطلق داخل کانتینر
 ENV_PATH = "/app/hotel_bot/.env"
 if os.path.exists(ENV_PATH):
     load_dotenv(dotenv_path=ENV_PATH)
 else:
     print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
-PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
+PROJECT_DIR = os.getenv("PROJECT_DIR", "/var/hotelscript-v2")
 BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/safarnameh")
 TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
-MAX_BACKUPS = 7  # حداکثر تعداد بکاپ نگهداری شده
+MAX_BACKUPS = 7
 # ===========================================================
 
-# بررسی دسترسی کاربر
 def is_allowed(user_id):
     return user_id in ALLOWED_USERS
 
-# حذف بکاپ‌های قدیمی اگر تعداد بیش از MAX_BACKUPS شد
 def cleanup_old_backups():
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR)
@@ -35,7 +32,6 @@ def cleanup_old_backups():
         oldest = zip_files.pop(0)
         os.remove(os.path.join(BACKUP_DIR, oldest))
 
-# شروع ربات
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_allowed(user_id):
@@ -44,12 +40,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ جدید بگیر", callback_data="backup_now")],
-        [InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")]
+        [InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
+        [InlineKeyboardButton("💬 پشتیبانی", url="https://t.me/sevintmadmin")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("سلام! چه کاری میخوای انجام بدی؟", reply_markup=reply_markup)
 
-# مدیریت دکمه‌ها
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -59,45 +55,33 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
         return
 
-    # بکاپ جدید
     if query.data == "backup_now":
         await query.edit_message_text("⏳ در حال گرفتن بکاپ...")
-        
+
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
         media_file = f"media_{DATE}.tar.gz"
         zip_file = f"backup_{DATE}.zip"
         zip_path = os.path.join(BACKUP_DIR, zip_file)
 
-        # گرفتن بکاپ دیتابیس
-        subprocess.run(
-            f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}",
-            shell=True
-        )
+        # بکاپ دیتابیس
+        subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True)
+        # بکاپ مدیا
+        subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True)
 
-        # گرفتن بکاپ مدیا
-        subprocess.run(
-            f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media",
-            shell=True
-        )
-
-        # ایجاد فایل زیپ شامل هر دو
+        # زیپ کردن هر دو
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.write(os.path.join(BACKUP_DIR, db_file), db_file)
             zf.write(os.path.join(BACKUP_DIR, media_file), media_file)
 
-        # پاک کردن فایل‌های جداگانه بعد از زیپ شدن
         os.remove(os.path.join(BACKUP_DIR, db_file))
         os.remove(os.path.join(BACKUP_DIR, media_file))
-
-        # حذف بکاپ‌های قدیمی
         cleanup_old_backups()
 
         await query.edit_message_text(
-            f"✅ بکاپ گرفته شد! فایل زیپ آماده است:\n`{zip_file}`\nبرای دانلود از FTP یا ابزار مشابه استفاده کنید."
+            f"✅ بکاپ گرفته شد!\nفایل زیپ: `{zip_file}`\nلینک دانلود را از FTP یا ابزار مشابه دریافت کنید."
         )
 
-    # لیست بکاپ‌ها
     elif query.data == "list_backups":
         if not os.path.exists(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
@@ -110,7 +94,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
 
-    # ریستور بکاپ
     elif query.data.startswith("restore:"):
         filename = query.data.split(":", 1)[1]
         zip_path = os.path.join(BACKUP_DIR, filename)
@@ -119,7 +102,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await query.edit_message_text(f"⏳ در حال ریستور بکاپ {filename} ...")
-        
+
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(BACKUP_DIR)
             extracted_files = zf.namelist()
@@ -127,18 +110,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db_file = next((f for f in extracted_files if f.endswith(".sql")), None)
         media_file = next((f for f in extracted_files if f.endswith(".tar.gz")), None)
 
-        if not db_file or not media_file:
-            await query.edit_message_text("❌ فایل SQL یا مدیا در ZIP موجود نیست!")
-            return
+        if db_file:
+            db_path = os.path.join(BACKUP_DIR, db_file)
+            subprocess.run(f"cat {db_path} | docker exec -i postgres_db psql -U postgres safarname24", shell=True)
+            os.remove(db_path)
 
-        db_path = os.path.join(BACKUP_DIR, db_file)
-        media_path = os.path.join(BACKUP_DIR, media_file)
-
-        subprocess.run(f"cat {db_path} | docker exec -i postgres_db psql -U postgres safarname24", shell=True)
-        subprocess.run(f"tar -xzf {media_path} -C {PROJECT_DIR}", shell=True)
-
-        os.remove(db_path)
-        os.remove(media_path)
+        if media_file:
+            media_path = os.path.join(BACKUP_DIR, media_file)
+            subprocess.run(f"tar -xzf {media_path} -C {PROJECT_DIR}", shell=True)
+            os.remove(media_path)
 
         await query.edit_message_text(f"🔄 ریستور انجام شد: {filename}")
 
