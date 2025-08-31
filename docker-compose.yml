@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: .
@@ -7,8 +5,8 @@ services:
     command: bash /app/start.sh
     volumes:
       - ./hotelscript-v2:/app
-      - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/app/backups
+      - media_data:/app/media
+      - ./backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
     environment:
@@ -33,18 +31,18 @@ services:
   bot:
     build: .
     container_name: telegram_bot
-    command: python3 /app/hotel_bot/bot.py
+    command: python3 /var/hotelscript-v2/hotel_bot/bot.py
     volumes:
-      - ./hotelscript-v2:/app
+      - ./hotelscript-v2:/var/hotelscript-v2
       - ./hotelscript-v2/backup.sh:/app/backup.sh
       - ./hotelscript-v2/restore.sh:/app/restore.sh
-      - /var/backups/sf24_9xkLp7:/app/backups
-      - /var/hotelscript-v2/media:/app/media
+      - ./backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - ./hotelscript-v2/media:/var/hotelscript-v2/media
     environment:
       BOT_TOKEN: "8454101111:AAFKanZZbaCRuPYb2YwFMWmn1kRed9ClzU0"
       ALLOWED_USERS: "5839876171,341564725"
-      PROJECT_DIR: "/app"
-      BACKUP_DIR: "/app/backups"
+      PROJECT_DIR: "/var/hotelscript-v2"
+      BACKUP_DIR: "/var/backups/sf24_9xkLp7"
       DB_HOST: db
       DB_USER: postgres
       DB_PASSWORD: admin
@@ -97,8 +95,8 @@ services:
     command: celery -A safarname24 worker -l info
     volumes:
       - ./hotelscript-v2:/app
-      - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/app/backups
+      - media_data:/app/media
+      - ./backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
@@ -122,8 +120,8 @@ services:
     command: celery -A safarname24 beat -l info
     volumes:
       - ./hotelscript-v2:/app
-      - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/app/backups
+      - media_data:/app/media
+      - ./backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
@@ -148,8 +146,6 @@ volumes:
   redis_data:
     driver: local
   media_data:
-    driver: local
-  backups:
     driver: local
 
 networks:
