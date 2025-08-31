@@ -14,9 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # کپی کل پروژه
 COPY . /app/
 
-# نصب system dependencies برای Django و MySQL (در صورت نیاز)
+# نصب system dependencies برای Django و PostgreSQL client و Docker
 RUN apt-get update && \
-    apt-get install -y default-libmysqlclient-dev curl docker.io && \
+    apt-get install -y default-libmysqlclient-dev postgresql-client curl docker.io && \
     rm -rf /var/lib/apt/lists/*
 
 # دادن دسترسی اجرایی به اسکریپت‌ها
