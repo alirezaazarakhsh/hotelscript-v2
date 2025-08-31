@@ -7,7 +7,7 @@ services:
     command: bash /app/start.sh && python /app/manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
-      - /var/hotelscript-v2/media:/app/media
+      - media_data:/app/media
     ports:
       - "8000:8000"
     environment:
@@ -72,7 +72,7 @@ services:
     command: celery -A safarname24 worker -l info
     volumes:
       - .:/app
-      - /var/hotelscript-v2/media:/app/media
+      - media_data:/app/media
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
@@ -96,7 +96,7 @@ services:
     command: celery -A safarname24 beat -l info
     volumes:
       - .:/app
-      - /var/hotelscript-v2/media:/app/media
+      - media_data:/app/media
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
@@ -119,6 +119,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  media_data:
     driver: local
 
 networks:
