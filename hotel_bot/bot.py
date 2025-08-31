@@ -13,8 +13,7 @@ else:
     print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
 PROJECT_DIR = os.getenv("PROJECT_DIR", "/var/hotelscript-v2")
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/sf24_9xkLp7")  # مسیر امن و غیرقابل حدس
-BASE_URL = os.getenv("BASE_URL", "https://safarnameh24.com/sf24_9xkLp7")
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/sf24_9xkLp7")
 TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7
@@ -28,7 +27,7 @@ def cleanup_old_backups():
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR)
     files = sorted(os.listdir(BACKUP_DIR))
-    zip_files = [f for f in files if f.endswith(".zip")]
+    zip_files = [f for f in files if f.endswith(".zip") or f.endswith(".tar.gz") or f.endswith(".sql")]
     while len(zip_files) > MAX_BACKUPS:
         oldest = zip_files.pop(0)
         os.remove(os.path.join(BACKUP_DIR, oldest))
@@ -37,7 +36,7 @@ def latest_file(extension=None):
     files = [f for f in os.listdir(BACKUP_DIR) if (extension is None or f.endswith(extension))]
     return sorted(files, reverse=True)[0] if files else None
 
-# ======================== شروع ربات ========================
+# ======================== منوی اصلی ========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.first_name
@@ -81,19 +80,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "backup_full":
         await query.edit_message_text("⏳ در حال گرفتن بکاپ کامل...")
         subprocess.run(f"{PROJECT_DIR}/backup.sh", shell=True)
-        latest = latest_file(".zip")
-        if latest:
-            url = f"{BASE_URL}/{latest}"
-            keyboard = [[InlineKeyboardButton("📥 دانلود بکاپ", url=url)]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("✅ بکاپ کامل گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
+        latest_db = latest_file(".sql")
+        latest_media = latest_file(".tar.gz")
+
+        # ارسال فایل‌ها مستقیم به تلگرام
+        if latest_db:
+            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_db), "rb"))
+        if latest_media:
+            await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, latest_media), "rb"))
+
         cleanup_old_backups()
+        await start(update, context)
 
     # ---------------- بکاپ جداگانه ----------------
     elif data == "backup_separate":
         keyboard = [
             [InlineKeyboardButton("📦 بکاپ دیتابیس", callback_data="backup_db")],
-            [InlineKeyboardButton("🖼 بکاپ مدیا", callback_data="backup_media")]
+            [InlineKeyboardButton("🖼 بکاپ مدیا", callback_data="backup_media")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("📌 انتخاب نوع بکاپ:", reply_markup=reply_markup)
@@ -102,31 +106,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
         subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True)
-        url = f"{BASE_URL}/{db_file}"
-        keyboard = [[InlineKeyboardButton("📥 دانلود دیتابیس", url=url)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("✅ بکاپ دیتابیس گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
+        await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, db_file), "rb"))
         cleanup_old_backups()
+        await start(update, context)
 
     elif data == "backup_media":
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         media_file = f"media_{DATE}.tar.gz"
         subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True)
-        url = f"{BASE_URL}/{media_file}"
-        keyboard = [[InlineKeyboardButton("📥 دانلود مدیا", url=url)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("✅ بکاپ مدیا گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
+        await context.bot.send_document(chat_id=user_id, document=open(os.path.join(BACKUP_DIR, media_file), "rb"))
         cleanup_old_backups()
+        await start(update, context)
 
     # ---------------- لیست بکاپ‌ها ----------------
     elif data == "list_backups":
         if not os.path.exists(BACKUP_DIR):
             os.makedirs(BACKUP_DIR)
-        files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")], reverse=True)
+        files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip") or f.endswith(".tar.gz") or f.endswith(".sql")], reverse=True)
         if not files:
             await query.edit_message_text("هیچ بکاپی موجود نیست.")
             return
         keyboard = [[InlineKeyboardButton(f, callback_data=f"select:{f}")] for f in files]
+        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
 
@@ -134,7 +135,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         filename = data.split(":", 1)[1]
         keyboard = [
             [InlineKeyboardButton("📦 ریستور دیتابیس", callback_data=f"restore_db:{filename}")],
-            [InlineKeyboardButton("🖼 ریستور مدیا", callback_data=f"restore_media:{filename}")]
+            [InlineKeyboardButton("🖼 ریستور مدیا", callback_data=f"restore_media:{filename}")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(f"📌 انتخاب عملیات برای {filename}:", reply_markup=reply_markup)
@@ -144,22 +146,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         filename = data.split(":", 1)[1]
         zip_path = os.path.join(BACKUP_DIR, filename)
         if not os.path.exists(zip_path):
-            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
+            await query.edit_message_text("❌ فایل پیدا نشد!")
             return
         await query.edit_message_text(f"⏳ در حال ریستور دیتابیس از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh {BACKUP_DIR}/db.sql dummy_media", shell=True)
+        subprocess.run(f"{PROJECT_DIR}/restore.sh {zip_path} dummy_media", shell=True)
         await query.edit_message_text(f"✅ ریستور دیتابیس انجام شد: {filename}")
+        await start(update, context)
 
     # ---------------- ریستور مدیا ----------------
     elif data.startswith("restore_media:"):
         filename = data.split(":", 1)[1]
         zip_path = os.path.join(BACKUP_DIR, filename)
         if not os.path.exists(zip_path):
-            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
+            await query.edit_message_text("❌ فایل پیدا نشد!")
             return
         await query.edit_message_text(f"⏳ در حال ریستور مدیا از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {BACKUP_DIR}/media.tar.gz", shell=True)
+        subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {zip_path}", shell=True)
         await query.edit_message_text(f"✅ ریستور مدیا انجام شد: {filename}")
+        await start(update, context)
+
+    # ---------------- بازگشت به منوی اصلی ----------------
+    elif data == "go_back":
+        await start(update, context)
 
     # ---------------- پشتیبانی ----------------
     elif data == "support":
