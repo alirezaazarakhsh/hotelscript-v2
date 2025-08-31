@@ -32,25 +32,25 @@ services:
 
   bot:
     build: .
-  container_name: telegram_bot
-  command: bash /app/backup.sh
-  volumes:
-    - /var/hotelscript-v2:/app        # همه پروژه و اسکریپت‌ها
-    - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7  # مسیر بکاپ‌ها
-    - /var/hotelscript-v2/media:/app/media
-  environment:
-    BOT_TOKEN: "8454101111:AAFKanZZbaCRuPYb2YwFMWmn1kRed9ClzU0"
-    ALLOWED_USERS: "5839876171,341564725"
-    PROJECT_DIR: "/app"
-    BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-    DB_HOST: db
-    DB_USER: postgres
-    DB_PASSWORD: admin
-    DB_NAME: safarname24
-  depends_on:
-    - db
-  networks:
-    - app_network
+    container_name: telegram_bot
+    command: bash /app/backup.sh
+    volumes:
+      - /var/hotelscript-v2:/app
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/hotelscript-v2/media:/app/media
+    environment:
+      BOT_TOKEN: "8454101111:AAFKanZZbaCRuPYb2YwFMWmn1kRed9ClzU0"
+      ALLOWED_USERS: "5839876171,341564725"
+      PROJECT_DIR: "/app"
+      BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      DB_HOST: db
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      DB_NAME: safarname24
+    depends_on:
+      - db
+    networks:
+      - app_network
 
   db:
     image: postgres:15.2
