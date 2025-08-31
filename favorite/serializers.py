@@ -178,8 +178,18 @@ class FavoriteCollectionDetailSerializer(serializers.ModelSerializer):
         for favorite in favorites:
             if isinstance(favorite.item, Hotel):
                 item_serializer = HotelSummarySerializer(favorite.item, context=context)
-                items_data.append({"type": "hotel", **item_serializer.data})
+                items_data.append({
+                    "id": favorite.id,  # شناسه Favorite به عنوان اولین فیلد
+                    "actual_id": favorite.id,  # استفاده از actual_id به جای favorite_id
+                    "type": "hotel",
+                    **item_serializer.data
+                })
             elif isinstance(favorite.item, Article):
                 item_serializer = ArticleSummarySerializer(favorite.item, context=context)
-                items_data.append({"type": "article", **item_serializer.data})
+                items_data.append({
+                    "id": favorite.id,  # شناسه Favorite به عنوان اولین فیلد
+                    "actual_id": favorite.id,  # استفاده از actual_id به جای favorite_id
+                    "type": "article",
+                    **item_serializer.data
+                })
         return items_data
