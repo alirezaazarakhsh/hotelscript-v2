@@ -13,11 +13,12 @@ else:
     print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
 PROJECT_DIR = os.getenv("PROJECT_DIR", "/var/hotelscript-v2")
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/safarnameh")
-BASE_URL = os.getenv("BASE_URL", "https://yourdomain.com/backups")
+BACKUP_DIR = os.getenv("BACKUP_DIR", "/var/backups/sf24_9xkLp7")  # مسیر امن و غیرقابل حدس
+BASE_URL = os.getenv("BASE_URL", "https://safarnameh24.com/sf24_9xkLp7")
 TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7
+
 # ===========================================================
 
 def is_allowed(user_id):
@@ -32,21 +33,39 @@ def cleanup_old_backups():
         oldest = zip_files.pop(0)
         os.remove(os.path.join(BACKUP_DIR, oldest))
 
+def latest_file(extension=None):
+    files = [f for f in os.listdir(BACKUP_DIR) if (extension is None or f.endswith(extension))]
+    return sorted(files, reverse=True)[0] if files else None
+
+# ======================== شروع ربات ========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    username = update.effective_user.first_name
     if not is_allowed(user_id):
         await update.message.reply_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
         return
 
+    text = f"""
+👋 سلام ادمین عزیز {username}!
+
+این ربات بکاپ و ریستور هتل شما را مدیریت می‌کند.
+
+📌 قابلیت‌ها:
+- 📦 بکاپ کامل: دیتابیس + مدیا
+- 🖥 بکاپ جداگانه: فقط دیتابیس یا فقط مدیا
+- 🗂 لیست بکاپ‌ها و ریستور جداگانه هر بخش
+- 💬 پشتیبانی و تماس با ادمین
+"""
     keyboard = [
-        [InlineKeyboardButton("📦 بکاپ کامل بگیر", callback_data="backup_full")],
-        [InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
+        [InlineKeyboardButton("📦 بکاپ کامل", callback_data="backup_full")],
         [InlineKeyboardButton("🖥 بکاپ جداگانه", callback_data="backup_separate")],
+        [InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
         [InlineKeyboardButton("💬 پشتیبانی", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("سلام! چه کاری میخوای انجام بدی؟", reply_markup=reply_markup)
+    await update.message.reply_text(text, reply_markup=reply_markup)
 
+# ======================== مدیریت دکمه‌ها ========================
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -58,63 +77,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
 
-    # ==================== بکاپ کامل ====================
+    # ---------------- بکاپ کامل ----------------
     if data == "backup_full":
         await query.edit_message_text("⏳ در حال گرفتن بکاپ کامل...")
         subprocess.run(f"{PROJECT_DIR}/backup.sh", shell=True)
-        # آخرین فایل zip در پوشه
-        files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")], reverse=True)
-        if files:
-            latest = files[0]
+        latest = latest_file(".zip")
+        if latest:
             url = f"{BASE_URL}/{latest}"
-            await query.edit_message_text(f"✅ بکاپ کامل گرفته شد!\n[دانلود فایل بکاپ]({url})", parse_mode="Markdown")
+            keyboard = [[InlineKeyboardButton("📥 دانلود بکاپ", url=url)]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("✅ بکاپ کامل گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
         cleanup_old_backups()
 
-    # ==================== لیست بکاپ‌ها ====================
-    elif data == "list_backups":
-        if not os.path.exists(BACKUP_DIR):
-            os.makedirs(BACKUP_DIR)
-        files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")], reverse=True)
-        if not files:
-            await query.edit_message_text("هیچ بکاپی موجود نیست.")
-            return
-        keyboard = [[InlineKeyboardButton(f, callback_data=f"select:{f}")] for f in files]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
-
-    # ==================== انتخاب بکاپ برای ریستور ====================
-    elif data.startswith("select:"):
-        filename = data.split(":", 1)[1]
-        keyboard = [
-            [InlineKeyboardButton("📦 ریستور دیتابیس", callback_data=f"restore_db:{filename}")],
-            [InlineKeyboardButton("🖼 ریستور مدیا", callback_data=f"restore_media:{filename}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"📌 انتخاب عملیات برای {filename}:", reply_markup=reply_markup)
-
-    # ==================== ریستور دیتابیس ====================
-    elif data.startswith("restore_db:"):
-        filename = data.split(":", 1)[1]
-        zip_path = os.path.join(BACKUP_DIR, filename)
-        if not os.path.exists(zip_path):
-            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
-            return
-        await query.edit_message_text(f"⏳ در حال ریستور دیتابیس از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh {BACKUP_DIR}/db.sql dummy_media", shell=True)
-        await query.edit_message_text(f"✅ ریستور دیتابیس انجام شد: {filename}")
-
-    # ==================== ریستور مدیا ====================
-    elif data.startswith("restore_media:"):
-        filename = data.split(":", 1)[1]
-        zip_path = os.path.join(BACKUP_DIR, filename)
-        if not os.path.exists(zip_path):
-            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
-            return
-        await query.edit_message_text(f"⏳ در حال ریستور مدیا از {filename} ...")
-        subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {BACKUP_DIR}/media.tar.gz", shell=True)
-        await query.edit_message_text(f"✅ ریستور مدیا انجام شد: {filename}")
-
-    # ==================== بکاپ جداگانه ====================
+    # ---------------- بکاپ جداگانه ----------------
     elif data == "backup_separate":
         keyboard = [
             [InlineKeyboardButton("📦 بکاپ دیتابیس", callback_data="backup_db")],
@@ -128,7 +103,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db_file = f"db_{DATE}.sql"
         subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True)
         url = f"{BASE_URL}/{db_file}"
-        await query.edit_message_text(f"✅ بکاپ دیتابیس گرفته شد!\n[دانلود فایل]({url})", parse_mode="Markdown")
+        keyboard = [[InlineKeyboardButton("📥 دانلود دیتابیس", url=url)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("✅ بکاپ دیتابیس گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
         cleanup_old_backups()
 
     elif data == "backup_media":
@@ -136,14 +113,59 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         media_file = f"media_{DATE}.tar.gz"
         subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True)
         url = f"{BASE_URL}/{media_file}"
-        await query.edit_message_text(f"✅ بکاپ مدیا گرفته شد!\n[دانلود فایل]({url})", parse_mode="Markdown")
+        keyboard = [[InlineKeyboardButton("📥 دانلود مدیا", url=url)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("✅ بکاپ مدیا گرفته شد! روی دکمه زیر بزنید:", reply_markup=reply_markup)
         cleanup_old_backups()
 
-    # ==================== پشتیبانی ====================
+    # ---------------- لیست بکاپ‌ها ----------------
+    elif data == "list_backups":
+        if not os.path.exists(BACKUP_DIR):
+            os.makedirs(BACKUP_DIR)
+        files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".zip")], reverse=True)
+        if not files:
+            await query.edit_message_text("هیچ بکاپی موجود نیست.")
+            return
+        keyboard = [[InlineKeyboardButton(f, callback_data=f"select:{f}")] for f in files]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
+
+    elif data.startswith("select:"):
+        filename = data.split(":", 1)[1]
+        keyboard = [
+            [InlineKeyboardButton("📦 ریستور دیتابیس", callback_data=f"restore_db:{filename}")],
+            [InlineKeyboardButton("🖼 ریستور مدیا", callback_data=f"restore_media:{filename}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"📌 انتخاب عملیات برای {filename}:", reply_markup=reply_markup)
+
+    # ---------------- ریستور دیتابیس ----------------
+    elif data.startswith("restore_db:"):
+        filename = data.split(":", 1)[1]
+        zip_path = os.path.join(BACKUP_DIR, filename)
+        if not os.path.exists(zip_path):
+            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
+            return
+        await query.edit_message_text(f"⏳ در حال ریستور دیتابیس از {filename} ...")
+        subprocess.run(f"{PROJECT_DIR}/restore.sh {BACKUP_DIR}/db.sql dummy_media", shell=True)
+        await query.edit_message_text(f"✅ ریستور دیتابیس انجام شد: {filename}")
+
+    # ---------------- ریستور مدیا ----------------
+    elif data.startswith("restore_media:"):
+        filename = data.split(":", 1)[1]
+        zip_path = os.path.join(BACKUP_DIR, filename)
+        if not os.path.exists(zip_path):
+            await query.edit_message_text("❌ فایل زیپ پیدا نشد!")
+            return
+        await query.edit_message_text(f"⏳ در حال ریستور مدیا از {filename} ...")
+        subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {BACKUP_DIR}/media.tar.gz", shell=True)
+        await query.edit_message_text(f"✅ ریستور مدیا انجام شد: {filename}")
+
+    # ---------------- پشتیبانی ----------------
     elif data == "support":
         keyboard = [[InlineKeyboardButton("📩 تماس با پشتیبانی", url="https://t.me/sevintmadmin")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("💬 کاربر عزیز سلام به درگاه پشتیبانی اسکریپت هتل خوش آمدید اگر مشکل فنی در زمینه بکاپ گیری دارید می توانید از طریق دکمه زیر به کارشناس پشتیبانی ما متصل بشید :", reply_markup=reply_markup)
+        await query.edit_message_text("💬 برای پشتیبانی می‌توانید از دکمه زیر استفاده کنید:", reply_markup=reply_markup)
 
 # ======================== اجرای ربات ========================
 app = ApplicationBuilder().token(TOKEN).build()
