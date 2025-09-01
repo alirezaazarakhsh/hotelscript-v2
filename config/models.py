@@ -790,16 +790,16 @@ class LegalProfileSubmissionRule(models.Model):
     
 
 
-#ریستور بکاپ اپ ها 
-class AppRestore(models.Model):
-    apps = models.ManyToManyField(ContentType, verbose_name=_("اپ‌ها"))
-    backup_json = models.FileField(upload_to='backups/restore/', verbose_name=_("فایل JSON"))
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
+# #ریستور بکاپ اپ ها 
+# class AppRestore(models.Model):
+#     apps = models.ManyToManyField(ContentType, verbose_name=_("اپ‌ها"))
+#     backup_json = models.FileField(upload_to='backups/restore/', verbose_name=_("فایل JSON"))
+#     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ایجاد")
    
 
-    class Meta:
-        verbose_name = "ریستور اپ"
-        verbose_name_plural = "ریستور اپ‌ها"
+#     class Meta:
+#         verbose_name = "ریستور اپ"
+#         verbose_name_plural = "ریستور اپ‌ها"
 
-    def __str__(self):
-        return "ریستور اپلیکیشن‌ها"
+#     def __str__(self):
+#         return "ریستور اپلیکیشن‌ها"
