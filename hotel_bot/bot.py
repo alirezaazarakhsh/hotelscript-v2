@@ -56,21 +56,22 @@ def get_file_datetime(filename):
 async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id=None, chat_id=None):
     username = (await context.bot.get_chat_member(user_id=user_id, chat_id=user_id)).user.first_name
     text = f"""
-👋 سلام ادمین عزیز {username}!
+    سلام  {username}!
+    به ربات اسکریپت هتل خوش اومدی  👋🏻
 
-این ربات یک ربات کامل برای اسکریپت هتلی شما می باشد و ما در این ورژن سعی کردیم تمام نیاز های شما را برطرف کنیم 
-
-📌 امکانات ورژن 1.1 ربات
-- 📦 بکاپ گیری به صورت دستی از فایل دیتابیس و فولدر مدیا
-- 🗂 لیست بکاپ‌های گرفته شده با قابلیت حذف و ریستور بکاپ در سرور و دیتابیس
-- 💬 پشتیبانی و تماس با ادمین
-- 📋 نحوه بکاپ‌گیری (درحال توسعه)
+    در این نسخه از ربات تلاش کرده ایم تمامی نیاز های شما را پوشش دهیم و مدیریت اسکریپت را برای برطرف کنیم 
+    
+- امکانات ورژن 1.1 ربات
+- 📦 بکاپ گیری دستی از دیتابیس و پوشه مدیا 
+- 🗂 نمایش لیست بکاپ ها با امکان حذف یا بازیابی (Restore) در سرور و دیتابیس 
+- 📮 پشتیبانی ارتباط سریع با ادمین 
+- 📋 راهنمای بکاپ گیری (در حال توسعه ...)
 """
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"),
          InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
         [InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"),
-         InlineKeyboardButton("💬 پشتیبانی", callback_data="support")]
+         InlineKeyboardButton("📮 پشتیبانی", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -87,7 +88,10 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_allowed(user_id):
-        await update.message.reply_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
+        await update.message.reply_text(
+            "💢 دسترسی غیرفعال\n\n"
+            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
+        )
         return
     await show_main_menu(user_id, context)
 
@@ -100,7 +104,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_allowed(user_id):
-        await query.edit_message_text("❌ شما اجازه دسترسی به این ربات را ندارید.")
+        await query.edit_message_text(
+            "💢 دسترسی غیرفعال\n\n"
+            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
+        )
         return
 
     data = query.data
@@ -109,20 +116,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
     # ---------------- منوی بکاپ ----------------
     if data == "backup_menu":
-        text = "📌 انتخاب نوع بکاپ مورد نظر:\n\n💡 توضیح: می‌توانید از دیتابیس یا فایل‌های مدیا بکاپ بگیرید."
+        text = "📦 انتخاب نوع بکاپ گیری \n\n💡 لازم به ذکر می باشد که می توانید از دیتابیس یا فولدر های مدیا بکاپ بگیرید "
         keyboard = [
-            [InlineKeyboardButton("📦 دیتابیس", callback_data="backup_db"),
-             InlineKeyboardButton("🖼 مدیا", callback_data="backup_media")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
+            [InlineKeyboardButton(" 2 - دیتابیس", callback_data="backup_db"),
+             InlineKeyboardButton(" 1 - فولدر مدیا", callback_data="backup_media")],
+            [InlineKeyboardButton(" بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     # ---------------- بکاپ دیتابیس ----------------
     elif data == "backup_db":
-        await context.bot.send_message(chat_id=user_id, text="⏳ در حال گرفتن بکاپ دیتابیس...")
+        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی  بکاپ دیتابیس...")
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
         
@@ -141,7 +149,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = os.path.join(BACKUP_DIR, db_file)
         if os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
-            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل دیتابیس: {db_file}")
+            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل بکاپ دیتابیس \n  File : {db_file}")
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
         
@@ -154,17 +162,32 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------------- بکاپ مدیا ----------------
     elif data == "backup_media":
-        await context.bot.send_message(chat_id=user_id, text="⏳ در حال گرفتن بکاپ مدیا...")
+        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی بکاپ مدیا...")
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         media_file = f"media_{DATE}.tar.gz"
-        result = subprocess.run(f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media", shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            f"tar -czf {os.path.join(BACKUP_DIR, media_file)} -C {PROJECT_DIR} media",
+            shell=True, capture_output=True, text=True
+        )
+
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا: {result.stderr}")
             return
-        media_url = MEDIA_BASE_URL + media_file
-        await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد.\n💾 لینک دانلود: {media_url}")
+
+        file_path = os.path.join(BACKUP_DIR, media_file)
+        if os.path.exists(file_path):
+            # پیام موفقیت
+            await context.bot.send_message(chat_id=user_id, text="✅ بکاپ مدیا با موفقیت انجام شد.")
+            # پیام لینک دانلود
+            media_url = MEDIA_BASE_URL + media_file
+            await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}")
+        else:
+            await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
+
         cleanup_old_backups()
         await show_main_menu(user_id, context)
+
+
 
     # ---------------- ادامه سایر بخش‌ها مثل قبل ----------------
     elif data == "list_backups":
@@ -172,7 +195,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.makedirs(BACKUP_DIR)
         files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".tar.gz") or f.endswith(".sql")], reverse=True)
         if not files:
-            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]]
+            keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text("در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد ", reply_markup=reply_markup)
             return
@@ -183,15 +206,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(f"{f} ({file_datetime})", callback_data=f"select:{f}"),
                 InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}")
             ])
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")])
+            
+            
+        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("📁 بکاپ‌ها: در این بخش لیست بکاپ های گرفته شده از فایل دیتابیس و فولدر مدیا موجود می باشد در این لیست ۷ تا از بروزترین بکاپ ها موجود می باشد شما می توانید از طریق کلیک روی دکمه حذف بکاپ را حذف نموده با کلیک روی نام فایل می توانید در مرحله بعدی اقدام به ریستور نمایید ", reply_markup=reply_markup)
+
+        await query.edit_message_text(
+            "📁 بخش بکاپ‌ها\n"
+            "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+            "با کلیک روی دکمه (حذف) :\n"
+            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+            "با کلیک روی دکمه (نام فایل) :\n"
+            "به مرحله بعد رفته و بکاپ را بازیابی (Restore) کنید.",
+            reply_markup=reply_markup
+        )
 
 
 
-
-
-    # ---------------- حذف و ریستور ----------------
+    
+     # ---------------- حذف و ریستور ----------------
+     
     elif data.startswith("delete:"):
         filename = data.split(":", 1)[1]
         file_path = os.path.join(BACKUP_DIR, filename)
@@ -204,12 +238,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         filename = data.split(":", 1)[1]
         keyboard = []
         if filename.endswith(".sql"):
-            keyboard.append([InlineKeyboardButton("📦 ریستور دیتابیس", callback_data=f"restore_db:{filename}")])
+            keyboard.append([InlineKeyboardButton("ریستور دیتابیس", callback_data=f"restore_db:{filename}")])
+            text = (
+                "انتخاب عملیات برای فایل زیر، در صورت تایید دکمه (ریستور دیتابیس) را انتخاب نمایید.\n\n"
+                f"File : {filename}"
+            )
         elif filename.endswith(".tar.gz"):
-            keyboard.append([InlineKeyboardButton("🖼 ریستور مدیا", callback_data=f"restore_media:{filename}")])
-        keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")])
+            keyboard.append([InlineKeyboardButton("ریستور مدیا", callback_data=f"restore_media:{filename}")])
+            text = (
+                "انتخاب عملیات برای فایل زیر، در صورت تایید دکمه (ریستور مدیا) را انتخاب نمایید.\n\n"
+                f"File : {filename}"
+            )
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"📌 انتخاب عملیات برای {filename}:", reply_markup=reply_markup)
+        await query.edit_message_text(text, reply_markup=reply_markup)
 
     elif data.startswith("restore_db:"):
         filename = data.split(":", 1)[1]
@@ -217,11 +258,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="❌ فایل پیدا نشد!")
             return
-        await context.bot.send_message(chat_id=user_id, text=f"⏳ در حال ریستور دیتابیس از {filename} ...")
-        result = subprocess.run(f"{PROJECT_DIR}/restore.sh {file_path} dummy_media", shell=True, capture_output=True, text=True)
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"⏳ در حال پیاده سازی ریستور دیتابیس...\n\nFile : {filename}"
+        )
+
+        result = subprocess.run(
+            f"{PROJECT_DIR}/restore.sh {file_path} dummy_media",
+            shell=True, capture_output=True, text=True
+        )
+
         if result.returncode != 0:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در ریستور دیتابیس: {result.stderr}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "💢 خطایی رخ داد!\n"
+                    "متأسفانه در عملیات ریستور دیتابیس مشکل سیستمی در ربات اتفاق افتاده است، "
+                    "لطفاً مجدد تلاش نمایید."
+                )
+            )
             return
+
         await context.bot.send_message(chat_id=user_id, text=f"✅ ریستور دیتابیس با موفقیت انجام شد: {filename}")
         await show_main_menu(user_id, context)
 
@@ -231,11 +289,28 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="❌ فایل پیدا نشد!")
             return
-        await context.bot.send_message(chat_id=user_id, text=f"⏳ در حال ریستور مدیا از {filename} ...")
-        result = subprocess.run(f"{PROJECT_DIR}/restore.sh dummy_db {file_path}", shell=True, capture_output=True, text=True)
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"⏳ در حال پیاده سازی ریستور مدیا...\n\nFile : {filename}"
+        )
+
+        result = subprocess.run(
+            f"{PROJECT_DIR}/restore.sh dummy_db {file_path}",
+            shell=True, capture_output=True, text=True
+        )
+
         if result.returncode != 0:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در ریستور مدیا: {result.stderr}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "💢 خطایی رخ داد!\n"
+                    "متأسفانه در عملیات ریستور مدیا مشکل سیستمی در ربات اتفاق افتاده است، "
+                    "لطفاً مجدد تلاش نمایید."
+                )
+            )
             return
+
         await context.bot.send_message(chat_id=user_id, text=f"✅ ریستور مدیا با موفقیت انجام شد: {filename}")
         await show_main_menu(user_id, context)
 
@@ -246,25 +321,30 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------------- توضیحات بکاپ‌گیری ----------------
     elif data == "backup_info":
         text = f"""
-📋 **توضیحات بکاپ‌گیری روزانه**
+📝 توضیحات بکاپ‌گیری روزانه
 
-شما می توانید به صورت روزانه از طریق این ربات از وب سایت و اسکریپت هتلی خود بکاپ بگیرید
-- **بکاپ دیتابیس**: شامل تمام داده‌های دیتابیس safarname24 در قالب فایل .sql.
-- **بکاپ مدیا**: شامل فایل‌های مدیا در قالب فایل فشرده .tar.gz.
-- **حداکثر تعداد بکاپ‌ها**: {MAX_BACKUPS} فایل اخیر نگهداری می‌شود و فایل‌های قدیمی‌تر به‌صورت خودکار حذف می‌شوند.
-- **ریستور**: امکان بازگردانی دیتابیس یا مدیا از بکاپ‌های موجود.
-"""
+        از طریق این ربات می‌توانید به‌صورت روزانه از وب‌سایت و اسکریپت هتلی خود بکاپ تهیه کنید.
+
+        01 - بکاپ دیتابیس : شامل تمام داده‌های پایگاه داده Safarname24 در قالب فایل (Sql)
+
+        02 - بکاپ مدیا : شامل تمامی فایل‌های مدیا در قالب فایل فشرده (tar.gz)
+
+        03 - تعداد بکاپ‌ها : حداکثر {MAX_BACKUPS} بکاپ اخیر نگهداری شده و نسخه‌های قدیمی به‌صورت خودکار حذف می‌شوند.
+
+        04 - ریستور (Restore) : امکان بازگردانی دیتابیس یا فایل‌های مدیا از بکاپ‌های موجود.
+        """
+
         keyboard = [
             [InlineKeyboardButton("🚀 ارتقا تعداد درخواست‌ها", callback_data="upgrade_requests")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
+            [InlineKeyboardButton(" بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
 
     elif data == "upgrade_requests":
         await query.edit_message_text(
-            "🚀 در حال حاضر امکان ارتقا تعداد درخواست‌ها در دست توسعه است. برای اطلاعات بیشتر با پشتیبانی تماس بگیرید.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="backup_info")]])
+            "ویژگی ارتقای تعداد درخواست‌ها به‌ زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(" بازگشت", callback_data="backup_info")]])
         )
 
 
@@ -282,11 +362,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------------- پشتیبانی ----------------
     elif data == "support":
         keyboard = [
-            [InlineKeyboardButton("📩 تماس با پشتیبانی", url="https://t.me/sevintmadmin")],
-            [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
+            [InlineKeyboardButton(" 📮 تماس با پشتیبانی", url="https://t.me/sevintmadmin")],
+            [InlineKeyboardButton(" بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("💬 ادمین عزیز اگر مشکلی در زمینه استفاده از ربات داشتید می توانید از ساعت ۹ صبح تا ساعت ۲۱ با کارشناس تلگرامی ما در تماس باشید ", reply_markup=reply_markup)
+        await query.edit_message_text("ادمین عزیز، در صورت بروز هرگونه مشکل در استفاده از ربات، می‌توانید از ساعت (9 صبح تا 21 شب) با کارشناس پشتیبانی ما در تلگرام در ارتباط باشید.", reply_markup=reply_markup)
 
 
 

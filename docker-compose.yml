@@ -112,12 +112,14 @@ services:
     networks:
       - app_network
 
+
+
   celery_beat:
     build: .
     container_name: celery_beat
     command: celery -A safarname24 beat -l info
     volumes:
-      - media_data:/app/media
+      - /var/hotelscript-v2/media:/app/media   # ذخیره‌ی مدیا روی سرو
       - backups:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
