@@ -58,18 +58,18 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
     text = f"""
 👋 سلام ادمین عزیز {username}!
 
-این ربات بکاپ و ریستور هتل شما را مدیریت می‌کند.
+این ربات یک ربات کامل برای اسکریپت هتلی شما می باشد و ما در این ورژن سعی کردیم تمام نیاز های شما را برطرف کنیم 
 
-📌 قابلیت‌ها:
-- 📦 بکاپ کامل یا جداگانه
-- 🗂 لیست بکاپ‌ها و ریستور/حذف
+📌 امکانات ورژن 1.1 ربات
+- 📦 بکاپ گیری به صورت دستی از فایل دیتابیس و فولدر مدیا
+- 🗂 لیست بکاپ‌های گرفته شده با قابلیت حذف و ریستور بکاپ در سرور و دیتابیس
 - 💬 پشتیبانی و تماس با ادمین
-- 📋 توضیحات بکاپ‌گیری
+- 📋 نحوه بکاپ‌گیری (درحال توسعه)
 """
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"),
          InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
-        [InlineKeyboardButton("📋 توضیحات بکاپ‌گیری", callback_data="backup_info"),
+        [InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"),
          InlineKeyboardButton("💬 پشتیبانی", callback_data="support")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
