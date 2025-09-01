@@ -39,7 +39,7 @@ services:
       - /var/hotelscript-v2/media:/app/media
     environment:
       BOT_TOKEN: "7577918859:AAFr---YleV2upXxfpxtqKHJpLt_30SRi14"
-      ALLOWED_USERS: "5839876171,341564725"
+      ALLOWED_USERS: "5839876171,341564725,1006807823"
       PROJECT_DIR: "/app"
       BACKUP_DIR: "/var/backups/sf24_9xkLp7"
       DB_HOST: db
