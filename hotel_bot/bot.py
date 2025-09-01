@@ -109,13 +109,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=user_id, text="⏳ در حال گرفتن بکاپ دیتابیس...")
         DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         db_file = f"db_{DATE}.sql"
-        result = subprocess.run(f"docker exec postgres_db pg_dump -U postgres safarname24 > {os.path.join(BACKUP_DIR, db_file)}", shell=True, capture_output=True, text=True)
+        
+        # استفاده از backup.sh برای گرفتن بکاپ دیتابیس
+        backup_script = os.path.join(PROJECT_DIR, "backup.sh")
+        print(f"Running backup.sh for DB: {backup_script}")
+        
+        result = subprocess.run(f"{backup_script} db {db_file}", shell=True, capture_output=True, text=True)
+        print(f"backup.sh stdout: {result.stdout}")
+        print(f"backup.sh stderr: {result.stderr}")
+        
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ دیتابیس: {result.stderr}")
             return
+        
         file_path = os.path.join(BACKUP_DIR, db_file)
-        await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
-        await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل دیتابیس: {db_file}")
+        if os.path.exists(file_path):
+            await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
+            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل دیتابیس: {db_file}")
+        else:
+            await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
+        
         cleanup_old_backups()
         await show_main_menu(user_id, context)
 
