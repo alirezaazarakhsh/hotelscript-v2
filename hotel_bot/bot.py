@@ -185,7 +185,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("📁 بکاپ‌ها: در این بخش لیست بکاپ های گرفته شده از فایل دیتابیس و فولدر مدیا موجود می باشد در این لیست ۷ تا از بروزترین بکاپ ها موجود می باشد شما می توانید از طریقکلیک روی دکمه حذف بکاپ را حذف نموده با کلیک روی نام فایل می توانید در مرحله بعدی اقدام به ریستور نمایید ", reply_markup=reply_markup)
+        await query.edit_message_text("📁 بکاپ‌ها: در این بخش لیست بکاپ های گرفته شده از فایل دیتابیس و فولدر مدیا موجود می باشد در این لیست ۷ تا از بروزترین بکاپ ها موجود می باشد شما می توانید از طریق کلیک روی دکمه حذف بکاپ را حذف نموده با کلیک روی نام فایل می توانید در مرحله بعدی اقدام به ریستور نمایید ", reply_markup=reply_markup)
 
 
 
