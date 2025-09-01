@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import load_dotenv
 
+
 # ================= بارگذاری متغیرهای محیطی =================
 ENV_PATH = "/app/hotel_bot/.env"
 if os.path.exists(ENV_PATH):
@@ -18,6 +19,9 @@ TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_USERS = list(map(int, os.getenv("ALLOWED_USERS", "").split(",")))
 MAX_BACKUPS = 7
 MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.safarnameh24.com/sf24_9xkLp7/")
+
+
+
 
 # ===========================================================
 
@@ -43,6 +47,10 @@ def get_file_datetime(filename):
         return datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S").strftime("%Y-%m-%d %H:%M:%S")
     except:
         return "نامشخص"
+
+
+
+
 
 # ======================== نمایش منوی اصلی ========================
 async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id=None, chat_id=None):
@@ -71,6 +79,10 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
     else:
         await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
 
+
+
+
+
 # ======================== فرمان شروع ========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -92,6 +104,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = query.data
+
+
+
+
 
     # ---------------- منوی بکاپ ----------------
     if data == "backup_menu":
@@ -132,6 +148,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cleanup_old_backups()
         await show_main_menu(user_id, context)
 
+
+
+
+
     # ---------------- بکاپ مدیا ----------------
     elif data == "backup_media":
         await context.bot.send_message(chat_id=user_id, text="⏳ در حال گرفتن بکاپ مدیا...")
@@ -154,7 +174,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not files:
             keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("هیچ بکاپی موجود نیست.", reply_markup=reply_markup)
+            await query.edit_message_text("در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد ", reply_markup=reply_markup)
             return
         keyboard = []
         for f in files:
@@ -165,7 +185,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("📁 بکاپ‌ها:", reply_markup=reply_markup)
+        await query.edit_message_text("📁 بکاپ‌ها: در این بخش لیست بکاپ های گرفته شده از فایل دیتابیس و فولدر مدیا موجود می باشد در این لیست ۷ تا از بروزترین بکاپ ها موجود می باشد شما می توانید از طریقکلیک روی دکمه حذف بکاپ را حذف نموده با کلیک روی نام فایل می توانید در مرحله بعدی اقدام به ریستور نمایید ", reply_markup=reply_markup)
+
+
+
+
 
     # ---------------- حذف و ریستور ----------------
     elif data.startswith("delete:"):
@@ -215,12 +239,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=user_id, text=f"✅ ریستور مدیا با موفقیت انجام شد: {filename}")
         await show_main_menu(user_id, context)
 
+
+
+
+
     # ---------------- توضیحات بکاپ‌گیری ----------------
     elif data == "backup_info":
         text = f"""
 📋 **توضیحات بکاپ‌گیری روزانه**
 
-این ربات به‌صورت روزانه بکاپ‌هایی از دیتابیس و فایل‌های مدیا شما ایجاد می‌کند. جزئیات:
+شما می توانید به صورت روزانه از طریق این ربات از وب سایت و اسکریپت هتلی خود بکاپ بگیرید
 - **بکاپ دیتابیس**: شامل تمام داده‌های دیتابیس safarname24 در قالب فایل .sql.
 - **بکاپ مدیا**: شامل فایل‌های مدیا در قالب فایل فشرده .tar.gz.
 - **حداکثر تعداد بکاپ‌ها**: {MAX_BACKUPS} فایل اخیر نگهداری می‌شود و فایل‌های قدیمی‌تر به‌صورت خودکار حذف می‌شوند.
@@ -239,9 +267,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="backup_info")]])
         )
 
+
+
+
+
     # ---------------- بازگشت به منوی اصلی ----------------
     elif data == "go_back":
         await show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+
+
+
+
 
     # ---------------- پشتیبانی ----------------
     elif data == "support":
@@ -250,7 +286,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("💬 برای پشتیبانی می‌توانید از دکمه زیر استفاده کنید:", reply_markup=reply_markup)
+        await query.edit_message_text("💬 ادمین عزیز اگر مشکلی در زمینه استفاده از ربات داشتید می توانید از ساعت ۹ صبح تا ساعت ۲۱ با کارشناس تلگرامی ما در تماس باشید ", reply_markup=reply_markup)
+
+
+
+
 
 # ======================== اجرای ربات ========================
 app = ApplicationBuilder().token(TOKEN).build()
