@@ -6,7 +6,7 @@ services:
     container_name: django_app
     command: bash /app/start.sh
     volumes:
-      - media_data:/app/media
+      - /var/hotelscript-v2/media:/app/media   
       - backups:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
