@@ -54,16 +54,17 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
 
 در این نسخه از ربات تلاش کرده ایم تمامی نیاز های شما را پوشش دهیم و مدیریت اسکریپت را برای برطرف کنیم 
     
-  امکانات ورژن 1.1 ربات
+  امکانات ورژن 1.1 ربات\n
+
  📦 بکاپ گیری دستی از دیتابیس و پوشه مدیا \n
  🗂 نمایش لیست بکاپ‌ها با امکان حذف \n
  📮 پشتیبانی ارتباط سریع با ادمین \n
- 📋 راهنمای بکاپ گیری (در حال توسعه ...)\n
+  📋 راهنمای بکاپ گیری (در حال توسعه ...)\n
 """
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"),
          InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
-        [InlineKeyboardButton("🗃  ریستور بکاپ", callback_data="restore_backup")],
+        [InlineKeyboardButton("🗃 ریستور بکاپ", callback_data="restore_backup")],
         [InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"),
          InlineKeyboardButton("📮 پشتیبانی", callback_data="support")]
     ]
@@ -192,17 +193,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not files:
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text("در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد ", reply_markup=reply_markup)
+            await query.edit_message_text(
+                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد ",
+                reply_markup=reply_markup
+            )
             return
+
         keyboard = []
         for f in files:
             file_type, filename = f.split(":", 1)
             file_datetime = get_file_datetime(filename)
             keyboard.append([
-                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"select:{f}"),
-                InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}")
+                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy:{filename}"),
+                InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
             ])
-            
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -210,9 +214,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📁 بخش بکاپ‌ها\n"
             "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
             "با کلیک روی دکمه (حذف) :\n"
-            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n",
+            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+            "💡 برای کپی نام فایل، روی نام آن کلیک کنید.",
             reply_markup=reply_markup
         )
+
+     # ---------------- کپی نام فایل ----------------
+     
+    elif data.startswith("copy:"):
+        filename = data.split(":", 1)[1]
+        await context.bot.answer_callback_query(
+            callback_query_id=query.id, 
+            text=f"✅ نام فایل {filename} آماده کپی شد!", 
+            show_alert=True
+        )
+        await context.bot.send_message(chat_id=user_id, text=f"نام فایل برای کپی: `{filename}`", parse_mode="Markdown")
+        
 
     # ---------------- حذف ----------------
     elif data.startswith("delete:"):
