@@ -1,69 +1,59 @@
 #!/bin/bash
-# مسیر ذخیره بکاپ دیتابیس (مستقیم داخل فولدر اصلی)
+# ===================== مسیرهای ذخیره بکاپ =====================
 DB_BACKUP_DIR="/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
-# مسیر ذخیره بکاپ مدیا
-MEDIA_BACKUP_DIR="${BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
+MEDIA_BACKUP_DIR="/var/backups/sf24_9xkLp7"
+
+# ===================== تنظیم تاریخ و نام فایل =====================
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 DB_NAME="${DB_NAME:-safarname24}"
 DB_USER="${DB_USER:-postgres}"
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
 
-# ایجاد پوشه‌های بکاپ در صورت عدم وجود
+# نام فایل‌ها
+DB_FILE="$DB_BACKUP_DIR/db_$DATE.sql"
+MEDIA_FILE="$MEDIA_BACKUP_DIR/media_$DATE.tar.gz"
+
+# ===================== ایجاد پوشه‌ها در صورت عدم وجود =====================
 mkdir -p "$DB_BACKUP_DIR"
 mkdir -p "$MEDIA_BACKUP_DIR"
 
-# بررسی دسترسی به پوشه دیتابیس
+# ===================== بررسی دسترسی =====================
 if [ ! -w "$DB_BACKUP_DIR" ]; then
     echo "❌ خطا: پوشه $DB_BACKUP_DIR قابل نوشتن نیست!"
     exit 1
 fi
 
-# بررسی دسترسی به پوشه مدیا
 if [ ! -w "$MEDIA_BACKUP_DIR" ]; then
     echo "❌ خطا: پوشه $MEDIA_BACKUP_DIR قابل نوشتن نیست!"
     exit 1
 fi
 
-# ================= بکاپ دیتابیس =================
-if [ "$1" = "db" ]; then
-    if [ -n "$2" ]; then
-        DB_FILE="$DB_BACKUP_DIR/$2"
-    else
-        DB_FILE="$DB_BACKUP_DIR/db_$DATE.sql"
-    fi
+# ===================== بکاپ دیتابیس =====================
+echo "📦 در حال بکاپ گرفتن از دیتابیس..."
+PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_FILE"
 
-    echo "📦 در حال بکاپ گرفتن از دیتابیس..."
-    PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_FILE"
-
-    if [ $? -eq 0 ]; then
-        echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_FILE"
-    else
-        echo "❌ خطا در بکاپ دیتابیس!"
-        exit 1
-    fi
+if [ $? -eq 0 ]; then
+    echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_FILE"
+else
+    echo "❌ خطا در بکاپ دیتابیس!"
+    exit 1
 fi
 
-# ================= بکاپ مدیا =================
-if [ "$1" = "media" ]; then
-    MEDIA_DIR="/app/media"
-    if [ -d "$MEDIA_DIR" ]; then
-        if [ -n "$2" ]; then
-            MEDIA_FILE="$MEDIA_BACKUP_DIR/$2"
-        else
-            MEDIA_FILE="$MEDIA_BACKUP_DIR/media_$DATE.zip"
-        fi
+# ===================== بکاپ مدیا =====================
+MEDIA_SOURCE_DIR="/app/media"
 
-        echo "📦 در حال بکاپ گرفتن از مدیا..."
-        zip -r "$MEDIA_FILE" "$MEDIA_DIR" > /dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"
-        else
-            echo "❌ خطا در بکاپ مدیا!"
-        fi
+if [ -d "$MEDIA_SOURCE_DIR" ]; then
+    echo "📦 در حال بکاپ گرفتن از مدیا..."
+    tar -czf "$MEDIA_FILE" -C "$MEDIA_SOURCE_DIR" .
+    if [ $? -eq 0 ]; then
+        echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"
     else
-        echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_DIR"
+        echo "❌ خطا در بکاپ مدیا!"
+        exit 1
     fi
+else
+    echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_SOURCE_DIR"
 fi
 
 echo "🎉 بکاپ کامل انجام شد!"
