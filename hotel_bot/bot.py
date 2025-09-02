@@ -184,16 +184,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.makedirs(DB_BACKUP_DIR)
         if not os.path.exists(MEDIA_BACKUP_DIR):
             os.makedirs(MEDIA_BACKUP_DIR)
+
         files = []
+        # اضافه کردن بکاپ‌های دیتابیس
         files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
+        # اضافه کردن بکاپ‌های مدیا
         files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
         files = sorted(files, key=lambda x: get_file_datetime(x.split(":", 1)[1]), reverse=True)
-        
+
         if not files:
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد ",
+                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد",
                 reply_markup=reply_markup
             )
             return
@@ -202,31 +205,33 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for f in files:
             file_type, filename = f.split(":", 1)
             file_datetime = get_file_datetime(filename)
-            # کوتاه کردن نام نمایش داده شده
-            display_name = filename if len(filename) <= 20 else filename[:17] + "..."
             keyboard.append([
-                InlineKeyboardButton(f"{display_name} [{file_type}]", callback_data=f"copy:{filename}"),
-                InlineKeyboardButton("🗑", callback_data=f"delete:{file_type}:{filename}")
+                # دکمه‌ای که نام فایل را برای کپی کردن نمایش می‌دهد
+                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", 
+                                    callback_data=f"copy_name:{filename}"),
+                # دکمه حذف
+                InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}")
             ])
+
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
             "📁 بخش بکاپ‌ها\n"
-            "لیست 7 بکاپ آخر دیتابیس و پوشه مدیا:\n\n"
-            "💡 روی نام بکاپ کلیک کنید تا آماده کپی شود، روی 🗑 کلیک کنید تا حذف شود.",
+            "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+            "با کلیک روی دکمه (حذف) :\n"
+            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+            "با کلیک روی اسم فایل :\n"
+            "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
             reply_markup=reply_markup
         )
 
-    # ---------------- کپی نام فایل ----------------
-    elif data.startswith("copy:"):
+    # ---------------- هندلر کلیک روی دکمه کپی ----------------
+    elif data.startswith("copy_name:"):
         filename = data.split(":", 1)[1]
-        # فقط نوتیف بالا دکمه بدون ارسال پیام جدا
-        await context.bot.answer_callback_query(
-            callback_query_id=query.id,
-            text=f"✅ نام فایل {filename} آماده کپی شد!",
-            show_alert=True
-        )
+        # نمایش پاپ‌آپ با نام فایل
+        await query.answer(f"نام فایل: {filename}", show_alert=True)
+
 
     # ---------------- حذف ----------------
     elif data.startswith("delete:"):
