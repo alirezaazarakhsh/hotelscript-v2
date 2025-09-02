@@ -4,8 +4,8 @@ services:
     container_name: django_app
     command: bash /app/start.sh
     volumes:
-      - media_data:/app/media
-      - backups:/var/backups/sf24_9xkLp7
+      - /var/hotelscript-v2/media:/app/media
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
     environment:
@@ -33,9 +33,9 @@ services:
     command: python /app/hotel_bot/bot.py
     volumes:
       - /var/hotelscript-v2:/app
-      - backups:/var/backups/sf24_9xkLp7
-      - db_backups:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
-      - media_data:/app/media
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
+      - /var/hotelscript-v2/media:/app/media
     environment:
       BOT_TOKEN: "7577918859:AAFr---YleV2upXxfpxtqKHJpLt_30SRi14"
       ALLOWED_USERS: "5839876171,341564725,1006807823"
@@ -70,7 +70,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: "alirezaazarakhsh20@gmail.com"
       PGADMIN_DEFAULT_PASSWORD: "password"
     volumes:
-      - db_backups:/var/lib/pgadmin/storage
+      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/pgadmin/storage
     ports:
       - "5050:80"
     depends_on:
@@ -93,8 +93,8 @@ services:
     container_name: celery_worker
     command: celery -A safarname24 worker -l info
     volumes:
-      - media_data:/app/media
-      - backups:/var/backups/sf24_9xkLp7
+      - /var/hotelscript-v2/media:/app/media
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
@@ -117,8 +117,8 @@ services:
     container_name: celery_beat
     command: celery -A safarname24 beat -l info
     volumes:
-      - media_data:/app/media
-      - backups:/var/backups/sf24_9xkLp7
+      - /var/hotelscript-v2/media:/app/media
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
