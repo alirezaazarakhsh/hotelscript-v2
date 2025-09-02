@@ -114,57 +114,59 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------------- بکاپ دیتابیس ----------------
     elif data == "backup_db":
-        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی  بکاپ دیتابیس...")
-        DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        db_file = f"db_{DATE}.sql"
+        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی بکاپ دیتابیس...")
         
-        # ایجاد پوشه بکاپ دیتابیس در صورت عدم وجود
+        # اجرای backup.sh
+        backup_script = os.path.join(PROJECT_DIR, "backup.sh")
         if not os.path.exists(DB_BACKUP_DIR):
             os.makedirs(DB_BACKUP_DIR)
-        
-        # استفاده از backup.sh برای گرفتن بکاپ دیتابیس
-        backup_script = os.path.join(PROJECT_DIR, "backup.sh")
+
         print(f"Running backup.sh for DB: {backup_script}")
-        
-        result = subprocess.run(f"{backup_script} db {db_file}", shell=True, capture_output=True, text=True)
+        result = subprocess.run(f"{backup_script} db", shell=True, capture_output=True, text=True)
         print(f"backup.sh stdout: {result.stdout}")
         print(f"backup.sh stderr: {result.stderr}")
-        
+
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ دیتابیس: {result.stderr}")
             return
-        
+
+        # پیدا کردن آخرین فایل بکاپ دیتابیس
+        db_file = latest_file(DB_BACKUP_DIR, extension=".sql")
         file_path = os.path.join(DB_BACKUP_DIR, db_file)
+
         if os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
-            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل بکاپ دیتابیس \n  File : {db_file}")
+            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل بکاپ دیتابیس \nFile: {db_file}")
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
-        
+
         cleanup_old_backups(DB_BACKUP_DIR)
         await show_main_menu(user_id, context)
+
 
     # ---------------- بکاپ مدیا ----------------
     elif data == "backup_media":
         await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی بکاپ مدیا...")
-        DATE = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        media_file = f"media_{DATE}.tar.gz"
+
         if not os.path.exists(MEDIA_BACKUP_DIR):
             os.makedirs(MEDIA_BACKUP_DIR)
-        result = subprocess.run(
-            f"tar -czf {os.path.join(MEDIA_BACKUP_DIR, media_file)} -C {PROJECT_DIR} media",
-            shell=True, capture_output=True, text=True
-        )
+
+        # اجرای backup.sh برای مدیا
+        backup_script = os.path.join(PROJECT_DIR, "backup.sh")
+        result = subprocess.run(f"{backup_script} media", shell=True, capture_output=True, text=True)
+        print(f"backup.sh stdout: {result.stdout}")
+        print(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا: {result.stderr}")
             return
 
+        # پیدا کردن آخرین فایل بکاپ مدیا
+        media_file = latest_file(MEDIA_BACKUP_DIR, extension=".tar.gz")
         file_path = os.path.join(MEDIA_BACKUP_DIR, media_file)
+
         if os.path.exists(file_path):
-            # پیام موفقیت
             await context.bot.send_message(chat_id=user_id, text="✅ بکاپ مدیا با موفقیت انجام شد.")
-            # پیام لینک دانلود
             media_url = MEDIA_BASE_URL + media_file
             await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}")
         else:
@@ -172,6 +174,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         cleanup_old_backups(MEDIA_BACKUP_DIR)
         await show_main_menu(user_id, context)
+
 
     # ---------------- لیست بکاپ‌ها ----------------
     elif data == "list_backups":
