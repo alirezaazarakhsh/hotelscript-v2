@@ -35,13 +35,15 @@ services:
     command: python /app/hotel_bot/bot.py
     volumes:
       - /var/hotelscript-v2:/app
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - backups:/var/backups/sf24_9xkLp7
+      - db_backups:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
     environment:
       BOT_TOKEN: "7577918859:AAFr---YleV2upXxfpxtqKHJpLt_30SRi14"
       ALLOWED_USERS: "5839876171,341564725,1006807823"
       PROJECT_DIR: "/app"
-      BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      DB_BACKUP_DIR: "/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
+      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
       DB_HOST: db
       DB_USER: postgres
       DB_PASSWORD: admin
@@ -50,6 +52,7 @@ services:
       - db
     networks:
       - app_network
+
 
   db:
     image: postgres:15.2
