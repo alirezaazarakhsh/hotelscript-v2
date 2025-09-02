@@ -63,7 +63,7 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"),
          InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
-        [InlineKeyboardButton("🗃  ریستور بکاپ", callback_data="restore_backup")]
+        [InlineKeyboardButton("🗃  ریستور بکاپ", callback_data="restore_backup")],
         [InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"),
          InlineKeyboardButton("📮 پشتیبانی", callback_data="support")]
     ]
