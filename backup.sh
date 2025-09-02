@@ -29,31 +29,38 @@ if [ ! -w "$MEDIA_BACKUP_DIR" ]; then
     exit 1
 fi
 
-# ===================== بکاپ دیتابیس =====================
-echo "📦 در حال بکاپ گرفتن از دیتابیس..."
-PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_FILE"
+# ===================== بررسی نوع بکاپ =====================
+BACKUP_TYPE="$1"  # پارامتر ورودی: db یا media
 
-if [ $? -eq 0 ]; then
-    echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_FILE"
+if [ "$BACKUP_TYPE" == "db" ]; then
+    echo "📦 در حال بکاپ گرفتن از دیتابیس..."
+    PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_FILE"
+    if [ $? -eq 0 ]; then
+        echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_FILE"
+    else
+        echo "❌ خطا در بکاپ دیتابیس!"
+        exit 1
+    fi
+
+elif [ "$BACKUP_TYPE" == "media" ]; then
+    MEDIA_SOURCE_DIR="/app/media"
+    if [ -d "$MEDIA_SOURCE_DIR" ]; then
+        echo "📦 در حال بکاپ گرفتن از مدیا..."
+        tar -czf "$MEDIA_FILE" -C "$MEDIA_SOURCE_DIR" .
+        if [ $? -eq 0 ]; then
+            echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"
+        else
+            echo "❌ خطا در بکاپ مدیا!"
+            exit 1
+        fi
+    else
+        echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_SOURCE_DIR"
+        exit 1
+    fi
+
 else
-    echo "❌ خطا در بکاپ دیتابیس!"
+    echo "⚠️ نوع بکاپ نامشخص است! لطفاً 'db' یا 'media' وارد کنید."
     exit 1
 fi
 
-# ===================== بکاپ مدیا =====================
-MEDIA_SOURCE_DIR="/app/media"
-
-if [ -d "$MEDIA_SOURCE_DIR" ]; then
-    echo "📦 در حال بکاپ گرفتن از مدیا..."
-    tar -czf "$MEDIA_FILE" -C "$MEDIA_SOURCE_DIR" .
-    if [ $? -eq 0 ]; then
-        echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"
-    else
-        echo "❌ خطا در بکاپ مدیا!"
-        exit 1
-    fi
-else
-    echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_SOURCE_DIR"
-fi
-
-echo "🎉 بکاپ کامل انجام شد!"
+echo "🎉 بکاپ $BACKUP_TYPE انجام شد!"

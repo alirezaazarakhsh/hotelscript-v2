@@ -63,6 +63,7 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
     keyboard = [
         [InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"),
          InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups")],
+        [InlineKeyboardButton("🗃  ریستور بکاپ", callback_data="restore_backup")]
         [InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"),
          InlineKeyboardButton("📮 پشتیبانی", callback_data="support")]
     ]
@@ -215,13 +216,58 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------------- حذف ----------------
     elif data.startswith("delete:"):
-        file_type, filename = data.split(":", 2)[1:]
+        _, file_type, filename = data.split(":", 2)
         backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
         file_path = os.path.join(backup_dir, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} حذف شد.")
-        await button(update, context)  # بروزرسانی لیست بکاپ‌ها
+        
+        # بازسازی لیست بکاپ‌ها بعد از حذف
+        files = []
+        files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
+        files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
+        files = sorted(files, key=lambda x: get_file_datetime(x.split(":", 1)[1]), reverse=True)
+
+        keyboard = []
+        if files:
+            for f in files:
+                file_type, filename = f.split(":", 1)
+                file_datetime = get_file_datetime(filename)
+                keyboard.append([
+                    InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"select:{f}"),
+                    InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
+                ])
+        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            "📁 بخش بکاپ‌ها\n"
+            "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+            "با کلیک روی دکمه (حذف) :\n"
+            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n",
+            reply_markup=reply_markup
+        )
+        
+        
+        
+    # ---------------- منوی ریستور بکاپ ----------------
+    elif data == "restore_backup":
+        text = (
+            "📥 منوی ریستور بکاپ\n\n"
+            "در این بخش می‌توانید فایل‌های بکاپ دیتابیس یا مدیا را به نسخه فعلی بازگردانید.\n"
+            "لطفاً دقت داشته باشید که ریستور بکاپ باعث جایگزینی فایل‌های موجود می‌شود!"
+        )
+        keyboard = [
+            [InlineKeyboardButton("ریستور فولدر مدیا", callback_data="restore_media")],
+            [InlineKeyboardButton("ریستور دیتابیس", callback_data="restore_db")],
+            [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        
+        
+            
 
     # ---------------- توضیحات بکاپ‌گیری ----------------
     elif data == "backup_info":
