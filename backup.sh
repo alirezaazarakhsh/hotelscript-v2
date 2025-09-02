@@ -1,5 +1,5 @@
 #!/bin/bash
-# مسیر ذخیره بکاپ دیتابیس
+# مسیر ذخیره بکاپ دیتابیس (مستقیم داخل فولدر اصلی)
 DB_BACKUP_DIR="/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
 # مسیر ذخیره بکاپ مدیا
 MEDIA_BACKUP_DIR="${BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
@@ -25,30 +25,45 @@ if [ ! -w "$MEDIA_BACKUP_DIR" ]; then
     exit 1
 fi
 
-echo "📦 در حال بکاپ گرفتن از دیتابیس..."
+# ================= بکاپ دیتابیس =================
+if [ "$1" = "db" ]; then
+    if [ -n "$2" ]; then
+        DB_FILE="$DB_BACKUP_DIR/$2"
+    else
+        DB_FILE="$DB_BACKUP_DIR/db_$DATE.sql"
+    fi
 
-# بکاپ PostgreSQL
-PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_BACKUP_DIR/db_$DATE.sql"
+    echo "📦 در حال بکاپ گرفتن از دیتابیس..."
+    PGPASSWORD="${DB_PASSWORD}" pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" > "$DB_FILE"
 
-if [ $? -eq 0 ]; then
-    echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_BACKUP_DIR/db_$DATE.sql"
-else
-    echo "❌ خطا در بکاپ دیتابیس!"
-    exit 1
+    if [ $? -eq 0 ]; then
+        echo "✅ بکاپ دیتابیس با موفقیت گرفته شد: $DB_FILE"
+    else
+        echo "❌ خطا در بکاپ دیتابیس!"
+        exit 1
+    fi
 fi
 
-# بکاپ فایل‌های مدیا
-MEDIA_DIR="/app/media"
-if [ -d "$MEDIA_DIR" ]; then
-    echo "📦 در حال بکاپ گرفتن از مدیا..."
-    zip -r "$MEDIA_BACKUP_DIR/media_$DATE.zip" "$MEDIA_DIR" > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_BACKUP_DIR/media_$DATE.zip"
+# ================= بکاپ مدیا =================
+if [ "$1" = "media" ]; then
+    MEDIA_DIR="/app/media"
+    if [ -d "$MEDIA_DIR" ]; then
+        if [ -n "$2" ]; then
+            MEDIA_FILE="$MEDIA_BACKUP_DIR/$2"
+        else
+            MEDIA_FILE="$MEDIA_BACKUP_DIR/media_$DATE.zip"
+        fi
+
+        echo "📦 در حال بکاپ گرفتن از مدیا..."
+        zip -r "$MEDIA_FILE" "$MEDIA_DIR" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"
+        else
+            echo "❌ خطا در بکاپ مدیا!"
+        fi
     else
-        echo "❌ خطا در بکاپ مدیا!"
+        echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_DIR"
     fi
-else
-    echo "⚠️ پوشه مدیا وجود ندارد: $MEDIA_DIR"
 fi
 
 echo "🎉 بکاپ کامل انجام شد!"
