@@ -17,7 +17,8 @@ PROJECT_DIR = os.getenv("PROJECT_DIR", "/var/hotelscript-v2")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "/var/lib/backsafarname/alirezaazarakhsh20_gmail.com")
 MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", "/var/backups/sf24_9xkLp7")
 TOKEN = os.getenv("BOT_TOKEN")
-SUPER_ADMINS = list(map(int, os.getenv("SUPER_ADMINS", "").split(",")))  # سوپر ادمین‌ها از .env
+# مدیریت SUPER_ADMINS برای جلوگیری از خطا در صورت خالی بودن
+SUPER_ADMINS = [int(x) for x in os.getenv("SUPER_ADMINS", "").split(",") if x]
 MAX_BACKUPS = 7
 MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.safarnameh24.com/sf24_9xkLp7/")
 
@@ -501,7 +502,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if target_type == 'admin':
             new_id = context.user_data.get('new_admin_id')
             if new_id:
-                admins[new_id] = selected
+                admins[str(new_id)] = selected  # ذخیره ID به صورت رشته
                 save_data(data)
                 await query.edit_message_text("✅ ادمین با موفقیت اضافه شد.")
         elif target_type == 'group':
