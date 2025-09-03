@@ -111,17 +111,17 @@ def get_file_datetime(filename):
 async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id=None, chat_id=None):
     username = (await context.bot.get_chat_member(user_id=user_id, chat_id=user_id)).user.first_name
     text = f"""
-سلام  {username}!
-به ربات اسکریپت هتل خوش اومدی  👋🏻
+سلام {username}!
+به ربات اسکریپت هتل خوش اومدی 👋🏻
 
-در این نسخه از ربات تلاش کرده ایم تمامی نیاز های شما را پوشش دهیم و مدیریت اسکریپت را برای برطرف کنیم 
-    
-  امکانات ورژن 1.1 ربات\n
+در این نسخه از ربات تلاش کرده‌ایم تمامی نیازهای شما را پوشش دهیم و مدیریت اسکریپت را آسان کنیم.
 
- 📦 بکاپ گیری دستی از دیتابیس و پوشه مدیا \n
- 🗂 نمایش لیست بکاپ‌ها با امکان حذف \n
- 📮 پشتیبانی ارتباط سریع با ادمین \n
-  📋 راهنمای بکاپ گیری (در حال توسعه ...)\n
+**امکانات ورژن 1.1 ربات:**
+
+📦 **بکاپ‌گیری دستی** از دیتابیس و پوشه مدیا
+🗂 **نمایش لیست بکاپ‌ها** با امکان حذف
+📮 **پشتیبانی** ارتباط سریع با ادمین
+📋 **راهنمای بکاپ‌گیری** (در حال توسعه...)
 """
     keyboard = []
     row = []
@@ -149,9 +149,56 @@ async def show_main_menu(user_id, context: ContextTypes.DEFAULT_TYPE, message_id
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     if message_id and chat_id:
+        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+
+# ======================== نمایش لیست ادمین‌ها ========================
+async def show_manage_admins(chat_id, context, message_id=None):
+    if not admins:
+        text = "هیچ ادمینی وجود ندارد.\n\nتوضیح: می‌توانید ادمین‌های جدید اضافه کنید یا گروه‌های دسترسی را مدیریت کنید."
+        keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
+    else:
+        text = "لیست ادمین‌ها:\n\nتوضیح: می‌توانید هر ادمین را ویرایش یا حذف کنید."
+        keyboard = []
+        row = []
+        for idx, uid in enumerate(admins):
+            row.append(InlineKeyboardButton(f"ID: {uid}", callback_data=f"view_admin:{uid}"))
+            if (idx + 1) % 2 == 0:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+        keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if message_id:
         await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
     else:
-        await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
+        await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+
+# ======================== نمایش جزئیات ادمین ========================
+async def show_admin_details(chat_id, context, admin_id, message_id=None):
+    perms = admins.get(admin_id, set())
+    text = f"جزئیات ادمین ID: {admin_id}\n\nمجوزها:\n"
+    for perm in perms:
+        text += f"- {PERM_DISPLAY[perm]['label']}: {PERM_DISPLAY[perm]['desc']}\n"
+    if not perms:
+        text += "هیچ مجوزی اختصاص نیافته.\n"
+    text += "\nتوضیح: می‌توانید گروه دسترسی یا مجوزهای این ادمین را ویرایش کنید یا ادمین را حذف کنید."
+    
+    keyboard = [
+        [InlineKeyboardButton("اختصاص گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}"),
+         InlineKeyboardButton("ویرایش مجوزها", callback_data=f"edit_admin_perms:{admin_id}")],
+        [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}"),
+         InlineKeyboardButton("بازگشت", callback_data="manage_admins")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if message_id:
+        await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+    else:
+        await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
 
 # ======================== فرمان شروع ========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,6 +215,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_allowed(user_id, 'manage_admins'):
+        await update.message.reply_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
         return
 
     state = context.user_data.get('state')
@@ -177,17 +225,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             new_id = int(text)
             if str(new_id) in admins or new_id in SUPER_ADMINS:
-                await update.message.reply_text("این کاربر قبلاً ادمین است!")
+                await update.message.reply_text("❌ این کاربر قبلاً ادمین است!")
                 return
             context.user_data['new_admin_id'] = new_id
             await show_group_selection(update.message.chat_id, context, new_id)
         except ValueError:
-            await update.message.reply_text("لطفاً یک ID عددی معتبر وارد کنید.")
+            await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید.")
 
     elif state == 'waiting_for_group_name':
         group_name = text.strip()
         if group_name in groups:
-            await update.message.reply_text("این گروه قبلاً وجود دارد!")
+            await update.message.reply_text("❌ این گروه قبلاً وجود دارد!")
             return
         context.user_data['new_group_name'] = group_name
         context.user_data['selected_perms'] = set()
@@ -198,7 +246,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_name = text.strip()
         old_name = context.user_data.get('editing_group')
         if new_name != old_name and new_name in groups:
-            await update.message.reply_text("این نام گروه قبلاً وجود دارد!")
+            await update.message.reply_text("❌ این نام گروه قبلاً وجود دارد!")
             return
         groups[new_name] = groups.pop(old_name)
         save_data(data)
@@ -209,7 +257,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================== نمایش انتخاب گروه برای ادمین ========================
 async def show_group_selection(chat_id, context, admin_id, message_id=None):
     if not groups:
-        await context.bot.send_message(chat_id=chat_id, text="هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه ایجاد کنید.")
+        text = "هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه ایجاد کنید.\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که می‌توانید مجوزها را به آن‌ها اختصاص دهید و سپس به ادمین‌ها割り دهید."
+        keyboard = [[InlineKeyboardButton("بازگشت", callback_data="control_panel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if message_id:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         return
     text = f"انتخاب گروه دسترسی برای ادمین ID: {admin_id}\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که مجوزهای از پیش تعریف‌شده دارند. با انتخاب یک گروه، مجوزهای آن به ادمین اختصاص می‌یابد."
     keyboard = []
@@ -325,25 +379,33 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------------- چک مجوز برای اقدامات ----------------
     if data == "backup_menu" and not (is_allowed(user_id, 'backup_db') or is_allowed(user_id, 'backup_media')):
+        await query.edit_message_text("❌ شما مجوز دسترسی به منوی بکاپ‌گیری را ندارید!")
         return
     if data == "backup_db" and not is_allowed(user_id, 'backup_db'):
+        await query.edit_message_text("❌ شما مجوز بکاپ‌گیری از دیتابیس را ندارید!")
         return
     if data == "backup_media" and not is_allowed(user_id, 'backup_media'):
+        await query.edit_message_text("❌ شما مجوز بکاپ‌گیری از مدیا را ندارید!")
         return
     if data == "list_backups" and not is_allowed(user_id, 'list_backups'):
+        await query.edit_message_text("❌ شما مجوز مشاهده لیست بکاپ‌ها را ندارید!")
         return
     if data.startswith("delete:") and not is_allowed(user_id, 'delete_backups'):
+        await query.edit_message_text("❌ شما مجوز حذف بکاپ‌ها را ندارید!")
         return
     if data == "restore_backup" and not (is_allowed(user_id, 'restore_db') or is_allowed(user_id, 'restore_media')):
+        await query.edit_message_text("❌ شما مجوز ریستور بکاپ را ندارید!")
         return
     if data == "backup_info" and not is_allowed(user_id, 'backup_info'):
+        await query.edit_message_text("❌ شما مجوز مشاهده اطلاعات بکاپ را ندارید!")
         return
     if data == "support" and not is_allowed(user_id, 'support'):
+        await query.edit_message_text("❌ شما مجوز دسترسی به پشتیبانی را ندارید!")
         return
 
     # ---------------- منوی بکاپ ----------------
     if data == "backup_menu":
-        text = "📦 انتخاب نوع بکاپ گیری \n\nلازم به ذکر می باشد که می توانید از دیتابیس یا فولدر های مدیا بکاپ بگیرید \n\nتوضیح: بکاپ دیتابیس داده‌های سایت را حفظ می‌کند، بکاپ مدیا فایل‌های آپلود شده را."
+        text = "📦 **انتخاب نوع بکاپ‌گیری**\n\nلازم به ذکر است که می‌توانید از دیتابیس یا فولدرهای مدیا بکاپ بگیرید.\n\n**توضیح**: بکاپ دیتابیس داده‌های سایت را حفظ می‌کند، بکاپ مدیا فایل‌های آپلود شده را."
         keyboard = [[
             InlineKeyboardButton("دیتابیس", callback_data="backup_db") if is_allowed(user_id, 'backup_db') else None,
             InlineKeyboardButton("فولدر مدیا", callback_data="backup_media") if is_allowed(user_id, 'backup_media') else None
@@ -351,16 +413,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         keyboard = [row for row in keyboard if any(row)]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
 
     # ---------------- بکاپ دیتابیس ----------------
     elif data == "backup_db":
-        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی بکاپ دیتابیس...")
+        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده‌سازی بکاپ دیتابیس...")
         
         # اجرای backup.sh
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
         if not os.path.exists(DB_BACKUP_DIR):
             os.makedirs(DB_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ دیتابیس ایجاد شد.")
 
         print(f"Running backup.sh for DB: {backup_script}")
         result = subprocess.run(f"{backup_script} db", shell=True, capture_output=True, text=True)
@@ -377,19 +440,21 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
-            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل بکاپ دیتابیس \nFile: {db_file}")
+            await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"), caption=f"فایل بکاپ دیتابیس\nFile: {db_file}")
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
 
         cleanup_old_backups(DB_BACKUP_DIR)
+        await context.bot.send_message(chat_id=user_id, text="✅ بکاپ‌های قدیمی با موفقیت مدیریت شدند.")
         await show_main_menu(user_id, context)
 
     # ---------------- بکاپ مدیا ----------------
     elif data == "backup_media":
-        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده سازی بکاپ مدیا...")
+        await context.bot.send_message(chat_id=user_id, text="⏳ در حال پیاده‌سازی بکاپ مدیا...")
 
         if not os.path.exists(MEDIA_BACKUP_DIR):
             os.makedirs(MEDIA_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ مدیا ایجاد شد.")
 
         # اجرای backup.sh برای مدیا
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
@@ -413,14 +478,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
 
         cleanup_old_backups(MEDIA_BACKUP_DIR)
+        await context.bot.send_message(chat_id=user_id, text="✅ بکاپ‌های قدیمی با موفقیت مدیریت شدند.")
         await show_main_menu(user_id, context)
 
     # ---------------- لیست بکاپ‌ها ----------------
     elif data == "list_backups":
         if not os.path.exists(DB_BACKUP_DIR):
             os.makedirs(DB_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ دیتابیس ایجاد شد.")
         if not os.path.exists(MEDIA_BACKUP_DIR):
             os.makedirs(MEDIA_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ مدیا ایجاد شد.")
 
         files = []
         # اضافه کردن بکاپ‌های دیتابیس
@@ -433,8 +501,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد",
-                reply_markup=reply_markup
+                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نیست.\n\n**توضیح**: ابتدا بکاپی ایجاد کنید تا در این بخش نمایش داده شود.",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
             )
             return
 
@@ -447,21 +516,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     callback_data=f"copy_name:{filename}"),
             ]
             if is_allowed(user_id, 'delete_backups'):
-                row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}"))
+                row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}"))
             keyboard.append(row)
 
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            "📁 بخش بکاپ‌ها\n"
+            "📁 **بخش بکاپ‌ها**\n\n"
             "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
-            "با کلیک روی دکمه (حذف) :\n"
-            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
-            "با کلیک روی اسم فایل :\n"
-            "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.\n\n"
-            "توضیح: بکاپ‌ها به صورت خودکار قدیمی‌ترین‌ها را حذف می‌کنند تا فضای ذخیره‌سازی مدیریت شود.",
-            reply_markup=reply_markup
+            "**با کلیک روی دکمه (حذف):** بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+            "**با کلیک روی اسم فایل:** نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.\n\n"
+            "**توضیح**: بکاپ‌ها به صورت خودکار قدیمی‌ترین‌ها را حذف می‌کنند تا فضای ذخیره‌سازی مدیریت شود.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
 
     # ---------------- هندلر کلیک روی دکمه کپی ----------------
@@ -472,13 +540,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ---------------- حذف ----------------
     elif data.startswith("delete:"):
-        f = data.split(":", 1)[1]
-        file_type, filename = f.split(":", 1)
+        _, file_type, filename = data.split(":", 2)
         backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
         file_path = os.path.join(backup_dir, filename)
         if os.path.exists(file_path):
             os.remove(file_path)
-            await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} حذف شد.")
+            await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} با موفقیت حذف شد.")
+        else:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
         
         # بازسازی لیست بکاپ‌ها بعد از حذف
         files = []
@@ -495,26 +564,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
                 ]
                 if is_allowed(user_id, 'delete_backups'):
-                    row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}"))
+                    row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}"))
                 keyboard.append(row)
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            "📁 بخش بکاپ‌ها\n"
+            "📁 **بخش بکاپ‌ها**\n\n"
             "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
-            "با کلیک روی دکمه (حذف) :\n"
-            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n",
-            reply_markup=reply_markup
+            "**با کلیک روی دکمه (حذف):** بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+            "**با کلیک روی اسم فایل:** نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
         
     # ---------------- منوی ریستور بکاپ ----------------
     elif data == "restore_backup":
         text = (
-            "📥 منوی ریستور بکاپ\n\n"
+            "📥 **منوی ریستور بکاپ**\n\n"
             "در این بخش می‌توانید فایل‌های بکاپ دیتابیس یا مدیا را به نسخه فعلی بازگردانید.\n"
-            "لطفاً دقت داشته باشید که ریستور بکاپ باعث جایگزینی فایل‌های موجود می‌شود!\n\n"
-            "توضیح: قبل از ریستور، از وضعیت فعلی بکاپ بگیرید تا در صورت مشکل بتوانید بازگردانی کنید."
+            "**لطفاً دقت کنید:** ریستور بکاپ باعث جایگزینی فایل‌های موجود می‌شود!\n\n"
+            "**توضیح**: قبل از ریستور، از وضعیت فعلی بکاپ بگیرید تا در صورت مشکل بتوانید بازگردانی کنید."
         )
         keyboard = [[
             InlineKeyboardButton("ریستور فولدر مدیا", callback_data="restore_media") if is_allowed(user_id, 'restore_media') else None,
@@ -523,25 +593,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         keyboard = [row for row in keyboard if any(row)]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
         
     # ---------------- توضیحات بکاپ‌گیری ----------------
     elif data == "backup_info":
         text = f"""
-📝 توضیحات بکاپ‌گیری روزانه
+📝 **توضیحات بکاپ‌گیری روزانه**
 
 از طریق این ربات می‌توانید به‌صورت روزانه از وب‌سایت و اسکریپت هتلی خود بکاپ تهیه کنید.
 
-01 - بکاپ دیتابیس : شامل تمام داده‌های پایگاه داده Safarname24 در قالب فایل (Sql). این بکاپ برای حفظ اطلاعات کاربران و تنظیمات ضروری است.
+1️⃣ **بکاپ دیتابیس**: شامل تمام داده‌های پایگاه داده Safarname24 در قالب فایل (SQL). این بکاپ برای حفظ اطلاعات کاربران و تنظیمات ضروری است.
 
-02 - بکاپ مدیا : شامل تمامی فایل‌های مدیا در قالب فایل فشرده (tar.gz). شامل تصاویر هتل‌ها، ویدیوها و فایل‌های آپلود شده توسط کاربران.
+2️⃣ **بکاپ مدیا**: شامل تمامی فایل‌های مدیا در قالب فایل فشرده (tar.gz). شامل تصاویر هتل‌ها، ویدیوها و فایل‌های آپلود شده توسط کاربران.
 
-03 - تعداد بکاپ‌ها : حداکثر {MAX_BACKUPS} بکاپ اخیر نگهداری شده و نسخه‌های قدیمی به‌صورت خودکار حذف می‌شوند تا فضای ذخیره‌سازی بهینه باشد.
+3️⃣ **تعداد بکاپ‌ها**: حداکثر {MAX_BACKUPS} بکاپ اخیر نگهداری شده و نسخه‌های قدیمی به‌صورت خودکار حذف می‌شوند تا فضای ذخیره‌سازی بهینه باشد.
 
-04 - حذف بکاپ : امکان حذف بکاپ‌های موجود برای مدیریت فضای ذخیره.
-    
-    """
-
+4️⃣ **حذف بکاپ**: امکان حذف بکاپ‌های موجود برای مدیریت فضای ذخیره.
+        """
         keyboard = [
             [InlineKeyboardButton("🚀 ارتقا تعداد درخواست‌ها", callback_data="upgrade_requests")],
             [InlineKeyboardButton("بازگشت", callback_data="go_back")]
@@ -551,8 +619,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "upgrade_requests":
         await query.edit_message_text(
-            "ویژگی ارتقای تعداد درخواست‌ها به‌ زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.\n\nتوضیح: این ارتقا اجازه بکاپ‌های بیشتر یا ویژگی‌های پیشرفته را فراهم می‌کند.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="backup_info")]])
+            "ویژگی ارتقای تعداد درخواست‌ها به‌زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.\n\n**توضیح**: این ارتقا اجازه بکاپ‌های بیشتر یا ویژگی‌های پیشرفته را فراهم می‌کند.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="backup_info")]]),
+            parse_mode="Markdown"
         )
 
     # ---------------- بازگشت به منوی اصلی ----------------
@@ -566,52 +635,87 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("بازگشت", callback_data="go_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("ادمین عزیز، در صورت بروز هرگونه مشکل در استفاده از ربات، می‌توانید از ساعت (9 صبح تا 21 شب) با کارشناس پشتیبانی ما در تلگرام در ارتباط باشید.\n\nتوضیح: پشتیبانی برای حل مشکلات فنی، راهنمایی و پیشنهادات در دسترس است.", reply_markup=reply_markup)
+        await query.edit_message_text(
+            "ادمین عزیز، در صورت بروز هرگونه مشکل در استفاده از ربات، می‌توانید از ساعت (9 صبح تا 21 شب) با کارشناس پشتیبانی ما در تلگرام در ارتباط باشید.\n\n**توضیح**: پشتیبانی برای حل مشکلات فنی، راهنمایی و پیشنهادات در دسترس است.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
 
     # ---------------- کنترل پنل ----------------
     elif data == "control_panel":
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز دسترسی به کنترل پنل را ندارید!")
             return
-        text = "⚙️ کنترل پنل ربات\n\nتوضیح: در این بخش می‌توانید ادمین‌ها و گروه‌های دسترسی را مدیریت کنید."
+        text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها و گروه‌های دسترسی را مدیریت کنید."
         keyboard = [[
             InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin"),
             InlineKeyboardButton("👥 ایجاد گروه دسترسی", callback_data="create_group")
+        ],[
+            InlineKeyboardButton("🛠 مدیریت گروه‌های دسترسی", callback_data="manage_groups"),
+            InlineKeyboardButton("👤 مدیریت ادمین‌ها", callback_data="manage_admins")
         ]]
-        keyboard.append([InlineKeyboardButton("🛠 مدیریت گروه‌های دسترسی", callback_data="manage_groups")])
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
 
     # ---------------- اضافه کردن ادمین ----------------
     elif data == "add_admin":
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز افزودن ادمین را ندارید!")
             return
         context.user_data['state'] = 'waiting_for_admin_id'
-        await context.bot.send_message(chat_id=chat_id, text="لطفاً ID عددی کاربر را ارسال کنید.\n\nتوضیح: ID کاربر را از تنظیمات تلگرام یا بات‌های دیگر می‌توانید پیدا کنید.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="لطفاً ID عددی کاربر را ارسال کنید.\n\n**توضیح**: ID کاربر را از تنظیمات تلگرام یا بات‌های دیگر می‌توانید پیدا کنید.",
+            parse_mode="Markdown"
+        )
 
     # ---------------- ایجاد گروه ----------------
     elif data == "create_group":
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز ایجاد گروه دسترسی را ندارید!")
             return
         context.user_data['state'] = 'waiting_for_group_name'
-        await context.bot.send_message(chat_id=chat_id, text="لطفاً نام گروه دسترسی را ارسال کنید.\n\nتوضیح: نام گروه باید منحصر به فرد باشد و برای شناسایی نقش استفاده می‌شود.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="لطفاً نام گروه دسترسی را ارسال کنید.\n\n**توضیح**: نام گروه باید منحصر به فرد باشد و برای شناسایی نقش استفاده می‌شود.",
+            parse_mode="Markdown"
+        )
 
     # ---------------- مدیریت گروه‌ها ----------------
     elif data == "manage_groups":
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز مدیریت گروه‌های دسترسی را ندارید!")
             return
         await show_manage_groups(chat_id, context, message_id=message_id)
+
+    # ---------------- مدیریت ادمین‌ها ----------------
+    elif data == "manage_admins":
+        if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
+            return
+        await show_manage_admins(chat_id, context, message_id=message_id)
 
     # ---------------- مشاهده گروه ----------------
     elif data.startswith("view_group:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز مشاهده گروه را ندارید!")
             return
         group_name = data.split(":", 1)[1]
         await show_group_details(chat_id, context, group_name, message_id=message_id)
 
+    # ---------------- مشاهده ادمین ----------------
+    elif data.startswith("view_admin:"):
+        if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز مشاهده ادمین را ندارید!")
+            return
+        admin_id = data.split(":", 1)[1]
+        await show_admin_details(chat_id, context, admin_id, message_id=message_id)
+
     # ---------------- ویرایش مجوزهای گروه ----------------
     elif data.startswith("edit_group_perms:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز ویرایش گروه را ندارید!")
             return
         group_name = data.split(":", 1)[1]
         context.user_data['editing_group'] = group_name
@@ -619,29 +723,71 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['state'] = 'select_group_permissions'
         await show_permissions_selection(chat_id, context, group_name, is_group=True, message_id=message_id, show_desc=True)
 
+    # ---------------- ویرایش مجوزهای ادمین ----------------
+    elif data.startswith("edit_admin_perms:"):
+        if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز ویرایش ادمین را ندارید!")
+            return
+        admin_id = data.split(":", 1)[1]
+        context.user_data['editing_admin'] = admin_id
+        context.user_data['selected_perms'] = admins.get(admin_id, set())
+        context.user_data['state'] = 'select_admin_permissions'
+        await show_permissions_selection(chat_id, context, admin_id, is_group=False, message_id=message_id, show_desc=True)
+
     # ---------------- تغییر نام گروه ----------------
     elif data.startswith("rename_group:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز تغییر نام گروه را ندارید!")
             return
         group_name = data.split(":", 1)[1]
         context.user_data['editing_group'] = group_name
         context.user_data['state'] = 'waiting_for_new_group_name'
-        await context.bot.send_message(chat_id=chat_id, text="لطفاً نام جدید گروه را ارسال کنید.\n\nتوضیح: نام جدید باید منحصر به فرد باشد.")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="لطفاً نام جدید گروه را ارسال کنید.\n\n**توضیح**: نام جدید باید منحصر به فرد باشد.",
+            parse_mode="Markdown"
+        )
 
     # ---------------- حذف گروه ----------------
     elif data.startswith("delete_group:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز حذف گروه را ندارید!")
             return
         group_name = data.split(":", 1)[1]
         if group_name in groups:
             del groups[group_name]
             save_data(data)
-            await query.edit_message_text("✅ گروه حذف شد.")
+            await query.edit_message_text("✅ گروه با موفقیت حذف شد.")
+        else:
+            await query.edit_message_text("❌ گروه یافت نشد!")
         await show_manage_groups(chat_id, context)
+
+    # ---------------- حذف ادمین ----------------
+    elif data.startswith("delete_admin:"):
+        if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز حذف ادمین را ندارید!")
+            return
+        admin_id = data.split(":", 1)[1]
+        if admin_id in admins:
+            del admins[admin_id]
+            save_data(data)
+            await query.edit_message_text("✅ ادمین با موفقیت حذف شد.")
+        else:
+            await query.edit_message_text("❌ ادمین یافت نشد!")
+        await show_manage_admins(chat_id, context)
+
+    # ---------------- اختصاص گروه به ادمین ----------------
+    elif data.startswith("assign_group_menu:"):
+        if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز اختصاص گروه را ندارید!")
+            return
+        admin_id = data.split(":", 1)[1]
+        await show_group_selection(chat_id, context, admin_id, message_id=message_id)
 
     # ---------------- toggle مجوز ----------------
     elif data.startswith("toggle_perm:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز تغییر مجوزها را ندارید!")
             return
         _, perm, target_type = data.split(":", 2)
         selected = context.user_data.get('selected_perms', set())
@@ -650,47 +796,58 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             selected.add(perm)
         context.user_data['selected_perms'] = selected
-        target = context.user_data.get('new_group_name') or context.user_data.get('editing_group') or context.user_data['new_admin_id']
+        target = (context.user_data.get('new_group_name') or 
+                  context.user_data.get('editing_group') or 
+                  context.user_data.get('new_admin_id') or 
+                  context.user_data.get('editing_admin'))
         await show_permissions_selection(chat_id, context, target, is_group=(target_type == 'group'), message_id=message_id, show_desc=True)
 
     # ---------------- تأیید مجوزها ----------------
     elif data.startswith("confirm_perms:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز تأیید مجوزها را ندارید!")
             return
         target_type = data.split(":", 1)[1]
         selected = context.user_data.get('selected_perms', set())
         if target_type == 'admin':
-            new_id = context.user_data.get('new_admin_id')
-            if new_id:
-                admins[str(new_id)] = selected
+            admin_id = context.user_data.get('new_admin_id') or context.user_data.get('editing_admin')
+            if admin_id:
+                admins[str(admin_id)] = selected
                 save_data(data)
-                await query.edit_message_text("✅ ادمین با موفقیت اضافه شد.")
+                await query.edit_message_text(
+                    f"✅ {'ادمین با موفقیت اضافه شد' if context.user_data.get('new_admin_id') else 'مجوزهای ادمین با موفقیت ویرایش شد'}."
+                )
         elif target_type == 'group':
             group_name = context.user_data.get('new_group_name') or context.user_data.get('editing_group')
             if group_name:
                 groups[group_name] = selected
                 save_data(data)
-                await query.edit_message_text("✅ گروه دسترسی با موفقیت ایجاد/ویرایش شد.")
+                await query.edit_message_text(
+                    f"✅ {'گروه دسترسی با موفقیت ایجاد شد' if context.user_data.get('new_group_name') else 'مجوزهای گروه با موفقیت ویرایش شد'}."
+                )
         context.user_data.clear()
         await show_main_menu(user_id, context)
 
     # ---------------- اختصاص گروه به ادمین ----------------
     elif data.startswith("assign_group:"):
         if not is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز اختصاص گروه را ندارید!")
             return
         _, group_name, admin_id = data.split(":")
         admin_id = int(admin_id)
         if group_name in groups:
             admins[str(admin_id)] = groups[group_name].copy()
             save_data(data)
-            await query.edit_message_text(f"✅ گروه {group_name} به ادمین ID {admin_id} اختصاص یافت.")
+            await query.edit_message_text(f"✅ گروه {group_name} با موفقیت به ادمین ID {admin_id} اختصاص یافت.")
+        else:
+            await query.edit_message_text(f"❌ گروه {group_name} یافت نشد!")
         context.user_data.clear()
         await show_main_menu(user_id, context)
 
     # ---------------- لغو ----------------
     elif data == "cancel_perms":
         context.user_data.clear()
-        await query.edit_message_text("عملیات لغو شد.")
+        await query.edit_message_text("✅ عملیات با موفقیت لغو شد.")
         await show_main_menu(user_id, context)
 
 # ======================== اجرای ربات ========================
