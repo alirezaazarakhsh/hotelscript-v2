@@ -81,6 +81,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ نام جدید گروه نمی‌تواند خالی باشد!")
                 return
             old_name = context.user_data.get('editing_group')
+            if not old_name:
+                await update.message.reply_text("❌ گروه در حال ویرایش یافت نشد!")
+                context.user_data.clear()
+                return
             if new_name != old_name and new_name in groups:
                 await update.message.reply_text("❌ این نام گروه قبلاً وجود دارد!")
                 return
@@ -88,7 +92,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             AccessManager.save_data(data)
             await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
             context.user_data.clear()
-            await GroupManager.show_manage_groups(update.message.chat_id, context)
+            await GroupManager.show_manage_groups(update.message.chat_id, context, groups)  # پاس دادن groups
 
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
@@ -96,7 +100,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
-
+        
+        
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
