@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: .
@@ -30,9 +28,7 @@ services:
       - app_network
 
   bot:
-    build:
-      context: ./hotel_bot
-      dockerfile: Dockerfile
+    build: .
     container_name: telegram_bot
     command: python /app/hotel_bot/bot.py
     volumes:
