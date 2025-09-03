@@ -5,7 +5,7 @@ class PermissionManager:
     @staticmethod
     async def show_group_selection(chat_id, context, admin_id, groups, message_id=None):
         if not groups:
-            text = "هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه ایجاد کنید.\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که می‌توانید مجوزها را به آن‌ها اختصاص دهید و سپس به ادمین‌ها割り دهید."
+            text = "هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه ایجاد کنید.\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که می‌توانید مجوزها را به آن‌ها اختصاص دهید و سپس به ادمین‌ها اختصاص دهید."
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="control_panel")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
@@ -33,6 +33,9 @@ class PermissionManager:
 
     @staticmethod
     async def show_permissions_selection(chat_id, context, target, is_group=False, message_id=None, show_desc=False):
+        if not is_group:
+            # حذف پشتیبانی از انتخاب مجوزها برای ادمین‌ها (فقط برای گروه‌ها)
+            return
         selected = context.user_data.get('selected_perms', set())
         text = f"انتخاب مجوزها برای {'گروه: ' + target if is_group else 'ادمین ID: ' + str(target)}\n\nتوضیح: مجوزها دسترسی‌های خاصی را تعریف می‌کنند. می‌توانید چندین مجوز را انتخاب کنید. برای هر مجوز توضیح مختصری وجود دارد."
         if show_desc:

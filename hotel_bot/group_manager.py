@@ -5,7 +5,7 @@ class GroupManager:
     @staticmethod
     async def show_manage_groups(chat_id, context, groups, message_id=None):
         if not groups:
-            text = "هیچ گروه دسترسی‌ای وجود ندارد.\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که می‌توانید مجوزها را به آن‌ها اختصاص دهید و سپس به ادمین‌ها割り دهید."
+            text = "هیچ گروه دسترسی‌ای وجود ندارد.\n\nتوضیح: گروه‌های دسترسی نقش‌هایی هستند که می‌توانید مجوزها را به آن‌ها اختصاص دهید و سپس به ادمین‌ها اختصاص دهید."
             keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
         else:
             text = "لیست گروه‌های دسترسی:\n\nتوضیح: می‌توانید هر گروه را ویرایش، حذف یا مجوزهای آن را مشاهده کنید."

@@ -186,7 +186,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ شما مجوز مشاهده ادمین را ندارید!")
             return
         admin_id = data.split(":", 1)[1]
-        await AdminManager.show_admin_details(chat_id, context, admin_id, admins, message_id=message_id)
+        await AdminManager.show_admin_details(chat_id, context, admin_id, admins, groups, message_id=message_id)
     elif data.startswith("edit_group_perms:"):
         if not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز ویرایش گروه را ندارید!")
@@ -196,15 +196,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_perms'] = groups.get(group_name, set())
         context.user_data['state'] = 'select_group_permissions'
         await PermissionManager.show_permissions_selection(chat_id, context, group_name, is_group=True, message_id=message_id, show_desc=True)
-    elif data.startswith("edit_admin_perms:"):
-        if not AccessManager.is_allowed(user_id, 'manage_admins'):
-            await query.edit_message_text("❌ شما مجوز ویرایش ادمین را ندارید!")
-            return
-        admin_id = data.split(":", 1)[1]
-        context.user_data['editing_admin'] = admin_id
-        context.user_data['selected_perms'] = admins.get(admin_id, set())
-        context.user_data['state'] = 'select_admin_permissions'
-        await PermissionManager.show_permissions_selection(chat_id, context, admin_id, is_group=False, message_id=message_id, show_desc=True)
     elif data.startswith("rename_group:"):
         if not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز تغییر نام گروه را ندارید!")
@@ -252,6 +243,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ شما مجوز تغییر مجوزها را ندارید!")
             return
         _, perm, target_type = data.split(":", 2)
+        if target_type != 'group':
+            return  # فقط برای گروه‌ها
         selected = context.user_data.get('selected_perms', set())
         if perm in selected:
             selected.remove(perm)
@@ -259,25 +252,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             selected.add(perm)
         context.user_data['selected_perms'] = selected
         target = (context.user_data.get('new_group_name') or 
-                  context.user_data.get('editing_group') or 
-                  context.user_data.get('new_admin_id') or 
-                  context.user_data.get('editing_admin'))
+                  context.user_data.get('editing_group'))
         await PermissionManager.show_permissions_selection(chat_id, context, target, is_group=(target_type == 'group'), message_id=message_id, show_desc=True)
     elif data.startswith("confirm_perms:"):
         if not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز تأیید مجوزها را ندارید!")
             return
         target_type = data.split(":", 1)[1]
+        if target_type != 'group':
+            return  # فقط برای گروه‌ها
         selected = context.user_data.get('selected_perms', set())
-        if target_type == 'admin':
-            admin_id = context.user_data.get('new_admin_id') or context.user_data.get('editing_admin')
-            if admin_id:
-                admins[str(admin_id)] = selected
-                AccessManager.save_data(access_data)
-                await query.edit_message_text(
-                    f"✅ {'ادمین با موفقیت اضافه شد' if context.user_data.get('new_admin_id') else 'مجوزهای ادمین با موفقیت ویرایش شد'}."
-                )
-        elif target_type == 'group':
+        if target_type == 'group':
             group_name = context.user_data.get('new_group_name') or context.user_data.get('editing_group')
             if group_name:
                 groups[group_name] = selected
@@ -292,9 +277,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ شما مجوز اختصاص گروه را ندارید!")
             return
         _, group_name, admin_id = data.split(":")
-        admin_id = int(admin_id)
         if group_name in groups:
-            admins[str(admin_id)] = groups[group_name].copy()
+            admins[str(admin_id)] = group_name
             AccessManager.save_data(access_data)
             await query.edit_message_text(f"✅ گروه {group_name} با موفقیت به ادمین ID {admin_id} اختصاص یافت.")
         else:

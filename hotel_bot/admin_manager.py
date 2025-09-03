@@ -28,18 +28,18 @@ class AdminManager:
             await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
 
     @staticmethod
-    async def show_admin_details(chat_id, context, admin_id, admins, message_id=None):
-        perms = admins.get(admin_id, set())
-        text = f"جزئیات ادمین ID: {admin_id}\n\nمجوزها:\n"
+    async def show_admin_details(chat_id, context, admin_id, admins, groups, message_id=None):
+        group = admins.get(admin_id)
+        perms = groups.get(group, set()) if group else set()
+        text = f"جزئیات ادمین ID: {admin_id}\n\nگروه دسترسی: {group or 'هیچ'}\n\nمجوزها:\n"
         for perm in perms:
             text += f"- {PERM_DISPLAY[perm]['label']}: {PERM_DISPLAY[perm]['desc']}\n"
         if not perms:
             text += "هیچ مجوزی اختصاص نیافته.\n"
-        text += "\nتوضیح: می‌توانید گروه دسترسی یا مجوزهای این ادمین را ویرایش کنید یا ادمین را حذف کنید."
+        text += "\nتوضیح: می‌توانید گروه دسترسی این ادمین را تغییر دهید یا ادمین را حذف کنید."
         
         keyboard = [
-            [InlineKeyboardButton("اختصاص گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}"),
-             InlineKeyboardButton("ویرایش مجوزها", callback_data=f"edit_admin_perms:{admin_id}")],
+            [InlineKeyboardButton("تغییر گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}")],
             [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}"),
              InlineKeyboardButton("بازگشت", callback_data="manage_admins")]
         ]
