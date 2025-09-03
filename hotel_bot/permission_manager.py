@@ -1,6 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import PERMISSIONS, PERM_DISPLAY
-from hotel_bot.menu_manager import MenuManager
 
 class PermissionManager:
     @staticmethod
@@ -34,13 +33,13 @@ class PermissionManager:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش گروه‌ها: {str(e)}")
-            await MenuManager.show_main_menu(chat_id, context)
+            await context.bot.send_message(chat_id=chat_id, text="لطفاً دوباره تلاش کنید.")
 
     @staticmethod
     async def show_permissions_selection(chat_id, context, target, is_group=False, message_id=None, show_desc=False):
         try:
             if not is_group:
-                return  # فقط برای گروه‌ها
+                return
             selected = context.user_data.get('selected_perms', set())
             text = f"انتخاب مجوزها برای گروه: {target}\n\nتوضیح: مجوزها دسترسی‌های خاصی را تعریف می‌کنند. می‌توانید چندین مجوز را انتخاب کنید. برای هر مجوز توضیح مختصری وجود دارد."
             if show_desc:
@@ -70,4 +69,4 @@ class PermissionManager:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش مجوزها: {str(e)}")
-            await MenuManager.show_main_menu(chat_id, context)
+            await context.bot.send_message(chat_id=chat_id, text="لطفاً دوباره تلاش کنید.")

@@ -9,7 +9,6 @@ class AccessManager:
             if os.path.exists(ADMINS_FILE):
                 with open(ADMINS_FILE, 'r') as f:
                     data = json.load(f)
-                    # تبدیل لیست‌های مجوزها به مجموعه (set) برای عملکرد بهتر
                     for gname in data.get('groups', {}):
                         data['groups'][gname] = set(data['groups'][gname])
                     return data
@@ -21,9 +20,8 @@ class AccessManager:
     @staticmethod
     def save_data(data):
         try:
-            # تبدیل مجموعه‌ها به لیست برای ذخیره‌سازی در JSON
             saveable = {
-                'admins': data['admins'],  # {uid: group_name}
+                'admins': data['admins'],
                 'groups': {gname: list(perms) for gname, perms in data['groups'].items()}
             }
             with open(ADMINS_FILE, 'w') as f:
@@ -44,5 +42,5 @@ class AccessManager:
         if group not in data['groups']:
             return False
         if permission is None:
-            return True  # اگر گروه اختصاص یافته، مجاز است
+            return True
         return permission in data['groups'][group]

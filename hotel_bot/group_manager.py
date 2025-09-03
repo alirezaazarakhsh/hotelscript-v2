@@ -1,6 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import PERM_DISPLAY
-from hotel_bot.menu_manager import MenuManager
 
 class GroupManager:
     @staticmethod
@@ -29,7 +28,7 @@ class GroupManager:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش لیست گروه‌ها: {str(e)}")
-            await MenuManager.show_main_menu(chat_id, context)
+            await context.bot.send_message(chat_id=chat_id, text="لطفاً دوباره تلاش کنید.")
 
     @staticmethod
     async def show_group_details(chat_id, context, group_name, groups, message_id=None):
@@ -56,4 +55,4 @@ class GroupManager:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش جزئیات گروه: {str(e)}")
-            await MenuManager.show_main_menu(chat_id, context)
+            await context.bot.send_message(chat_id=chat_id, text="لطفاً دوباره تلاش کنید.")
