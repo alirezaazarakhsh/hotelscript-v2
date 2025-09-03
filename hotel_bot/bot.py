@@ -147,7 +147,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             filename = data.split(":", 1)[1]
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"نام فایل: {filename}\nبرای کپی کردن، این متن را انتخاب کنید."
+                text=filename
             )
             return
         elif data.startswith("delete:"):
