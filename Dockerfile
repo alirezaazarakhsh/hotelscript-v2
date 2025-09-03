@@ -1,5 +1,5 @@
-# استفاده از ایمیج پایه پایتون 3.8 برای سازگاری با docker-compose
-FROM python:3.8-slim
+# استفاده از ایمیج پایه پایتون 3.9
+FROM python:3.9-slim
 
 # تنظیم مسیر کاری
 WORKDIR /app
@@ -16,6 +16,9 @@ RUN apt-get update && \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# به‌روزرسانی pip
+RUN pip install --upgrade pip
+
 # کپی requirements و نصب آنها
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
@@ -26,5 +29,5 @@ COPY . /app/
 # دادن دسترسی اجرایی به اسکریپت‌ها
 RUN chmod +x /app/start.sh /app/backup.sh
 
-# دستور پیش‌فرض برای اجرای Django یا سرویس‌های دیگر
-CMD ["bash"]
+# دستور پیش‌فرض (توسط docker-compose override می‌شود)
+CMD ["bash", "/app/start.sh"]
