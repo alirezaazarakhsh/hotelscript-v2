@@ -5,25 +5,31 @@ from config import ADMINS_FILE, SUPER_ADMINS
 class AccessManager:
     @staticmethod
     def load_data():
-        if os.path.exists(ADMINS_FILE):
-            with open(ADMINS_FILE, 'r') as f:
-                data = json.load(f)
-                # تبدیل لیست‌های مجوزها به مجموعه (set) برای عملکرد بهتر
-                for gname in data.get('groups', {}):
-                    data['groups'][gname] = set(data['groups'][gname])
-                # admins حالا {uid: group_name} است، نیازی به تغییر نیست
-                return data
-        return {'admins': {}, 'groups': {}}
+        try:
+            if os.path.exists(ADMINS_FILE):
+                with open(ADMINS_FILE, 'r') as f:
+                    data = json.load(f)
+                    # تبدیل لیست‌های مجوزها به مجموعه (set) برای عملکرد بهتر
+                    for gname in data.get('groups', {}):
+                        data['groups'][gname] = set(data['groups'][gname])
+                    return data
+            return {'admins': {}, 'groups': {}}
+        except Exception as e:
+            print(f"Error loading ADMINS_FILE: {str(e)}")
+            return {'admins': {}, 'groups': {}}
 
     @staticmethod
     def save_data(data):
-        # تبدیل مجموعه‌ها به لیست برای ذخیره‌سازی در JSON
-        saveable = {
-            'admins': data['admins'],  # {uid: group_name}
-            'groups': {gname: list(perms) for gname, perms in data['groups'].items()}
-        }
-        with open(ADMINS_FILE, 'w') as f:
-            json.dump(saveable, f)
+        try:
+            # تبدیل مجموعه‌ها به لیست برای ذخیره‌سازی در JSON
+            saveable = {
+                'admins': data['admins'],  # {uid: group_name}
+                'groups': {gname: list(perms) for gname, perms in data['groups'].items()}
+            }
+            with open(ADMINS_FILE, 'w') as f:
+                json.dump(saveable, f)
+        except Exception as e:
+            print(f"Error saving ADMINS_FILE: {str(e)}")
 
     @staticmethod
     def is_allowed(user_id, permission=None):
@@ -38,5 +44,5 @@ class AccessManager:
         if group not in data['groups']:
             return False
         if permission is None:
-            return True  # اگر گروه اختصاص یافته، مجاز است (حتی اگر مجوزها خالی باشد)
+            return True  # اگر گروه اختصاص یافته، مجاز است
         return permission in data['groups'][group]
