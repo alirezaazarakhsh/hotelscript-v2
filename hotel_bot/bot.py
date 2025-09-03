@@ -11,6 +11,9 @@ from admin_manager import AdminManager
 from group_manager import GroupManager
 from permission_manager import PermissionManager
 
+
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not AccessManager.is_allowed(user_id):
@@ -20,6 +23,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     await MenuManager.show_main_menu(user_id, context)
+
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -76,6 +81,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+
+
+
+
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -136,7 +145,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_backup_list(query, user_id, context)
         elif data.startswith("copy_name:"):
             filename = data.split(":", 1)[1]
-            await query.answer(f"نام فایل: {filename}", show_alert=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"نام فایل: {filename}\nبرای کپی کردن، این متن را انتخاب کنید."
+            )
+            return
         elif data.startswith("delete:"):
             await delete_backup(query, user_id, context)
         elif data == "restore_backup":
@@ -304,6 +317,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+
+
 
 
 async def show_backup_list(query, user_id, context):
