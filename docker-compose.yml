@@ -32,7 +32,7 @@ services:
   bot:
     build:
       context: ./hotel_bot
-      dockerfile: Dockerfile.bot
+      dockerfile: Dockerfile
     container_name: telegram_bot
     command: python /app/hotel_bot/bot.py
     volumes:

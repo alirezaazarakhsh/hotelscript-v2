@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters,  ContextTypes
+
 from config import TOKEN
 from access_manager import AccessManager
 from backup_manager import BackupManager
@@ -33,8 +34,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if state == 'waiting_for_admin_id':
         try:
-            new_id = int(text)
-            if str(new_id) in admins or new_id in AccessManager.SUPER_ADMINS:
+            new_id = str(int(text))  # حتما string
+            if new_id in admins or int(new_id) in AccessManager.SUPER_ADMINS:
                 await update.message.reply_text("❌ این کاربر قبلاً ادمین است!")
                 return
             context.user_data['new_admin_id'] = new_id
@@ -74,7 +75,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not AccessManager.is_allowed(user_id):
         await query.edit_message_text(
             "💢 دسترسی غیرفعال\n\n"
-            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
+            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
         )
         return
 

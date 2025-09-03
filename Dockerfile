@@ -27,4 +27,4 @@ COPY . /app/
 RUN chmod +x /app/start.sh /app/backup.sh
 
 # دستور پیش‌فرض برای اجرای Django یا سرویس‌های دیگر
-CMD ["bash", "/app/start.sh"]
+CMD ["bash"]
