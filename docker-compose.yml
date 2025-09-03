@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -36,16 +38,10 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
+      - ./hotel_bot/.env:/app/hotel_bot/.env  # اضافه کردن فایل .env به کانتینر
     environment:
-      BOT_TOKEN: "7577918859:AAFr---YleV2upXxfpxtqKHJpLt_30SRi14"
-      ALLOWED_USERS: "5839876171,341564725,1006807823"
-      PROJECT_DIR: "/app"
-      DB_BACKUP_DIR: "/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      DB_HOST: db
-      DB_USER: postgres
-      DB_PASSWORD: admin
-      DB_NAME: safarname24
+      # متغیرهای محیطی از فایل .env بارگذاری می‌شوند، نیازی به تعریف دستی نیست
+      ENV_PATH: "/app/hotel_bot/.env"
     depends_on:
       - db
     networks:
