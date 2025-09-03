@@ -1,3 +1,4 @@
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
@@ -304,104 +305,93 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
 
+
 async def show_backup_list(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
-    try:
-        if not os.path.exists(DB_BACKUP_DIR):
-            os.makedirs(DB_BACKUP_DIR)
-            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ دیتابیس ایجاد شد.")
-        if not os.path.exists(MEDIA_BACKUP_DIR):
-            os.makedirs(MEDIA_BACKUP_DIR)
-            await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ مدیا ایجاد شد.")
+    # ایجاد دایرکتوری‌ها در صورت عدم وجود
+    if not os.path.exists(DB_BACKUP_DIR):
+        os.makedirs(DB_BACKUP_DIR)
+    if not os.path.exists(MEDIA_BACKUP_DIR):
+        os.makedirs(MEDIA_BACKUP_DIR)
 
-        files = []
-        try:
-            files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
-            files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
-            files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
-        except Exception as e:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در خواندن فایل‌های بکاپ: {str(e)}")
-            return
+    files = []
+    # اضافه کردن بکاپ‌های دیتابیس
+    files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
+    # اضافه کردن بکاپ‌های مدیا
+    files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
+    files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
 
-        if not files:
-            keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نیست.\n\n**توضیح**: ابتدا بکاپی ایجاد کنید تا در این بخش نمایش داده شود.",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
-            return
-
-        keyboard = []
-        for f in files:
-            file_type, filename = f.split(":", 1)
-            file_datetime = FileManager.get_file_datetime(filename)
-            row = [
-                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
-            ]
-            if AccessManager.is_allowed(user_id, 'delete_backups'):
-                row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}"))
-            keyboard.append(row)
-
-        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+    if not files:
+        keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-
         await query.edit_message_text(
-            "📁 **بخش بکاپ‌ها**\n\n"
-            f"در این بخش می‌توانید لیست {MAX_BACKUPS} بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
-            "**با کلیک روی دکمه (حذف):** بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
-            "**با کلیک روی اسم فایل:** نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.\n\n"
-            "**توضیح**: بکاپ‌ها به صورت خودکار قدیمی‌ترین‌ها را حذف می‌کنند تا فضای ذخیره‌سازی مدیریت شود.",
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            "در حال حاضر هیچ بکاپی از فایل دیتابیس و فولدر مدیا در لیست موجود نمی باشد",
+            reply_markup=reply_markup
         )
-    except Exception as e:
-        await query.edit_message_text(f"❌ خطا در نمایش لیست بکاپ‌ها: {str(e)}")
-        await MenuManager.show_main_menu(user_id, context, message_id=query.message.message_id, chat_id=query.message.chat_id)
+        return
+
+    keyboard = []
+    for f in files:
+        file_type, filename = f.split(":", 1)
+        file_datetime = FileManager.get_file_datetime(filename)
+        keyboard.append([
+            InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
+            InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}")
+        ])
+
+    keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        "📁 بخش بکاپ‌ها\n"
+        "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+        "با کلیک روی دکمه (حذف) :\n"
+        "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+        "با کلیک روی اسم فایل :\n"
+        "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
+        reply_markup=reply_markup
+    )
+
 
 async def delete_backup(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
-    try:
-        _, file_type, filename = query.data.split(":", 2)
-        backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
-        file_path = os.path.join(backup_dir, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} با موفقیت حذف شد.")
-        else:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
+    _, file_type, filename = query.data.split(":", 2)
+    backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
+    file_path = os.path.join(backup_dir, filename)
+    
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} حذف شد.")
+    else:
+        await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
 
-        files = []
-        files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
-        files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
-        files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
+    # بازسازی لیست بکاپ‌ها بعد از حذف
+    files = []
+    files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
+    files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
+    files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
 
-        keyboard = []
-        if files:
-            for f in files:
-                file_type, filename = f.split(":", 1)
-                file_datetime = FileManager.get_file_datetime(filename)
-                row = [
-                    InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
-                ]
-                if AccessManager.is_allowed(user_id, 'delete_backups'):
-                    row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}"))
-                keyboard.append(row)
-        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard = []
+    if files:
+        for f in files:
+            file_type, filename = f.split(":", 1)
+            file_datetime = FileManager.get_file_datetime(filename)
+            keyboard.append([
+                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
+                InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
+            ])
+    keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(
-            "📁 **بخش بکاپ‌ها**\n\n"
-            "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
-            "**با کلیک روی دکمه (حذف):** بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
-            "**با کلیک روی اسم فایل:** نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        await query.edit_message_text(f"❌ خطا در حذف بکاپ: {str(e)}")
-        await MenuManager.show_main_menu(user_id, context, message_id=query.message.message_id, chat_id=query.message.chat_id)
+    await query.edit_message_text(
+        "📁 بخش بکاپ‌ها\n"
+        "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+        "با کلیک روی دکمه (حذف) :\n"
+        "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
+        "با کلیک روی اسم فایل :\n"
+        "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
+        reply_markup=reply_markup
+    )
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
