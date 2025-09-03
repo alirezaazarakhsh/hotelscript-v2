@@ -1,7 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import PERM_DISPLAY
 from access_manager import AccessManager
-from hotel_bot.menu_manager import MenuManager
+from menu_manager import MenuManager  
 
 class AdminManager:
     @staticmethod
