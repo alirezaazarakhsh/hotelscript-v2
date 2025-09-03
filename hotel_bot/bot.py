@@ -315,9 +315,13 @@ async def show_backup_list(query, user_id, context):
             await context.bot.send_message(chat_id=user_id, text="✅ دایرکتوری بکاپ مدیا ایجاد شد.")
 
         files = []
-        files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
-        files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
-        files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
+        try:
+            files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
+            files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
+            files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در خواندن فایل‌های بکاپ: {str(e)}")
+            return
 
         if not files:
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
@@ -334,8 +338,7 @@ async def show_backup_list(query, user_id, context):
             file_type, filename = f.split(":", 1)
             file_datetime = FileManager.get_file_datetime(filename)
             row = [
-                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", 
-                                    callback_data=f"copy_name:{filename}"),
+                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
             ]
             if AccessManager.is_allowed(user_id, 'delete_backups'):
                 row.append(InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}"))
@@ -346,7 +349,7 @@ async def show_backup_list(query, user_id, context):
 
         await query.edit_message_text(
             "📁 **بخش بکاپ‌ها**\n\n"
-            "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
+            f"در این بخش می‌توانید لیست {MAX_BACKUPS} بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
             "**با کلیک روی دکمه (حذف):** بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
             "**با کلیک روی اسم فایل:** نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.\n\n"
             "**توضیح**: بکاپ‌ها به صورت خودکار قدیمی‌ترین‌ها را حذف می‌کنند تا فضای ذخیره‌سازی مدیریت شود.",

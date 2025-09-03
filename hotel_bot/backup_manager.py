@@ -1,8 +1,8 @@
 import os
 import subprocess
+import asyncio
 from config import PROJECT_DIR, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MEDIA_BASE_URL
 from file_manager import FileManager
-
 
 class BackupManager:
     @staticmethod
@@ -18,15 +18,28 @@ class BackupManager:
         # ایجاد دایرکتوری بکاپ دیتابیس
         os.makedirs(DB_BACKUP_DIR, exist_ok=True)
 
-        # اجرای اسکریپت بکاپ دیتابیس
+        # اجرای اسکریپت بکاپ دیتابیس با تایم‌اوت
         print(f"Running backup.sh for DB: {backup_script}")
-        result = subprocess.run([backup_script, "db"], capture_output=True, text=True)
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [backup_script, "db"],
+                capture_output=True,
+                text=True,
+                timeout=300  # تایم‌اوت 5 دقیقه
+            )
+        except subprocess.TimeoutExpired:
+            await context.bot.send_message(chat_id=user_id, text="❌ خطا: اجرای بکاپ دیتابیس بیش از حد طول کشید!")
+            return
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در اجرای اسکریپت بکاپ دیتابیس: {str(e)}")
+            return
 
         print(f"backup.sh stdout: {result.stdout}")
         print(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ دیتابیس:\n{result.stderr}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ دیتابیس:\n{result.stderr or 'خطای ناشناخته'}")
             return
 
         # پیدا کردن آخرین فایل بکاپ دیتابیس
@@ -38,17 +51,23 @@ class BackupManager:
         file_path = os.path.join(DB_BACKUP_DIR, db_file)
         if os.path.exists(file_path):
             await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
-            await context.bot.send_document(
-                chat_id=user_id,
-                document=open(file_path, "rb"),
-                caption=f"فایل بکاپ دیتابیس\nFile: {db_file}"
-            )
+            try:
+                await context.bot.send_document(
+                    chat_id=user_id,
+                    document=open(file_path, "rb"),
+                    caption=f"فایل بکاپ دیتابیس\nFile: {db_file}"
+                )
+            except Exception as e:
+                await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در ارسال فایل بکاپ: {str(e)}")
         else:
-            await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل بکاپ {db_file} پیدا نشد!")
 
         # پاکسازی بکاپ‌های قدیمی
-        FileManager.cleanup_old_backups(DB_BACKUP_DIR)
-        await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        try:
+            FileManager.cleanup_old_backups(DB_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در پاکسازی بکاپ‌های قدیمی: {str(e)}")
 
     @staticmethod
     async def backup_media(user_id, context):
@@ -63,15 +82,28 @@ class BackupManager:
         # ایجاد دایرکتوری بکاپ مدیا
         os.makedirs(MEDIA_BACKUP_DIR, exist_ok=True)
 
-        # اجرای اسکریپت بکاپ مدیا
+        # اجرای اسکریپت بکاپ مدیا با تایم‌اوت
         print(f"Running backup.sh for media: {backup_script}")
-        result = subprocess.run([backup_script, "media"], capture_output=True, text=True)
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [backup_script, "media"],
+                capture_output=True,
+                text=True,
+                timeout=600  # تایم‌اوت 10 دقیقه برای مدیا
+            )
+        except subprocess.TimeoutExpired:
+            await context.bot.send_message(chat_id=user_id, text="❌ خطا: اجرای بکاپ مدیا بیش از حد طول کشید!")
+            return
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در اجرای اسکریپت بکاپ مدیا: {str(e)}")
+            return
 
         print(f"backup.sh stdout: {result.stdout}")
         print(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا:\n{result.stderr}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا:\n{result.stderr or 'خطای ناشناخته'}")
             return
 
         # پیدا کردن آخرین فایل بکاپ مدیا
@@ -86,8 +118,11 @@ class BackupManager:
             media_url = MEDIA_BASE_URL + media_file
             await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}")
         else:
-            await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل بکاپ {media_file} پیدا نشد!")
 
         # پاکسازی بکاپ‌های قدیمی
-        FileManager.cleanup_old_backups(MEDIA_BACKUP_DIR)
-        await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        try:
+            FileManager.cleanup_old_backups(MEDIA_BACKUP_DIR)
+            await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در پاکسازی بکاپ‌های قدیمی: {str(e)}")
