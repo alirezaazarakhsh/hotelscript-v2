@@ -30,7 +30,9 @@ services:
       - app_network
 
   bot:
-    build: .
+    build:
+      context: ./hotel_bot
+      dockerfile: Dockerfile.bot
     container_name: telegram_bot
     command: python /app/hotel_bot/bot.py
     volumes:
@@ -38,10 +40,15 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
-      - ./hotel_bot/.env:/app/hotel_bot/.env  # اضافه کردن فایل .env به کانتینر
+      - ./hotel_bot/.env:/app/hotel_bot/.env
     environment:
-      # متغیرهای محیطی از فایل .env بارگذاری می‌شوند، نیازی به تعریف دستی نیست
       ENV_PATH: "/app/hotel_bot/.env"
+      DB_NAME: "safarname24"
+      DB_USER: "postgres"
+      DB_PASSWORD: "admin"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      PROJECT_DIR: "/app"
     depends_on:
       - db
     networks:

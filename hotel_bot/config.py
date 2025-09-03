@@ -2,13 +2,13 @@ import os
 from dotenv import load_dotenv
 
 # ================= بارگذاری متغیرهای محیطی =================
-ENV_PATH = "/app/hotel_bot/.env"
+ENV_PATH = os.getenv("ENV_PATH", "/app/hotel_bot/.env")
 if os.path.exists(ENV_PATH):
     load_dotenv(dotenv_path=ENV_PATH)
 else:
     print(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}")
 
-PROJECT_DIR = os.getenv("PROJECT_DIR", "/var/hotelscript-v2")
+PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "/var/lib/backsafarname/alirezaazarakhsh20_gmail.com")
 MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", "/var/backups/sf24_9xkLp7")
 TOKEN = os.getenv("BOT_TOKEN")
