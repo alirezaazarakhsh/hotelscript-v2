@@ -40,32 +40,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if state == 'waiting_for_admin_id':
-            new_id = str(int(text))  # حتما string
-            if new_id in admins or int(new_id) in AccessManager.SUPER_ADMINS:
-                await update.message.reply_text("❌ این کاربر قبلاً ادمین است!")
+            try:
+                new_id = int(text)  # تبدیل به عدد
+            except ValueError:
+                await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
+                return
+            if str(new_id) in admins or new_id in SUPER_ADMINS:
+                await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
                 return
             context.user_data['new_admin_id'] = new_id
             if not groups:
                 await update.message.reply_text(
                     "❌ هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه دسترسی ایجاد کنید.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]])
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
+                    ])
                 )
                 context.user_data.clear()
                 return
             await PermissionManager.show_group_selection(update.message.chat_id, context, new_id, groups)
-        
+
         elif state == 'waiting_for_group_name':
             group_name = text.strip()
+            if not group_name:
+                await update.message.reply_text("❌ نام گروه نمی‌تواند خالی باشد!")
+                return
             if group_name in groups:
                 await update.message.reply_text("❌ این گروه قبلاً وجود دارد!")
                 return
             context.user_data['new_group_name'] = group_name
             context.user_data['selected_perms'] = set()
             context.user_data['state'] = 'select_group_permissions'
-            await PermissionManager.show_permissions_selection(update.message.chat_id, context, group_name, is_group=True, show_desc=True)
-        
+            await PermissionManager.show_permissions_selection(
+                update.message.chat_id, context, group_name, is_group=True, show_desc=True
+            )
+
         elif state == 'waiting_for_new_group_name':
             new_name = text.strip()
+            if not new_name:
+                await update.message.reply_text("❌ نام جدید گروه نمی‌تواند خالی باشد!")
+                return
             old_name = context.user_data.get('editing_group')
             if new_name != old_name and new_name in groups:
                 await update.message.reply_text("❌ این نام گروه قبلاً وجود دارد!")
@@ -75,14 +89,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
             context.user_data.clear()
             await GroupManager.show_manage_groups(update.message.chat_id, context)
+
     except ValueError:
-        await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید.")
+        await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
     except Exception as e:
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
-
-
 
 
 
