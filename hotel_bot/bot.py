@@ -1,8 +1,8 @@
 import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from config import TOKEN, SUPER_ADMINS
 
-from config import TOKEN
 from access_manager import AccessManager
 from backup_manager import BackupManager
 from file_manager import FileManager
@@ -45,6 +45,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
                 return
+            print(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")  # برای دیباگ
             if str(new_id) in admins or new_id in SUPER_ADMINS:
                 await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
                 return
@@ -92,7 +93,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             AccessManager.save_data(data)
             await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
             context.user_data.clear()
-            await GroupManager.show_manage_groups(update.message.chat_id, context, groups)  # پاس دادن groups
+            await GroupManager.show_manage_groups(update.message.chat_id, context, groups)
 
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
@@ -100,8 +101,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
-        
-        
+
+
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
