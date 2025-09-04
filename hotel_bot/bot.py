@@ -461,42 +461,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await WalletManager.show_wallet_menu(update.message.chat_id, context)
                     return
 
-                if ReceiptManager.add_receipt(user_id, amount, receipt_file_id):
-                    await update.message.reply_text(
-                        "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
-                    )
-                    # ارسال اعلان به سوپرادمین‌ها
-                    for admin in SUPER_ADMINS:
-                        try:
-                            await context.bot.send_message(
+                # تغییر به فراخوانی ناهمگام
+                await ReceiptManager.add_receipt(context, user_id, amount, receipt_file_id)
+                await update.message.reply_text(
+                    "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
+                )
+                # ارسال اعلان به سوپرادمین‌ها
+                for admin in SUPER_ADMINS:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin,
+                            text=f"📄 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
+                            parse_mode="Markdown"
+                        )
+                        logger.debug(f"Notified super admin {admin} for receipt from user {user_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to notify super admin {admin}: {str(e)}")
+                # ارسال فایل رسید به سوپرادمین‌ها
+                for admin in SUPER_ADMINS:
+                    try:
+                        if update.message.photo:
+                            await context.bot.send_photo(
                                 chat_id=admin,
-                                text=f"📄 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
-                                parse_mode="Markdown"
+                                photo=receipt_file_id,
+                                caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
                             )
-                            logger.debug(f"Notified super admin {admin} for receipt from user {user_id}")
-                        except Exception as e:
-                            logger.error(f"Failed to notify super admin {admin}: {str(e)}")
-                    # ارسال فایل رسید به سوپرادمین‌ها
-                    for admin in SUPER_ADMINS:
-                        try:
-                            if update.message.photo:
-                                await context.bot.send_photo(
-                                    chat_id=admin,
-                                    photo=receipt_file_id,
-                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                                )
-                            elif update.message.document:
-                                await context.bot.send_document(
-                                    chat_id=admin,
-                                    document=receipt_file_id,
-                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                                )
-                            logger.debug(f"Sent receipt file to super admin {admin}")
-                        except Exception as e:
-                            logger.error(f"Failed to send receipt file to super admin {admin}: {str(e)}")
-                    context.user_data.clear()
-                else:
-                    raise Exception("خطا در ثبت رسید")
+                        elif update.message.document:
+                            await context.bot.send_document(
+                                chat_id=admin,
+                                document=receipt_file_id,
+                                caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
+                            )
+                        logger.debug(f"Sent receipt file to super admin {admin}")
+                    except Exception as e:
+                        logger.error(f"Failed to send receipt file to super admin {admin}: {str(e)}")
+                context.user_data.clear()
             except Exception as e:
                 logger.error(f"Error processing receipt for user {user_id}: {str(e)}")
                 await update.message.reply_text(
@@ -504,6 +503,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
+        
+        
 
         elif state == 'waiting_for_admin_wallet_amount':
             try:
