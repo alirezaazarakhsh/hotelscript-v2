@@ -170,13 +170,22 @@ class MenuManager:
             profile = access_data.get('profiles', {}).get(str(user_id), {})
             
             text = f"👤 **ویرایش پروفایل شما (ID: {user_id})**\n\nمشخصات فعلی:\n"
-            text += f"- نام: {profile.get('name', 'ندارد')} (در صورت تغییر، نام جدید را وارد کنید)\n"
-            text += f"- نام خانوادگی: {profile.get('lastname', 'ندارد')} (در صورت تغییر، نام خانوادگی جدید را وارد کنید)\n"
-            text += f"- کد ملی: {profile.get('national_id', 'ندارد')} (در صورت تغییر، کد ملی جدید را وارد کنید)\n"
-            text += f"- شماره همراه: {profile.get('phone', 'ندارد')} (در صورت تغییر، شماره همراه جدید را وارد کنید)\n"
-            text += f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')} (در صورت تغییر، شماره تلفن ثابت جدید را وارد کنید)\n"
-            text += f"- نام شرکت: {profile.get('company_name', 'ندارد')} (در صورت تغییر، نام شرکت جدید را وارد کنید)\n"
-            text += f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')} (در صورت تغییر، کد ثبت شرکت جدید را وارد کنید)\n\n"
+            # بررسی و نمایش مقدار فعلی یا "ندارد" فقط در صورت نبود مقدار
+            name = profile.get('name') if profile.get('name') is not None else 'ندارد'
+            lastname = profile.get('lastname') if profile.get('lastname') is not None else 'ندارد'
+            national_id = profile.get('national_id') if profile.get('national_id') is not None else 'ندارد'
+            phone = profile.get('phone') if profile.get('phone') is not None else 'ندارد'
+            landline = profile.get('landline') if profile.get('landline') is not None else 'ندارد'
+            company_name = profile.get('company_name') if profile.get('company_name') is not None else 'ندارد'
+            company_reg = profile.get('company_reg') if profile.get('company_reg') is not None else 'ندارد'
+
+            text += f"- نام: {name} (در صورت تغییر، نام جدید را وارد کنید)\n"
+            text += f"- نام خانوادگی: {lastname} (در صورت تغییر، نام خانوادگی جدید را وارد کنید)\n"
+            text += f"- کد ملی: {national_id} (در صورت تغییر، کد ملی جدید را وارد کنید)\n"
+            text += f"- شماره همراه: {phone} (در صورت تغییر، شماره همراه جدید را وارد کنید)\n"
+            text += f"- شماره تلفن ثابت: {landline} (در صورت تغییر، شماره تلفن ثابت جدید را وارد کنید)\n"
+            text += f"- نام شرکت: {company_name} (در صورت تغییر، نام شرکت جدید را وارد کنید)\n"
+            text += f"- کد ثبت شرکت: {company_reg} (در صورت تغییر، کد ثبت شرکت جدید را وارد کنید)\n\n"
             text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
 
             keyboard = [
