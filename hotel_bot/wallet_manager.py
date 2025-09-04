@@ -14,7 +14,7 @@ class WalletManager:
     async def show_wallet_menu(chat_id, context, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            text = "💰 **شارژ کیف پول**\n\nبرای شارژ کیف پول خود یا مشاهده موجودی، یکی از گزینه‌های زیر را انتخاب کنید. شارژ کیف پول به شما امکان استفاده از خدمات بیشتر را می‌دهد.\n\n**نکته**: حداقل مبلغ شارژ ۱,۰۰۰,۰۰۰ تومان است."
+            text = "💰 **شارژ کیف پول**\n\nبرای شارژ کیف پول خود یا مشاهده موجودی، یکی از گزینه‌های زیر را انتخاب کنید. شارژ کیف پول به شما امکان استفاده از خدمات بیشتر را می‌دهد.\n\n**نکته**: حداقل مبلغ شارژ 1,000,000 تومان است."
             keyboard = [
                 [InlineKeyboardButton("شارژ حساب با درگاه پرداخت", callback_data="payment_gateway")],
                 [InlineKeyboardButton("شارژ حساب با کارت به کارت", callback_data="card_to_card")],
@@ -68,7 +68,7 @@ class WalletManager:
             context.user_data['state'] = 'waiting_for_amount'
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل ۱,۰۰۰,۰۰۰ تومان.",
+                text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل 1,000,000 تومان.",
                 parse_mode="Markdown"
             )
             logger.debug(f"Prompted user {user_id} for amount")
@@ -87,7 +87,8 @@ class WalletManager:
             text = (
                 f"💳 **شارژ با کارت به کارت**\n\n"
                 f"برای شارژ مبلغ {amount:,} تومان:\n\n"
-                f"**شماره کارت**: 0506-3631-1411-6362\n\n"
+                f"**شماره کارت**: 0506-3631-1411-6362\n\n"         
+                f"** نام صاحب حساب**: علیرضا آذرخش آلوچه \n\n"
                 f"لطفاً مبلغ را به این کارت واریز کنید و رسید پرداخت را ارسال کنید (عکس یا فایل PDF)."
             )
             keyboard = [

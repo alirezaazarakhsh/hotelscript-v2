@@ -435,7 +435,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data['amount'] = amount
                 await WalletManager.show_card_details(update.message.chat_id, context, amount)
             except ValueError:
-                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000,000 تومان و فقط اعداد.")
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
 

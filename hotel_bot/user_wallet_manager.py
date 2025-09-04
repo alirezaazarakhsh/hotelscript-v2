@@ -13,7 +13,7 @@ class UserWalletManager:
                 return
             context.user_data['state'] = 'waiting_for_admin_wallet_amount'
             context.user_data['target_admin_id'] = admin_id
-            text = f"لطفاً مبلغ مورد نظر برای شارژ کیف پول ادمین {admin_id} (به تومان) را وارد کنید. حداقل ۱,۰۰۰,۰۰۰ تومان."
+            text = f"لطفاً مبلغ مورد نظر برای شارژ کیف پول ادمین {admin_id} (به تومان) را وارد کنید. حداقل 1,000,000 تومان."
             if message_id:
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
             else:
