@@ -19,6 +19,7 @@ from user_wallet_manager import UserWalletManager
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Handler برای دستور /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data['user_id'] = user_id
@@ -30,6 +31,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await MenuManager.show_main_menu(user_id, context)
 
+# Handler برای مدیریت دکمه‌ها
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -353,16 +355,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
 
+# Handler برای مدیریت پیام‌های متنی و فایل‌ها
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data['user_id'] = user_id
     state = context.user_data.get('state')
-    text = update.message.text
+    logger.debug(f"Handling message for user {user_id}, state: {state}, message type: {type(update.message).__name__}, content: {update.message}")
+    text = update.message.text if update.message.text else "No text"
     data = AccessManager.load_data()
     admins = data['admins']
     groups = data['groups']
 
     try:
+        # حالت انتظار برای دریافت ID ادمین جدید
         if state == 'waiting_for_admin_id':
             try:
                 new_id = int(text)
@@ -385,6 +390,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             await PermissionManager.show_group_selection(update.message.chat_id, context, new_id, groups)
 
+        # حالت انتظار برای دریافت نام گروه جدید
         elif state == 'waiting_for_group_name':
             group_name = text.strip()
             if not group_name:
@@ -400,6 +406,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 update.message.chat_id, context, group_name, is_group=True, show_desc=True
             )
 
+        # حالت انتظار برای دریافت نام جدید گروه
         elif state == 'waiting_for_new_group_name':
             new_name = text.strip()
             if not new_name:
@@ -419,6 +426,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             await GroupManager.show_manage_groups(update.message.chat_id, context, groups)
 
+        # حالت انتظار برای دریافت مبلغ شارژ
         elif state == 'waiting_for_amount':
             try:
                 amount = int(text)
@@ -431,6 +439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
 
+        # حالت انتظار برای دریافت رسید پرداخت
         elif state == 'waiting_for_receipt':
             try:
                 if not update.message:
@@ -438,6 +447,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
                     return
                 
+                receipt_file_id = None
                 if update.message.photo:
                     receipt_file_id = update.message.photo[-1].file_id
                     logger.debug(f"Photo receipt received from user {user_id}: {receipt_file_id}")
@@ -445,7 +455,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     receipt_file_id = update.message.document.file_id
                     logger.debug(f"Document receipt received from user {user_id}: {receipt_file_id}")
                 else:
-                    logger.warning(f"Invalid file type sent by user {user_id}")
+                    logger.warning(f"Invalid file type sent by user {user_id}: {update.message.document.mime_type if update.message.document else 'No document'}")
                     await update.message.reply_text(
                         "❌ لطفاً رسید را به صورت عکس (JPEG/PNG) یا فایل PDF ارسال کنید."
                     )
@@ -453,7 +463,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 amount = context.user_data.get('amount')
                 if not amount:
-                    logger.error(f"No amount found in user_data for user {user_id}")
+                    logger.error(f"No amount found in user_data for user {user_id}: {context.user_data}")
                     await update.message.reply_text(
                         "❌ خطا: مبلغ پرداخت مشخص نشده است. لطفاً دوباره شروع کنید."
                     )
@@ -461,8 +471,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await WalletManager.show_wallet_menu(update.message.chat_id, context)
                     return
 
-                # تغییر به فراخوانی ناهمگام
+                logger.debug(f"Calling add_receipt with user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
                 await ReceiptManager.add_receipt(context, user_id, amount, receipt_file_id)
+                logger.info(f"Receipt successfully processed for user {user_id}")
+
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
@@ -497,15 +509,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         logger.error(f"Failed to send receipt file to super admin {admin}: {str(e)}")
                 context.user_data.clear()
             except Exception as e:
-                logger.error(f"Error processing receipt for user {user_id}: {str(e)}")
+                logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
                 await update.message.reply_text(
                     f"❌ خطا در ثبت رسید: {str(e)}. لطفاً دوباره تلاش کنید."
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-        
-        
 
+        # حالت انتظار برای دریافت مبلغ شارژ کیف پول ادمین
         elif state == 'waiting_for_admin_wallet_amount':
             try:
                 amount = int(text)
@@ -525,14 +536,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
 
-    except ValueError:
-        await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
     except Exception as e:
-        logger.error(f"Error in handle_message: {str(e)}")
+        logger.error(f"Error in handle_message for user {user_id}: {str(e)}", exc_info=True)
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
 
+# نمایش لیست بکاپ‌ها
 async def show_backup_list(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
     if not os.path.exists(DB_BACKUP_DIR):
@@ -576,6 +586,7 @@ async def show_backup_list(query, user_id, context):
         reply_markup=reply_markup
     )
 
+# حذف بکاپ
 async def delete_backup(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
     _, file_type, filename = query.data.split(":", 2)
