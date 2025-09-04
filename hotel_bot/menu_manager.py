@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import MAX_BACKUPS, PERM_DISPLAY
+from config import MAX_BACKUPS, PERM_DISPLAY, SUPER_ADMINS
 from access_manager import AccessManager
 
 class MenuManager:
@@ -18,6 +18,7 @@ class MenuManager:
 🗂 **نمایش لیست بکاپ‌ها** با امکان حذف
 📮 **پشتیبانی** ارتباط سریع با ادمین
 📋 **راهنمای بکاپ‌گیری** (در حال توسعه...)
+💰 **شارژ کیف پول** برای دسترسی به خدمات بیشتر
 """
         keyboard = []
         row = []
@@ -39,6 +40,10 @@ class MenuManager:
             row.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
         if AccessManager.is_allowed(user_id, 'manage_admins'):
             row.append(InlineKeyboardButton("⚙️ کنترل پنل", callback_data="control_panel"))
+        if row:
+            keyboard.append(row)
+        row = []
+        row.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
         if row:
             keyboard.append(row)
         
@@ -115,7 +120,7 @@ class MenuManager:
 
     @staticmethod
     async def show_control_panel(query, user_id, context):
-        text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها و گروه‌های دسترسی را مدیریت کنید."
+        text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها، گروه‌های دسترسی و رسیدهای پرداخت را مدیریت کنید."
         keyboard = [[
             InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin"),
             InlineKeyboardButton("👥 ایجاد گروه دسترسی", callback_data="create_group")
@@ -123,6 +128,8 @@ class MenuManager:
             InlineKeyboardButton("🛠 مدیریت گروه‌های دسترسی", callback_data="manage_groups"),
             InlineKeyboardButton("👤 مدیریت ادمین‌ها", callback_data="manage_admins")
         ]]
+        if user_id in SUPER_ADMINS:
+            keyboard.append([InlineKeyboardButton("📜 لیست رسیدهای در حال انتظار", callback_data="pending_receipts")])
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")

@@ -1,8 +1,8 @@
 import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from config import TOKEN, SUPER_ADMINS
 
+from config import TOKEN, SUPER_ADMINS
 from access_manager import AccessManager
 from backup_manager import BackupManager
 from file_manager import FileManager
@@ -10,9 +10,8 @@ from menu_manager import MenuManager
 from admin_manager import AdminManager
 from group_manager import GroupManager
 from permission_manager import PermissionManager
-
-
-
+from wallet_manager import WalletManager
+from receipt_manager import ReceiptManager
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -23,87 +22,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     await MenuManager.show_main_menu(user_id, context)
-
-
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not AccessManager.is_allowed(user_id, 'manage_admins'):
-        await update.message.reply_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
-        return
-
-    state = context.user_data.get('state')
-    text = update.message.text
-    data = AccessManager.load_data()
-    admins = data['admins']
-    groups = data['groups']
-
-    try:
-        if state == 'waiting_for_admin_id':
-            try:
-                new_id = int(text)  # تبدیل به عدد
-            except ValueError:
-                await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
-                return
-            print(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")  # برای دیباگ
-            if str(new_id) in admins or new_id in SUPER_ADMINS:
-                await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
-                return
-            context.user_data['new_admin_id'] = new_id
-            if not groups:
-                await update.message.reply_text(
-                    "❌ هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه دسترسی ایجاد کنید.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
-                    ])
-                )
-                context.user_data.clear()
-                return
-            await PermissionManager.show_group_selection(update.message.chat_id, context, new_id, groups)
-
-        elif state == 'waiting_for_group_name':
-            group_name = text.strip()
-            if not group_name:
-                await update.message.reply_text("❌ نام گروه نمی‌تواند خالی باشد!")
-                return
-            if group_name in groups:
-                await update.message.reply_text("❌ این گروه قبلاً وجود دارد!")
-                return
-            context.user_data['new_group_name'] = group_name
-            context.user_data['selected_perms'] = set()
-            context.user_data['state'] = 'select_group_permissions'
-            await PermissionManager.show_permissions_selection(
-                update.message.chat_id, context, group_name, is_group=True, show_desc=True
-            )
-
-        elif state == 'waiting_for_new_group_name':
-            new_name = text.strip()
-            if not new_name:
-                await update.message.reply_text("❌ نام جدید گروه نمی‌تواند خالی باشد!")
-                return
-            old_name = context.user_data.get('editing_group')
-            if not old_name:
-                await update.message.reply_text("❌ گروه در حال ویرایش یافت نشد!")
-                context.user_data.clear()
-                return
-            if new_name != old_name and new_name in groups:
-                await update.message.reply_text("❌ این نام گروه قبلاً وجود دارد!")
-                return
-            groups[new_name] = groups.pop(old_name)
-            AccessManager.save_data(data)
-            await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
-            context.user_data.clear()
-            await GroupManager.show_manage_groups(update.message.chat_id, context, groups)
-
-    except ValueError:
-        await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
-    except Exception as e:
-        await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
-        context.user_data.clear()
-        await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
-
-
-
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -219,7 +137,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
                 return
-            await AdminManager.show_manage_admins(chat_id, context, admins, message_id=message_id)
+            await AdminManager.show_manage_admins(chat_id, context, admins, groups, message_id=message_id)
         elif data.startswith("view_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده گروه را ندارید!")
@@ -332,13 +250,146 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             await query.edit_message_text("✅ عملیات با موفقیت لغو شد.")
             await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+        elif data == "wallet_charge":
+            await WalletManager.show_wallet_menu(chat_id, context, message_id)
+        elif data == "payment_gateway":
+            await WalletManager.show_payment_packages(chat_id, context, message_id)
+        elif data.startswith("payment:"):
+            amount = int(data.split(":")[1])
+            text = f"💸 در حال هدایت به درگاه پرداخت برای مبلغ {amount:,} تومان...\nلینک پرداخت: [لینک درگاه پرداخت - نیاز به API دارد]"
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
+        elif data == "card_to_card":
+            await WalletManager.prompt_for_amount(chat_id, context)
+        elif data == "send_receipt":
+            await WalletManager.prompt_for_receipt(chat_id, context, message_id)
+        elif data == "cancel_card_to_card":
+            context.user_data.clear()
+            await WalletManager.show_wallet_menu(chat_id, context, message_id)
+        elif data == "wallet_menu":
+            await WalletManager.show_wallet_menu(chat_id, context, message_id)
+        elif data == "pending_receipts":
+            if user_id in SUPER_ADMINS:
+                await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
+            else:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("confirm_receipt:"):
+            if user_id in SUPER_ADMINS:
+                _, u_id, amt, idx = data.split(":")
+                msg = await ReceiptManager.confirm_receipt(context, int(u_id), int(amt), int(idx))
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
+                await ReceiptManager.show_pending_receipts(chat_id, context)
+            else:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("reject_receipt:"):
+            if user_id in SUPER_ADMINS:
+                _, u_id, idx = data.split(":")
+                msg = await ReceiptManager.reject_receipt(context, int(u_id), int(idx))
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
+                await ReceiptManager.show_pending_receipts(chat_id, context)
+            else:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+
     except Exception as e:
         await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    state = context.user_data.get('state')
+    text = update.message.text
+    data = AccessManager.load_data()
+    admins = data['admins']
+    groups = data['groups']
 
+    try:
+        if state == 'waiting_for_admin_id':
+            try:
+                new_id = int(text)
+            except ValueError:
+                await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
+                return
+            print(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")
+            if str(new_id) in admins or new_id in SUPER_ADMINS:
+                await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
+                return
+            context.user_data['new_admin_id'] = new_id
+            if not groups:
+                await update.message.reply_text(
+                    "❌ هیچ گروه دسترسی‌ای وجود ندارد. ابتدا یک گروه دسترسی ایجاد کنید.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
+                    ])
+                )
+                context.user_data.clear()
+                return
+            await PermissionManager.show_group_selection(update.message.chat_id, context, new_id, groups)
 
+        elif state == 'waiting_for_group_name':
+            group_name = text.strip()
+            if not group_name:
+                await update.message.reply_text("❌ نام گروه نمی‌تواند خالی باشد!")
+                return
+            if group_name in groups:
+                await update.message.reply_text("❌ این گروه قبلاً وجود دارد!")
+                return
+            context.user_data['new_group_name'] = group_name
+            context.user_data['selected_perms'] = set()
+            context.user_data['state'] = 'select_group_permissions'
+            await PermissionManager.show_permissions_selection(
+                update.message.chat_id, context, group_name, is_group=True, show_desc=True
+            )
+
+        elif state == 'waiting_for_new_group_name':
+            new_name = text.strip()
+            if not new_name:
+                await update.message.reply_text("❌ نام جدید گروه نمی‌تواند خالی باشد!")
+                return
+            old_name = context.user_data.get('editing_group')
+            if not old_name:
+                await update.message.reply_text("❌ گروه در حال ویرایش یافت نشد!")
+                context.user_data.clear()
+                return
+            if new_name != old_name and new_name in groups:
+                await update.message.reply_text("❌ این نام گروه قبلاً وجود دارد!")
+                return
+            groups[new_name] = groups.pop(old_name)
+            AccessManager.save_data(data)
+            await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
+            context.user_data.clear()
+            await GroupManager.show_manage_groups(update.message.chat_id, context, groups)
+
+        elif state == 'waiting_for_amount':
+            try:
+                amount = int(text)
+                if amount < 100000:
+                    raise ValueError("مبلغ کمتر از حداقل")
+                context.user_data['amount'] = amount
+                await WalletManager.show_card_details(update.message.chat_id, context, amount)
+            except ValueError:
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱۰۰,۰۰۰ تومان و فقط اعداد.")
+
+        elif state == 'waiting_for_receipt':
+            if update.message.photo or update.message.document:
+                receipt_file_id = update.message.photo[-1].file_id if update.message.photo else update.message.document.file_id
+                ReceiptManager.add_receipt(user_id, context.user_data['amount'], receipt_file_id)
+                await update.message.reply_text("✅ رسید ارسال شد و در حال بررسی توسط ادمین است.")
+                for admin in SUPER_ADMINS:
+                    await context.bot.send_message(
+                        admin,
+                        f"📄 رسید جدید از کاربر {user_id} برای مبلغ {context.user_data.get('amount', 0):,} تومان دریافت شد.",
+                        parse_mode="Markdown"
+                    )
+                context.user_data.clear()
+            else:
+                await update.message.reply_text("❌ لطفاً رسید را به صورت عکس یا فایل PDF ارسال کنید.")
+
+    except ValueError:
+        await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
+        context.user_data.clear()
+        await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
 
 async def show_backup_list(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
@@ -370,7 +421,7 @@ async def show_backup_list(query, user_id, context):
         file_datetime = FileManager.get_file_datetime(filename)
         keyboard.append([
             InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
-            InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{f}")
+            InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
         ])
 
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
@@ -385,7 +436,6 @@ async def show_backup_list(query, user_id, context):
         "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
         reply_markup=reply_markup
     )
-
 
 async def delete_backup(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
