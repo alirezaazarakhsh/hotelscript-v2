@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import SUPER_ADMINS, PERM_DISPLAY
 from access_manager import AccessManager
 from menu_manager import MenuManager
+from receipt_manager import ReceiptManager  # برای دسترسی به load_wallets
 
 class AdminManager:
     @staticmethod
@@ -52,20 +53,25 @@ class AdminManager:
 
             group = admins.get(admin_id, "بدون گروه")
             perms = groups.get(group, set()) if group else set()
-            text = f"👤 **جزئیات ادمین**\n\n**ID**: {admin_id}\n**گروه دسترسی**: {group}\n\n**مجوزها**:\n"
+            wallets = ReceiptManager.load_wallets()
+            wallet_balance = wallets.get(str(admin_id), 0)
+
+            text = f"👤 **جزئیات ادمین**\n\n**ID**: {admin_id}\n**گروه دسترسی**: {group}\n**موجودی کیف پول**: {wallet_balance:,} تومان\n\n**مجوزها**:\n"
             if perms:
                 for perm in perms:
                     text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
             else:
                 text += "هیچ مجوزی اختصاص نیافته.\n"
-            text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول او را شارژ کنید."
+            text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول او را مدیریت کنید."
 
             keyboard = [
                 [InlineKeyboardButton("تغییر گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}")],
                 [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}")],
             ]
             if user_id in SUPER_ADMINS:
-                keyboard.append([InlineKeyboardButton("💰 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("💰 مشاهده موجودی", callback_data=f"view_wallet:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
             keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 

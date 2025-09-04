@@ -348,6 +348,30 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("charge_admin_wallet:"):
             admin_id = data.split(":", 1)[1]
             await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
+        elif data.startswith("view_wallet:"):
+            if user_id in SUPER_ADMINS:
+                admin_id = data.split(":", 1)[1]
+                wallets = ReceiptManager.load_wallets()
+                balance = wallets.get(str(admin_id), 0)
+                await query.edit_message_text(
+                    f"💰 **موجودی کیف پول ادمین {admin_id}**\n\nموجودی فعلی: {balance:,} تومان",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]]),
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("modify_wallet:"):
+            if user_id in SUPER_ADMINS:
+                admin_id = data.split(":", 1)[1]
+                context.user_data['state'] = 'waiting_for_wallet_modification'
+                context.user_data['target_admin_id'] = admin_id
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="لطفاً مقدار تغییر موجودی (مثبت برای افزایش، منفی برای کاهش) را به تومان وارد کنید.\n\n**مثال**: 500000 برای افزایش 500,000 تومان یا -500000 برای کاهش 500,000 تومان.",
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Error in button handler: {str(e)}")
@@ -448,7 +472,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
                     return
 
-                # بررسی اینکه آیا قبلاً رسید پردازش شده است
                 if 'receipt_processed' in context.user_data and context.user_data['receipt_processed']:
                     logger.warning(f"Receipt already processed for user {user_id}, skipping.")
                     return
@@ -482,7 +505,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
-                context.user_data['receipt_processed'] = True  # علامت‌گذاری برای جلوگیری از پردازش دوباره
+                context.user_data['receipt_processed'] = True
                 context.user_data.clear()
             except Exception as e:
                 logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
@@ -511,6 +534,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000,000 تومان و فقط اعداد.")
+
+        # حالت انتظار برای تغییر دستی موجودی کیف پول
+        elif state == 'waiting_for_wallet_modification':
+            try:
+                amount = int(text)
+                target_admin_id = context.user_data['target_admin_id']
+                wallets = ReceiptManager.load_wallets()
+                current_balance = wallets.get(str(target_admin_id), 0)
+                new_balance = current_balance + amount
+                if new_balance < 0:
+                    raise ValueError("موجودی نمی‌تواند منفی شود!")
+                wallets[str(target_admin_id)] = new_balance
+                ReceiptManager.save_wallets(wallets)
+                await update.message.reply_text(
+                    f"✅ موجودی کیف پول ادمین {target_admin_id} به مبلغ {new_balance:,} تومان تغییر یافت (تغییر: {amount:+,} تومان)."
+                )
+                await context.bot.send_message(
+                    chat_id=target_admin_id,
+                    text=f"✅ موجودی کیف پول شما به مبلغ {new_balance:,} تومان توسط سوپرادمین تغییر یافت (تغییر: {amount:+,} تومان)."
+                )
+                context.user_data.clear()
+                await AdminManager.show_admin_details(update.message.chat_id, context, target_admin_id, admins, groups)
+            except ValueError as e:
+                await update.message.reply_text(f"❌ خطا: {str(e)}")
+                context.user_data.clear()
+            except Exception as e:
+                logger.error(f"Error modifying wallet for user {target_admin_id}: {str(e)}")
+                await update.message.reply_text(f"❌ خطا در تغییر موجودی: {str(e)}")
+                context.user_data.clear()
 
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}", exc_info=True)
