@@ -110,14 +110,14 @@ class AdminManager:
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
             
             text = f"👤 **ویرایش پروفایل ادمین {admin_id}**\n\nمشخصات فعلی:\n"
-            text += f"- نام: {profile.get('name', 'ندارد')}\n"
-            text += f"- نام خانوادگی: {profile.get('lastname', 'ندارد')}\n"
-            text += f"- کد ملی: {profile.get('national_id', 'ندارد')}\n"
-            text += f"- شماره همراه: {profile.get('phone', 'ندارد')}\n"
-            text += f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')}\n"
-            text += f"- نام شرکت: {profile.get('company_name', 'ندارد')}\n"
-            text += f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')}\n\n"
-            text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید."
+            text += f"- نام: {profile.get('name', 'ندارد')} (در صورت تغییر، نام جدید را وارد کنید)\n"
+            text += f"- نام خانوادگی: {profile.get('lastname', 'ندارد')} (در صورت تغییر، نام خانوادگی جدید را وارد کنید)\n"
+            text += f"- کد ملی: {profile.get('national_id', 'ندارد')} (در صورت تغییر، کد ملی جدید را وارد کنید)\n"
+            text += f"- شماره همراه: {profile.get('phone', 'ندارد')} (در صورت تغییر، شماره همراه جدید را وارد کنید)\n"
+            text += f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')} (در صورت تغییر، شماره تلفن ثابت جدید را وارد کنید)\n"
+            text += f"- نام شرکت: {profile.get('company_name', 'ندارد')} (در صورت تغییر، نام شرکت جدید را وارد کنید)\n"
+            text += f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')} (در صورت تغییر، کد ثبت شرکت جدید را وارد کنید)\n\n"
+            text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
 
             keyboard = [
                 [InlineKeyboardButton("نام", callback_data=f"edit_admin_profile_field:name:{admin_id}")],
