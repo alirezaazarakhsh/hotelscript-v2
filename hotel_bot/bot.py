@@ -442,6 +442,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # حالت انتظار برای دریافت رسید پرداخت
         elif state == 'waiting_for_receipt':
             try:
+                logger.debug(f"User {user_id} sent message: photo={bool(update.message.photo)}, document={bool(update.message.document)}, user_data={context.user_data}")
                 if not update.message:
                     logger.error(f"No message received for user {user_id} in waiting_for_receipt state")
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
@@ -450,12 +451,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 receipt_file_id = None
                 if update.message.photo:
                     receipt_file_id = update.message.photo[-1].file_id
-                    logger.debug(f"Photo receipt received from user {user_id}: {receipt_file_id}")
+                    logger.debug(f"Photo receipt received: {receipt_file_id}")
                 elif update.message.document and update.message.document.mime_type in ['application/pdf', 'image/jpeg', 'image/png']:
                     receipt_file_id = update.message.document.file_id
-                    logger.debug(f"Document receipt received from user {user_id}: {receipt_file_id}")
+                    logger.debug(f"Document receipt received: {receipt_file_id}")
                 else:
-                    logger.warning(f"Invalid file type sent by user {user_id}: {update.message.document.mime_type if update.message.document else 'No document'}")
+                    logger.warning(f"Invalid file type: {update.message.document.mime_type if update.message.document else 'No document'}")
                     await update.message.reply_text(
                         "❌ لطفاً رسید را به صورت عکس (JPEG/PNG) یا فایل PDF ارسال کنید."
                     )
@@ -463,7 +464,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 amount = context.user_data.get('amount')
                 if not amount:
-                    logger.error(f"No amount found in user_data for user {user_id}: {context.user_data}")
+                    logger.error(f"No amount found in user_data: {context.user_data}")
                     await update.message.reply_text(
                         "❌ خطا: مبلغ پرداخت مشخص نشده است. لطفاً دوباره شروع کنید."
                     )
@@ -473,39 +474,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 logger.debug(f"Calling add_receipt with user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
                 await ReceiptManager.add_receipt(context, user_id, amount, receipt_file_id)
-                logger.info(f"Receipt successfully processed for user {user_id}")
-
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
-
-                # ارسال اعلان و رسید به سوپرادمین‌ها با مدیریت بهتر خطاها
-                for admin in SUPER_ADMINS:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=admin,
-                            text=f"📄 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
-                            parse_mode="Markdown"
-                        )
-                        logger.debug(f"Notified super admin {admin} for receipt from user {user_id}")
-                        if receipt_file_id:
-                            if update.message.photo:
-                                await context.bot.send_photo(
-                                    chat_id=admin,
-                                    photo=receipt_file_id,
-                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                                )
-                            elif update.message.document:
-                                await context.bot.send_document(
-                                    chat_id=admin,
-                                    document=receipt_file_id,
-                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                                )
-                            logger.debug(f"Sent receipt file to super admin {admin}")
-                    except Exception as e:
-                        logger.error(f"Failed to notify or send receipt to super admin {admin}: {str(e)}")
-                        continue  # ادامه می‌ده تا بقیه سوپرادمین‌ها رو امتحان کنه
-
                 context.user_data.clear()
             except Exception as e:
                 logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
@@ -514,7 +485,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-
+        
+        
         # حالت انتظار برای دریافت مبلغ شارژ کیف پول ادمین
         elif state == 'waiting_for_admin_wallet_amount':
             try:
