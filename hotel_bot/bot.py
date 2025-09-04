@@ -12,9 +12,11 @@ from group_manager import GroupManager
 from permission_manager import PermissionManager
 from wallet_manager import WalletManager
 from receipt_manager import ReceiptManager
+from user_wallet_manager import UserWalletManager  # اضافه کردن ماژول جدید
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    context.user_data['user_id'] = user_id  # ذخیره user_id برای استفاده در جاهای دیگر
     if not AccessManager.is_allowed(user_id):
         await update.message.reply_text(
             "💢 دسترسی غیرفعال\n\n"
@@ -26,6 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
+    context.user_data['user_id'] = user_id
     chat_id = query.message.chat_id
     message_id = query.message.message_id
     await query.answer()
@@ -68,6 +71,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "support" and not AccessManager.is_allowed(user_id, 'support'):
             await query.edit_message_text("❌ شما مجوز دسترسی به پشتیبانی را ندارید!")
             return
+        if data == "view_balance" and not AccessManager.is_allowed(user_id, 'view_balance'):
+            await query.edit_message_text("❌ شما مجوز مشاهده موجودی کیف پول را ندارید!")
+            return
+        if data.startswith("charge_admin_wallet:") and not AccessManager.is_allowed(user_id, 'manage_wallet'):
+            await query.edit_message_text("❌ شما مجوز شارژ کیف پول دیگران را ندارید!")
+            return
 
         # Handlers
         if data == "backup_menu":
@@ -82,10 +91,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_backup_list(query, user_id, context)
         elif data.startswith("copy_name:"):
             filename = data.split(":", 1)[1]
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=filename
-            )
+            await context.bot.send_message(chat_id=chat_id, text=filename)
             return
         elif data.startswith("delete:"):
             await delete_backup(query, user_id, context)
@@ -255,6 +261,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "payment_gateway":
             await WalletManager.show_payment_packages(chat_id, context, message_id)
         elif data.startswith("payment:"):
+            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
+                await query.edit_message_text("❌ شما مجوز شارژ کیف پول را ندارید!")
+                return
             amount = int(data.split(":")[1])
             text = f"💸 در حال هدایت به درگاه پرداخت برای مبلغ {amount:,} تومان...\nلینک پرداخت: [لینک درگاه پرداخت - نیاز به API دارد]"
             await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
@@ -267,6 +276,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await WalletManager.show_wallet_menu(chat_id, context, message_id)
         elif data == "wallet_menu":
             await WalletManager.show_wallet_menu(chat_id, context, message_id)
+        elif data == "view_balance":
+            await WalletManager.show_balance(chat_id, context, user_id, message_id)
         elif data == "pending_receipts":
             if user_id in SUPER_ADMINS:
                 await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
@@ -288,6 +299,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("charge_admin_wallet:"):
+            admin_id = data.split(":", 1)[1]
+            await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
 
     except Exception as e:
         await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
@@ -296,6 +310,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    context.user_data['user_id'] = user_id
     state = context.user_data.get('state')
     text = update.message.text
     data = AccessManager.load_data()
@@ -362,12 +377,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif state == 'waiting_for_amount':
             try:
                 amount = int(text)
-                if amount < 100000:
-                    raise ValueError("مبلغ کمتر از حداقل")
+                if amount < 1000000:
+                    raise ValueError("مبلغ کمتر از حداقل مجاز است")
                 context.user_data['amount'] = amount
                 await WalletManager.show_card_details(update.message.chat_id, context, amount)
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
+                context.user_data.clear()
+                await WalletManager.show_wallet_menu(update.message.chat_id, context)
 
         elif state == 'waiting_for_receipt':
             if update.message.photo or update.message.document:
@@ -384,6 +401,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ لطفاً رسید را به صورت عکس یا فایل PDF ارسال کنید.")
 
+        elif state == 'waiting_for_admin_wallet_amount':
+            try:
+                amount = int(text)
+                if amount < 1000000:
+                    raise ValueError("مبلغ کمتر از حداقل مجاز است")
+                target_admin_id = context.user_data['target_admin_id']
+                wallets = ReceiptManager.load_wallets()
+                wallets[str(target_admin_id)] = wallets.get(str(target_admin_id), 0) + amount
+                ReceiptManager.save_wallets(wallets)
+                await update.message.reply_text(f"✅ کیف پول ادمین {target_admin_id} به مبلغ {amount:,} تومان شارژ شد.")
+                await context.bot.send_message(
+                    chat_id=target_admin_id,
+                    text=f"✅ کیف پول شما به مبلغ {amount:,} تومان توسط سوپرادمین شارژ شد."
+                )
+                context.user_data.clear()
+                await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
+            except ValueError:
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
+
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
     except Exception as e:
@@ -393,16 +429,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_backup_list(query, user_id, context):
     from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR
-    # ایجاد دایرکتوری‌ها در صورت عدم وجود
     if not os.path.exists(DB_BACKUP_DIR):
         os.makedirs(DB_BACKUP_DIR)
     if not os.path.exists(MEDIA_BACKUP_DIR):
         os.makedirs(MEDIA_BACKUP_DIR)
 
     files = []
-    # اضافه کردن بکاپ‌های دیتابیس
     files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
-    # اضافه کردن بکاپ‌های مدیا
     files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
     files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
 
@@ -449,7 +482,6 @@ async def delete_backup(query, user_id, context):
     else:
         await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
 
-    # بازسازی لیست بکاپ‌ها بعد از حذف
     files = []
     files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
     files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
