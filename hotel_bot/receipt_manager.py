@@ -4,7 +4,7 @@ from config import SUPER_ADMINS
 import json
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from jdatetime import datetime as jdatetime  # برای تبدیل به شمسی
 
 # تنظیم لاگ برای دیباگ
@@ -96,6 +96,13 @@ class ReceiptManager:
             raise
 
     @staticmethod
+    def get_server_time():
+        """به دست آوردن زمان فعلی سرور (به وقت محلی، فرضاً تهران UTC+3:30)"""
+        current_time = datetime.now()  # زمان محلی سرور
+        shamsi_time = jdatetime.fromgregorian(datetime=current_time)
+        return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")  # فرمت HH:MM:SS - DD-MM-YYYY
+
+    @staticmethod
     async def add_receipt(context, user_id, amount, receipt_file_id):
         """افزودن یک رسید جدید برای کاربر و اطلاع‌رسانی به سوپرادمین‌ها"""
         try:
@@ -116,7 +123,7 @@ class ReceiptManager:
                 "amount": int(amount),
                 "receipt_file_id": receipt_file_id,
                 "status": "pending",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now().isoformat()  # استفاده از زمان محلی سرور
             }
             receipts[user_id].append(receipt_data)
             logger.debug(f"Receipt data to save: {receipt_data}")
@@ -126,7 +133,7 @@ class ReceiptManager:
             # ارسال پیام تأیید به کاربر (فقط یک بار)
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.",
+                text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.\nزمان سرور: {ReceiptManager.get_server_time()}",
                 parse_mode="Markdown"
             )
 
@@ -135,7 +142,7 @@ class ReceiptManager:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
-                        text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
+                        text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.\nزمان سرور: {ReceiptManager.get_server_time()}",
                         parse_mode="Markdown"
                     )
                     if receipt_file_id:
@@ -192,22 +199,20 @@ class ReceiptManager:
             logger.debug(f"Pending receipts: {pending_receipts}")
 
             if not pending_receipts:
-                text = "📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد."
+                text = "📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد.\nزمان سرور: {ReceiptManager.get_server_time()}"
                 keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
             else:
                 text = "📜 **لیست رسیدهای در حال انتظار**:\n\n"
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     timestamp = receipt.get("timestamp", "نامشخص")
-                    # تبدیل تاریخ میلادی به شمسی با جابجایی زمانی و فرمت جدید
+                    # تبدیل تاریخ محلی به شمسی
                     if timestamp != "نامشخص":
-                        miladi_datetime = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                        # اضافه کردن 2 ساعت و 30 دقیقه (اختلاف تهران با UTC)
-                        tehran_datetime = miladi_datetime + timedelta(hours=2, minutes=30)
-                        shamsi_datetime = jdatetime.fromgregorian(datetime=tehran_datetime)
-                        formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
+                        local_datetime = datetime.fromisoformat(timestamp)
+                        shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
                         formatted_time = shamsi_datetime.strftime("%H:%M:%S")
-                        display_time = f"{formatted_date} - {formatted_time}"
+                        formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
+                        display_time = f"{formatted_time} - {formatted_date}"
                     else:
                         display_time = "نامشخص"
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
@@ -225,7 +230,7 @@ class ReceiptManager:
                             callback_data=f"view_receipt:{uid}:{receipt_idx}"
                         )
                     ])
-                keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
+                text += f"\nزمان سرور: {ReceiptManager.get_server_time()}"
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
@@ -278,7 +283,7 @@ class ReceiptManager:
 
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"✅ کیف پول شما به مبلغ {amount:,} تومان شارژ شد.",
+                text=f"✅ کیف پول شما به مبلغ {amount:,} تومان شارژ شد.\nزمان سرور: {ReceiptManager.get_server_time()}",
                 parse_mode="Markdown"
             )
 
@@ -286,7 +291,7 @@ class ReceiptManager:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
-                        text=f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد.",
+                        text=f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد.\nزمان سرور: {ReceiptManager.get_server_time()}",
                         parse_mode="Markdown"
                     )
                 except Exception as e:
@@ -321,7 +326,7 @@ class ReceiptManager:
 
             await context.bot.send_message(
                 chat_id=user_id,
-                text="❌ رسید پرداخت شما رد شد. لطفاً با پشتیبانی تماس بگیرید.",
+                text="❌ رسید پرداخت شما رد شد. لطفاً با پشتیبانی تماس بگیرید.\nزمان سرور: {ReceiptManager.get_server_time()}",
                 parse_mode="Markdown"
             )
 
@@ -329,7 +334,7 @@ class ReceiptManager:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
-                        text=f"❌ رسید کاربر {user_id} رد شد.",
+                        text=f"❌ رسید کاربر {user_id} رد شد.\nزمان سرور: {ReceiptManager.get_server_time()}",
                         parse_mode="Markdown"
                     )
                 except Exception as e:
@@ -359,7 +364,7 @@ class ReceiptManager:
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
 
-            receipt = receipts[user_id][receipt_idx]
+            receipt = receipts[user_id][receipt_index]
             receipt_file_id = receipt.get("receipt_file_id")
             amount = receipt.get("amount")
             status = receipt.get("status")
@@ -372,7 +377,7 @@ class ReceiptManager:
             await context.bot.send_document(
                 chat_id=context.user_data.get('user_id'),
                 document=receipt_file_id,
-                caption=f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}",
+                caption=f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {ReceiptManager.get_server_time()}",
                 parse_mode="Markdown"
             )
             logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
