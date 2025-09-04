@@ -2,7 +2,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-from config import TOKEN, SUPER_ADMINS
+from config import BOT_TOKEN, SUPER_ADMINS  # اصلاح TOKEN به BOT_TOKEN
 from access_manager import AccessManager
 from backup_manager import BackupManager
 from file_manager import FileManager
@@ -12,11 +12,11 @@ from group_manager import GroupManager
 from permission_manager import PermissionManager
 from wallet_manager import WalletManager
 from receipt_manager import ReceiptManager
-from user_wallet_manager import UserWalletManager  # اضافه کردن ماژول جدید
+from user_wallet_manager import UserWalletManager
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    context.user_data['user_id'] = user_id  # ذخیره user_id برای استفاده در جاهای دیگر
+    context.user_data['user_id'] = user_id
     if not AccessManager.is_allowed(user_id):
         await update.message.reply_text(
             "💢 دسترسی غیرفعال\n\n"
@@ -510,7 +510,7 @@ async def delete_backup(query, user_id, context):
     )
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()  # اصلاح TOKEN به BOT_TOKEN
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

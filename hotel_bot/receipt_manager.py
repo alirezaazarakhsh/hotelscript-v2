@@ -3,6 +3,11 @@ from telegram.ext import ContextTypes
 from config import SUPER_ADMINS
 import json
 import os
+import logging
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 RECEIPTS_FILE = "receipts.json"  # فایل برای ذخیره رسیدهای در حال انتظار
 WALLETS_FILE = "wallets.json"  # فایل برای ذخیره موجودی کیف پول کاربران
@@ -13,10 +18,13 @@ class ReceiptManager:
         try:
             if os.path.exists(RECEIPTS_FILE):
                 with open(RECEIPTS_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    logger.debug(f"Loaded receipts: {data}")
+                    return data
+            logger.debug("Receipts file does not exist, returning empty dict")
             return {}
         except Exception as e:
-            print(f"Error loading receipts: {str(e)}")
+            logger.error(f"Error loading receipts: {str(e)}")
             return {}
 
     @staticmethod
@@ -24,18 +32,22 @@ class ReceiptManager:
         try:
             with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(receipts, f, ensure_ascii=False, indent=4)
+            logger.debug(f"Saved receipts: {receipts}")
         except Exception as e:
-            print(f"Error saving receipts: {str(e)}")
+            logger.error(f"Error saving receipts: {str(e)}")
 
     @staticmethod
     def load_wallets():
         try:
             if os.path.exists(WALLETS_FILE):
                 with open(WALLETS_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    logger.debug(f"Loaded wallets: {data}")
+                    return data
+            logger.debug("Wallets file does not exist, returning empty dict")
             return {}
         except Exception as e:
-            print(f"Error loading wallets: {str(e)}")
+            logger.error(f"Error loading wallets: {str(e)}")
             return {}
 
     @staticmethod
@@ -43,23 +55,27 @@ class ReceiptManager:
         try:
             with open(WALLETS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(wallets, f, ensure_ascii=False, indent=4)
+            logger.debug(f"Saved wallets: {wallets}")
         except Exception as e:
-            print(f"Error saving wallets: {str(e)}")
+            logger.error(f"Error saving wallets: {str(e)}")
 
     @staticmethod
     def add_receipt(user_id, amount, receipt_file_id):
         try:
             receipts = ReceiptManager.load_receipts()
-            if str(user_id) not in receipts:
-                receipts[str(user_id)] = []
-            receipts[str(user_id)].append({
+            user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            if user_id not in receipts:
+                receipts[user_id] = []
+            receipt_data = {
                 "amount": amount,
                 "receipt_file_id": receipt_file_id,
                 "status": "pending"
-            })
+            }
+            receipts[user_id].append(receipt_data)
             ReceiptManager.save_receipts(receipts)
+            logger.info(f"Receipt added for user {user_id}: {receipt_data}")
         except Exception as e:
-            print(f"Error adding receipt: {str(e)}")
+            logger.error(f"Error adding receipt for user {user_id}: {str(e)}")
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
@@ -77,6 +93,7 @@ class ReceiptManager:
                 for idx, receipt in enumerate(user_receipts):
                     if receipt["status"] == "pending":
                         pending_receipts.append((uid, idx, receipt))
+            logger.debug(f"Pending receipts: {pending_receipts}")
 
             if not pending_receipts:
                 text = "📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد."
@@ -109,6 +126,7 @@ class ReceiptManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
+            logger.error(f"Error showing pending receipts: {str(e)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش رسیدها: {str(e)}")
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
@@ -119,6 +137,7 @@ class ReceiptManager:
             receipts = ReceiptManager.load_receipts()
             user_id = str(user_id)
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
+                logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
 
             receipts[user_id][receipt_index]["status"] = "confirmed"
@@ -144,8 +163,10 @@ class ReceiptManager:
                     parse_mode="Markdown"
                 )
 
+            logger.info(f"Receipt confirmed for user {user_id}: amount {amount}")
             return f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد."
         except Exception as e:
+            logger.error(f"Error confirming receipt for user {user_id}: {str(e)}")
             return f"❌ خطا در تأیید رسید: {str(e)}"
 
     @staticmethod
@@ -154,6 +175,7 @@ class ReceiptManager:
             receipts = ReceiptManager.load_receipts()
             user_id = str(user_id)
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
+                logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
 
             receipts[user_id][receipt_index]["status"] = "rejected"
@@ -174,6 +196,8 @@ class ReceiptManager:
                     parse_mode="Markdown"
                 )
 
+            logger.info(f"Receipt rejected for user {user_id}")
             return f"✅ رسید کاربر {user_id} رد شد."
         except Exception as e:
+            logger.error(f"Error rejecting receipt for user {user_id}: {str(e)}")
             return f"❌ خطا در رد رسید: {str(e)}"
