@@ -510,7 +510,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.clear()
                 await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
             except ValueError:
-                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000,000 تومان و فقط اعداد.")
 
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}", exc_info=True)
