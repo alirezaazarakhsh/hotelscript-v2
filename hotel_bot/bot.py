@@ -618,6 +618,6 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.ANY & ~filters.COMMAND, handle_message))  # تغییر به filters.ANY برای مدیریت عکس و سند
     logger.info("Bot running...")
     app.run_polling()
