@@ -9,8 +9,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-RECEIPTS_FILE = "receipts.json"  # فایل برای ذخیره رسیدهای در حال انتظار
-WALLETS_FILE = "wallets.json"  # فایل برای ذخیره موجودی کیف پول کاربران
+RECEIPTS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "receipts.json")  # مسیر کامل فایل
+WALLETS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "wallets.json")  # مسیر کامل فایل
 
 class ReceiptManager:
     @staticmethod
@@ -30,11 +30,14 @@ class ReceiptManager:
     @staticmethod
     def save_receipts(receipts):
         try:
+            # اطمینان از وجود دایرکتوری
+            os.makedirs(os.path.dirname(RECEIPTS_FILE), exist_ok=True)
             with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(receipts, f, ensure_ascii=False, indent=4)
             logger.debug(f"Saved receipts: {receipts}")
         except Exception as e:
             logger.error(f"Error saving receipts: {str(e)}")
+            raise
 
     @staticmethod
     def load_wallets():
@@ -53,17 +56,20 @@ class ReceiptManager:
     @staticmethod
     def save_wallets(wallets):
         try:
+            # اطمینان از وجود دایرکتوری
+            os.makedirs(os.path.dirname(WALLETS_FILE), exist_ok=True)
             with open(WALLETS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(wallets, f, ensure_ascii=False, indent=4)
             logger.debug(f"Saved wallets: {wallets}")
         except Exception as e:
             logger.error(f"Error saving wallets: {str(e)}")
+            raise
 
     @staticmethod
     def add_receipt(user_id, amount, receipt_file_id):
         try:
-            receipts = ReceiptManager.load_receipts()
             user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
             receipt_data = {
@@ -74,15 +80,21 @@ class ReceiptManager:
             receipts[user_id].append(receipt_data)
             ReceiptManager.save_receipts(receipts)
             logger.info(f"Receipt added for user {user_id}: {receipt_data}")
+            return True
         except Exception as e:
             logger.error(f"Error adding receipt for user {user_id}: {str(e)}")
+            return False
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if user_id not in SUPER_ADMINS:
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مشاهده رسیدهای در حال انتظار را ندارید!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده رسیدهای در حال انتظار را ندارید!",
+                    parse_mode="Markdown"
+                )
                 from menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
@@ -127,7 +139,11 @@ class ReceiptManager:
                 )
         except Exception as e:
             logger.error(f"Error showing pending receipts: {str(e)}")
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش رسیدها: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش رسیدها: {str(e)}",
+                parse_mode="Markdown"
+            )
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
 
@@ -157,11 +173,14 @@ class ReceiptManager:
 
             # ارسال اعلان به تمام سوپرادمین‌ها
             for admin in SUPER_ADMINS:
-                await context.bot.send_message(
-                    chat_id=admin,
-                    text=f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد.",
-                    parse_mode="Markdown"
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin,
+                        text=f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد.",
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    logger.error(f"Error notifying admin {admin}: {str(e)}")
 
             logger.info(f"Receipt confirmed for user {user_id}: amount {amount}")
             return f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد."
@@ -190,11 +209,14 @@ class ReceiptManager:
 
             # ارسال اعلان به تمام سوپرادمین‌ها
             for admin in SUPER_ADMINS:
-                await context.bot.send_message(
-                    chat_id=admin,
-                    text=f"❌ رسید کاربر {user_id} رد شد.",
-                    parse_mode="Markdown"
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin,
+                        text=f"❌ رسید کاربر {user_id} رد شد.",
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    logger.error(f"Error notifying admin {admin}: {str(e)}")
 
             logger.info(f"Receipt rejected for user {user_id}")
             return f"✅ رسید کاربر {user_id} رد شد."

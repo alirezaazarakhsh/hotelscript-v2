@@ -3,6 +3,12 @@ import subprocess
 import asyncio
 from config import PROJECT_DIR, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MEDIA_BASE_URL
 from file_manager import FileManager
+from menu_manager import MenuManager
+import logging
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class BackupManager:
     @staticmethod
@@ -14,13 +20,14 @@ class BackupManager:
 
         # اجرای اسکریپت بکاپ دیتابیس
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        print(f"Running backup.sh for DB: {backup_script}")
+        logger.debug(f"Running backup.sh for DB: {backup_script}")
         result = subprocess.run(f"{backup_script} db", shell=True, capture_output=True, text=True)
-        print(f"backup.sh stdout: {result.stdout}")
-        print(f"backup.sh stderr: {result.stderr}")
+        logger.debug(f"backup.sh stdout: {result.stdout}")
+        logger.debug(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ دیتابیس: {result.stderr}")
+            await MenuManager.show_main_menu(user_id, context)
             return
 
         # پیدا کردن آخرین فایل بکاپ دیتابیس
@@ -39,6 +46,10 @@ class BackupManager:
 
         FileManager.cleanup_old_backups(DB_BACKUP_DIR)
         await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        
+        # نمایش منوی اصلی
+        await MenuManager.show_main_menu(user_id, context)
+        logger.debug(f"Main menu displayed for user {user_id} after database backup")
 
     @staticmethod
     async def backup_media(user_id, context):
@@ -49,13 +60,14 @@ class BackupManager:
 
         # اجرای اسکریپت بکاپ مدیا
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        print(f"Running backup.sh for media: {backup_script}")
+        logger.debug(f"Running backup.sh for media: {backup_script}")
         result = subprocess.run(f"{backup_script} media", shell=True, capture_output=True, text=True)
-        print(f"backup.sh stdout: {result.stdout}")
-        print(f"backup.sh stderr: {result.stderr}")
+        logger.debug(f"backup.sh stdout: {result.stdout}")
+        logger.debug(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا: {result.stderr}")
+            await MenuManager.show_main_menu(user_id, context)
             return
 
         # پیدا کردن آخرین فایل بکاپ مدیا
@@ -71,3 +83,7 @@ class BackupManager:
 
         FileManager.cleanup_old_backups(MEDIA_BACKUP_DIR)
         await context.bot.send_message(chat_id=user_id, text="🧹 بکاپ‌های قدیمی مدیریت شدند.")
+        
+        # نمایش منوی اصلی
+        await MenuManager.show_main_menu(user_id, context)
+        logger.debug(f"Main menu displayed for user {user_id} after media backup")

@@ -3,6 +3,11 @@ from telegram.ext import ContextTypes
 from config import SUPER_ADMINS
 from access_manager import AccessManager
 from receipt_manager import ReceiptManager
+import logging
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class WalletManager:
     @staticmethod
@@ -22,6 +27,7 @@ class WalletManager:
             else:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
+            logger.error(f"Error in show_wallet_menu: {str(e)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش منوی شارژ کیف پول: {str(e)}")
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
@@ -29,7 +35,8 @@ class WalletManager:
     @staticmethod
     async def show_payment_packages(chat_id, context, message_id=None):
         try:
-            if not AccessManager.is_allowed(context.user_data.get('user_id', chat_id), 'wallet_charge'):
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
                 await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
                 return
             text = "💸 **انتخاب مبلغ برای شارژ از طریق درگاه پرداخت**\n\nلطفاً یکی از پکیج‌های زیر را انتخاب کنید. پس از انتخاب، به درگاه پرداخت هدایت می‌شوید."
@@ -47,50 +54,99 @@ class WalletManager:
             else:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
+            logger.error(f"Error in show_payment_packages: {str(e)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش پکیج‌های پرداخت: {str(e)}")
             await WalletManager.show_wallet_menu(chat_id, context)
 
     @staticmethod
     async def prompt_for_amount(chat_id, context):
-        if not AccessManager.is_allowed(context.user_data.get('user_id', chat_id), 'wallet_charge'):
-            await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
-            return
-        context.user_data['state'] = 'waiting_for_amount'
-        await context.bot.send_message(chat_id=chat_id, text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل ۱,۰۰۰,۰۰۰ تومان.")
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
+                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
+                return
+            context.user_data['state'] = 'waiting_for_amount'
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل ۱,۰۰۰,۰۰۰ تومان.",
+                parse_mode="Markdown"
+            )
+            logger.debug(f"Prompted user {user_id} for amount")
+        except Exception as e:
+            logger.error(f"Error in prompt_for_amount: {str(e)}")
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در درخواست مبلغ: {str(e)}")
+            await WalletManager.show_wallet_menu(chat_id, context)
 
     @staticmethod
     async def show_card_details(chat_id, context, amount, message_id=None):
         try:
+            user_id = context.user_data.get('user_id', chat_id)
             if amount < 1000000:
                 raise ValueError("مبلغ کمتر از حداقل مجاز است")
-            text = f"💳 **شارژ با کارت به کارت**\n\nبرای شارژ مبلغ {amount:,} تومان:\n\n**شماره کارت**: 0506-3631-1411-6362\n\nلطفاً مبلغ را به این کارت واریز کنید و رسید پرداخت را ارسال کنید (عکس یا فایل PDF)."
+            context.user_data['amount'] = amount  # ذخیره مبلغ در context
+            text = (
+                f"💳 **شارژ با کارت به کارت**\n\n"
+                f"برای شارژ مبلغ {amount:,} تومان:\n\n"
+                f"**شماره کارت**: 0506-3631-1411-6362\n\n"
+                f"لطفاً مبلغ را به این کارت واریز کنید و رسید پرداخت را ارسال کنید (عکس یا فایل PDF)."
+            )
             keyboard = [
                 [InlineKeyboardButton("ارسال رسید", callback_data="send_receipt")],
                 [InlineKeyboardButton("لغو", callback_data="cancel_card_to_card")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            logger.debug(f"Displayed card details for user {user_id}, amount: {amount}")
         except ValueError as ve:
+            logger.error(f"ValueError in show_card_details: {str(ve)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا: {str(ve)}. حداقل مبلغ ۱,۰۰۰,۰۰۰ تومان است.")
             await WalletManager.show_wallet_menu(chat_id, context)
         except Exception as e:
+            logger.error(f"Error in show_card_details: {str(e)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش جزئیات کارت: {str(e)}")
             await WalletManager.show_wallet_menu(chat_id, context)
 
     @staticmethod
     async def prompt_for_receipt(chat_id, context, message_id=None):
-        if not AccessManager.is_allowed(context.user_data.get('user_id', chat_id), 'wallet_charge'):
-            await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
-            return
-        context.user_data['state'] = 'waiting_for_receipt'
-        text = "📄 لطفاً رسید پرداخت را ارسال کنید (عکس یا فایل). رسید به ادمین ارسال خواهد شد."
-        if message_id:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
-        else:
-            await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
+                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
+                return
+            context.user_data['state'] = 'waiting_for_receipt'
+            text = "📄 لطفاً رسید پرداخت را ارسال کنید (عکس یا فایل PDF). رسید به ادمین ارسال خواهد شد."
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            logger.debug(f"Prompted user {user_id} for receipt")
+        except Exception as e:
+            logger.error(f"Error in prompt_for_receipt: {str(e)}")
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در درخواست رسید: {str(e)}")
+            await WalletManager.show_wallet_menu(chat_id, context)
 
     @staticmethod
     async def show_balance(chat_id, context, user_id, message_id=None):
@@ -103,14 +159,27 @@ class WalletManager:
             text = f"💰 موجودی کیف پول شما: {balance:,} تومان"
             keyboard = [
                 [InlineKeyboardButton("شارژ کیف پول", callback_data="wallet_charge")],
-                [InlineKeyboardButton("بازگشت ", callback_data="go_back")]
+                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            logger.debug(f"Displayed balance for user {user_id}: {balance}")
         except Exception as e:
+            logger.error(f"Error in show_balance: {str(e)}")
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش موجودی: {str(e)}")
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
