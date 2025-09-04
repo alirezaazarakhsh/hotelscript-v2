@@ -446,7 +446,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"No message received for user {user_id} in waiting_for_receipt state")
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
                     return
-                
+
                 receipt_file_id = None
                 if update.message.photo:
                     receipt_file_id = update.message.photo[-1].file_id
@@ -478,7 +478,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
-                # ارسال اعلان به سوپرادمین‌ها
+
+                # ارسال اعلان و رسید به سوپرادمین‌ها با مدیریت بهتر خطاها
                 for admin in SUPER_ADMINS:
                     try:
                         await context.bot.send_message(
@@ -487,26 +488,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             parse_mode="Markdown"
                         )
                         logger.debug(f"Notified super admin {admin} for receipt from user {user_id}")
+                        if receipt_file_id:
+                            if update.message.photo:
+                                await context.bot.send_photo(
+                                    chat_id=admin,
+                                    photo=receipt_file_id,
+                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
+                                )
+                            elif update.message.document:
+                                await context.bot.send_document(
+                                    chat_id=admin,
+                                    document=receipt_file_id,
+                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
+                                )
+                            logger.debug(f"Sent receipt file to super admin {admin}")
                     except Exception as e:
-                        logger.error(f"Failed to notify super admin {admin}: {str(e)}")
-                # ارسال فایل رسید به سوپرادمین‌ها
-                for admin in SUPER_ADMINS:
-                    try:
-                        if update.message.photo:
-                            await context.bot.send_photo(
-                                chat_id=admin,
-                                photo=receipt_file_id,
-                                caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                            )
-                        elif update.message.document:
-                            await context.bot.send_document(
-                                chat_id=admin,
-                                document=receipt_file_id,
-                                caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
-                            )
-                        logger.debug(f"Sent receipt file to super admin {admin}")
-                    except Exception as e:
-                        logger.error(f"Failed to send receipt file to super admin {admin}: {str(e)}")
+                        logger.error(f"Failed to notify or send receipt to super admin {admin}: {str(e)}")
+                        continue  # ادامه می‌ده تا بقیه سوپرادمین‌ها رو امتحان کنه
+
                 context.user_data.clear()
             except Exception as e:
                 logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
