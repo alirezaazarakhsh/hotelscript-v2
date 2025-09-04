@@ -448,6 +448,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
                     return
 
+                # بررسی اینکه آیا قبلاً رسید پردازش شده است
+                if 'receipt_processed' in context.user_data and context.user_data['receipt_processed']:
+                    logger.warning(f"Receipt already processed for user {user_id}, skipping.")
+                    return
+
                 receipt_file_id = None
                 if update.message.photo:
                     receipt_file_id = update.message.photo[-1].file_id
@@ -477,6 +482,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
+                context.user_data['receipt_processed'] = True  # علامت‌گذاری برای جلوگیری از پردازش دوباره
                 context.user_data.clear()
             except Exception as e:
                 logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
@@ -485,7 +491,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-        
         
         # حالت انتظار برای دریافت مبلغ شارژ کیف پول ادمین
         elif state == 'waiting_for_admin_wallet_amount':

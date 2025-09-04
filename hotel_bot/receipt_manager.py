@@ -99,7 +99,7 @@ class ReceiptManager:
         """افزودن یک رسید جدید برای کاربر و اطلاع‌رسانی به سوپرادمین‌ها"""
         try:
             logger.debug(f"Starting add_receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
-            user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            user_id = str(user_id)
             if not isinstance(amount, (int, float)) or amount <= 0:
                 logger.error(f"Invalid amount for user {user_id}: {amount}")
                 raise ValueError("مبلغ نامعتبر است")
@@ -112,24 +112,24 @@ class ReceiptManager:
             if user_id not in receipts:
                 receipts[user_id] = []
             receipt_data = {
-                "amount": int(amount),  # اطمینان از عدد صحیح بودن مبلغ
+                "amount": int(amount),
                 "receipt_file_id": receipt_file_id,
                 "status": "pending",
-                "timestamp": datetime.utcnow().isoformat()  # افزودن زمان ثبت
+                "timestamp": datetime.utcnow().isoformat()
             }
             receipts[user_id].append(receipt_data)
             logger.debug(f"Receipt data to save: {receipt_data}")
             ReceiptManager.save_receipts(receipts)
             logger.info(f"Receipt successfully added for user {user_id}: {receipt_data}")
 
-            # ارسال اعلان به کاربر
+            # ارسال پیام تأیید به کاربر (فقط یک بار)
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.",
                 parse_mode="Markdown"
             )
 
-            # ارسال اعلان و فایل رسید به سوپرادمین‌ها
+            # ارسال اعلان به سوپرادمین‌ها (فقط یک بار برای هر ادمین)
             for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
@@ -163,6 +163,7 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
             raise
+    
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
