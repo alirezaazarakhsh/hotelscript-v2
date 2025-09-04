@@ -69,6 +69,13 @@ class ReceiptManager:
     def add_receipt(user_id, amount, receipt_file_id):
         try:
             user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            if not isinstance(amount, (int, float)) or amount <= 0:
+                logger.error(f"Invalid amount provided for user {user_id}: {amount}")
+                raise ValueError("مبلغ نامعتبر است")
+            if not receipt_file_id:
+                logger.error(f"Invalid receipt file ID for user {user_id}")
+                raise ValueError("شناسه فایل رسید نامعتبر است")
+            
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
@@ -83,13 +90,15 @@ class ReceiptManager:
             return True
         except Exception as e:
             logger.error(f"Error adding receipt for user {user_id}: {str(e)}")
-            return False
+            raise  # خطا را به تابع caller منتقل می‌کنیم تا به کاربر نمایش داده شود
+        
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if user_id not in SUPER_ADMINS:
+                logger.warning(f"User {user_id} attempted to access pending receipts without permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز مشاهده رسیدهای در حال انتظار را ندارید!",
@@ -100,10 +109,11 @@ class ReceiptManager:
                 return
 
             receipts = ReceiptManager.load_receipts()
+            logger.debug(f"Loaded receipts for display: {receipts}")
             pending_receipts = []
             for uid, user_receipts in receipts.items():
                 for idx, receipt in enumerate(user_receipts):
-                    if receipt["status"] == "pending":
+                    if receipt.get("status") == "pending":
                         pending_receipts.append((uid, idx, receipt))
             logger.debug(f"Pending receipts: {pending_receipts}")
 
@@ -116,8 +126,18 @@ class ReceiptManager:
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان\n"
                     keyboard.append([
-                        InlineKeyboardButton(f"تأیید رسید {idx}", callback_data=f"confirm_receipt:{uid}:{receipt['amount']}:{receipt_idx}"),
-                        InlineKeyboardButton(f"رد رسید {idx}", callback_data=f"reject_receipt:{uid}:{receipt_idx}")
+                        InlineKeyboardButton(
+                            f"تأیید رسید {idx}",
+                            callback_data=f"confirm_receipt:{uid}:{receipt['amount']}:{receipt_idx}"
+                        ),
+                        InlineKeyboardButton(
+                            f"رد رسید {idx}",
+                            callback_data=f"reject_receipt:{uid}:{receipt_idx}"
+                        ),
+                        InlineKeyboardButton(
+                            f"مشاهده رسید {idx}",
+                            callback_data=f"view_receipt:{uid}:{receipt_idx}"
+                        )
                     ])
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
@@ -146,6 +166,8 @@ class ReceiptManager:
             )
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
+            
+            
 
     @staticmethod
     async def confirm_receipt(context, user_id, amount, receipt_index):

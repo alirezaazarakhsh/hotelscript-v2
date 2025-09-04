@@ -1,8 +1,9 @@
 import os
+import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-from config import BOT_TOKEN, SUPER_ADMINS  # اصلاح TOKEN به BOT_TOKEN
+from config import BOT_TOKEN, SUPER_ADMINS
 from access_manager import AccessManager
 from backup_manager import BackupManager
 from file_manager import FileManager
@@ -13,6 +14,10 @@ from permission_manager import PermissionManager
 from wallet_manager import WalletManager
 from receipt_manager import ReceiptManager
 from user_wallet_manager import UserWalletManager
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -299,11 +304,51 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("view_receipt:"):
+            if user_id in SUPER_ADMINS:
+                _, u_id, idx = data.split(":")
+                receipts = ReceiptManager.load_receipts()
+                if u_id in receipts and int(idx) < len(receipts[u_id]):
+                    receipt = receipts[u_id][int(idx)]
+                    receipt_file_id = receipt.get("receipt_file_id")
+                    try:
+                        await context.bot.send_document(
+                            chat_id=chat_id,
+                            document=receipt_file_id,
+                            caption=f"رسید از کاربر {u_id} برای مبلغ {receipt['amount']:,} تومان"
+                        ) if receipt_file_id.startswith("BA") else await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=receipt_file_id,
+                            caption=f"رسید از کاربر {u_id} برای مبلغ {receipt['amount']:,} تومان"
+                        )
+                        logger.debug(f"Sent receipt file {receipt_file_id} to super admin {user_id}")
+                    except Exception as e:
+                        logger.error(f"Error sending receipt file to super admin {user_id}: {str(e)}")
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"❌ خطا در نمایش فایل رسید: {str(e)}",
+                            parse_mode="Markdown"
+                        )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ رسید یافت نشد!",
+                        parse_mode="Markdown"
+                    )
+                await ReceiptManager.show_pending_receipts(chat_id, context)
+            else:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ شما مجوز دسترسی ندارید!",
+                    parse_mode="Markdown"
+                )
         elif data.startswith("charge_admin_wallet:"):
             admin_id = data.split(":", 1)[1]
             await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
 
     except Exception as e:
+        logger.error(f"Error in button handler: {str(e)}")
         await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
@@ -324,7 +369,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
                 return
-            print(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")
+            logger.debug(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")
             if str(new_id) in admins or new_id in SUPER_ADMINS:
                 await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
                 return
@@ -387,19 +432,78 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
 
         elif state == 'waiting_for_receipt':
-            if update.message.photo or update.message.document:
-                receipt_file_id = update.message.photo[-1].file_id if update.message.photo else update.message.document.file_id
-                ReceiptManager.add_receipt(user_id, context.user_data['amount'], receipt_file_id)
-                await update.message.reply_text("✅ رسید ارسال شد و در حال بررسی توسط ادمین است.")
-                for admin in SUPER_ADMINS:
-                    await context.bot.send_message(
-                        admin,
-                        f"📄 رسید جدید از کاربر {user_id} برای مبلغ {context.user_data.get('amount', 0):,} تومان دریافت شد.",
-                        parse_mode="Markdown"
+            try:
+                if not update.message:
+                    logger.error(f"No message received for user {user_id} in waiting_for_receipt state")
+                    await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
+                    return
+                
+                if update.message.photo:
+                    receipt_file_id = update.message.photo[-1].file_id
+                    logger.debug(f"Photo receipt received from user {user_id}: {receipt_file_id}")
+                elif update.message.document and update.message.document.mime_type in ['application/pdf', 'image/jpeg', 'image/png']:
+                    receipt_file_id = update.message.document.file_id
+                    logger.debug(f"Document receipt received from user {user_id}: {receipt_file_id}")
+                else:
+                    logger.warning(f"Invalid file type sent by user {user_id}")
+                    await update.message.reply_text(
+                        "❌ لطفاً رسید را به صورت عکس (JPEG/PNG) یا فایل PDF ارسال کنید."
                     )
+                    return
+
+                amount = context.user_data.get('amount')
+                if not amount:
+                    logger.error(f"No amount found in user_data for user {user_id}")
+                    await update.message.reply_text(
+                        "❌ خطا: مبلغ پرداخت مشخص نشده است. لطفاً دوباره شروع کنید."
+                    )
+                    context.user_data.clear()
+                    await WalletManager.show_wallet_menu(update.message.chat_id, context)
+                    return
+
+                if ReceiptManager.add_receipt(user_id, amount, receipt_file_id):
+                    await update.message.reply_text(
+                        "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
+                    )
+                    # ارسال اعلان به سوپرادمین‌ها
+                    for admin in SUPER_ADMINS:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=admin,
+                                text=f"📄 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
+                                parse_mode="Markdown"
+                            )
+                            logger.debug(f"Notified super admin {admin} for receipt from user {user_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to notify super admin {admin}: {str(e)}")
+                    # ارسال فایل رسید به سوپرادمین‌ها
+                    for admin in SUPER_ADMINS:
+                        try:
+                            if update.message.photo:
+                                await context.bot.send_photo(
+                                    chat_id=admin,
+                                    photo=receipt_file_id,
+                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
+                                )
+                            elif update.message.document:
+                                await context.bot.send_document(
+                                    chat_id=admin,
+                                    document=receipt_file_id,
+                                    caption=f"رسید از کاربر {user_id} برای مبلغ {amount:,} تومان"
+                                )
+                            logger.debug(f"Sent receipt file to super admin {admin}")
+                        except Exception as e:
+                            logger.error(f"Failed to send receipt file to super admin {admin}: {str(e)}")
+                    context.user_data.clear()
+                else:
+                    raise Exception("خطا در ثبت رسید")
+            except Exception as e:
+                logger.error(f"Error processing receipt for user {user_id}: {str(e)}")
+                await update.message.reply_text(
+                    f"❌ خطا در ثبت رسید: {str(e)}. لطفاً دوباره تلاش کنید."
+                )
                 context.user_data.clear()
-            else:
-                await update.message.reply_text("❌ لطفاً رسید را به صورت عکس یا فایل PDF ارسال کنید.")
+                await WalletManager.show_wallet_menu(update.message.chat_id, context)
 
         elif state == 'waiting_for_admin_wallet_amount':
             try:
@@ -423,6 +527,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
     except Exception as e:
+        logger.error(f"Error in handle_message: {str(e)}")
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
@@ -510,9 +615,9 @@ async def delete_backup(query, user_id, context):
     )
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()  # اصلاح TOKEN به BOT_TOKEN
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot running...")
+    logger.info("Bot running...")
     app.run_polling()
