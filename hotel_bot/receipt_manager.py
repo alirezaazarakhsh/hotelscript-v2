@@ -205,8 +205,9 @@ class ReceiptManager:
                         # اضافه کردن 2 ساعت و 30 دقیقه (اختلاف تهران با UTC)
                         tehran_datetime = miladi_datetime + timedelta(hours=2, minutes=30)
                         shamsi_datetime = jdatetime.fromgregorian(datetime=tehran_datetime)
-                        formatted_time = shamsi_datetime.strftime("%d-%m-%Y %H:%M:%S")  # فرمت DD-MM-YYYY
-                        display_time = f"- {formatted_time}"
+                        formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
+                        formatted_time = shamsi_datetime.strftime("%H:%M:%S")
+                        display_time = f"{formatted_date} - {formatted_time}"
                     else:
                         display_time = "نامشخص"
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
@@ -358,7 +359,7 @@ class ReceiptManager:
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
 
-            receipt = receipts[user_id][receipt_index]
+            receipt = receipts[user_id][receipt_idx]
             receipt_file_id = receipt.get("receipt_file_id")
             amount = receipt.get("amount")
             status = receipt.get("status")
