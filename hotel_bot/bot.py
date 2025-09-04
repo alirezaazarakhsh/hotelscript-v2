@@ -137,7 +137,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
                 return
-            await AdminManager.show_manage_admins(chat_id, context, admins, groups, message_id=message_id)
+            await AdminManager.show_manage_admins(chat_id, context, admins, message_id=message_id)
         elif data.startswith("view_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده گروه را ندارید!")
@@ -367,7 +367,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data['amount'] = amount
                 await WalletManager.show_card_details(update.message.chat_id, context, amount)
             except ValueError:
-                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱۰۰,۰۰۰ تومان و فقط اعداد.")
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل ۱,۰۰۰,۰۰۰ تومان و فقط اعداد.")
 
         elif state == 'waiting_for_receipt':
             if update.message.photo or update.message.document:

@@ -5,11 +5,11 @@ class WalletManager:
     @staticmethod
     async def show_wallet_menu(chat_id, context, message_id=None):
         try:
-            text = "💰 **شارژ کیف پول**\n\nبرای شارژ کیف پول خود، یکی از روش‌های زیر را انتخاب کنید. شارژ کیف پول به شما امکان استفاده از خدمات بیشتر را می‌دهد.\n\n**نکته**: حداقل مبلغ شارژ ۱۰۰,۰۰۰ تومان است."
+            text = "💰 **شارژ کیف پول**\n\nبرای شارژ کیف پول خود، یکی از روش‌های زیر را انتخاب کنید. شارژ کیف پول به شما امکان استفاده از خدمات بیشتر را می‌دهد.\n\n**نکته**: حداقل مبلغ شارژ ۱,۰۰۰,۰۰۰ تومان است."
             keyboard = [
                 [InlineKeyboardButton("شارژ حساب با درگاه پرداخت", callback_data="payment_gateway")],
                 [InlineKeyboardButton("شارژ حساب با کارت به کارت", callback_data="card_to_card")],
-                [InlineKeyboardButton("بازگشت به منوی اصلی", callback_data="go_back")]
+                [InlineKeyboardButton("بازگشت ", callback_data="go_back")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
@@ -45,12 +45,12 @@ class WalletManager:
     @staticmethod
     async def prompt_for_amount(chat_id, context):
         context.user_data['state'] = 'waiting_for_amount'
-        await context.bot.send_message(chat_id=chat_id, text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل ۱۰۰,۰۰۰ تومان.")
+        await context.bot.send_message(chat_id=chat_id, text="لطفاً مبلغ مورد نظر برای شارژ (به تومان) را وارد کنید. حداقل ۱,۰۰۰,۰۰۰ تومان.")
 
     @staticmethod
     async def show_card_details(chat_id, context, amount, message_id=None):
         try:
-            text = f"💳 **شارژ با کارت به کارت**\n\nبرای شارژ مبلغ {amount:,} تومان:\n\n**شماره کارت**: 6362-1411-3631-0506\n\nلطفاً مبلغ را به این کارت واریز کنید و رسید پرداخت را ارسال کنید (عکس یا فایل PDF)."
+            text = f"💳 **شارژ با کارت به کارت**\n\nبرای شارژ مبلغ {amount:,} تومان:\n\n**شماره کارت**: 0506-3631-1411-6362\n\nلطفاً مبلغ را به این کارت واریز کنید و رسید پرداخت را ارسال کنید (عکس یا فایل PDF)."
             keyboard = [
                 [InlineKeyboardButton("ارسال رسید", callback_data="send_receipt")],
                 [InlineKeyboardButton("لغو", callback_data="cancel_card_to_card")]
