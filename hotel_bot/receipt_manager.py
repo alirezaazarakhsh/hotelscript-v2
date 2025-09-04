@@ -4,97 +4,152 @@ from config import SUPER_ADMINS
 import json
 import os
 import logging
+from datetime import datetime
 
 # تنظیم لاگ برای دیباگ
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-RECEIPTS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "receipts.json")  # مسیر کامل فایل
-WALLETS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "wallets.json")  # مسیر کامل فایل
+# تنظیم مسیر فایل‌ها
+RECEIPTS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "receipts.json")
+WALLETS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "wallets.json")
 
 class ReceiptManager:
     @staticmethod
     def load_receipts():
+        """بارگذاری داده‌های رسیدها از فایل receipts.json"""
         try:
-            if os.path.exists(RECEIPTS_FILE):
-                with open(RECEIPTS_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    logger.debug(f"Loaded receipts: {data}")
-                    return data
-            logger.debug("Receipts file does not exist, returning empty dict")
+            if not os.path.exists(RECEIPTS_FILE):
+                logger.warning(f"Receipts file {RECEIPTS_FILE} not found, creating an empty one")
+                os.makedirs(os.path.dirname(RECEIPTS_FILE), exist_ok=True)
+                with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump({}, f, ensure_ascii=False, indent=4)
+                return {}
+            
+            with open(RECEIPTS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.debug(f"Loaded receipts from {RECEIPTS_FILE}: {data}")
+                return data
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in {RECEIPTS_FILE}: {str(e)}. Returning empty dict.")
             return {}
         except Exception as e:
-            logger.error(f"Error loading receipts: {str(e)}")
+            logger.error(f"Error loading receipts from {RECEIPTS_FILE}: {str(e)}")
             return {}
 
     @staticmethod
     def save_receipts(receipts):
+        """ذخیره داده‌های رسیدها در فایل receipts.json"""
         try:
-            # اطمینان از وجود دایرکتوری
             os.makedirs(os.path.dirname(RECEIPTS_FILE), exist_ok=True)
             with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(receipts, f, ensure_ascii=False, indent=4)
-            logger.debug(f"Saved receipts: {receipts}")
+            logger.info(f"Receipts saved to {RECEIPTS_FILE}: {receipts}")
         except Exception as e:
-            logger.error(f"Error saving receipts: {str(e)}")
+            logger.error(f"Error saving receipts to {RECEIPTS_FILE}: {str(e)}")
             raise
 
     @staticmethod
     def load_wallets():
+        """بارگذاری داده‌های کیف پول‌ها از فایل wallets.json"""
         try:
-            if os.path.exists(WALLETS_FILE):
-                with open(WALLETS_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    logger.debug(f"Loaded wallets: {data}")
-                    return data
-            logger.debug("Wallets file does not exist, returning empty dict")
+            if not os.path.exists(WALLETS_FILE):
+                logger.warning(f"Wallets file {WALLETS_FILE} not found, creating an empty one")
+                os.makedirs(os.path.dirname(WALLETS_FILE), exist_ok=True)
+                with open(WALLETS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump({}, f, ensure_ascii=False, indent=4)
+                return {}
+            
+            with open(WALLETS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.debug(f"Loaded wallets from {WALLETS_FILE}: {data}")
+                return data
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in {WALLETS_FILE}: {str(e)}. Returning empty dict.")
             return {}
         except Exception as e:
-            logger.error(f"Error loading wallets: {str(e)}")
+            logger.error(f"Error loading wallets from {WALLETS_FILE}: {str(e)}")
             return {}
 
     @staticmethod
     def save_wallets(wallets):
+        """ذخیره داده‌های کیف پول‌ها در فایل wallets.json"""
         try:
-            # اطمینان از وجود دایرکتوری
             os.makedirs(os.path.dirname(WALLETS_FILE), exist_ok=True)
             with open(WALLETS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(wallets, f, ensure_ascii=False, indent=4)
-            logger.debug(f"Saved wallets: {wallets}")
+            logger.info(f"Wallets saved to {WALLETS_FILE}: {wallets}")
         except Exception as e:
-            logger.error(f"Error saving wallets: {str(e)}")
+            logger.error(f"Error saving wallets to {WALLETS_FILE}: {str(e)}")
             raise
 
     @staticmethod
-    def add_receipt(user_id, amount, receipt_file_id):
+    async def add_receipt(context, user_id, amount, receipt_file_id):
+        """افزودن یک رسید جدید برای کاربر و اطلاع‌رسانی به سوپرادمین‌ها"""
         try:
+            logger.debug(f"Attempting to add receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
             user_id = str(user_id)  # اطمینان از رشته بودن user_id
             if not isinstance(amount, (int, float)) or amount <= 0:
                 logger.error(f"Invalid amount provided for user {user_id}: {amount}")
                 raise ValueError("مبلغ نامعتبر است")
-            if not receipt_file_id:
-                logger.error(f"Invalid receipt file ID for user {user_id}")
+            if not receipt_file_id or not isinstance(receipt_file_id, str):
+                logger.error(f"Invalid receipt file ID for user {user_id}: {receipt_file_id}")
                 raise ValueError("شناسه فایل رسید نامعتبر است")
-            
+
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
             receipt_data = {
-                "amount": amount,
+                "amount": int(amount),  # اطمینان از عدد صحیح بودن مبلغ
                 "receipt_file_id": receipt_file_id,
-                "status": "pending"
+                "status": "pending",
+                "timestamp": datetime.utcnow().isoformat()  # افزودن زمان ثبت
             }
             receipts[user_id].append(receipt_data)
             ReceiptManager.save_receipts(receipts)
             logger.info(f"Receipt added for user {user_id}: {receipt_data}")
+
+            # ارسال اعلان به کاربر
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.",
+                parse_mode="Markdown"
+            )
+
+            # ارسال اعلان و فایل رسید به سوپرادمین‌ها
+            for admin in SUPER_ADMINS:
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin,
+                        text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
+                        parse_mode="Markdown"
+                    )
+                    # ارسال فایل رسید (اگر file_id معتبر باشد)
+                    if receipt_file_id:
+                        await context.bot.send_document(
+                            chat_id=admin,
+                            document=receipt_file_id,
+                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان"
+                        )
+                except Exception as e:
+                    logger.error(f"Error notifying admin {admin}: {str(e)}")
+
             return True
         except Exception as e:
             logger.error(f"Error adding receipt for user {user_id}: {str(e)}")
-            raise  # خطا را به تابع caller منتقل می‌کنیم تا به کاربر نمایش داده شود
-        
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"❌ خطا در ثبت رسید: {str(e)}",
+                parse_mode="Markdown"
+            )
+            raise
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
+        """نمایش لیست رسیدهای در حال انتظار"""
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if user_id not in SUPER_ADMINS:
@@ -124,7 +179,8 @@ class ReceiptManager:
                 text = "📜 **لیست رسیدهای در حال انتظار**:\n\n"
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
-                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان\n"
+                    timestamp = receipt.get("timestamp", "نامشخص")
+                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {timestamp}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"تأیید رسید {idx}",
@@ -166,14 +222,18 @@ class ReceiptManager:
             )
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
-            
-            
 
     @staticmethod
     async def confirm_receipt(context, user_id, amount, receipt_index):
+        """تأیید رسید و شارژ کیف پول کاربر"""
         try:
+            user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            if receipt_index < 0:
+                logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
+                raise ValueError("شاخص رسید نامعتبر است")
+
             receipts = ReceiptManager.load_receipts()
-            user_id = str(user_id)
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
@@ -182,6 +242,7 @@ class ReceiptManager:
             ReceiptManager.save_receipts(receipts)
 
             # شارژ کیف پول کاربر
+            amount = int(amount)  # اطمینان از عدد صحیح بودن مبلغ
             wallets = ReceiptManager.load_wallets()
             wallets[user_id] = wallets.get(user_id, 0) + amount
             ReceiptManager.save_wallets(wallets)
@@ -206,15 +267,24 @@ class ReceiptManager:
 
             logger.info(f"Receipt confirmed for user {user_id}: amount {amount}")
             return f"✅ رسید کاربر {user_id} برای مبلغ {amount:,} تومان تأیید شد."
+        except ValueError as e:
+            logger.error(f"ValueError confirming receipt for user {user_id}: {str(e)}")
+            return f"❌ خطا در تأیید رسید: {str(e)}"
         except Exception as e:
             logger.error(f"Error confirming receipt for user {user_id}: {str(e)}")
             return f"❌ خطا در تأیید رسید: {str(e)}"
 
     @staticmethod
     async def reject_receipt(context, user_id, receipt_index):
+        """رد رسید و اطلاع‌رسانی به کاربر"""
         try:
+            user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            if receipt_index < 0:
+                logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
+                raise ValueError("شاخص رسید نامعتبر است")
+
             receipts = ReceiptManager.load_receipts()
-            user_id = str(user_id)
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
                 return "❌ رسید یافت نشد!"
@@ -242,6 +312,49 @@ class ReceiptManager:
 
             logger.info(f"Receipt rejected for user {user_id}")
             return f"✅ رسید کاربر {user_id} رد شد."
+        except ValueError as e:
+            logger.error(f"ValueError rejecting receipt for user {user_id}: {str(e)}")
+            return f"❌ خطا در رد رسید: {str(e)}"
         except Exception as e:
             logger.error(f"Error rejecting receipt for user {user_id}: {str(e)}")
             return f"❌ خطا در رد رسید: {str(e)}"
+
+    @staticmethod
+    async def view_receipt(context, user_id, receipt_index):
+        """نمایش فایل رسید برای سوپرادمین"""
+        try:
+            user_id = str(user_id)  # اطمینان از رشته بودن user_id
+            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            if receipt_index < 0:
+                logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
+                raise ValueError("شاخص رسید نامعتبر است")
+
+            receipts = ReceiptManager.load_receipts()
+            if user_id not in receipts or receipt_index >= len(receipts[user_id]):
+                logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
+                return "❌ رسید یافت نشد!"
+
+            receipt = receipts[user_id][receipt_index]
+            receipt_file_id = receipt.get("receipt_file_id")
+            amount = receipt.get("amount")
+            status = receipt.get("status")
+            timestamp = receipt.get("timestamp", "نامشخص")
+
+            if not receipt_file_id:
+                logger.error(f"No receipt file ID for user {user_id} at index {receipt_index}")
+                return "❌ فایل رسید یافت نشد!"
+
+            await context.bot.send_document(
+                chat_id=context.user_data.get('user_id'),
+                document=receipt_file_id,
+                caption=f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}",
+                parse_mode="Markdown"
+            )
+            logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
+            return f"✅ رسید کاربر {user_id} نمایش داده شد."
+        except ValueError as e:
+            logger.error(f"ValueError viewing receipt for user {user_id}: {str(e)}")
+            return f"❌ خطا در نمایش رسید: {str(e)}"
+        except Exception as e:
+            logger.error(f"Error viewing receipt for user {user_id}: {str(e)}")
+            return f"❌ خطا در نمایش رسید: {str(e)}"
