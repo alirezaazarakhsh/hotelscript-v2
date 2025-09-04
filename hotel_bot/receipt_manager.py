@@ -5,6 +5,7 @@ import json
 import os
 import logging
 from datetime import datetime
+from jdatetime import datetime as jdatetime  # اضافه کردن برای تبدیل به شمسی
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(
@@ -198,7 +199,15 @@ class ReceiptManager:
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     timestamp = receipt.get("timestamp", "نامشخص")
-                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {timestamp}\n"
+                    # تبدیل تاریخ میلادی به شمسی و اضافه کردن خط تیره
+                    if timestamp != "نامشخص":
+                        miladi_datetime = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
+                        formatted_time = shamsi_datetime.strftime("%Y-%m-%d %H:%M:%S")
+                        display_time = f"- {formatted_time}"
+                    else:
+                        display_time = "نامشخص"
+                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"تأیید رسید {idx}",

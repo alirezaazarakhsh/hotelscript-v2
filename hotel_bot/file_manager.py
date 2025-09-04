@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from jdatetime import datetime as jdatetime  # برای تبدیل به تاریخ شمسی
 from config import MAX_BACKUPS
 
 class FileManager:
@@ -22,6 +23,8 @@ class FileManager:
     def get_file_datetime(filename):
         try:
             date_part = filename.split('_')[1] + '_' + filename.split('_')[2].split('.')[0]
-            return datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S").strftime("%Y-%m-%d %H:%M:%S")
+            miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S")
+            shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
+            return shamsi_datetime.strftime("%Y-%m-%d %H:%M:%S")  # فرمت شمسی
         except:
             return "نامشخص"
