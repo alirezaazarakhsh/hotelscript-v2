@@ -56,7 +56,7 @@ class AdminManager:
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
 
             group = admins.get(admin_id, "بدون گروه")
-            perms = groups.get(group, set()) if group else set()
+            perms = groups.get(group, set()) if group != "بدون گروه" else set()
             wallets = ReceiptManager.load_wallets()
             wallet_balance = wallets.get(str(admin_id), 0)
 
@@ -145,4 +145,55 @@ class AdminManager:
                 await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context)
+
+    @staticmethod
+    async def add_admin(chat_id, context, new_id, group_name):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز افزودن ادمین را ندارید!")
+                await MenuManager.show_main_menu(user_id, context)
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data['admins']
+            groups = access_data['groups']
+
+            if str(new_id) in admins or new_id in SUPER_ADMINS:
+                await context.bot.send_message(chat_id=chat_id, text="❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
+                return
+            if group_name not in groups:
+                await context.bot.send_message(chat_id=chat_id, text="❌ گروه دسترسی انتخاب‌شده وجود ندارد!")
+                return
+
+            admins[str(new_id)] = group_name
+            AccessManager.save_data(access_data)
+            await context.bot.send_message(chat_id=chat_id, text=f"✅ ادمین با ID {new_id} با گروه {group_name} اضافه شد.")
+            await AdminManager.show_manage_admins(chat_id, context, admins)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در افزودن ادمین: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context)
+
+    @staticmethod
+    async def delete_admin(chat_id, context, admin_id):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز حذف ادمین را ندارید!")
+                await MenuManager.show_main_menu(user_id, context)
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data['admins']
+
+            if admin_id in admins:
+                del admins[admin_id]
+                AccessManager.save_data(access_data)
+                await context.bot.send_message(chat_id=chat_id, text=f"✅ ادمین با ID {admin_id} حذف شد.")
+            else:
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ ادمین با ID {admin_id} یافت نشد!")
+            await AdminManager.show_manage_admins(chat_id, context, admins)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در حذف ادمین: {str(e)}")
             await MenuManager.show_main_menu(user_id, context)

@@ -110,7 +110,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_backup_list(query, user_id, context)
         elif data.startswith("copy_name:"):
             filename = data.split(":", 1)[1]
-            await context.bot.send_message(chat_id=chat_id, text=filename)
+            await query.message.reply_text(filename)
             return
         elif data.startswith("delete:"):
             await delete_backup(query, user_id, context)
@@ -285,7 +285,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             amount = int(data.split(":")[1])
             text = f"💸 در حال هدایت به درگاه پرداخت برای مبلغ {amount:,} تومان...\nلینک پرداخت: [لینک درگاه پرداخت - نیاز به API دارد]"
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
+            await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
         elif data == "card_to_card":
             await WalletManager.prompt_for_amount(chat_id, context)
         elif data == "send_receipt":
@@ -301,23 +301,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user_id in SUPER_ADMINS:
                 await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
             else:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data.startswith("confirm_receipt:"):
             if user_id in SUPER_ADMINS:
                 _, u_id, amt, idx = data.split(":")
                 msg = await ReceiptManager.confirm_receipt(context, int(u_id), int(amt), int(idx))
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data.startswith("reject_receipt:"):
             if user_id in SUPER_ADMINS:
                 _, u_id, idx = data.split(":")
                 msg = await ReceiptManager.reject_receipt(context, int(u_id), int(idx))
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
-                await context.bot.edit_message_text(
+                await query.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
                     text="❌ شما مجوز دسترسی ندارید!",
@@ -356,7 +356,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
-                await context.bot.edit_message_text(
+                await query.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
                     text="❌ شما مجوز دسترسی ندارید!",
