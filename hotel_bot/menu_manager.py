@@ -49,6 +49,8 @@ class MenuManager:
                 row.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
             if AccessManager.is_allowed(user_id, 'view_balance'):
                 row.append(InlineKeyboardButton("💸 مشاهده موجودی", callback_data="view_balance"))
+            if AccessManager.is_allowed(user_id, 'edit_profile'):
+                row.append(InlineKeyboardButton("👤 ویرایش پروفایل", callback_data="edit_profile"))
             if row:
                 keyboard.append(row)
         
@@ -159,4 +161,24 @@ class MenuManager:
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
             await query.edit_message_text(f"❌ خطا در نمایش کنترل پنل: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context, query.message.message_id, query.message.chat_id)
+
+    @staticmethod
+    async def show_profile_edit_menu(query, user_id, context):
+        try:
+            text = "👤 **ویرایش پروفایل**\n\nلطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. هیچ‌کدام از فیلدها اجباری نیستند."
+            keyboard = [
+                [InlineKeyboardButton("نام", callback_data=f"edit_profile_field:name:{user_id}")],
+                [InlineKeyboardButton("نام خانوادگی", callback_data=f"edit_profile_field:lastname:{user_id}")],
+                [InlineKeyboardButton("کد ملی", callback_data=f"edit_profile_field:national_id:{user_id}")],
+                [InlineKeyboardButton("شماره همراه", callback_data=f"edit_profile_field:phone:{user_id}")],
+                [InlineKeyboardButton("شماره تلفن ثابت", callback_data=f"edit_profile_field:landline:{user_id}")],
+                [InlineKeyboardButton("نام شرکت", callback_data=f"edit_profile_field:company_name:{user_id}")],
+                [InlineKeyboardButton("کد ثبت شرکت", callback_data=f"edit_profile_field:company_reg:{user_id}")],
+                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception as e:
+            await query.edit_message_text(f"❌ خطا در نمایش منوی ویرایش پروفایل: {str(e)}")
             await MenuManager.show_main_menu(user_id, context, query.message.message_id, query.message.chat_id)

@@ -84,6 +84,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("charge_admin_wallet:") and not AccessManager.is_allowed(user_id, 'manage_wallet'):
             await query.edit_message_text("❌ شما مجوز شارژ کیف پول دیگران را ندارید!")
             return
+        if data == "edit_profile" and not AccessManager.is_allowed(user_id, 'edit_profile'):
+            await query.edit_message_text("❌ شما مجوز ویرایش پروفایل را ندارید!")
+            return
+        if data.startswith("edit_admin_profile:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز ویرایش پروفایل ادمین را ندارید!")
+            return
+        if data.startswith("edit_profile_field:") and not AccessManager.is_allowed(user_id, 'edit_profile'):
+            await query.edit_message_text("❌ شما مجوز ویرایش این بخش از پروفایل را ندارید!")
+            return
+        if data.startswith("edit_admin_profile_field:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز ویرایش این بخش از پروفایل ادمین را ندارید!")
+            return
 
         # Handlers
         if data == "backup_menu":
@@ -305,7 +317,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
                 await ReceiptManager.show_pending_receipts(chat_id, context)
             else:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ شما مجوز دسترسی ندارید!",
+                    parse_mode="Markdown"
+                )
         elif data.startswith("view_receipt:"):
             if user_id in SUPER_ADMINS:
                 _, u_id, idx = data.split(":")
@@ -372,6 +389,29 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data == "edit_profile":
+            await MenuManager.show_profile_edit_menu(query, user_id, context)
+        elif data.startswith("edit_profile_field:"):
+            _, field, target_id = data.split(":")
+            context.user_data['state'] = f'waiting_for_{field}'
+            context.user_data['target_id'] = target_id
+            await query.edit_message_text(
+                f"لطفاً {field.replace('_', ' ')} خود را وارد کنید (اختیاری).",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="go_back")]]),
+                parse_mode="Markdown"
+            )
+        elif data.startswith("edit_admin_profile:"):
+            admin_id = data.split(":", 1)[1]
+            await AdminManager.show_edit_admin_profile(chat_id, context, admin_id, message_id)
+        elif data.startswith("edit_admin_profile_field:"):
+            _, field, admin_id = data.split(":")
+            context.user_data['state'] = f'waiting_for_{field}'
+            context.user_data['target_id'] = admin_id
+            await query.edit_message_text(
+                f"لطفاً {field.replace('_', ' ')} ادمین {admin_id} را وارد کنید (اختیاری).",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
+                parse_mode="Markdown"
+            )
 
     except Exception as e:
         logger.error(f"Error in button handler: {str(e)}")
@@ -389,6 +429,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = AccessManager.load_data()
     admins = data['admins']
     groups = data['groups']
+    profiles = data.get('profiles', {})
 
     try:
         # حالت انتظار برای دریافت ID ادمین جدید
@@ -514,7 +555,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-        
+
         # حالت انتظار برای دریافت مبلغ شارژ کیف پول ادمین
         elif state == 'waiting_for_admin_wallet_amount':
             try:
@@ -563,6 +604,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Error modifying wallet for user {target_admin_id}: {str(e)}")
                 await update.message.reply_text(f"❌ خطا در تغییر موجودی: {str(e)}")
                 context.user_data.clear()
+
+        # حالت انتظار برای ویرایش فیلدهای پروفایل
+        elif state in ['waiting_for_name', 'waiting_for_lastname', 'waiting_for_national_id', 'waiting_for_phone', 'waiting_for_landline', 'waiting_for_company_name', 'waiting_for_company_reg']:
+            target_id = context.user_data.get('target_id')
+            access_data = AccessManager.load_data()
+            profiles = access_data.get('profiles', {})
+            if target_id not in profiles:
+                profiles[target_id] = {}
+
+            if state == 'waiting_for_name':
+                profiles[target_id]['name'] = text if text else profiles[target_id].get('name', '')
+            elif state == 'waiting_for_lastname':
+                profiles[target_id]['lastname'] = text if text else profiles[target_id].get('lastname', '')
+            elif state == 'waiting_for_national_id':
+                profiles[target_id]['national_id'] = text if text else profiles[target_id].get('national_id', '')
+            elif state == 'waiting_for_phone':
+                profiles[target_id]['phone'] = text if text else profiles[target_id].get('phone', '')
+            elif state == 'waiting_for_landline':
+                profiles[target_id]['landline'] = text if text else profiles[target_id].get('landline', '')
+            elif state == 'waiting_for_company_name':
+                profiles[target_id]['company_name'] = text if text else profiles[target_id].get('company_name', '')
+            elif state == 'waiting_for_company_reg':
+                profiles[target_id]['company_reg'] = text if text else profiles[target_id].get('company_reg', '')
+
+            access_data['profiles'] = profiles
+            AccessManager.save_data(access_data)
+            await update.message.reply_text(
+                f"✅ {state.replace('waiting_for_', '').replace('_', ' ')} با موفقیت ثبت شد."
+            )
+            context.user_data.clear()
+            if str(user_id) == target_id:
+                await MenuManager.show_profile_edit_menu(update.message, user_id, context)
+            else:
+                await AdminManager.show_edit_admin_profile(update.message.chat_id, context, target_id)
 
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}", exc_info=True)
