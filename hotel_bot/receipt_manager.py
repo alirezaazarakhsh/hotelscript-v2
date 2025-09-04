@@ -4,8 +4,8 @@ from config import SUPER_ADMINS
 import json
 import os
 import logging
-from datetime import datetime
-from jdatetime import datetime as jdatetime  # اضافه کردن برای تبدیل به شمسی
+from datetime import datetime, timedelta
+from jdatetime import datetime as jdatetime  # برای تبدیل به شمسی
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(
@@ -199,11 +199,13 @@ class ReceiptManager:
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     timestamp = receipt.get("timestamp", "نامشخص")
-                    # تبدیل تاریخ میلادی به شمسی و اضافه کردن خط تیره
+                    # تبدیل تاریخ میلادی به شمسی با جابجایی زمانی و فرمت جدید
                     if timestamp != "نامشخص":
                         miladi_datetime = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                        shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
-                        formatted_time = shamsi_datetime.strftime("%Y-%m-%d %H:%M:%S")
+                        # اضافه کردن 2 ساعت و 30 دقیقه (اختلاف تهران با UTC)
+                        tehran_datetime = miladi_datetime + timedelta(hours=2, minutes=30)
+                        shamsi_datetime = jdatetime.fromgregorian(datetime=tehran_datetime)
+                        formatted_time = shamsi_datetime.strftime("%d-%m-%Y %H:%M:%S")  # فرمت DD-MM-YYYY
                         display_time = f"- {formatted_time}"
                     else:
                         display_time = "نامشخص"
