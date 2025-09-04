@@ -34,10 +34,15 @@ class ReceiptManager:
                 logger.debug(f"Loaded receipts from {RECEIPTS_FILE}: {data}")
                 return data
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in {RECEIPTS_FILE}: {str(e)}. Returning empty dict.")
+            logger.error(f"Invalid JSON in {RECEIPTS_FILE}: {str(e)}. Returning empty dict and attempting to fix.")
+            with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
+                json.dump({}, f, ensure_ascii=False, indent=4)
             return {}
+        except PermissionError as e:
+            logger.error(f"Permission denied accessing {RECEIPTS_FILE}: {str(e)}")
+            raise
         except Exception as e:
-            logger.error(f"Error loading receipts from {RECEIPTS_FILE}: {str(e)}")
+            logger.error(f"Unexpected error loading receipts from {RECEIPTS_FILE}: {str(e)}")
             return {}
 
     @staticmethod
@@ -48,6 +53,9 @@ class ReceiptManager:
             with open(RECEIPTS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(receipts, f, ensure_ascii=False, indent=4)
             logger.info(f"Receipts saved to {RECEIPTS_FILE}: {receipts}")
+        except PermissionError as e:
+            logger.error(f"Permission denied saving to {RECEIPTS_FILE}: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Error saving receipts to {RECEIPTS_FILE}: {str(e)}")
             raise
@@ -90,15 +98,16 @@ class ReceiptManager:
     async def add_receipt(context, user_id, amount, receipt_file_id):
         """افزودن یک رسید جدید برای کاربر و اطلاع‌رسانی به سوپرادمین‌ها"""
         try:
-            logger.debug(f"Attempting to add receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
+            logger.debug(f"Starting add_receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
             user_id = str(user_id)  # اطمینان از رشته بودن user_id
             if not isinstance(amount, (int, float)) or amount <= 0:
-                logger.error(f"Invalid amount provided for user {user_id}: {amount}")
+                logger.error(f"Invalid amount for user {user_id}: {amount}")
                 raise ValueError("مبلغ نامعتبر است")
             if not receipt_file_id or not isinstance(receipt_file_id, str):
-                logger.error(f"Invalid receipt file ID for user {user_id}: {receipt_file_id}")
+                logger.error(f"Invalid receipt_file_id for user {user_id}: {receipt_file_id}")
                 raise ValueError("شناسه فایل رسید نامعتبر است")
 
+            logger.debug(f"Loading receipts for user {user_id}")
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
@@ -109,8 +118,9 @@ class ReceiptManager:
                 "timestamp": datetime.utcnow().isoformat()  # افزودن زمان ثبت
             }
             receipts[user_id].append(receipt_data)
+            logger.debug(f"Receipt data to save: {receipt_data}")
             ReceiptManager.save_receipts(receipts)
-            logger.info(f"Receipt added for user {user_id}: {receipt_data}")
+            logger.info(f"Receipt successfully added for user {user_id}: {receipt_data}")
 
             # ارسال اعلان به کاربر
             await context.bot.send_message(
@@ -127,7 +137,6 @@ class ReceiptManager:
                         text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
                         parse_mode="Markdown"
                     )
-                    # ارسال فایل رسید (اگر file_id معتبر باشد)
                     if receipt_file_id:
                         await context.bot.send_document(
                             chat_id=admin,
@@ -138,8 +147,16 @@ class ReceiptManager:
                     logger.error(f"Error notifying admin {admin}: {str(e)}")
 
             return True
+        except ValueError as ve:
+            logger.error(f"Validation error in add_receipt for user {user_id}: {str(ve)}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"❌ خطا در ثبت رسید: {str(ve)}",
+                parse_mode="Markdown"
+            )
+            raise
         except Exception as e:
-            logger.error(f"Error adding receipt for user {user_id}: {str(e)}")
+            logger.error(f"Unexpected error in add_receipt for user {user_id}: {str(e)}")
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"❌ خطا در ثبت رسید: {str(e)}",
@@ -227,8 +244,8 @@ class ReceiptManager:
     async def confirm_receipt(context, user_id, amount, receipt_index):
         """تأیید رسید و شارژ کیف پول کاربر"""
         try:
-            user_id = str(user_id)  # اطمینان از رشته بودن user_id
-            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            user_id = str(user_id)
+            receipt_index = int(receipt_index)
             if receipt_index < 0:
                 logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
                 raise ValueError("شاخص رسید نامعتبر است")
@@ -241,20 +258,17 @@ class ReceiptManager:
             receipts[user_id][receipt_index]["status"] = "confirmed"
             ReceiptManager.save_receipts(receipts)
 
-            # شارژ کیف پول کاربر
-            amount = int(amount)  # اطمینان از عدد صحیح بودن مبلغ
+            amount = int(amount)
             wallets = ReceiptManager.load_wallets()
             wallets[user_id] = wallets.get(user_id, 0) + amount
             ReceiptManager.save_wallets(wallets)
 
-            # ارسال اعلان به کاربر
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ کیف پول شما به مبلغ {amount:,} تومان شارژ شد.",
                 parse_mode="Markdown"
             )
 
-            # ارسال اعلان به تمام سوپرادمین‌ها
             for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
@@ -278,8 +292,8 @@ class ReceiptManager:
     async def reject_receipt(context, user_id, receipt_index):
         """رد رسید و اطلاع‌رسانی به کاربر"""
         try:
-            user_id = str(user_id)  # اطمینان از رشته بودن user_id
-            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            user_id = str(user_id)
+            receipt_index = int(receipt_index)
             if receipt_index < 0:
                 logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
                 raise ValueError("شاخص رسید نامعتبر است")
@@ -292,14 +306,12 @@ class ReceiptManager:
             receipts[user_id][receipt_index]["status"] = "rejected"
             ReceiptManager.save_receipts(receipts)
 
-            # ارسال اعلان به کاربر
             await context.bot.send_message(
                 chat_id=user_id,
                 text="❌ رسید پرداخت شما رد شد. لطفاً با پشتیبانی تماس بگیرید.",
                 parse_mode="Markdown"
             )
 
-            # ارسال اعلان به تمام سوپرادمین‌ها
             for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
@@ -323,8 +335,8 @@ class ReceiptManager:
     async def view_receipt(context, user_id, receipt_index):
         """نمایش فایل رسید برای سوپرادمین"""
         try:
-            user_id = str(user_id)  # اطمینان از رشته بودن user_id
-            receipt_index = int(receipt_index)  # اطمینان از عدد صحیح بودن receipt_index
+            user_id = str(user_id)
+            receipt_index = int(receipt_index)
             if receipt_index < 0:
                 logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
                 raise ValueError("شاخص رسید نامعتبر است")
