@@ -3,12 +3,18 @@ from config import SUPER_ADMINS, PERM_DISPLAY
 from access_manager import AccessManager
 from menu_manager import MenuManager
 from receipt_manager import ReceiptManager
+import logging
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class AdminManager:
     @staticmethod
     async def show_manage_admins(chat_id, context, admins, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
+            logger.debug(f"Showing manage admins for user_id: {user_id}, chat_id: {chat_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
                 await MenuManager.show_main_menu(user_id, context)
@@ -52,6 +58,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
+            logger.error(f"Error in show_manage_admins: {str(e)}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش لیست ادمین‌ها: {str(e)}"
@@ -62,6 +69,7 @@ class AdminManager:
     async def show_admin_details(chat_id, context, admin_id, admins, groups, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
+            logger.debug(f"Showing admin details for admin_id: {admin_id}, user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -128,6 +136,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
+            logger.error(f"Error in show_admin_details for admin_id {admin_id}: {str(e)}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}"
@@ -138,6 +147,7 @@ class AdminManager:
     async def show_edit_admin_profile(chat_id, context, admin_id, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
+            logger.debug(f"Showing edit admin profile for admin_id: {admin_id}, user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -196,6 +206,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
+            logger.error(f"Error in show_edit_admin_profile for admin_id {admin_id}: {str(e)}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}"
@@ -206,6 +217,7 @@ class AdminManager:
     async def add_admin(chat_id, context, new_id, group_name):
         try:
             user_id = context.user_data.get('user_id', chat_id)
+            logger.debug(f"Adding admin with ID: {new_id}, group: {group_name}, by user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -239,6 +251,7 @@ class AdminManager:
             )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
+            logger.error(f"Error in add_admin for new_id {new_id}: {str(e)}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در افزودن ادمین: {str(e)}"
@@ -249,6 +262,7 @@ class AdminManager:
     async def delete_admin(chat_id, context, admin_id):
         try:
             user_id = context.user_data.get('user_id', chat_id)
+            logger.debug(f"Deleting admin with ID: {admin_id}, by user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -274,6 +288,7 @@ class AdminManager:
                 )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
+            logger.error(f"Error in delete_admin for admin_id {admin_id}: {str(e)}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در حذف ادمین: {str(e)}"
