@@ -163,49 +163,43 @@ class MenuManager:
             await query.edit_message_text(f"❌ خطا در نمایش کنترل پنل: {str(e)}")
             await MenuManager.show_main_menu(user_id, context, query.message.message_id, query.message.chat_id)
 
-        @staticmethod
-        async def show_profile_edit_menu(query, user_id, context):
-            try:
-                access_data = AccessManager.load_data()
-                profile = access_data.get('profiles', {}).get(str(user_id), {})
-                
-                text = f"👤 **ویرایش پروفایل شما (ID: {user_id})**\n\nمشخصات فعلی:\n"
-                name = profile.get('name') if profile.get('name') is not None else 'ندارد'
-                lastname = profile.get('lastname') if profile.get('lastname') is not None else 'ندارد'
-                national_id = profile.get('national_id') if profile.get('national_id') is not None else 'ندارد'
-                phone = profile.get('phone') if profile.get('phone') is not None else 'ندارد'
-                landline = profile.get('landline') if profile.get('landline') is not None else 'ندارد'
-                company_name = profile.get('company_name') if profile.get('company_name') is not None else 'ندارد'
-                company_reg = profile.get('company_reg') if profile.get('company_reg') is not None else 'ندارد'
+    @staticmethod
+    async def show_profile_edit_menu(query, user_id, context):
+        try:
+            access_data = AccessManager.load_data()
+            profile = access_data.get('profiles', {}).get(str(user_id), {})
+            
+            text = f"👤 **ویرایش پروفایل شما (ID: {user_id})**\n\nمشخصات فعلی:\n"
+            # بررسی و نمایش مقدار فعلی یا "ندارد" فقط در صورت نبود مقدار
+            name = profile.get('name') if profile.get('name') is not None else 'ندارد'
+            lastname = profile.get('lastname') if profile.get('lastname') is not None else 'ندارد'
+            national_id = profile.get('national_id') if profile.get('national_id') is not None else 'ندارد'
+            phone = profile.get('phone') if profile.get('phone') is not None else 'ندارد'
+            landline = profile.get('landline') if profile.get('landline') is not None else 'ندارد'
+            company_name = profile.get('company_name') if profile.get('company_name') is not None else 'ندارد'
+            company_reg = profile.get('company_reg') if profile.get('company_reg') is not None else 'ندارد'
 
-                text += f"- نام: {name} \n"
-                text += f"- نام خانوادگی: {lastname} \n"
-                text += f"- کد ملی: {national_id} \n"
-                text += f"- شماره همراه: {phone} \n"
-                text += f"- شماره تلفن ثابت: {landline} \n"
-                text += f"- نام شرکت: {company_name} \n"
-                text += f"- کد ثبت شرکت: {company_reg} \n\n"
-                text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
+            text += f"- نام: {name} \n"
+            text += f"- نام خانوادگی: {lastname} \n"
+            text += f"- کد ملی: {national_id} \n"
+            text += f"- شماره همراه: {phone} \n"
+            text += f"- شماره تلفن ثابت: {landline} \n"
+            text += f"- نام شرکت: {company_name} \n"
+            text += f"- کد ثبت شرکت: {company_reg} \n\n"
+            text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
 
-                keyboard = [
-                    [InlineKeyboardButton("نام", callback_data=f"edit_profile_field:name:{user_id}")],
-                    [InlineKeyboardButton("نام خانوادگی", callback_data=f"edit_profile_field:lastname:{user_id}")],
-                    [InlineKeyboardButton("کد ملی", callback_data=f"edit_profile_field:national_id:{user_id}")],
-                    [InlineKeyboardButton("شماره همراه", callback_data=f"edit_profile_field:phone:{user_id}")],
-                    [InlineKeyboardButton("شماره تلفن ثابت", callback_data=f"edit_profile_field:landline:{user_id}")],
-                    [InlineKeyboardButton("نام شرکت", callback_data=f"edit_profile_field:company_name:{user_id}")],
-                    [InlineKeyboardButton("کد ثبت شرکت", callback_data=f"edit_profile_field:company_reg:{user_id}")],
-                    [InlineKeyboardButton("بازگشت", callback_data="go_back")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                # بررسی اینکه آیا از query استفاده می‌کنیم یا پیام جدید ارسال می‌کنیم
-                if query and hasattr(query, 'edit_message_text'):
-                    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
-                else:
-                    # اگر query وجود ندارد (مثلاً از start فراخوانی شده)، پیام جدید ارسال کنید
-                    await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
-
-            except Exception as e:
-                await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی ویرایش پروفایل: {str(e)}")
-                await MenuManager.show_main_menu(user_id, context)
+            keyboard = [
+                [InlineKeyboardButton("نام", callback_data=f"edit_profile_field:name:{user_id}")],
+                [InlineKeyboardButton("نام خانوادگی", callback_data=f"edit_profile_field:lastname:{user_id}")],
+                [InlineKeyboardButton("کد ملی", callback_data=f"edit_profile_field:national_id:{user_id}")],
+                [InlineKeyboardButton("شماره همراه", callback_data=f"edit_profile_field:phone:{user_id}")],
+                [InlineKeyboardButton("شماره تلفن ثابت", callback_data=f"edit_profile_field:landline:{user_id}")],
+                [InlineKeyboardButton("نام شرکت", callback_data=f"edit_profile_field:company_name:{user_id}")],
+                [InlineKeyboardButton("کد ثبت شرکت", callback_data=f"edit_profile_field:company_reg:{user_id}")],
+                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception as e:
+            await query.edit_message_text(f"❌ خطا در نمایش منوی ویرایش پروفایل: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context, query.message.message_id, query.message.chat_id)
