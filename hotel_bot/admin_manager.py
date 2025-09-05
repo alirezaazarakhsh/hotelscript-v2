@@ -2,7 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import SUPER_ADMINS, PERM_DISPLAY
 from access_manager import AccessManager
 from menu_manager import MenuManager
-from receipt_manager import ReceiptManager  # برای دسترسی به load_wallets
+from receipt_manager import ReceiptManager
 
 class AdminManager:
     @staticmethod
@@ -16,8 +16,10 @@ class AdminManager:
 
             if not admins:
                 text = "📋 **مدیریت ادمین‌ها**\n\nهیچ ادمینی وجود ندارد.\n\n**توضیح**: می‌توانید ادمین‌های جدید اضافه کنید یا گروه‌های دسترسی را مدیریت کنید."
-                keyboard = [[InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")],
-                           [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
+                keyboard = [
+                    [InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")],
+                    [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
+                ]
             else:
                 text = "📋 **مدیریت ادمین‌ها**\n\n**لیست ادمین‌ها**:\n"
                 keyboard = []
@@ -35,11 +37,25 @@ class AdminManager:
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
         except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش لیست ادمین‌ها: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش لیست ادمین‌ها: {str(e)}"
+            )
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -47,28 +63,35 @@ class AdminManager:
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مشاهده جزئیات ادمین را ندارید!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده جزئیات ادمین را ندارید!"
+                )
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
-            # بارگذاری داده‌ها به‌صورت تازه
-            access_data = AccessManager.load_data()  # همیشه داده‌های به‌روز رو بارگذاری می‌کنیم
+            access_data = AccessManager.load_data()
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
-
             group = admins.get(admin_id, "بدون گروه")
             perms = groups.get(group, set()) if group != "بدون گروه" else set()
             wallets = ReceiptManager.load_wallets()
             wallet_balance = wallets.get(str(admin_id), 0)
 
-            text = f"👤 **جزئیات ادمین**\n\n**ID**: {admin_id}\n**گروه دسترسی**: {group}\n**موجودی کیف پول**: {wallet_balance:,} تومان\n\n**مشخصات پروفایل**:\n"
-            text += f"- نام: {profile.get('name', 'ندارد')}\n"
-            text += f"- نام خانوادگی: {profile.get('lastname', 'ندارد')}\n"
-            text += f"- کد ملی: {profile.get('national_id', 'ندارد')}\n"
-            text += f"- شماره همراه: {profile.get('phone', 'ندارد')}\n"
-            text += f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')}\n"
-            text += f"- نام شرکت: {profile.get('company_name', 'ندارد')}\n"
-            text += f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')}\n\n"
-            text += "**مجوزها**:\n"
+            text = (
+                f"👤 **جزئیات ادمین**\n\n"
+                f"**ID**: {admin_id}\n"
+                f"**گروه دسترسی**: {group}\n"
+                f"**موجودی کیف پول**: {wallet_balance:,} تومان\n\n"
+                f"**مشخصات پروفایل**:\n"
+                f"- نام: {profile.get('name', 'ندارد')}\n"
+                f"- نام خانوادگی: {profile.get('lastname', 'ندارد')}\n"
+                f"- کد ملی: {profile.get('national_id', 'ندارد')}\n"
+                f"- شماره همراه: {profile.get('phone', 'ندارد')}\n"
+                f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')}\n"
+                f"- نام شرکت: {profile.get('company_name', 'ندارد')}\n"
+                f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')}\n\n"
+                f"**مجوزها**:\n"
+            )
             if perms:
                 for perm in perms:
                     text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
@@ -90,11 +113,25 @@ class AdminManager:
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
         except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}"
+            )
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -102,7 +139,10 @@ class AdminManager:
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز ویرایش پروفایل ادمین را ندارید!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز ویرایش پروفایل ادمین را ندارید!"
+                )
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -110,22 +150,24 @@ class AdminManager:
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
             
             text = f"👤 **ویرایش پروفایل ادمین {admin_id}**\n\nمشخصات فعلی:\n"
-            name = profile.get('name') if profile.get('name') is not None else 'ندارد'
-            lastname = profile.get('lastname') if profile.get('lastname') is not None else 'ندارد'
-            national_id = profile.get('national_id') if profile.get('national_id') is not None else 'ندارد'
-            phone = profile.get('phone') if profile.get('phone') is not None else 'ندارد'
-            landline = profile.get('landline') if profile.get('landline') is not None else 'ندارد'
-            company_name = profile.get('company_name') if profile.get('company_name') is not None else 'ندارد'
-            company_reg = profile.get('company_reg') if profile.get('company_reg') is not None else 'ندارد'
+            name = profile.get('name', 'ندارد')
+            lastname = profile.get('lastname', 'ندارد')
+            national_id = profile.get('national_id', 'ندارد')
+            phone = profile.get('phone', 'ندارد')
+            landline = profile.get('landline', 'ندارد')
+            company_name = profile.get('company_name', 'ندارد')
+            company_reg = profile.get('company_reg', 'ندارد')
 
-            text += f"- نام: {name} \n"
-            text += f"- نام خانوادگی: {lastname} \n"
-            text += f"- کد ملی: {national_id} \n"
-            text += f"- شماره همراه: {phone} \n"
-            text += f"- شماره تلفن ثابت: {landline} \n"
-            text += f"- نام شرکت: {company_name} \n"
-            text += f"- کد ثبت شرکت: {company_reg} \n\n"
-            text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
+            text += (
+                f"- نام: {name}\n"
+                f"- نام خانوادگی: {lastname}\n"
+                f"- کد ملی: {national_id}\n"
+                f"- شماره همراه: {phone}\n"
+                f"- شماره تلفن ثابت: {landline}\n"
+                f"- نام شرکت: {company_name}\n"
+                f"- کد ثبت شرکت: {company_reg}\n\n"
+                f"لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
+            )
 
             keyboard = [
                 [InlineKeyboardButton("نام", callback_data=f"edit_admin_profile_field:name:{admin_id}")],
@@ -139,11 +181,25 @@ class AdminManager:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
         except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}"
+            )
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -151,7 +207,10 @@ class AdminManager:
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز افزودن ادمین را ندارید!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز افزودن ادمین را ندارید!"
+                )
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -160,18 +219,30 @@ class AdminManager:
             groups = access_data['groups']
 
             if str(new_id) in admins or new_id in SUPER_ADMINS:
-                await context.bot.send_message(chat_id=chat_id, text="❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ این کاربر قبلاً ادمین یا سوپرادمین است!"
+                )
                 return
             if group_name not in groups:
-                await context.bot.send_message(chat_id=chat_id, text="❌ گروه دسترسی انتخاب‌شده وجود ندارد!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ گروه دسترسی انتخاب‌شده وجود ندارد!"
+                )
                 return
 
             admins[str(new_id)] = group_name
             AccessManager.save_data(access_data)
-            await context.bot.send_message(chat_id=chat_id, text=f"✅ ادمین با ID {new_id} با گروه {group_name} اضافه شد.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ ادمین با ID {new_id} با گروه {group_name} اضافه شد."
+            )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در افزودن ادمین: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در افزودن ادمین: {str(e)}"
+            )
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -179,7 +250,10 @@ class AdminManager:
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز حذف ادمین را ندارید!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز حذف ادمین را ندارید!"
+                )
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -189,10 +263,19 @@ class AdminManager:
             if admin_id in admins:
                 del admins[admin_id]
                 AccessManager.save_data(access_data)
-                await context.bot.send_message(chat_id=chat_id, text=f"✅ ادمین با ID {admin_id} حذف شد.")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ ادمین با ID {admin_id} حذف شد."
+                )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=f"❌ ادمین با ID {admin_id} یافت نشد!")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ ادمین با ID {admin_id} یافت نشد!"
+                )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در حذف ادمین: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در حذف ادمین: {str(e)}"
+            )
             await MenuManager.show_main_menu(user_id, context)
