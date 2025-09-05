@@ -98,9 +98,9 @@ class ReceiptManager:
     @staticmethod
     def get_server_time():
         """به دست آوردن زمان فعلی سرور (به وقت محلی، فرضاً تهران UTC+3:30)"""
-        current_time = datetime.now()  # زمان محلی سرور
+        current_time = datetime.now()
         shamsi_time = jdatetime.fromgregorian(datetime=current_time)
-        return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")  # فرمت HH:MM:SS - DD-MM-YYYY
+        return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")
 
     @staticmethod
     async def add_receipt(context, user_id, amount, receipt_file_id, is_photo=False):
@@ -115,7 +115,6 @@ class ReceiptManager:
                 logger.error(f"Invalid receipt_file_id for user {user_id}: {receipt_file_id}")
                 raise ValueError("شناسه فایل رسید نامعتبر است")
 
-            logger.debug(f"Loading receipts for user {user_id}")
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
@@ -124,22 +123,19 @@ class ReceiptManager:
                 "receipt_file_id": receipt_file_id,
                 "file_type": "photo" if is_photo else "document",
                 "status": "pending",
-                "timestamp": datetime.now().isoformat()  # زمان محلی سرور
+                "timestamp": datetime.now().isoformat()
             }
             receipts[user_id].append(receipt_data)
-            logger.debug(f"Receipt data to save: {receipt_data}")
             ReceiptManager.save_receipts(receipts)
             logger.info(f"Receipt successfully added for user {user_id}: {receipt_data}")
 
             server_time = ReceiptManager.get_server_time()
-            # ارسال پیام تأیید به کاربر
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.\nزمان سرور: {server_time}",
                 parse_mode="Markdown"
             )
 
-            # ارسال اعلان به سوپرادمین‌ها
             for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
@@ -205,7 +201,6 @@ class ReceiptManager:
                 for idx, receipt in enumerate(user_receipts):
                     if receipt.get("status") == "pending":
                         pending_receipts.append((uid, idx, receipt))
-            logger.debug(f"Pending receipts: {pending_receipts}")
 
             server_time = ReceiptManager.get_server_time()
             if not pending_receipts:
@@ -225,26 +220,36 @@ class ReceiptManager:
                     else:
                         display_time = "نامشخص"
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
-                    # اضافه کردن دکمه‌ها برای هر رسید
                     keyboard_row = [
                         InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}"),
                         InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
                         InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}")
                     ]
                     keyboard.append(keyboard_row)
-                # اضافه کردن دکمه بازگشت به کنترل پنل در انتها
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
                 text += f"\nزمان سرور: {server_time}"
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    if "message is not modified" in str(e).lower():
+                        logger.warning(f"Message not modified for chat_id {chat_id}, message_id {message_id}. Sending new message.")
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=text,
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        raise e
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -375,15 +380,15 @@ class ReceiptManager:
             amount = receipt.get("amount")
             status = receipt.get("status")
             timestamp = receipt.get("timestamp", "نامشخص")
-            file_type = receipt.get("file_type", "document")  # پیش‌فرض document اگر file_type موجود نباشد
+            file_type = receipt.get("file_type", "document")
 
             server_time = ReceiptManager.get_server_time()
             if not receipt_file_id:
                 logger.error(f"No receipt file ID for user {user_id} at index {receipt_index}")
                 return "❌ فایل رسید یافت نشد!"
 
-            # استفاده از chat_id از context یا user_id
-            chat_id = context.user_data.get('user_id') or context._chat_id
+            # استفاده از chat_id سوپرادمین
+            chat_id = context._chat_id or context.user_data.get('user_id', user_id)
             caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {server_time}"
 
             if file_type == "photo":
