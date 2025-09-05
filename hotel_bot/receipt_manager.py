@@ -103,10 +103,10 @@ class ReceiptManager:
         return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")  # فرمت HH:MM:SS - DD-MM-YYYY
 
     @staticmethod
-    async def add_receipt(context, user_id, amount, receipt_file_id):
+    async def add_receipt(context, user_id, amount, receipt_file_id, is_photo=False):
         """افزودن یک رسید جدید برای کاربر و اطلاع‌رسانی به سوپرادمین‌ها"""
         try:
-            logger.debug(f"Starting add_receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
+            logger.debug(f"Starting add_receipt: user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}, is_photo={is_photo}")
             user_id = str(user_id)
             if not isinstance(amount, (int, float)) or amount <= 0:
                 logger.error(f"Invalid amount for user {user_id}: {amount}")
@@ -122,6 +122,7 @@ class ReceiptManager:
             receipt_data = {
                 "amount": int(amount),
                 "receipt_file_id": receipt_file_id,
+                "file_type": "photo" if is_photo else "document",
                 "status": "pending",
                 "timestamp": datetime.now().isoformat()  # زمان محلی سرور
             }
@@ -131,14 +132,14 @@ class ReceiptManager:
             logger.info(f"Receipt successfully added for user {user_id}: {receipt_data}")
 
             server_time = ReceiptManager.get_server_time()
-            # ارسال پیام تأیید به کاربر (فقط یک بار)
+            # ارسال پیام تأیید به کاربر
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.\nزمان سرور: {server_time}",
                 parse_mode="Markdown"
             )
 
-            # ارسال اعلان به سوپرادمین‌ها (فقط یک بار برای هر ادمین)
+            # ارسال اعلان به سوپرادمین‌ها
             for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
@@ -146,11 +147,19 @@ class ReceiptManager:
                         text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.\nزمان سرور: {server_time}",
                         parse_mode="Markdown"
                     )
-                    if receipt_file_id:
+                    if is_photo:
+                        await context.bot.send_photo(
+                            chat_id=admin,
+                            photo=receipt_file_id,
+                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان",
+                            parse_mode="Markdown"
+                        )
+                    else:
                         await context.bot.send_document(
                             chat_id=admin,
                             document=receipt_file_id,
-                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان"
+                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان",
+                            parse_mode="Markdown"
                         )
                 except Exception as e:
                     logger.error(f"Error notifying admin {admin}: {str(e)}")
@@ -172,89 +181,86 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
             raise
-    
 
     @staticmethod
     async def show_pending_receipts(chat_id, context, message_id=None):
-            """نمایش لیست رسیدهای در حال انتظار"""
-            try:
-                user_id = context.user_data.get('user_id', chat_id)
-                if user_id not in SUPER_ADMINS:
-                    logger.warning(f"User {user_id} attempted to access pending receipts without permission")
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text="❌ شما مجوز مشاهده رسیدهای در حال انتظار را ندارید!",
-                        parse_mode="Markdown"
-                    )
-                    from menu_manager import MenuManager
-                    await MenuManager.show_main_menu(user_id, context)
-                    return
-
-                receipts = ReceiptManager.load_receipts()
-                logger.debug(f"Loaded receipts for display: {receipts}")
-                pending_receipts = []
-                for uid, user_receipts in receipts.items():
-                    for idx, receipt in enumerate(user_receipts):
-                        if receipt.get("status") == "pending":
-                            pending_receipts.append((uid, idx, receipt))
-                logger.debug(f"Pending receipts: {pending_receipts}")
-
-                server_time = ReceiptManager.get_server_time()
-                if not pending_receipts:
-                    text = "📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد.\nزمان سرور: {server_time}"
-                    keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
-                else:
-                    text = "📜 **لیست رسیدهای در حال انتظار**:\n\n"
-                    keyboard = []
-                    for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
-                        timestamp = receipt.get("timestamp", "نامشخص")
-                        if timestamp != "نامشخص":
-                            local_datetime = datetime.fromisoformat(timestamp)
-                            shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
-                            formatted_time = shamsi_datetime.strftime("%H:%M:%S")
-                            formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
-                            display_time = f"{formatted_time} - {formatted_date}"
-                        else:
-                            display_time = "نامشخص"
-                        text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
-                        # اضافه کردن دکمه‌ها برای هر رسید
-                        keyboard_row = [
-                            InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}"),
-                            InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
-                            InlineKeyboardButton("مشاهده رسید ", callback_data=f"view_{uid}_{receipt_idx}")
-                        ]
-                        keyboard.append(keyboard_row)
-                    # اضافه کردن دکمه بازگشت به کنترل پنل در انتها
-                    keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
-                    text += f"\nزمان سرور: {server_time}"
-
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                if message_id:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=text,
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                else:
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=text,
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-            except Exception as e:
-                logger.error(f"Error showing pending receipts: {str(e)}")
+        """نمایش لیست رسیدهای در حال انتظار"""
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if user_id not in SUPER_ADMINS:
+                logger.warning(f"User {user_id} attempted to access pending receipts without permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"❌ خطا در نمایش رسیدها: {str(e)}",
+                    text="❌ شما مجوز مشاهده رسیدهای در حال انتظار را ندارید!",
                     parse_mode="Markdown"
                 )
                 from menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
-                
-            
+                return
+
+            receipts = ReceiptManager.load_receipts()
+            logger.debug(f"Loaded receipts for display: {receipts}")
+            pending_receipts = []
+            for uid, user_receipts in receipts.items():
+                for idx, receipt in enumerate(user_receipts):
+                    if receipt.get("status") == "pending":
+                        pending_receipts.append((uid, idx, receipt))
+            logger.debug(f"Pending receipts: {pending_receipts}")
+
+            server_time = ReceiptManager.get_server_time()
+            if not pending_receipts:
+                text = f"📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد.\nزمان سرور: {server_time}"
+                keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
+            else:
+                text = "📜 **لیست رسیدهای در حال انتظار**:\n\n"
+                keyboard = []
+                for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
+                    timestamp = receipt.get("timestamp", "نامشخص")
+                    if timestamp != "نامشخص":
+                        local_datetime = datetime.fromisoformat(timestamp)
+                        shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
+                        formatted_time = shamsi_datetime.strftime("%H:%M:%S")
+                        formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
+                        display_time = f"{formatted_time} - {formatted_date}"
+                    else:
+                        display_time = "نامشخص"
+                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
+                    # اضافه کردن دکمه‌ها برای هر رسید
+                    keyboard_row = [
+                        InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}"),
+                        InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
+                        InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}")
+                    ]
+                    keyboard.append(keyboard_row)
+                # اضافه کردن دکمه بازگشت به کنترل پنل در انتها
+                keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
+                text += f"\nزمان سرور: {server_time}"
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error showing pending receipts: {str(e)}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش رسیدها: {str(e)}",
+                parse_mode="Markdown"
+            )
+            from menu_manager import MenuManager
+            await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
     async def confirm_receipt(context, user_id, amount, receipt_index):
@@ -369,18 +375,32 @@ class ReceiptManager:
             amount = receipt.get("amount")
             status = receipt.get("status")
             timestamp = receipt.get("timestamp", "نامشخص")
+            file_type = receipt.get("file_type", "document")  # پیش‌فرض document اگر file_type موجود نباشد
 
             server_time = ReceiptManager.get_server_time()
             if not receipt_file_id:
                 logger.error(f"No receipt file ID for user {user_id} at index {receipt_index}")
                 return "❌ فایل رسید یافت نشد!"
 
-            await context.bot.send_document(
-                chat_id=context.user_data.get('user_id'),
-                document=receipt_file_id,
-                caption=f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {server_time}",
-                parse_mode="Markdown"
-            )
+            # استفاده از chat_id از context یا user_id
+            chat_id = context.user_data.get('user_id') or context._chat_id
+            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {server_time}"
+
+            if file_type == "photo":
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=receipt_file_id,
+                    caption=caption,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=receipt_file_id,
+                    caption=caption,
+                    parse_mode="Markdown"
+                )
+
             logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
             return f"✅ رسید کاربر {user_id} نمایش داده شد."
         except ValueError as e:

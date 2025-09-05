@@ -111,7 +111,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("copy_name:"):
             filename = data.split(":", 1)[1]
             await query.message.reply_text(filename)
-            return 
+            return
         elif data.startswith("delete:"):
             await delete_backup(query, user_id, context)
         elif data == "restore_backup":
@@ -216,7 +216,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if admin_id in admins:
                 del admins[admin_id]
                 AccessManager.save_data(access_data)
-                await query.edit_message_text("✅ ادインプット ادمین با موفقیت حذف شد.")
+                await query.edit_message_text("✅ ادمین با موفقیت حذف شد.")
             else:
                 await query.edit_message_text("❌ ادمین یافت نشد!")
             await AdminManager.show_manage_admins(chat_id, context, admins)
@@ -326,11 +326,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("view_"):
             if user_id in SUPER_ADMINS:
                 _, u_id, idx = data.split("_")
-                msg = await ReceiptManager.view_receipt(context, int(u_id), int(idx))
-                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
-                await ReceiptManager.show_pending_receipts(chat_id, context)
+                try:
+                    await ReceiptManager.view_receipt(context, int(u_id), int(idx))
+                    await ReceiptManager.show_pending_receipts(chat_id, context, message_id=message_id)
+                except Exception as e:
+                    logger.error(f"Error in view_receipt for user {u_id}, index {idx}: {str(e)}")
+                    await query.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"❌ خطا در نمایش رسید: {str(e)}",
+                        parse_mode="Markdown"
+                    )
             else:
-                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+                await query.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ شما مجوز دسترسی ندارید!",
+                    parse_mode="Markdown"
+                )
         elif data.startswith("charge_admin_wallet:"):
             admin_id = data.split(":", 1)[1]
             await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
