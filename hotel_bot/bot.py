@@ -348,17 +348,38 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             admin_id = data.split(":", 1)[1]
             await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
         elif data.startswith("view_wallet:"):
+            logger.debug(f"Handling view_wallet for user_id: {user_id}, data: {data}")
             if user_id in SUPER_ADMINS:
                 admin_id = data.split(":", 1)[1]
-                wallets = ReceiptManager.load_wallets()
-                balance = wallets.get(str(admin_id), 0)
+                logger.debug(f"Viewing wallet for admin_id: {admin_id}")
+                try:
+                    wallets = ReceiptManager.load_wallets()
+                    logger.debug(f"Loaded wallets: {wallets}")
+                    balance = wallets.get(str(admin_id), 0)
+                    logger.debug(f"Balance for admin_id {admin_id}: {balance}")
+                    await query.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"💰 **موجودی کیف پول ادمین {admin_id}**\n\nموجودی فعلی: {balance:,} تومان",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]]),
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    logger.error(f"Error viewing wallet for admin_id {admin_id}: {str(e)}")
+                    await query.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=f"❌ خطا در نمایش موجودی کیف پول: {str(e)}",
+                        parse_mode="Markdown"
+                    )
+            else:
+                logger.warning(f"User {user_id} not in SUPER_ADMINS: {SUPER_ADMINS}")
                 await query.edit_message_text(
-                    f"💰 **موجودی کیف پول ادمین {admin_id}**\n\nموجودی فعلی: {balance:,} تومان",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]]),
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ شما مجوز دسترسی ندارید!",
                     parse_mode="Markdown"
                 )
-            else:
-                await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data.startswith("modify_wallet:"):
             if user_id in SUPER_ADMINS:
                 admin_id = data.split(":", 1)[1]
