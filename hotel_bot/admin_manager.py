@@ -51,8 +51,8 @@ class AdminManager:
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
-            # بارگذاری پروفایل از یک فایل یا دیتابیس (فرض می‌کنیم در access_data ذخیره می‌شه)
-            access_data = AccessManager.load_data()
+            # بارگذاری داده‌ها به‌صورت تازه
+            access_data = AccessManager.load_data()  # همیشه داده‌های به‌روز رو بارگذاری می‌کنیم
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
 
             group = admins.get(admin_id, "بدون گروه")
@@ -110,7 +110,6 @@ class AdminManager:
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
             
             text = f"👤 **ویرایش پروفایل ادمین {admin_id}**\n\nمشخصات فعلی:\n"
-            # بررسی و نمایش مقدار فعلی یا "ندارد" فقط در صورت نبود مقدار
             name = profile.get('name') if profile.get('name') is not None else 'ندارد'
             lastname = profile.get('lastname') if profile.get('lastname') is not None else 'ندارد'
             national_id = profile.get('national_id') if profile.get('national_id') is not None else 'ندارد'
