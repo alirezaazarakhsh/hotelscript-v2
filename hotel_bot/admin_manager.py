@@ -118,13 +118,13 @@ class AdminManager:
             company_name = profile.get('company_name') if profile.get('company_name') is not None else 'ندارد'
             company_reg = profile.get('company_reg') if profile.get('company_reg') is not None else 'ندارد'
 
-            text += f"- نام: {name} (در صورت تغییر، نام جدید را وارد کنید)\n"
-            text += f"- نام خانوادگی: {lastname} (در صورت تغییر، نام خانوادگی جدید را وارد کنید)\n"
-            text += f"- کد ملی: {national_id} (در صورت تغییر، کد ملی جدید را وارد کنید)\n"
-            text += f"- شماره همراه: {phone} (در صورت تغییر، شماره همراه جدید را وارد کنید)\n"
-            text += f"- شماره تلفن ثابت: {landline} (در صورت تغییر، شماره تلفن ثابت جدید را وارد کنید)\n"
-            text += f"- نام شرکت: {company_name} (در صورت تغییر، نام شرکت جدید را وارد کنید)\n"
-            text += f"- کد ثبت شرکت: {company_reg} (در صورت تغییر، کد ثبت شرکت جدید را وارد کنید)\n\n"
+            text += f"- نام: {name} \n"
+            text += f"- نام خانوادگی: {lastname} \n"
+            text += f"- کد ملی: {national_id} \n"
+            text += f"- شماره همراه: {phone} \n"
+            text += f"- شماره تلفن ثابت: {landline} \n"
+            text += f"- نام شرکت: {company_name} \n"
+            text += f"- کد ثبت شرکت: {company_reg} \n\n"
             text += "لطفاً بخشی که می‌خواهید ویرایش کنید را انتخاب کنید. اگر تغییری نمی‌خواهید، می‌توانید همان مقدار فعلی را نگه دارید."
 
             keyboard = [
