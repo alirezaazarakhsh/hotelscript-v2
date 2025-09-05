@@ -14,8 +14,9 @@ class AdminManager:
     async def show_manage_admins(chat_id, context, admins, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            logger.debug(f"Showing manage admins for user_id: {user_id}, chat_id: {chat_id}")
+            logger.debug(f"show_manage_admins called for user_id: {user_id}, chat_id: {chat_id}, message_id: {message_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
                 await MenuManager.show_main_menu(user_id, context)
                 return
@@ -42,6 +43,7 @@ class AdminManager:
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.debug(f"Displaying admin list with text: {text[:100]}... and keyboard: {keyboard}")
             if message_id:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -51,14 +53,14 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
             else:
-                await context.bot.send_message(
+                await context.bot.sent_message(
                     chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
                     parse_mode="Markdown"
                 )
         except Exception as e:
-            logger.error(f"Error in show_manage_admins: {str(e)}")
+            logger.error(f"Error in show_manage_admins for user_id {user_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش لیست ادمین‌ها: {str(e)}"
@@ -69,8 +71,9 @@ class AdminManager:
     async def show_admin_details(chat_id, context, admin_id, admins, groups, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            logger.debug(f"Showing admin details for admin_id: {admin_id}, user_id: {user_id}")
+            logger.debug(f"show_admin_details called for admin_id: {admin_id}, user_id: {user_id}, message_id: {message_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز مشاهده جزئیات ادمین را ندارید!"
@@ -80,9 +83,10 @@ class AdminManager:
 
             access_data = AccessManager.load_data()
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
-            group = admins.get(admin_id, "بدون گروه")
+            group = admins.get(str(admin_id), "بدون گروه")
             perms = groups.get(group, set()) if group != "بدون گروه" else set()
             wallets = ReceiptManager.load_wallets()
+            logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
 
             text = (
@@ -112,6 +116,7 @@ class AdminManager:
                 [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}")],
             ]
             if user_id in SUPER_ADMINS:
+                logger.debug(f"User {user_id} is super admin, adding wallet and profile options for admin_id {admin_id}")
                 keyboard.append([InlineKeyboardButton("💰 مشاهده موجودی", callback_data=f"view_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
@@ -120,6 +125,7 @@ class AdminManager:
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.debug(f"Displaying admin details for admin_id {admin_id} with wallet balance: {wallet_balance}")
             if message_id:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -136,7 +142,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
-            logger.error(f"Error in show_admin_details for admin_id {admin_id}: {str(e)}")
+            logger.error(f"Error in show_admin_details for admin_id {admin_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}"
@@ -147,8 +153,9 @@ class AdminManager:
     async def show_edit_admin_profile(chat_id, context, admin_id, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            logger.debug(f"Showing edit admin profile for admin_id: {admin_id}, user_id: {user_id}")
+            logger.debug(f"show_edit_admin_profile called for admin_id: {admin_id}, user_id: {user_id}, message_id: {message_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز ویرایش پروفایل ادمین را ندارید!"
@@ -190,6 +197,7 @@ class AdminManager:
                 [InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.debug(f"Displaying edit admin profile for admin_id {admin_id}")
             if message_id:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -206,7 +214,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
         except Exception as e:
-            logger.error(f"Error in show_edit_admin_profile for admin_id {admin_id}: {str(e)}")
+            logger.error(f"Error in show_edit_admin_profile for admin_id {admin_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}"
@@ -217,8 +225,9 @@ class AdminManager:
     async def add_admin(chat_id, context, new_id, group_name):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            logger.debug(f"Adding admin with ID: {new_id}, group: {group_name}, by user_id: {user_id}")
+            logger.debug(f"add_admin called with new_id: {new_id}, group_name: {group_name}, user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز افزودن ادمین را ندارید!"
@@ -231,12 +240,14 @@ class AdminManager:
             groups = access_data['groups']
 
             if str(new_id) in admins or new_id in SUPER_ADMINS:
+                logger.warning(f"User {new_id} is already an admin or super admin")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ این کاربر قبلاً ادمین یا سوپرادمین است!"
                 )
                 return
             if group_name not in groups:
+                logger.warning(f"Group {group_name} does not exist")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ گروه دسترسی انتخاب‌شده وجود ندارد!"
@@ -245,13 +256,14 @@ class AdminManager:
 
             admins[str(new_id)] = group_name
             AccessManager.save_data(access_data)
+            logger.info(f"Admin {new_id} added with group {group_name}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"✅ ادمین با ID {new_id} با گروه {group_name} اضافه شد."
             )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
-            logger.error(f"Error in add_admin for new_id {new_id}: {str(e)}")
+            logger.error(f"Error in add_admin for new_id {new_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در افزودن ادمین: {str(e)}"
@@ -262,8 +274,9 @@ class AdminManager:
     async def delete_admin(chat_id, context, admin_id):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            logger.debug(f"Deleting admin with ID: {admin_id}, by user_id: {user_id}")
+            logger.debug(f"delete_admin called for admin_id: {admin_id}, user_id: {user_id}")
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز حذف ادمین را ندارید!"
@@ -274,23 +287,97 @@ class AdminManager:
             access_data = AccessManager.load_data()
             admins = access_data['admins']
 
-            if admin_id in admins:
-                del admins[admin_id]
+            if str(admin_id) in admins:
+                del admins[str(admin_id)]
                 AccessManager.save_data(access_data)
+                logger.info(f"Admin {admin_id} deleted")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"✅ ادمین با ID {admin_id} حذف شد."
                 )
             else:
+                logger.warning(f"Admin {admin_id} not found")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"❌ ادمین با ID {admin_id} یافت نشد!"
                 )
             await AdminManager.show_manage_admins(chat_id, context, admins)
         except Exception as e:
-            logger.error(f"Error in delete_admin for admin_id {admin_id}: {str(e)}")
+            logger.error(f"Error in delete_admin for admin_id {admin_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در حذف ادمین: {str(e)}"
             )
             await MenuManager.show_main_menu(user_id, context)
+
+# Relevant bot.py handler for view_wallet
+# This should be integrated into your existing bot.py within the button() function
+async def button(update, context):
+    query = update.callback_query
+    user_id = query.from_user.id
+    context.user_data['user_id'] = user_id
+    chat_id = query.message.chat_id
+    message_id = query.message.message_id
+    await query.answer()
+
+    if not AccessManager.is_allowed(user_id):
+        logger.warning(f"User {user_id} lacks general access")
+        await query.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
+        )
+        return
+
+    data = query.data
+    access_data = AccessManager.load_data()
+    admins = access_data['admins']
+    groups = access_data['groups']
+
+    try:
+        if data.startswith("view_wallet:"):
+            logger.debug(f"Handling view_wallet for user_id: {user_id}, data: {data}")
+            if user_id not in SUPER_ADMINS:
+                logger.warning(f"User {user_id} not in SUPER_ADMINS: {SUPER_ADMINS}")
+                await query.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ شما مجوز دسترسی ندارید!",
+                    parse_mode="Markdown"
+                )
+                return
+
+            admin_id = data.split(":", 1)[1]
+            logger.debug(f"Viewing wallet for admin_id: {admin_id}")
+            try:
+                wallets = ReceiptManager.load_wallets()
+                logger.debug(f"Loaded wallets: {wallets}")
+                balance = wallets.get(str(admin_id), 0)
+                logger.debug(f"Balance for admin_id {admin_id}: {balance}")
+                text = f"💰 **موجودی کیف پول ادمین {admin_id}**\n\nموجودی فعلی: {balance:,} تومان"
+                keyboard = [[InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Error viewing wallet for admin_id {admin_id}: {str(e)}", exc_info=True)
+                await query.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"❌ خطا در نمایش موجودی کیف پول: {str(e)}",
+                    parse_mode="Markdown"
+                )
+    except Exception as e:
+        logger.error(f"Error in button handler for data {data}: {str(e)}", exc_info=True)
+        await query.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=f"❌ خطایی رخ داد: {str(e)}"
+        )
+        context.user_data.clear()
+        await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
