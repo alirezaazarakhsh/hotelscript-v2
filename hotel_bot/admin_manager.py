@@ -53,7 +53,7 @@ class AdminManager:
                     parse_mode="Markdown"
                 )
             else:
-                await context.bot.sent_message(
+                await context.bot.send_message(
                     chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
@@ -81,10 +81,8 @@ class AdminManager:
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
-            access_data = AccessManager.load_data()
-            profile = access_data.get('profiles', {}).get(str(admin_id), {})
             group = admins.get(str(admin_id), "بدون گروه")
-            perms = groups.get(group, set()) if group != "بدون گروه" else set()
+            perms = groups.get(group, set()) if group else set()
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
@@ -94,14 +92,6 @@ class AdminManager:
                 f"**ID**: {admin_id}\n"
                 f"**گروه دسترسی**: {group}\n"
                 f"**موجودی کیف پول**: {wallet_balance:,} تومان\n\n"
-                f"**مشخصات پروفایل**:\n"
-                f"- نام: {profile.get('name', 'ندارد')}\n"
-                f"- نام خانوادگی: {profile.get('lastname', 'ندارد')}\n"
-                f"- کد ملی: {profile.get('national_id', 'ندارد')}\n"
-                f"- شماره همراه: {profile.get('phone', 'ندارد')}\n"
-                f"- شماره تلفن ثابت: {profile.get('landline', 'ندارد')}\n"
-                f"- نام شرکت: {profile.get('company_name', 'ندارد')}\n"
-                f"- کد ثبت شرکت: {profile.get('company_reg', 'ندارد')}\n\n"
                 f"**مجوزها**:\n"
             )
             if perms:
@@ -109,18 +99,17 @@ class AdminManager:
                     text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
             else:
                 text += "هیچ مجوزی اختصاص نیافته.\n"
-            text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول و پروفایل او را مدیریت کنید."
+            text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول او را مدیریت کنید."
 
             keyboard = [
                 [InlineKeyboardButton("تغییر گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}")],
                 [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}")],
             ]
             if user_id in SUPER_ADMINS:
-                logger.debug(f"User {user_id} is super admin, adding wallet and profile options for admin_id {admin_id}")
+                logger.debug(f"User {user_id} is super admin, adding wallet options for admin_id {admin_id}")
                 keyboard.append([InlineKeyboardButton("💰 مشاهده موجودی", callback_data=f"view_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
-                keyboard.append([InlineKeyboardButton("📝 ویرایش پروفایل", callback_data=f"edit_admin_profile:{admin_id}")])
             keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
