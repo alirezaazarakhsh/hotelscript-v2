@@ -1,11 +1,13 @@
 # 📦 استاندارد کتابخانه‌های پایتون
 import logging
 import os
+import random
 import re
 import uuid
 import jdatetime
 from decimal import Decimal
 from datetime import timedelta
+import jdatetime
 from functools import cached_property
 
 # 🌐 Django
@@ -1235,3 +1237,225 @@ class BestHotels(models.Model):
 
     def __str__(self):
         return f"{self.order} - {self.title_logo}"
+    
+    
+
+
+
+#مدل رزرو های کاربران سایت 
+logger = logging.getLogger(__name__)
+
+class Reservationhotel(models.Model):
+    STATUS_CHOICES = [
+        ('paid', _('پرداخت شده')),
+        ('unpaid', _('پرداخت نشده')),
+        ('confirmed', _('تایید رزرو')),
+        ('unconfirmed', _('عدم تایید رزرو')),
+        ('cancelled', _('لغو شده')),
+    ]
+
+    buyer = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر خریدار'),
+        related_name='reservations',
+    )
+    reserver_first_name = models.CharField(
+        verbose_name=_('نام رزرو کننده'),
+        max_length=256,
+    )
+    reserver_last_name = models.CharField(
+        verbose_name=_('نام خانوادگی رزرو کننده'),
+        max_length=256,
+    )
+    reserver_phone_number = models.CharField(
+        verbose_name=_('شماره تماس رزرو کننده'),
+        max_length=11,
+    )
+    reserver_national_code = models.CharField(
+        verbose_name=_('کد ملی رزرو کننده'),
+        max_length=10,
+        blank=True,
+        null=True,
+    )
+    check_in_date = jmodels.jDateField(
+        verbose_name=_('تاریخ ورود'),
+    )
+    check_out_date = jmodels.jDateField(
+        verbose_name=_('تاریخ خروج'),
+    )
+    total_price = models.DecimalField(
+        verbose_name=_('مجموع قیمت'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    discount = models.DecimalField(
+        verbose_name=_('تخفیف'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    final_price = models.DecimalField(
+        verbose_name=_('قیمت نهایی'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    tracking_code = models.CharField(
+        verbose_name=_('کد پیگیری'),
+        max_length=9,
+        unique=True,
+        editable=False,
+    )
+    additional_notes = models.TextField(
+        verbose_name=_('توضیحات تکمیلی'),
+        blank=True,
+        default='',
+    )
+    status = models.CharField(
+        verbose_name=_('وضعیت رزرو'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='unpaid',
+    )
+    created_at = jmodels.jDateTimeField(
+        verbose_name=_('تاریخ ایجاد'),
+        auto_now_add=True,
+    )
+    updated_at = jmodels.jDateTimeField(
+        verbose_name=_('تاریخ به‌روزرسانی'),
+        auto_now=True,
+    )
+
+    class Meta:
+        verbose_name = _('رزرو')
+        verbose_name_plural = _('رزروها')
+
+    def __str__(self):
+        return f'رزرو {self.tracking_code} توسط {self.buyer.phone_number}'
+
+    def clean(self):
+        super().clean()
+        if self.check_out_date <= self.check_in_date:
+            raise ValidationError(_('تاریخ خروج باید بعد از تاریخ ورود باشد.'))
+        for res_room in self.reservation_rooms.all():
+            if res_room.quantity > res_room.room.inventory:
+                raise ValidationError(_(f'تعداد اتاق‌های درخواستی ({res_room.quantity}) برای {res_room.room.title} از موجودی ({res_room.room.inventory}) بیشتر است.'))
+
+    def save(self, *args, **kwargs):
+        if not self.tracking_code:
+            while True:
+                code = 'safa' + str(random.randint(10000, 99999))
+                if not Reservationhotel.objects.filter(tracking_code=code).exists():
+                    self.tracking_code = code
+                    break
+        if self.total_price and self.discount:
+            self.final_price = self.total_price - self.discount
+        super().save(*args, **kwargs)
+
+    @property
+    def nights_count(self):
+        if self.check_in_date and self.check_out_date:
+            return (self.check_out_date - self.check_in_date).days
+        return 0
+
+    @property
+    def total_rooms(self):
+        return self.reservation_rooms.aggregate(total=models.Sum('quantity'))['total'] or 0
+
+    @property
+    def total_guests(self):
+        total = 0
+        for res_room in self.reservation_rooms.all():
+            room = res_room.room
+            total += (room.room_capacity + room.extra_capacity) * res_room.quantity
+        return total
+
+class ReservationRoom(models.Model):
+    reservation = models.ForeignKey(
+        Reservationhotel,
+        on_delete=models.CASCADE,
+        verbose_name=_('رزرو'),
+        related_name='reservation_rooms',
+    )
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.CASCADE,
+        verbose_name=_('اتاق'),
+        related_name='reservation_rooms',
+    )
+    quantity = models.PositiveIntegerField(
+        verbose_name=_('تعداد اتاق'),
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
+    price_per_night = models.DecimalField(
+        verbose_name=_('قیمت هر شب'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    subtotal = models.DecimalField(
+        verbose_name=_('جمع فرعی'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+
+    class Meta:
+        verbose_name = _('اتاق رزرو شده')
+        verbose_name_plural = _('اتاق‌های رزرو شده')
+        unique_together = ('reservation', 'room')
+
+    def __str__(self):
+        return f'{self.quantity} اتاق {self.room.title} در رزرو {self.reservation.tracking_code}'
+
+    def clean(self):
+        super().clean()
+        if self.quantity > self.room.inventory:
+            raise ValidationError(_(f'تعداد اتاق‌های درخواستی ({self.quantity}) از موجودی ({self.room.inventory}) بیشتر است.'))
+
+    def save(self, *args, **kwargs):
+        nights = self.reservation.nights_count
+        if nights > 0 and self.price_per_night:
+            self.subtotal = self.price_per_night * nights * self.quantity
+        super().save(*args, **kwargs)
+        self.room.inventory = models.F('inventory') - self.quantity
+        self.room.save()
+
+
+# مدل مسافر برای هر اتاق
+class ReservationRoomPassenger(models.Model):
+    reservation_room = models.ForeignKey(
+        ReservationRoom,
+        on_delete=models.CASCADE,
+        related_name='passengers',
+        verbose_name=_('اتاق رزرو شده')
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        verbose_name=_('مسافر اصلی')
+    )
+    first_name = models.CharField(_('نام'), max_length=100)
+    last_name = models.CharField(_('نام خانوادگی'), max_length=100)
+    mobile_number = models.CharField(_('شماره موبایل'), max_length=11, blank=True, null=True)
+    national_code = models.CharField(_('کد ملی'), max_length=10)
+
+    class Meta:
+        verbose_name = _('مسافر')
+        verbose_name_plural = _('مسافرها')
+
+    def save(self, *args, **kwargs):
+        # فقط مسافر اصلی شماره موبایل دارد
+        if not self.is_primary:
+            self.mobile_number = None
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.first_name} {self.last_name}'
