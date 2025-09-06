@@ -6,6 +6,7 @@ import os
 import logging
 from datetime import datetime
 from telegram.error import BadRequest
+from jdatetime import datetime as jdatetime  # برای تبدیل به شمسی
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(
@@ -159,7 +160,7 @@ class ReceiptManager:
             logger.error(f"Validation error in add_receipt for user {user_id}: {str(ve)}")
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"❌ خطا در ثبت رسید෡ {str(ve)}",
+                text=f"❌ خطا در ثبت رسید: {str(ve)}",
                 parse_mode="Markdown"
             )
             raise
@@ -205,7 +206,16 @@ class ReceiptManager:
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     timestamp = receipt.get("timestamp", "نامشخص")
-                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {timestamp}\n"
+                    if timestamp != "نامشخص":
+                        try:
+                            local_datetime = datetime.fromisoformat(timestamp)
+                            shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
+                            formatted_time = shamsi_datetime.strftime("%H:%M:%S - %Y/%m/%d")
+                        except ValueError:
+                            formatted_time = "نامشخص"
+                    else:
+                        formatted_time = "نامشخص"
+                    text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {formatted_time}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"تأیید رسید {idx}",
@@ -359,11 +369,22 @@ class ReceiptManager:
             amount = receipt.get("amount")
             status = receipt.get("status")
             timestamp = receipt.get("timestamp", "نامشخص")
-            file_type = receipt.get("file_type", "document")  # پیش‌فرض document
+            file_type = receipt.get("file_type", "photo")  # پیش‌فرض photo برای رسیدهای قدیمی
 
             if not receipt_file_id or not isinstance(receipt_file_id, str):
                 logger.error(f"Invalid receipt_file_id for user {user_id}: {receipt_file_id}")
                 return "❌ شناسه فایل رسید نامعتبر است!"
+
+            # تبدیل زمان به شمسی
+            if timestamp != "نامشخص":
+                try:
+                    local_datetime = datetime.fromisoformat(timestamp)
+                    shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
+                    formatted_time = shamsi_datetime.strftime("%H:%M:%S - %Y/%m/%d")
+                except ValueError:
+                    formatted_time = "نامشخص"
+            else:
+                formatted_time = "نامشخص"
 
             # استفاده از chat_id ارسالی یا از context
             target_chat_id = chat_id or context.user_data.get('user_id')
@@ -371,23 +392,37 @@ class ReceiptManager:
                 logger.error(f"No valid chat_id provided for user {user_id}")
                 return "❌ خطا: شناسه چت معتبر نیست!"
 
-            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}"
+            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {formatted_time}"
             logger.debug(f"Attempting to send file with ID: {receipt_file_id}, type: {file_type} to chat_id: {target_chat_id}")
 
-            if file_type == "photo":
-                await context.bot.send_photo(
-                    chat_id=target_chat_id,
-                    photo=receipt_file_id,
-                    caption=caption,
-                    parse_mode="Markdown"
-                )
-            else:
-                await context.bot.send_document(
-                    chat_id=target_chat_id,
-                    document=receipt_file_id,
-                    caption=caption,
-                    parse_mode="Markdown"
-                )
+            try:
+                if file_type == "photo":
+                    await context.bot.send_photo(
+                        chat_id=target_chat_id,
+                        photo=receipt_file_id,
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await context.bot.send_document(
+                        chat_id=target_chat_id,
+                        document=receipt_file_id,
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+            except BadRequest as e:
+                logger.error(f"BadRequest error sending file {receipt_file_id}: {str(e)}")
+                # اگر ارسال به صورت photo شکست خورد، به صورت document امتحان می‌کنیم
+                if file_type == "photo":
+                    logger.debug(f"Retrying to send file {receipt_file_id} as document")
+                    await context.bot.send_document(
+                        chat_id=target_chat_id,
+                        document=receipt_file_id,
+                        caption=caption,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    raise
 
             logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
             return f"✅ رسید کاربر {user_id} نمایش داده شد."
