@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config import SUPER_ADMINS
+from config import SUPER_ADMINS, ADMINS_FILE, PERMISSIONS
 import json
 import os
 import logging
@@ -19,6 +19,30 @@ RECEIPTS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "receipts.json")
 WALLETS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "wallets.json")
 
 class ReceiptManager:
+    @staticmethod
+    def load_admins():
+        """بارگذاری داده‌های ادمین‌ها از فایل admins.json"""
+        try:
+            if not os.path.exists(ADMINS_FILE):
+                logger.warning(f"Admins file {ADMINS_FILE} not found, creating an empty one")
+                os.makedirs(os.path.dirname(ADMINS_FILE), exist_ok=True)
+                with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump({}, f, ensure_ascii=False, indent=4)
+                return {}
+            
+            with open(ADMINS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                logger.debug(f"Loaded admins from {ADMINS_FILE}: {data}")
+                return data
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in {ADMINS_FILE}: {str(e)}. Returning empty dict.")
+            with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
+                json.dump({}, f, ensure_ascii=False, indent=4)
+            return {}
+        except Exception as e:
+            logger.error(f"Error loading admins from {ADMINS_FILE}: {str(e)}")
+            return {}
+
     @staticmethod
     def load_receipts():
         """بارگذاری داده‌های رسیدها از فایل receipts.json"""
@@ -136,7 +160,11 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
 
-            for admin in SUPER_ADMINS:
+            admins = ReceiptManager.load_admins()
+            authorized_admins = [admin for admin in SUPER_ADMINS] + [
+                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
+            ]
+            for admin in authorized_admins:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -183,7 +211,10 @@ class ReceiptManager:
         """نمایش لیست رسیدهای در حال انتظار"""
         try:
             user_id = str(chat_id)  # استفاده از chat_id به عنوان user_id
-            if user_id not in SUPER_ADMINS:
+            admins = ReceiptManager.load_admins()
+            user_permissions = admins.get(user_id, []) if user_id not in SUPER_ADMINS else PERMISSIONS
+
+            if 'manage_wallet' not in user_permissions and user_id not in SUPER_ADMINS:
                 logger.warning(f"User {user_id} attempted to access pending receipts without permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -223,7 +254,7 @@ class ReceiptManager:
                     keyboard_row = [
                         InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}_{receipt['amount']}"),
                         InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
-                        InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}")
+                        InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}_{chat_id}")
                     ]
                     keyboard.append(keyboard_row)
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
@@ -297,7 +328,11 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
 
-            for admin in SUPER_ADMINS:
+            admins = ReceiptManager.load_admins()
+            authorized_admins = [admin for admin in SUPER_ADMINS] + [
+                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
+            ]
+            for admin in authorized_admins:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -341,7 +376,11 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
 
-            for admin in SUPER_ADMINS:
+            admins = ReceiptManager.load_admins()
+            authorized_admins = [admin for admin in SUPER_ADMINS] + [
+                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
+            ]
+            for admin in authorized_admins:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -362,13 +401,25 @@ class ReceiptManager:
 
     @staticmethod
     async def view_receipt(context, user_id, receipt_index, chat_id):
-        """نمایش فایل رسید برای سوپرادمین"""
+        """نمایش فایل رسید برای سوپرادمین یا ادمین با مجوز"""
         try:
             user_id = str(user_id)
             receipt_index = int(receipt_index)
             if receipt_index < 0:
                 logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
                 raise ValueError("شاخص رسید نامعتبر است")
+
+            # بررسی مجوز کاربر
+            admins = ReceiptManager.load_admins()
+            user_permissions = admins.get(str(chat_id), []) if str(chat_id) not in SUPER_ADMINS else PERMISSIONS
+            if 'manage_wallet' not in user_permissions and str(chat_id) not in SUPER_ADMINS:
+                logger.warning(f"User {chat_id} attempted to view receipt without permission")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده رسید را ندارید!",
+                    parse_mode="Markdown"
+                )
+                return
 
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
@@ -423,7 +474,7 @@ class ReceiptManager:
                     parse_mode="Markdown"
                 )
 
-            logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
+            logger.info(f"Receipt viewed for user {user_id}: index {receipt_index} by admin {chat_id}")
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"✅ رسید کاربر {user_id} نمایش داده شد.",
