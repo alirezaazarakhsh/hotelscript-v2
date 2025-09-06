@@ -28,13 +28,14 @@ class BackupManager:
         current_time = datetime.now(TEHRAN_TZ)
         logger.debug(f"Current time (Gregorian): {current_time}")
         shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
-        timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+        timestamp = shamsi_time.strftime("%Y-%m-%d -%H:%M")
         logger.debug(f"Generated timestamp (Shamsi before send): {timestamp}")
 
-        # اجرای اسکریپت بکاپ دیتابیس با ارسال زمان شمسی
+        # اجرای اسکریپت بکاپ دیتابیس با ارسال زمان شمسی (بدون دو نقطه برای سازگاری با فایل)
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        logger.debug(f"Running backup.sh for DB with timestamp {timestamp}: {backup_script}")
-        result = subprocess.run(f"{backup_script} db {timestamp}", shell=True, capture_output=True, text=True)
+        file_timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")  # فرمت بدون دو نقطه برای نام فایل
+        logger.debug(f"Running backup.sh for DB with timestamp {file_timestamp}: {backup_script}")
+        result = subprocess.run(f"{backup_script} db {file_timestamp}", shell=True, capture_output=True, text=True)
         logger.debug(f"backup.sh stdout: {result.stdout}")
         logger.debug(f"backup.sh stderr: {result.stderr}")
 
@@ -48,13 +49,13 @@ class BackupManager:
         file_path = os.path.join(DB_BACKUP_DIR, db_file)
 
         if os.path.exists(file_path):
-            formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
+            formatted_time = timestamp  # استفاده از زمان شمسی با فرمت جدید
             logger.debug(f"Formatted time for display: {formatted_time}")
-            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ دیتابیس با موفقیت انجام شد. (زمان: {formatted_time})")
+            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ دیتابیس با موفقیت انجام شد. (time backup: {formatted_time})", parse_mode="Markdown")
             await context.bot.send_document(
                 chat_id=user_id,
                 document=open(file_path, "rb"),
-                caption=f"فایل بکاپ دیتابیس\nFile: {db_file}\nزمان بکاپ: {formatted_time}"
+                caption=f"فایل بکاپ دیتابیس\nFile: {db_file}\n{formatted_time}"
             )
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
@@ -77,13 +78,14 @@ class BackupManager:
         current_time = datetime.now(TEHRAN_TZ)
         logger.debug(f"Current time (Gregorian): {current_time}")
         shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
-        timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+        timestamp = shamsi_time.strftime("%Y-%m-%d -%H:%M")
         logger.debug(f"Generated timestamp (Shamsi before send): {timestamp}")
 
-        # اجرای اسکریپت بکاپ مدیا با ارسال زمان شمسی
+        # اجرای اسکریپت بکاپ مدیا با ارسال زمان شمسی (بدون دو نقطه برای سازگاری با فایل)
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        logger.debug(f"Running backup.sh for media with timestamp {timestamp}: {backup_script}")
-        result = subprocess.run(f"{backup_script} media {timestamp}", shell=True, capture_output=True, text=True)
+        file_timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")  # فرمت بدون دو نقطه برای نام فایل
+        logger.debug(f"Running backup.sh for media with timestamp {file_timestamp}: {backup_script}")
+        result = subprocess.run(f"{backup_script} media {file_timestamp}", shell=True, capture_output=True, text=True)
         logger.debug(f"backup.sh stdout: {result.stdout}")
         logger.debug(f"backup.sh stderr: {result.stderr}")
 
@@ -98,11 +100,11 @@ class BackupManager:
         file_path = os.path.join(MEDIA_BACKUP_DIR, media_file)
 
         if os.path.exists(file_path):
-            formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
+            formatted_time = timestamp  # استفاده از زمان شمسی با فرمت جدید
             logger.debug(f"Formatted time for display: {formatted_time}")
-            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد. (زمان: {formatted_time})")
+            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد. (time backup: {formatted_time})", parse_mode="Markdown")
             media_url = MEDIA_BASE_URL + media_file
-            await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}\nزمان بکاپ: {formatted_time}")
+            await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}\n{formatted_time}", parse_mode="Markdown")
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
 
