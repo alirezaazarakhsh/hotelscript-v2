@@ -27,7 +27,6 @@ from .models import (
     RoomService,
     Room,
     Passenger,
-    Reservation,
     SuggestedCommentItem,
 )
 
@@ -566,21 +565,6 @@ class PassengerAdmin(admin.ModelAdmin):
     
     
 
-@admin.register(Reservation)
-class ReservationAdmin(admin.ModelAdmin):
-    list_display = (
-        'uuid',
-        'user',
-        'status',
-        'created',
-        'updated',
-    )
-    search_fields = (
-        'uuid',
-    )
-    list_filter = (
-        'status',
-    )
 
 
 @admin.register(BestHotels)
