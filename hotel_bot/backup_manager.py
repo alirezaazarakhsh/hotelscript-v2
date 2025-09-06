@@ -78,12 +78,13 @@ class BackupManager:
         # اجرای اسکریپت بکاپ مدیا با ارسال زمان شمسی
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
         logger.debug(f"Running backup.sh for media with timestamp {timestamp}: {backup_script}")
-        result = subprocess.run(f"{backup.sh} media {timestamp}", shell=True, capture_output=True, text=True)
+        result = subprocess.run(f"{backup_script} media {timestamp}", shell=True, capture_output=True, text=True)
         logger.debug(f"backup.sh stdout: {result.stdout}")
         logger.debug(f"backup.sh stderr: {result.stderr}")
 
         if result.returncode != 0:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا: {result.stderr}")
+            error_msg = result.stderr if result.stderr else "خطای ناشناخته در اجرای اسکریپت بکاپ"
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در گرفتن بکاپ مدیا: {error_msg}")
             await MenuManager.show_main_menu(user_id, context)
             return
 
