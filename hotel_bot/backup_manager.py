@@ -5,10 +5,16 @@ from config import PROJECT_DIR, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MEDIA_BASE_URL
 from file_manager import FileManager
 from menu_manager import MenuManager
 import logging
+from datetime import datetime
+import pytz
+from jdatetime import datetime as jdatetime
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# تنظیم منطقه زمانی تهران
+TEHRAN_TZ = pytz.timezone('Asia/Tehran')
 
 class BackupManager:
     @staticmethod
@@ -35,11 +41,14 @@ class BackupManager:
         file_path = os.path.join(DB_BACKUP_DIR, db_file)
 
         if os.path.exists(file_path):
-            await context.bot.send_message(chat_id=user_id, text="✅ بکاپ دیتابیس با موفقیت انجام شد.")
+            current_time = datetime.now(TEHRAN_TZ)
+            shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
+            formatted_time = shamsi_time.strftime("%H:%M:%S - %Y/%m/%d")
+            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ دیتابیس با موفقیت انجام شد. (زمان: {formatted_time})")
             await context.bot.send_document(
                 chat_id=user_id,
                 document=open(file_path, "rb"),
-                caption=f"فایل بکاپ دیتابیس\nFile: {db_file}"
+                caption=f"فایل بکاپ دیتابیس\nFile: {db_file}\nزمان بکاپ: {formatted_time}"
             )
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
@@ -75,9 +84,12 @@ class BackupManager:
         file_path = os.path.join(MEDIA_BACKUP_DIR, media_file)
 
         if os.path.exists(file_path):
-            await context.bot.send_message(chat_id=user_id, text="✅ بکاپ مدیا با موفقیت انجام شد.")
+            current_time = datetime.now(TEHRAN_TZ)
+            shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
+            formatted_time = shamsi_time.strftime("%H:%M:%S - %Y/%m/%d")
+            await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد. (زمان: {formatted_time})")
             media_url = MEDIA_BASE_URL + media_file
-            await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}")
+            await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}\nزمان بکاپ: {formatted_time}")
         else:
             await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ پیدا نشد!")
 
