@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import telegram
 from telegram.ext import ContextTypes
-from config import SUPER_ADMINS, ADMINS_FILE, PERMISSIONS
+from config import SUPER_ADMINS
 import json
 import os
 import logging
@@ -19,30 +20,6 @@ RECEIPTS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "receipts.json")
 WALLETS_FILE = os.path.join(os.getenv("PROJECT_DIR", "/app"), "wallets.json")
 
 class ReceiptManager:
-    @staticmethod
-    def load_admins():
-        """بارگذاری داده‌های ادمین‌ها از فایل admins.json"""
-        try:
-            if not os.path.exists(ADMINS_FILE):
-                logger.warning(f"Admins file {ADMINS_FILE} not found, creating an empty one")
-                os.makedirs(os.path.dirname(ADMINS_FILE), exist_ok=True)
-                with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
-                    json.dump({}, f, ensure_ascii=False, indent=4)
-                return {}
-            
-            with open(ADMINS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                logger.debug(f"Loaded admins from {ADMINS_FILE}: {data}")
-                return data
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in {ADMINS_FILE}: {str(e)}. Returning empty dict.")
-            with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
-                json.dump({}, f, ensure_ascii=False, indent=4)
-            return {}
-        except Exception as e:
-            logger.error(f"Error loading admins from {ADMINS_FILE}: {str(e)}")
-            return {}
-
     @staticmethod
     def load_receipts():
         """بارگذاری داده‌های رسیدها از فایل receipts.json"""
@@ -122,9 +99,9 @@ class ReceiptManager:
     @staticmethod
     def get_server_time():
         """به دست آوردن زمان فعلی سرور (به وقت محلی، فرضاً تهران UTC+3:30)"""
-        current_time = datetime.now()
+        current_time = datetime.now()  # زمان محلی سرور
         shamsi_time = jdatetime.fromgregorian(datetime=current_time)
-        return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")
+        return shamsi_time.strftime("%H:%M:%S - %d-%m-%Y")  # فرمت HH:MM:SS - DD-MM-YYYY
 
     @staticmethod
     async def add_receipt(context, user_id, amount, receipt_file_id, is_photo=False):
@@ -139,6 +116,7 @@ class ReceiptManager:
                 logger.error(f"Invalid receipt_file_id for user {user_id}: {receipt_file_id}")
                 raise ValueError("شناسه فایل رسید نامعتبر است")
 
+            logger.debug(f"Loading receipts for user {user_id}")
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts:
                 receipts[user_id] = []
@@ -147,24 +125,23 @@ class ReceiptManager:
                 "receipt_file_id": receipt_file_id,
                 "file_type": "photo" if is_photo else "document",
                 "status": "pending",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()  # زمان محلی سرور
             }
             receipts[user_id].append(receipt_data)
+            logger.debug(f"Receipt data to save: {receipt_data}")
             ReceiptManager.save_receipts(receipts)
             logger.info(f"Receipt successfully added for user {user_id}: {receipt_data}")
 
             server_time = ReceiptManager.get_server_time()
+            # ارسال پیام تأیید به کاربر
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"✅ رسید شما برای مبلغ {amount:,} تومان با موفقیت ارسال شد و در انتظار تأیید است.\nزمان سرور: {server_time}",
                 parse_mode="Markdown"
             )
 
-            admins = ReceiptManager.load_admins()
-            authorized_admins = [admin for admin in SUPER_ADMINS] + [
-                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
-            ]
-            for admin in authorized_admins:
+            # ارسال اعلان به سوپرادمین‌ها
+            for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -210,11 +187,8 @@ class ReceiptManager:
     async def show_pending_receipts(chat_id, context, message_id=None):
         """نمایش لیست رسیدهای در حال انتظار"""
         try:
-            user_id = str(chat_id)  # استفاده از chat_id به عنوان user_id
-            admins = ReceiptManager.load_admins()
-            user_permissions = admins.get(user_id, []) if user_id not in SUPER_ADMINS else PERMISSIONS
-
-            if 'manage_wallet' not in user_permissions and user_id not in SUPER_ADMINS:
+            user_id = context.user_data.get('user_id', chat_id)
+            if user_id not in SUPER_ADMINS:
                 logger.warning(f"User {user_id} attempted to access pending receipts without permission")
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -232,6 +206,7 @@ class ReceiptManager:
                 for idx, receipt in enumerate(user_receipts):
                     if receipt.get("status") == "pending":
                         pending_receipts.append((uid, idx, receipt))
+            logger.debug(f"Pending receipts: {pending_receipts}")
 
             server_time = ReceiptManager.get_server_time()
             if not pending_receipts:
@@ -251,36 +226,26 @@ class ReceiptManager:
                     else:
                         display_time = "نامشخص"
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
+                    # اضافه کردن دکمه‌ها برای هر رسید
                     keyboard_row = [
-                        InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}_{receipt['amount']}"),
+                        InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}"),
                         InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
-                        InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}_{chat_id}")
+                        InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}")
                     ]
                     keyboard.append(keyboard_row)
+                # اضافه کردن دکمه بازگشت به کنترل پنل در انتها
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
                 text += f"\nزمان سرور: {server_time}"
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                try:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=text,
-                        reply_markup=reply_markup,
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        logger.warning(f"Message not modified for chat_id {chat_id}, message_id {message_id}. Sending new message.")
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=text,
-                            reply_markup=reply_markup,
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        raise e
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -328,11 +293,7 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
 
-            admins = ReceiptManager.load_admins()
-            authorized_admins = [admin for admin in SUPER_ADMINS] + [
-                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
-            ]
-            for admin in authorized_admins:
+            for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -376,11 +337,7 @@ class ReceiptManager:
                 parse_mode="Markdown"
             )
 
-            admins = ReceiptManager.load_admins()
-            authorized_admins = [admin for admin in SUPER_ADMINS] + [
-                int(uid) for uid, perms in admins.items() if "manage_wallet" in perms
-            ]
-            for admin in authorized_admins:
+            for admin in SUPER_ADMINS:
                 try:
                     await context.bot.send_message(
                         chat_id=admin,
@@ -400,8 +357,8 @@ class ReceiptManager:
             return f"❌ خطا در رد رسید: {str(e)}"
 
     @staticmethod
-    async def view_receipt(context, user_id, receipt_index, chat_id):
-        """نمایش فایل رسید برای سوپرادمین یا ادمین با مجوز"""
+    async def view_receipt(context, user_id, receipt_index):
+        """نمایش فایل رسید برای سوپرادمین"""
         try:
             user_id = str(user_id)
             receipt_index = int(receipt_index)
@@ -409,56 +366,31 @@ class ReceiptManager:
                 logger.error(f"Invalid receipt index for user {user_id}: {receipt_index}")
                 raise ValueError("شاخص رسید نامعتبر است")
 
-            # بررسی مجوز کاربر
-            admins = ReceiptManager.load_admins()
-            user_permissions = admins.get(str(chat_id), []) if str(chat_id) not in SUPER_ADMINS else PERMISSIONS
-            if 'manage_wallet' not in user_permissions and str(chat_id) not in SUPER_ADMINS:
-                logger.warning(f"User {chat_id} attempted to view receipt without permission")
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="❌ شما مجوز مشاهده رسید را ندارید!",
-                    parse_mode="Markdown"
-                )
-                return
-
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="❌ رسید یافت نشد!",
-                    parse_mode="Markdown"
-                )
-                return
+                return "❌ رسید یافت نشد!"
 
             receipt = receipts[user_id][receipt_index]
             receipt_file_id = receipt.get("receipt_file_id")
             amount = receipt.get("amount")
             status = receipt.get("status")
             timestamp = receipt.get("timestamp", "نامشخص")
-            file_type = receipt.get("file_type", "document")
+            file_type = receipt.get("file_type", "document")  # پیش‌فرض document
+
+            if not receipt_file_id or not isinstance(receipt_file_id, str):
+                logger.error(f"Invalid receipt_file_id for user {user_id}: {receipt_file_id}")
+                return "❌ شناسه فایل رسید نامعتبر است!"
 
             server_time = ReceiptManager.get_server_time()
-            if not receipt_file_id:
-                logger.error(f"No receipt file ID for user {user_id} at index {receipt_index}")
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="❌ فایل رسید یافت نشد!",
-                    parse_mode="Markdown"
-                )
-                return
+            chat_id = context._chat_id or context.user_data.get('user_id')
+            if not chat_id:
+                logger.error(f"No valid chat_id found for user {user_id}")
+                return "❌ خطا: شناسه چت معتبر نیست!"
 
-            if timestamp != "نامشخص":
-                local_datetime = datetime.fromisoformat(timestamp)
-                shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
-                formatted_time = shamsi_datetime.strftime("%H:%M:%S")
-                formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
-                display_time = f"{formatted_time} - {formatted_date}"
-            else:
-                display_time = "نامشخص"
+            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {server_time}"
 
-            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {display_time}\nزمان سرور: {server_time}"
-
+            logger.debug(f"Attempting to send file with ID: {receipt_file_id}, type: {file_type}")
             if file_type == "photo":
                 await context.bot.send_photo(
                     chat_id=chat_id,
@@ -474,23 +406,14 @@ class ReceiptManager:
                     parse_mode="Markdown"
                 )
 
-            logger.info(f"Receipt viewed for user {user_id}: index {receipt_index} by admin {chat_id}")
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ رسید کاربر {user_id} نمایش داده شد.",
-                parse_mode="Markdown"
-            )
+            logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
+            return f"✅ رسید کاربر {user_id} نمایش داده شد."
+        except telegram.error.BadRequest as e:
+            logger.error(f"BadRequest error sending file {receipt_file_id}: {str(e)}")
+            return f"❌ خطا در ارسال فایل رسید: فایل در سرور تلگرام در دسترس نیست."
         except ValueError as e:
             logger.error(f"ValueError viewing receipt for user {user_id}: {str(e)}")
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ خطا در نمایش رسید: {str(e)}",
-                parse_mode="Markdown"
-            )
+            return f"❌ خطا در نمایش رسید: {str(e)}"
         except Exception as e:
             logger.error(f"Error viewing receipt for user {user_id}: {str(e)}")
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ خطا در نمایش رسید: {str(e)}",
-                parse_mode="Markdown"
-            )
+            return f"❌ خطا در نمایش رسید: {str(e)}"
