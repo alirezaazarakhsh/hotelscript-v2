@@ -24,10 +24,15 @@ class BackupManager:
         # ایجاد دایرکتوری بکاپ دیتابیس
         os.makedirs(DB_BACKUP_DIR, exist_ok=True)
 
-        # اجرای اسکریپت بکاپ دیتابیس
+        # تولید زمان شمسی برای نام فایل
+        current_time = datetime.now(TEHRAN_TZ)
+        shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
+        timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+
+        # اجرای اسکریپت بکاپ دیتابیس با ارسال زمان شمسی
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        logger.debug(f"Running backup.sh for DB: {backup_script}")
-        result = subprocess.run(f"{backup_script} db", shell=True, capture_output=True, text=True)
+        logger.debug(f"Running backup.sh for DB with timestamp {timestamp}: {backup_script}")
+        result = subprocess.run(f"{backup_script} db {timestamp}", shell=True, capture_output=True, text=True)
         logger.debug(f"backup.sh stdout: {result.stdout}")
         logger.debug(f"backup.sh stderr: {result.stderr}")
 
@@ -36,14 +41,12 @@ class BackupManager:
             await MenuManager.show_main_menu(user_id, context)
             return
 
-        # پیدا کردن آخرین فایل بکاپ دیتابیس
+        # پیدا کردن آخرین فایل بکاپ دیتابیس با نام شمسی
         db_file = FileManager.latest_file(DB_BACKUP_DIR, extension=".sql")
         file_path = os.path.join(DB_BACKUP_DIR, db_file)
 
         if os.path.exists(file_path):
-            current_time = datetime.now(TEHRAN_TZ)
-            shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
-            formatted_time = shamsi_time.strftime("%H:%M:%S - %Y/%m/%d")
+            formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
             await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ دیتابیس با موفقیت انجام شد. (زمان: {formatted_time})")
             await context.bot.send_document(
                 chat_id=user_id,
@@ -67,10 +70,15 @@ class BackupManager:
         # ایجاد دایرکتوری بکاپ مدیا
         os.makedirs(MEDIA_BACKUP_DIR, exist_ok=True)
 
-        # اجرای اسکریپت بکاپ مدیا
+        # تولید زمان شمسی برای نام فایل
+        current_time = datetime.now(TEHRAN_TZ)
+        shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
+        timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+
+        # اجرای اسکریپت بکاپ مدیا با ارسال زمان شمسی
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        logger.debug(f"Running backup.sh for media: {backup_script}")
-        result = subprocess.run(f"{backup_script} media", shell=True, capture_output=True, text=True)
+        logger.debug(f"Running backup.sh for media with timestamp {timestamp}: {backup_script}")
+        result = subprocess.run(f"{backup.sh} media {timestamp}", shell=True, capture_output=True, text=True)
         logger.debug(f"backup.sh stdout: {result.stdout}")
         logger.debug(f"backup.sh stderr: {result.stderr}")
 
@@ -79,14 +87,12 @@ class BackupManager:
             await MenuManager.show_main_menu(user_id, context)
             return
 
-        # پیدا کردن آخرین فایل بکاپ مدیا
+        # پیدا کردن آخرین فایل بکاپ مدیا با نام شمسی
         media_file = FileManager.latest_file(MEDIA_BACKUP_DIR, extension=".tar.gz")
         file_path = os.path.join(MEDIA_BACKUP_DIR, media_file)
 
         if os.path.exists(file_path):
-            current_time = datetime.now(TEHRAN_TZ)
-            shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
-            formatted_time = shamsi_time.strftime("%H:%M:%S - %Y/%m/%d")
+            formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
             await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد. (زمان: {formatted_time})")
             media_url = MEDIA_BASE_URL + media_file
             await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}\nزمان بکاپ: {formatted_time}")

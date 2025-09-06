@@ -3,16 +3,16 @@
 DB_BACKUP_DIR="/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
 MEDIA_BACKUP_DIR="/var/backups/sf24_9xkLp7"
 
-# ===================== تنظیم تاریخ و نام فایل =====================
-DATE=$(date +%Y-%m-%d_%H-%M-%S)
+# ===================== تنظیم نام فایل با زمان شمسی از آرگومان =====================
+TIMESTAMP="$2"  # زمان شمسی از Python دریافت می‌شود (مثلاً 1404-06-15-19-48)
 DB_NAME="${DB_NAME:-safarname24}"
 DB_USER="${DB_USER:-postgres}"
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
 
-# نام فایل‌ها
-DB_FILE="$DB_BACKUP_DIR/db_$DATE.sql"
-MEDIA_FILE="$MEDIA_BACKUP_DIR/media_$DATE.tar.gz"
+# نام فایل‌ها با زمان شمسی
+DB_FILE="$DB_BACKUP_DIR/db_$TIMESTAMP.sql"
+MEDIA_FILE="$MEDIA_BACKUP_DIR/media_$TIMESTAMP.tar.gz"
 
 # ===================== ایجاد پوشه‌ها در صورت عدم وجود =====================
 mkdir -p "$DB_BACKUP_DIR"
