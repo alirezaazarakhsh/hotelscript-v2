@@ -174,10 +174,10 @@ class ReceiptManager:
                         pending_receipts.append((uid, idx, receipt))
 
             if not pending_receipts:
-                text = "📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد."
+                text = f"📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد. ({datetime.now(TEHRAN_TZ).isoformat()})"
                 keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
             else:
-                text = "📜 **لیست رسیدهای در حال انتظار**:\n\n"
+                text = f"📜 **لیست رسیدهای در حال انتظار**:\n\n"
                 keyboard = []
                 for idx, (uid, receipt_idx, receipt) in enumerate(pending_receipts, 1):
                     timestamp = receipt.get("timestamp", "نامشخص")
@@ -209,13 +209,20 @@ class ReceiptManager:
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except BadRequest as e:
+                    if "Message is not modified" in str(e):
+                        logger.debug(f"Message not modified, skipping edit: {text}")
+                    else:
+                        logger.error(f"Error editing message: {str(e)}")
+                        raise
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -353,25 +360,19 @@ class ReceiptManager:
                         caption=caption,
                         parse_mode="Markdown"
                     )
-                else:
+                elif file_type == "document":
                     await context.bot.send_document(
                         chat_id=target_chat_id,
                         document=receipt_file_id,
                         caption=caption,
                         parse_mode="Markdown"
                     )
+                else:
+                    logger.error(f"Unsupported file_type: {file_type}")
+                    return "❌ نوع فایل پشتیبانی نمی‌شود!"
             except BadRequest as e:
                 logger.error(f"BadRequest error sending file {receipt_file_id}: {str(e)}")
-                if file_type == "photo":
-                    logger.debug(f"Retrying to send file {receipt_file_id} as document")
-                    await context.bot.send_document(
-                        chat_id=target_chat_id,
-                        document=receipt_file_id,
-                        caption=caption,
-                        parse_mode="Markdown"
-                    )
-                else:
-                    raise
+                return f"❌ خطا در نمایش رسید: {str(e)}"
 
             logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
             return f"✅ رسید کاربر {user_id} نمایش داده شد."
