@@ -2,6 +2,7 @@ import os
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+import re
 
 from config import BOT_TOKEN, SUPER_ADMINS
 from access_manager import AccessManager
@@ -302,61 +303,55 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
             else:
                 await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
-        elif data.startswith("confirm_"):
-            if user_id in SUPER_ADMINS:
-                _, u_id, idx = data.split("_")
-                receipts = ReceiptManager.load_receipts()
-                if u_id in receipts and int(idx) < len(receipts[u_id]):
-                    amount = receipts[u_id][int(idx)]['amount']
-                    msg = await ReceiptManager.confirm_receipt(context, int(u_id), amount, int(idx))
-                    await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
-                    await ReceiptManager.show_pending_receipts(chat_id, context)
-                else:
-                    await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ رسید یافت نشد!", parse_mode="Markdown")
-            else:
+        elif data.startswith("confirm_receipt:"):
+            if user_id not in SUPER_ADMINS:
                 await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
-        elif data.startswith("reject_"):
-            if user_id in SUPER_ADMINS:
-                _, u_id, idx = data.split("_")
-                msg = await ReceiptManager.reject_receipt(context, int(u_id), int(idx))
+                return
+            match = re.match(r'^confirm_receipt:(\d+):(\d+):(\d+)$', data)
+            if not match:
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ داده‌های نامعتبر!", parse_mode="Markdown")
+                return
+            u_id, amount, idx = match.groups()
+            receipts = ReceiptManager.load_receipts()
+            if u_id in receipts and int(idx) < len(receipts[u_id]):
+                msg = await ReceiptManager.confirm_receipt(context, u_id, int(amount), int(idx))
                 await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
-                await ReceiptManager.show_pending_receipts(chat_id, context)
+                await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
             else:
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ رسید یافت نشد!", parse_mode="Markdown")
+        elif data.startswith("reject_receipt:"):
+            if user_id not in SUPER_ADMINS:
                 await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
-        elif data.startswith("view_"):
-            if user_id in SUPER_ADMINS:
-                _, u_id, idx = data.split("_")
-                try:
-                    await ReceiptManager.view_receipt(context, int(u_id), int(idx))
-                    await ReceiptManager.show_pending_receipts(chat_id, context, message_id=message_id)
-                except Exception as e:
-                    logger.error(f"Error in view_receipt for user {u_id}, index {idx}: {str(e)}")
-                    await query.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=f"❌ خطا در نمایش رسید: {str(e)}",
-                        parse_mode="Markdown"
-                    )
-            else:
-                await query.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text="❌ شما مجوز دسترسی ندارید!",
-                    parse_mode="Markdown"
-                )
+                return
+            match = re.match(r'^reject_receipt:(\d+):(\d+)$', data)
+            if not match:
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ داده‌های نامعتبر!", parse_mode="Markdown")
+                return
+            u_id, idx = match.groups()
+            msg = await ReceiptManager.reject_receipt(context, u_id, int(idx))
+            await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=msg, parse_mode="Markdown")
+            await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
+        elif data.startswith("view_receipt:"):
+            if user_id not in SUPER_ADMINS:
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+                return
+            match = re.match(r'^view_receipt:(\d+):(\d+)$', data)
+            if not match:
+                await query.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ داده‌های نامعتبر!", parse_mode="Markdown")
+                return
+            u_id, idx = match.groups()
+            msg = await ReceiptManager.view_receipt(context, u_id, int(idx), chat_id=chat_id)
+            await query.message.reply_text(text=msg, parse_mode="Markdown")
+            await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
         elif data.startswith("charge_admin_wallet:"):
             admin_id = data.split(":", 1)[1]
             await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
         elif data.startswith("view_wallet:"):
-            logger.debug(f"Handling view_wallet for user_id: {user_id}, data: {data}")
             if user_id in SUPER_ADMINS:
                 admin_id = data.split(":", 1)[1]
-                logger.debug(f"Viewing wallet for admin_id: {admin_id}")
                 try:
                     wallets = ReceiptManager.load_wallets()
-                    logger.debug(f"Loaded wallets: {wallets}")
                     balance = wallets.get(str(admin_id), 0)
-                    logger.debug(f"Balance for admin_id {admin_id}: {balance}")
                     await query.edit_message_text(
                         chat_id=chat_id,
                         message_id=message_id,
@@ -373,7 +368,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         parse_mode="Markdown"
                     )
             else:
-                logger.warning(f"User {user_id} not in SUPER_ADMINS: {SUPER_ADMINS}")
                 await query.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
@@ -435,14 +429,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profiles = data.get('profiles', {})
 
     try:
-        # حالت انتظار برای دریافت ID ادمین جدید
         if state == 'waiting_for_admin_id':
             try:
                 new_id = int(text)
             except ValueError:
                 await update.message.reply_text("❌ لطفاً یک ID عددی معتبر وارد کنید (فقط اعداد).")
                 return
-            logger.debug(f"Checking new_id: {new_id}, SUPER_ADMINS: {SUPER_ADMINS}")
             if str(new_id) in admins or new_id in SUPER_ADMINS:
                 await update.message.reply_text("❌ این کاربر قبلاً ادمین یا سوپرادمین است!")
                 return
@@ -457,8 +449,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data.clear()
                 return
             await PermissionManager.show_group_selection(update.message.chat_id, context, new_id, groups)
-
-        # حالت انتظار برای دریافت نام گروه جدید
         elif state == 'waiting_for_group_name':
             group_name = text.strip()
             if not group_name:
@@ -473,8 +463,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await PermissionManager.show_permissions_selection(
                 update.message.chat_id, context, group_name, is_group=True, show_desc=True
             )
-
-        # حالت انتظار برای دریافت نام جدید گروه
         elif state == 'waiting_for_new_group_name':
             new_name = text.strip()
             if not new_name:
@@ -493,8 +481,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"✅ نام گروه به {new_name} تغییر یافت.")
             context.user_data.clear()
             await GroupManager.show_manage_groups(update.message.chat_id, context, groups)
-
-        # حالت انتظار برای دریافت مبلغ شارژ
         elif state == 'waiting_for_amount':
             try:
                 amount = int(text)
@@ -506,8 +492,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000,000 تومان و فقط اعداد.")
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-
-        # حالت انتظار برای دریافت رسید پرداخت
         elif state == 'waiting_for_receipt':
             try:
                 logger.debug(f"User {user_id} sent message: photo={bool(update.message.photo)}, document={bool(update.message.document)}, user_data={context.user_data}")
@@ -515,14 +499,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"No message received for user {user_id} in waiting_for_receipt state")
                     await update.message.reply_text("❌ خطا: هیچ پیامی دریافت نشد!")
                     return
-
                 if 'receipt_processed' in context.user_data and context.user_data['receipt_processed']:
                     logger.warning(f"Receipt already processed for user {user_id}, skipping.")
                     return
-
                 receipt_file_id = None
+                is_photo = False
                 if update.message.photo:
                     receipt_file_id = update.message.photo[-1].file_id
+                    is_photo = True
                     logger.debug(f"Photo receipt received: {receipt_file_id}")
                 elif update.message.document and update.message.document.mime_type in ['application/pdf', 'image/jpeg', 'image/png']:
                     receipt_file_id = update.message.document.file_id
@@ -533,7 +517,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "❌ لطفاً رسید را به صورت عکس (JPEG/PNG) یا فایل PDF ارسال کنید."
                     )
                     return
-
                 amount = context.user_data.get('amount')
                 if not amount:
                     logger.error(f"No amount found in user_data: {context.user_data}")
@@ -543,23 +526,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data.clear()
                     await WalletManager.show_wallet_menu(update.message.chat_id, context)
                     return
-
-                logger.debug(f"Calling add_receipt with user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}")
-                await ReceiptManager.add_receipt(context, user_id, amount, receipt_file_id)
+                logger.debug(f"Calling add_receipt with user_id={user_id}, amount={amount}, receipt_file_id={receipt_file_id}, is_photo={is_photo}")
+                await ReceiptManager.add_receipt(context, user_id, amount, receipt_file_id, is_photo)
                 await update.message.reply_text(
                     "✅ رسید ارسال شد و در حال بررسی توسط ادمین است."
                 )
                 context.user_data['receipt_processed'] = True
                 context.user_data.clear()
             except Exception as e:
-                logger.error(f"Error processing receipt for user {user_id}: {str(e)}", exc_info=True)
+                logger.error(f"Error processing receipt for user {user_id}: {str(e)}")
                 await update.message.reply_text(
                     f"❌ خطا در ثبت رسید: {str(e)}. لطفاً دوباره تلاش کنید."
                 )
                 context.user_data.clear()
                 await WalletManager.show_wallet_menu(update.message.chat_id, context)
-
-        # حالت انتظار برای دریافت مبلغ شارژ کیف پول ادمین
         elif state == 'waiting_for_admin_wallet_amount':
             try:
                 amount = int(text)
@@ -578,8 +558,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000,000 تومان و فقط اعداد.")
-
-        # حالت انتظار برای تغییر دستی موجودی کیف پول
         elif state == 'waiting_for_wallet_modification':
             try:
                 amount = int(text)
@@ -607,15 +585,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Error modifying wallet for user {target_admin_id}: {str(e)}")
                 await update.message.reply_text(f"❌ خطا در تغییر موجودی: {str(e)}")
                 context.user_data.clear()
-
-        # حالت انتظار برای ویرایش فیلدهای پروفایل
         elif state in ['waiting_for_name', 'waiting_for_lastname', 'waiting_for_national_id', 'waiting_for_phone', 'waiting_for_landline', 'waiting_for_company_name', 'waiting_for_company_reg']:
             target_id = context.user_data.get('target_id')
             access_data = AccessManager.load_data()
             profiles = access_data.get('profiles', {})
             if target_id not in profiles:
                 profiles[target_id] = {}
-
             if state == 'waiting_for_name':
                 profiles[target_id]['name'] = text if text else profiles[target_id].get('name', '')
             elif state == 'waiting_for_lastname':
@@ -630,7 +605,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 profiles[target_id]['company_name'] = text if text else profiles[target_id].get('company_name', '')
             elif state == 'waiting_for_company_reg':
                 profiles[target_id]['company_reg'] = text if text else profiles[target_id].get('company_reg', '')
-
             access_data['profiles'] = profiles
             AccessManager.save_data(access_data)
             await update.message.reply_text(
@@ -641,9 +615,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await MenuManager.show_profile_edit_menu(update.message, user_id, context)
             else:
                 await AdminManager.show_edit_admin_profile(update.message.chat_id, context, target_id)
-
     except Exception as e:
-        logger.error(f"Error in handle_message for user {user_id}: {str(e)}", exc_info=True)
+        logger.error(f"Error in handle_message for user {user_id}: {str(e)}")
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
@@ -655,12 +628,10 @@ async def show_backup_list(query, user_id, context):
         os.makedirs(DB_BACKUP_DIR)
     if not os.path.exists(MEDIA_BACKUP_DIR):
         os.makedirs(MEDIA_BACKUP_DIR)
-
     files = []
     files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
     files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
     files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
-
     if not files:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -669,7 +640,6 @@ async def show_backup_list(query, user_id, context):
             reply_markup=reply_markup
         )
         return
-
     keyboard = []
     for f in files:
         file_type, filename = f.split(":", 1)
@@ -678,10 +648,8 @@ async def show_backup_list(query, user_id, context):
             InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
             InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
         ])
-
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.edit_message_text(
         "📁 بخش بکاپ‌ها\n"
         "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
@@ -698,18 +666,15 @@ async def delete_backup(query, user_id, context):
     _, file_type, filename = query.data.split(":", 2)
     backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
     file_path = os.path.join(backup_dir, filename)
-    
     if os.path.exists(file_path):
         os.remove(file_path)
         await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} حذف شد.")
     else:
         await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
-
     files = []
     files.extend([f"db:{f}" for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql")])
     files.extend([f"media:{f}" for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz")])
     files = sorted(files, key=lambda x: FileManager.get_file_datetime(x.split(":", 1)[1]), reverse=True)
-
     keyboard = []
     if files:
         for f in files:
@@ -721,7 +686,6 @@ async def delete_backup(query, user_id, context):
             ])
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.edit_message_text(
         "📁 بخش بکاپ‌ها\n"
         "در این بخش می‌توانید لیست 7 بکاپ آخر از دیتابیس و پوشه مدیا را مشاهده کنید.\n\n"
