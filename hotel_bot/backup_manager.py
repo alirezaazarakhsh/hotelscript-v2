@@ -26,8 +26,10 @@ class BackupManager:
 
         # تولید زمان شمسی برای نام فایل
         current_time = datetime.now(TEHRAN_TZ)
+        logger.debug(f"Current time (Gregorian): {current_time}")
         shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
         timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+        logger.debug(f"Generated timestamp (Shamsi before send): {timestamp}")
 
         # اجرای اسکریپت بکاپ دیتابیس با ارسال زمان شمسی
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
@@ -47,6 +49,7 @@ class BackupManager:
 
         if os.path.exists(file_path):
             formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
+            logger.debug(f"Formatted time for display: {formatted_time}")
             await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ دیتابیس با موفقیت انجام شد. (زمان: {formatted_time})")
             await context.bot.send_document(
                 chat_id=user_id,
@@ -72,8 +75,10 @@ class BackupManager:
 
         # تولید زمان شمسی برای نام فایل
         current_time = datetime.now(TEHRAN_TZ)
+        logger.debug(f"Current time (Gregorian): {current_time}")
         shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
         timestamp = shamsi_time.strftime("%Y-%m-%d-%H-%M")
+        logger.debug(f"Generated timestamp (Shamsi before send): {timestamp}")
 
         # اجرای اسکریپت بکاپ مدیا با ارسال زمان شمسی
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
@@ -94,6 +99,7 @@ class BackupManager:
 
         if os.path.exists(file_path):
             formatted_time = timestamp  # استفاده از زمان شمسی تولیدشده
+            logger.debug(f"Formatted time for display: {formatted_time}")
             await context.bot.send_message(chat_id=user_id, text=f"✅ بکاپ مدیا با موفقیت انجام شد. (زمان: {formatted_time})")
             media_url = MEDIA_BASE_URL + media_file
             await context.bot.send_message(chat_id=user_id, text=f"💾 لینک دانلود: {media_url}\nزمان بکاپ: {formatted_time}")
