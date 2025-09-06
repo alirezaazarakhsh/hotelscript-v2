@@ -124,20 +124,6 @@ class ReceiptManager:
                         text=f"📥 رسید جدید از کاربر {user_id} برای مبلغ {amount:,} تومان دریافت شد.",
                         parse_mode="Markdown"
                     )
-                    if is_photo:
-                        await context.bot.send_photo(
-                            chat_id=admin,
-                            photo=receipt_file_id,
-                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان",
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        await context.bot.send_document(
-                            chat_id=admin,
-                            document=receipt_file_id,
-                            caption=f"📎 رسید کاربر {user_id} - مبلغ {amount:,} تومان",
-                            parse_mode="Markdown"
-                        )
                 except Exception as e:
                     logger.error(f"Error notifying admin {admin}: {str(e)}")
 
@@ -174,7 +160,10 @@ class ReceiptManager:
                         pending_receipts.append((uid, idx, receipt))
 
             if not pending_receipts:
-                text = f"📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد. ({datetime.now(TEHRAN_TZ).isoformat()})"
+                current_time = datetime.now(TEHRAN_TZ)
+                shamsi_time = jdatetime.fromgregorian(datetime=current_time, locale='fa_IR')
+                formatted_time = shamsi_time.strftime("%H:%M:%S - %Y/%m/%d")
+                text = f"📜 **لیست رسیدهای در حال انتظار**\n\nهیچ رسید در حال انتظاری وجود ندارد. (زمان: {formatted_time})"
                 keyboard = [[InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]]
             else:
                 text = f"📜 **لیست رسیدهای در حال انتظار**:\n\n"
