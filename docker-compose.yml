@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   web:
     build: .
@@ -5,6 +7,7 @@ services:
     command: bash /app/start.sh
     volumes:
       - /var/hotelscript-v2/media:/app/media
+      - /var/hotelscript-v2/staticfiles:/app/staticfiles
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
@@ -146,6 +149,8 @@ volumes:
   backups:
     driver: local
   db_backups:
+    driver: local
+  staticfiles:
     driver: local
 
 networks:
