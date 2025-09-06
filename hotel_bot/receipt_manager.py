@@ -182,7 +182,7 @@ class ReceiptManager:
     async def show_pending_receipts(chat_id, context, message_id=None):
         """نمایش لیست رسیدهای در حال انتظار"""
         try:
-            user_id = context.user_data.get('user_id', chat_id)
+            user_id = str(chat_id)  # استفاده از chat_id به عنوان user_id
             if user_id not in SUPER_ADMINS:
                 logger.warning(f"User {user_id} attempted to access pending receipts without permission")
                 await context.bot.send_message(
@@ -221,7 +221,7 @@ class ReceiptManager:
                         display_time = "نامشخص"
                     text += f"{idx}. کاربر {uid} - مبلغ {receipt['amount']:,} تومان - زمان: {display_time}\n"
                     keyboard_row = [
-                        InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}"),
+                        InlineKeyboardButton("تأیید", callback_data=f"confirm_{uid}_{receipt_idx}_{receipt['amount']}"),
                         InlineKeyboardButton("رد", callback_data=f"reject_{uid}_{receipt_idx}"),
                         InlineKeyboardButton("مشاهده رسید", callback_data=f"view_{uid}_{receipt_idx}")
                     ]
@@ -361,7 +361,7 @@ class ReceiptManager:
             return f"❌ خطا در رد رسید: {str(e)}"
 
     @staticmethod
-    async def view_receipt(context, user_id, receipt_index):
+    async def view_receipt(context, user_id, receipt_index, chat_id):
         """نمایش فایل رسید برای سوپرادمین"""
         try:
             user_id = str(user_id)
@@ -373,7 +373,12 @@ class ReceiptManager:
             receipts = ReceiptManager.load_receipts()
             if user_id not in receipts or receipt_index >= len(receipts[user_id]):
                 logger.error(f"Receipt not found for user {user_id} at index {receipt_index}")
-                return "❌ رسید یافت نشد!"
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ رسید یافت نشد!",
+                    parse_mode="Markdown"
+                )
+                return
 
             receipt = receipts[user_id][receipt_index]
             receipt_file_id = receipt.get("receipt_file_id")
@@ -385,11 +390,23 @@ class ReceiptManager:
             server_time = ReceiptManager.get_server_time()
             if not receipt_file_id:
                 logger.error(f"No receipt file ID for user {user_id} at index {receipt_index}")
-                return "❌ فایل رسید یافت نشد!"
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ فایل رسید یافت نشد!",
+                    parse_mode="Markdown"
+                )
+                return
 
-            # استفاده از chat_id سوپرادمین
-            chat_id = context._chat_id or context.user_data.get('user_id', user_id)
-            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {timestamp}\nزمان سرور: {server_time}"
+            if timestamp != "نامشخص":
+                local_datetime = datetime.fromisoformat(timestamp)
+                shamsi_datetime = jdatetime.fromgregorian(datetime=local_datetime)
+                formatted_time = shamsi_datetime.strftime("%H:%M:%S")
+                formatted_date = shamsi_datetime.strftime("%d-%m-%Y")
+                display_time = f"{formatted_time} - {formatted_date}"
+            else:
+                display_time = "نامشخص"
+
+            caption = f"📎 رسید کاربر {user_id}\nمبلغ: {amount:,} تومان\nوضعیت: {status}\nزمان: {display_time}\nزمان سرور: {server_time}"
 
             if file_type == "photo":
                 await context.bot.send_photo(
@@ -407,10 +424,22 @@ class ReceiptManager:
                 )
 
             logger.info(f"Receipt viewed for user {user_id}: index {receipt_index}")
-            return f"✅ رسید کاربر {user_id} نمایش داده شد."
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ رسید کاربر {user_id} نمایش داده شد.",
+                parse_mode="Markdown"
+            )
         except ValueError as e:
             logger.error(f"ValueError viewing receipt for user {user_id}: {str(e)}")
-            return f"❌ خطا در نمایش رسید: {str(e)}"
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش رسید: {str(e)}",
+                parse_mode="Markdown"
+            )
         except Exception as e:
             logger.error(f"Error viewing receipt for user {user_id}: {str(e)}")
-            return f"❌ خطا در نمایش رسید: {str(e)}"
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش رسید: {str(e)}",
+                parse_mode="Markdown"
+            )
