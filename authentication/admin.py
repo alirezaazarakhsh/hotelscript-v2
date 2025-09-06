@@ -223,22 +223,24 @@ class JuridicalProfileDocumentInline(admin.TabularInline):
     verbose_name = 'مدرک پروفایل حقوقی'
     verbose_name_plural = 'مدارک پروفایل حقوقی'
 
+
 class JuridicalCardNumberInline(admin.TabularInline):
     model = JuridicalCardNumber
-    extra = 1  # نمایش یک فرم خالی برای افزودن شماره کارت جدید
-    max_num = 2  # محدودیت حداکثر ۲ شماره کارت
-    fields = ('card_number', 'iban' , 'account_holder_name')  # فیلدهای قابل ویرایش در اینلاین
+    extra = 1
+    max_num = 2
+    fields = ('card_number', 'iban', 'account_holder_name')
     verbose_name = "شماره کارت حقوقی"
     verbose_name_plural = "شماره‌های کارت حقوقی"
+
 
 @admin.register(JuridicalProfile)
 class JuridicalProfileAdmin(admin.ModelAdmin):
     form = JuridicalProfileForm
     list_display = (
         'id',
-        'base_user__phone_number',
-        'natural_profile__first_name',
-        'natural_profile__last_name',
+        'get_base_user_phone_number',
+        'get_natural_profile_first_name',
+        'get_natural_profile_last_name',
         'organization_name',
         'national_id',
         'registeration_number',
@@ -248,7 +250,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'status',
     )
     search_fields = (
-        'base_user__phone_number',
+        'natural_profile__base_user__phone_number',
         'natural_profile__first_name',
         'natural_profile__last_name',
         'organization_name',
@@ -259,22 +261,30 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ['natural_profile']
     ordering = ('-id',)
-    inlines = [JuridicalProfileDocumentInline, JuridicalCardNumberInline]  # افزودن اینلاین برای شماره‌های کارت
-
-    def base_user__phone_number(self, obj):
-        return obj.natural_profile.base_user.phone_number
-    base_user__phone_number.short_description = 'موبایل'
-
-    def natural_profile__first_name(self, obj):
-        return obj.natural_profile.first_name
-    natural_profile__first_name.short_description = 'نام'
-
-    def natural_profile__last_name(self, obj):
-        return obj.natural_profile.last_name
-    natural_profile__last_name.short_description = 'نام خانوادگی'
+    inlines = [JuridicalProfileDocumentInline, JuridicalCardNumberInline]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('natural_profile__base_user')
+        # فقط یک سطح select_related انجام می‌دهیم
+        return super().get_queryset(request).select_related('natural_profile', 'natural_profile__base_user')
+
+    def get_base_user_phone_number(self, obj):
+        if obj.pk and obj.natural_profile and obj.natural_profile.base_user:
+            return obj.natural_profile.base_user.phone_number
+        return ''
+    get_base_user_phone_number.short_description = 'موبایل'
+
+    def get_natural_profile_first_name(self, obj):
+        if obj.pk and obj.natural_profile:
+            return obj.natural_profile.first_name
+        return ''
+    get_natural_profile_first_name.short_description = 'نام'
+
+    def get_natural_profile_last_name(self, obj):
+        if obj.pk and obj.natural_profile:
+            return obj.natural_profile.last_name
+        return ''
+    get_natural_profile_last_name.short_description = 'نام خانوادگی'
+
     
     
     
