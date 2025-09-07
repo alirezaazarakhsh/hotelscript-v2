@@ -302,3 +302,40 @@ class UserLevelAdmin(admin.ModelAdmin):
             )
         return "-"
     icon_preview.short_description = "آیکون انتخاب‌شده"
+
+
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'latitude', 'longitude')
+    search_fields = ('latitude', 'longitude')
+    
+    
+    
+@admin.register(LegalProfileSubmissionRule)
+class LegalProfileSubmissionRuleAdmin(admin.ModelAdmin):
+    list_display = ('id', 'short_description')
+    readonly_fields = ('display_notice',)
+
+    def short_description(self, obj):
+        # نمایش خلاصه‌ای از توضیحات
+        return obj.description[:50] + "..." if len(obj.description) > 50 else obj.description
+    short_description.short_description = "توضیحات"
+
+    def display_notice(self, obj=None):
+        # نمایش هشدار در بالای فرم ادمین
+        if LegalProfileSubmissionRule.objects.exists():
+            return "⚠️ تنها یک نمونه از قوانین ارسال مدارک پروفایل حقوقی می‌تواند وجود داشته باشد."
+        return "می‌توانید یک نمونه بسازید."
+    display_notice.short_description = "هشدار"
+
+    def has_add_permission(self, request):
+        # اجازه اضافه کردن فقط اگر نمونه‌ای وجود نداشته باشد
+        return not LegalProfileSubmissionRule.objects.exists()
+
+    def save_model(self, request, obj, form, change):
+        # اطمینان از تک بودن نمونه
+        if not change and LegalProfileSubmissionRule.objects.exists():
+            self.message_user(request, "فقط یک نمونه از قوانین ارسال مدارک پروفایل حقوقی می‌تواند وجود داشته باشد.", level="error")
+            return
+        super().save_model(request, obj, form, change)
