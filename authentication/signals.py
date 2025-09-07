@@ -4,7 +4,7 @@ from django.db import transaction
 from .models import BaseUser, NaturalProfile
 from config.models import UserLevel
 from bashgah_moshtarian.models import CustomerClubPoint
-from bashgah_moshtarian.sms.sms import send_registration_gift_sms
+from bashgah_moshtarian.sms.sms import send_registration_gift_sms  # ایمپورت تابع پیامک
 import logging
 import threading
 import time
@@ -18,32 +18,17 @@ def create_user_related_records(sender, instance, created, **kwargs):
 
     logger.info(f"Running post_save signal for user {instance.phone_number}, created={created}")
 
-    # اگر سوپر یوزر است، هیچ پروفایل یا رکورد مرتبط نساز
-    if instance.is_superuser:
-        logger.info(f"User {instance.phone_number} is superuser, skipping profile creation and points setup.")
-        return
-
-    # ۱. ساخت سطح میهمان فقط برای کاربران عادی
-    # اگر لازم است می‌توانید یک آیکون پیش‌فرض برای این سطح اضافه کنید
-    try:
-        guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
-    except Exception as e:
-        logger.error(f"Cannot create guest UserLevel for user {instance.phone_number}: {e}")
-        guest_level = None
+    # ۱. ساخت سطح میهمان
+    guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
 
     # ۲. ساخت پروفایل حقیقی
-    profile_defaults = {
-        'first_name': 'میهمان',
-        'last_name': 'عزیز',
-        'level': guest_level
-    } if guest_level else {
-        'first_name': 'میهمان',
-        'last_name': 'عزیز',
-    }
-
     profile, created_profile = NaturalProfile.objects.get_or_create(
         base_user=instance,
-        defaults=profile_defaults
+        defaults={
+            'first_name': 'میهمان',
+            'last_name': 'عزیز',
+            'level': guest_level
+        }
     )
     if created_profile:
         logger.info(f"Created new profile for user {instance.phone_number}")

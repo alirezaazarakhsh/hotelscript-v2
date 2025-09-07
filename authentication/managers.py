@@ -10,6 +10,10 @@ class UserManager(BaseUserManager):
         if not phone_number:
             raise ValueError('شماره موبایل الزامی است.')
 
+        # ایمپورت داخلی برای جلوگیری از circular import
+        from authentication.models import NaturalProfile
+        from config.models import UserLevel
+
         # ابتدا بررسی می‌کنیم کاربر قبلا وجود دارد یا نه
         user, created = self.model.objects.get_or_create(
             phone_number=phone_number,
@@ -21,20 +25,16 @@ class UserManager(BaseUserManager):
             user.set_unusable_password()
             user.save(using=self._db)
 
-            # اگر سوپر یوزر نیست، پروفایل بساز
-            if not user.is_superuser:
-                from config.models import UserLevel
-                from authentication.models import NaturalProfile
-
-                guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
-                NaturalProfile.objects.get_or_create(
-                    base_user=user,
-                    defaults={
-                        'first_name': 'میهمان',
-                        'last_name': 'عزیز',
-                        'level': guest_level
-                    }
-                )
+            # ست کردن پروفایل حقیقی و سطح میهمان فقط برای کاربر جدید
+            guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
+            NaturalProfile.objects.get_or_create(
+                base_user=user,
+                defaults={
+                    'first_name': 'میهمان',
+                    'last_name': 'عزیز',
+                    'level': guest_level
+                }
+            )
 
         return user
 
