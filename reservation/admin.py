@@ -603,6 +603,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
+
 # ---------------- Inline برای مسافران هر اتاق ----------------
 class ReservationRoomPassengerInline(admin.TabularInline):
     model = ReservationRoomPassenger
@@ -621,11 +622,6 @@ class ReservationRoomPassengerInline(admin.TabularInline):
         qs = super().get_queryset(request)
         return qs.select_related('reservation_room')
 
-    def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        if obj and not obj.is_primary:
-            fields = [f for f in fields if f != 'mobile_number']
-        return fields
 
 # ---------------- Inline برای اتاق‌های رزرو شده ----------------
 class ReservationRoomInline(admin.TabularInline):
@@ -644,6 +640,7 @@ class ReservationRoomInline(admin.TabularInline):
     verbose_name = _('اتاق رزرو شده')
     verbose_name_plural = _('اتاق‌های رزرو شده')
     show_change_link = True
+    inlines = [ReservationRoomPassengerInline]
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -657,9 +654,6 @@ class ReservationRoomInline(admin.TabularInline):
         return obj.room.extra_capacity if obj.room else 0
     extra_capacity_display.short_description = 'ظرفیت نفر اضافه'
 
-    def get_readonly_fields(self, request, obj=None):
-        readonly_fields = super().get_readonly_fields(request, obj)
-        return readonly_fields + ('room_capacity_display', 'extra_capacity_display')
 
 # ---------------- Admin برای رزرو ----------------
 @admin.register(Reservationhotel)
@@ -742,32 +736,32 @@ class ReservationhotelAdmin(admin.ModelAdmin):
         }),
     )
 
-    # --------------- نمایش فیلدهای شمسی ----------------
+    # ---------------- نمایش تاریخ شمسی ----------------
     def created_jalali(self, obj):
-        if obj.created_at:
+        if obj and obj.created_at:
             return jdatetime.datetime.fromgregorian(datetime=obj.created_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
     created_jalali.admin_order_field = 'created_at'
 
     def updated_jalali(self, obj):
-        if obj.updated_at:
+        if obj and obj.updated_at:
             return jdatetime.datetime.fromgregorian(datetime=obj.updated_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
     updated_jalali.admin_order_field = 'updated_at'
 
-    # --------------- فیلدهای محاسبه‌ای ----------------
+    # ---------------- فیلدهای محاسبه‌ای ----------------
     def nights_count_fa(self, obj):
-        return obj.nights_count
+        return obj.nights_count if obj.pk else 0
     nights_count_fa.short_description = 'تعداد شب‌ها'
 
     def total_rooms_fa(self, obj):
-        return obj.total_rooms
+        return obj.total_rooms if obj.pk else 0
     total_rooms_fa.short_description = 'کل اتاق‌ها'
 
     def total_guests_fa(self, obj):
-        return obj.total_guests
+        return obj.total_guests if obj.pk else 0
     total_guests_fa.short_description = 'کل مهمان‌ها'
 
     def half_charge_check_in(self, obj):
@@ -781,6 +775,7 @@ class ReservationhotelAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related('buyer')
+
 
 # ---------------- Admin برای اتاق رزرو شده ----------------
 @admin.register(ReservationRoom)
