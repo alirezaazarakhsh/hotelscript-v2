@@ -278,10 +278,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if price_data and price_data.discount_type != 'none':
             if price_data.discount_type == 'percentage':
                 if not price_data.discount_date or price_data.discount_date <= date:
-                    # اگر تاریخ انقضا وجود نداشته باشه یا به تاریخ فعلی رسیده/عبور کرده باشه، تخفیف برداشته می‌شه
                     price_after_discount = price_data.price
                 else:
-                    # اگر هنوز تایمر مونده، تخفیف اعمال می‌شه
                     discount_amount = int(price_data.price * price_data.discount_value / 100)
                     discount_percentage = price_data.discount_value
                     discount_date = price_data.discount_date.strftime('%Y/%m/%d')
@@ -327,7 +325,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 passengers_list = [int(p) for p in passengers_clean if p.strip()]
                 if not passengers_list:
                     return Response({'detail': 'پارامتر passengers باید حداقل یک عدد صحیح داشته باشد.'}, status=400)
-                if passengers_list == [0]:  # Handle passengers=[0] to return all rooms
+                if passengers_list == [0]:
                     passengers_list = []
                 elif len(passengers_list) > 3:
                     return Response({'detail': 'تعداد اتاق‌ها نمی‌تواند بیشتر از ۳ باشد.'}, status=400)
@@ -360,6 +358,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
             date_prices__end_date__gte=end_date_obj,
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+
+        # اگر هیچ اتاقی نبود، پاسخ مناسب با status 200 برگردان
+        if not rooms_qs.exists():
+            return Response({
+                'detail': 'هیچ اتاقی برای این هتل موجود نیست.',
+                'rooms': [],
+                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
+            }, status=200)
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
@@ -408,7 +414,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
-            # Only apply percentage discounts to total_price_discount
             total_price_discount = sum(
                 day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
                 day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
@@ -452,9 +457,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
             required_capacity = passengers_list[0]
             filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
             if not filtered_rooms:
-                price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
-                return Response({'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.', 'price_calendar': price_calendar}, status=404)
-            
+                return Response({
+                    'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.',
+                    'rooms': [],
+                    'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
+                }, status=200)
+
             for room in filtered_rooms:
                 if required_capacity > room['capacity']:
                     extra_passengers = required_capacity - room['capacity']
@@ -522,8 +530,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
         generate_packs([], passengers_list, {})
 
         if not packs:
-            price_calendar = [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
-            return Response({'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.', 'price_calendar': price_calendar}, status=404)
+            return Response({
+                'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.',
+                'packs': [],
+                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
+            }, status=200)
 
         seen = set()
         unique_packs = []
