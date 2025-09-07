@@ -3,6 +3,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 import jdatetime
+import nested_admin
 from authentication import forms
 from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
@@ -604,47 +605,27 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
 
 
 
-# ---------------- Inline برای مسافران هر اتاق ----------------
-class ReservationRoomPassengerInline(admin.TabularInline):
+
+# ---------------- Passenger Inline ----------------
+class ReservationRoomPassengerInline(nested_admin.NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 1
-    fields = (
-        'is_primary',
-        'first_name',
-        'last_name',
-        'mobile_number',
-        'national_code',
-    )
+    max_num = 8  # حداکثر 8 مسافر
+    fk_name = 'reservation_room'
+    fields = ('is_primary', 'first_name', 'last_name', 'mobile_number', 'national_code')
     verbose_name = _('مسافر')
     verbose_name_plural = _('مسافران')
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('reservation_room')
 
-
-# ---------------- Inline برای اتاق‌های رزرو شده ----------------
-class ReservationRoomInline(admin.TabularInline):
+# ---------------- Room Inline ----------------
+class ReservationRoomInline(nested_admin.NestedTabularInline):
     model = ReservationRoom
     extra = 1
-    fields = (
-        'room',
-        'quantity',
-        'price_per_night',
-        'subtotal',
-        'room_capacity_display',
-        'extra_capacity_display',
-    )
-    autocomplete_fields = ('room',)
+    max_num = 3  # حداکثر 3 اتاق
+    fields = ('room', 'quantity', 'price_per_night', 'subtotal', 'room_capacity_display', 'extra_capacity_display')
     readonly_fields = ('subtotal', 'room_capacity_display', 'extra_capacity_display')
-    verbose_name = _('اتاق رزرو شده')
-    verbose_name_plural = _('اتاق‌های رزرو شده')
-    show_change_link = True
+    autocomplete_fields = ('room',)
     inlines = [ReservationRoomPassengerInline]
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('room')
 
     def room_capacity_display(self, obj):
         return obj.room.room_capacity if obj.room else 0
@@ -655,103 +636,59 @@ class ReservationRoomInline(admin.TabularInline):
     extra_capacity_display.short_description = 'ظرفیت نفر اضافه'
 
 
-# ---------------- Admin برای رزرو ----------------
+# ---------------- Reservation Admin ----------------
 @admin.register(Reservationhotel)
-class ReservationhotelAdmin(admin.ModelAdmin):
+class ReservationhotelAdmin(nested_admin.NestedModelAdmin):
     list_display = (
-        'tracking_code',
-        'buyer',
-        'reserver_first_name',
-        'reserver_last_name',
-        'reserver_phone_number',
-        'check_in_date',
-        'check_out_date',
-        'nights_count_fa',
-        'total_rooms_fa',
-        'total_guests_fa',
-        'final_price',
-        'status',
-        'created_jalali',
+        'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
+        'reserver_phone_number', 'check_in_date', 'check_out_date',
+        'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+        'final_price', 'status', 'created_jalali'
     )
     search_fields = (
-        'tracking_code',
-        'buyer__phone_number',
-        'reserver_first_name',
-        'reserver_last_name',
-        'reserver_phone_number',
-        'reserver_national_code',
+        'tracking_code', 'buyer__phone_number', 'reserver_first_name',
+        'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
-    list_filter = (
-        'status',
-        'check_in_date',
-        'check_out_date',
-    )
+    list_filter = ('status', 'check_in_date', 'check_out_date',)
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
 
     readonly_fields = (
-        'tracking_code',
-        'nights_count_fa',
-        'total_rooms_fa',
-        'total_guests_fa',
-        'created_jalali',
-        'updated_jalali',
-        'final_price',
-        'half_charge_check_in',
-        'half_charge_check_out',
+        'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+        'created_jalali', 'updated_jalali', 'final_price'
     )
 
     fieldsets = (
-        (_('کد پیگیری'), {
-            'fields': ('tracking_code',)
-        }),
-        (_('کاربر و اطلاعات رزرو کننده'), {
+        (_('اطلاعات رزرو کننده'), {
             'fields': (
-                'buyer',
-                'reserver_first_name',
-                'reserver_last_name',
-                'reserver_phone_number',
-                'reserver_national_code',
+                'buyer', 'reserver_first_name', 'reserver_last_name',
+                'reserver_phone_number', 'reserver_national_code', 'additional_notes'
             )
         }),
-        (_('تاریخ و جزئیات اقامت'), {
-            'fields': (
-                'check_in_date',
-                'check_out_date',
-                'nights_count_fa',
-                'total_rooms_fa',
-                'total_guests_fa',
-            )
+        (_('تاریخ رزرو'), {
+            'fields': ('check_in_date', 'check_out_date')
         }),
         (_('قیمت و وضعیت'), {
-            'fields': (
-                'total_price',
-                'discount',
-                'final_price',
-                'half_charge_check_in',
-                'half_charge_check_out',
-                'status',
-                'additional_notes',
-            )
+            'fields': ('total_price', 'discount', 'final_price', 'status')
+        }),
+        (_('اطلاعات سیستم'), {
+            'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+                       'created_jalali', 'updated_jalali')
         }),
     )
 
-    # ---------------- نمایش تاریخ شمسی ----------------
     def created_jalali(self, obj):
-        if obj and obj.created_at:
+        if obj.created_at:
             return jdatetime.datetime.fromgregorian(datetime=obj.created_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
-    created_jalali.admin_order_field = 'created_at'
 
     def updated_jalali(self, obj):
-        if obj and obj.updated_at:
+        if obj.updated_at:
             return jdatetime.datetime.fromgregorian(datetime=obj.updated_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
-    updated_jalali.admin_order_field = 'updated_at'
 
-    # ---------------- فیلدهای محاسبه‌ای ----------------
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
     nights_count_fa.short_description = 'تعداد شب‌ها'
@@ -763,48 +700,3 @@ class ReservationhotelAdmin(admin.ModelAdmin):
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
     total_guests_fa.short_description = 'کل مهمان‌ها'
-
-    def half_charge_check_in(self, obj):
-        return obj.total_price / 2 if obj.total_price else 0
-    half_charge_check_in.short_description = 'نیم شارژ ورود'
-
-    def half_charge_check_out(self, obj):
-        return obj.total_price / 2 if obj.total_price else 0
-    half_charge_check_out.short_description = 'نیم شارژ خروج'
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('buyer')
-
-
-# ---------------- Admin برای اتاق رزرو شده ----------------
-@admin.register(ReservationRoom)
-class ReservationRoomAdmin(admin.ModelAdmin):
-    list_display = (
-        'reservation',
-        'room',
-        'quantity',
-        'price_per_night',
-        'subtotal',
-    )
-    search_fields = (
-        'reservation__tracking_code',
-        'room__title',
-    )
-    list_filter = (
-        'reservation__status',
-    )
-    autocomplete_fields = ('reservation', 'room')
-    readonly_fields = ('subtotal',)
-    fields = (
-        'reservation',
-        'room',
-        'quantity',
-        'price_per_night',
-        'subtotal',
-    )
-    inlines = [ReservationRoomPassengerInline]
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.select_related('reservation', 'room')

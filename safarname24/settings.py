@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     
     'tinymce',
     'channels',
+    'nested_admin',
 ]
 
 MIDDLEWARE = [
