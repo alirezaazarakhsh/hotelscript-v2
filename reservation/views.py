@@ -2515,6 +2515,22 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+import random
+import jdatetime
+import traceback
+from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from django.utils.translation import gettext_lazy as _
+
+from .models import Reservationhotel, ReservationRoom, ReservationRoomPassenger, Room, Hotel
+from .serializers import ReservationSerializer, ReservationCreateInputSerializer, ReservationUpdatePassengersInputSerializer
+
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2534,7 +2550,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             ),
@@ -2543,7 +2560,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             )
@@ -2578,7 +2596,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             # Validate hotel
             hotel = get_object_or_404(Hotel, id=hotel_id)
 
-            # Validate rooms and ensure they belong to the hotel
+            # Validate rooms
             rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
             if rooms.count() != len(room_ids):
                 return Response(
@@ -2586,7 +2604,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Create Reservationhotel instance
+            # Create Reservationhotel
             reservation = Reservationhotel(
                 buyer=request.user,
                 reserver_first_name="Pending",
@@ -2594,42 +2612,41 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reserver_phone_number="00000000000",
                 check_in_date=check_in_date,
                 check_out_date=check_out_date,
-                status='unconfirmed'
+                status='unconfirmed',
+                final_price=0  # جلوگیری از خطای NOT NULL
             )
 
-            # Generate unique tracking code
+            # Generate tracking code
             while True:
                 code = 'safa' + str(random.randint(10000, 99999))
                 if not Reservationhotel.objects.filter(tracking_code=code).exists():
                     reservation.tracking_code = code
                     break
 
-            # Save reservation
             reservation.save()
 
-            # Create ReservationRoom instances
+            # Create ReservationRoom
             for room in rooms:
-                reservation_room = ReservationRoom(
+                ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
                     quantity=1
                 )
-                reservation_room.save()
 
-            # Serialize response
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
             return Response(
-                {"error": str(e)},
+                {"error": str(e), "traceback": traceback.format_exc()},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
-                {"error": _("An unexpected error occurred")},
+                {"error": str(e), "traceback": traceback.format_exc()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
@@ -2641,7 +2658,7 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
 
     @swagger_auto_schema(
         operation_summary="ویرایش اطلاعات مسافران رزرو",
-        operation_description="ویرایش اطلاعات مسافران (مسافر اصلی، سایر مسافران، مسافران ظرفیت اضافه) برای رزرو موجود با استفاده از کد پیگیری. تعداد مسافران باید با ظرفیت اتاق‌ها و ظرفیت اضافه مطابقت داشته باشد.",
+        operation_description="ویرایش اطلاعات مسافران (مسافر اصلی، سایر مسافران، مسافران ظرفیت اضافه) برای رزرو موجود با استفاده از کد پیگیری.",
         tags=["reservation-api"],
         request_body=ReservationUpdatePassengersInputSerializer,
         responses={
@@ -2654,7 +2671,8 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             ),
@@ -2663,7 +2681,8 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             )
@@ -2671,54 +2690,49 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     )
     def put(self, request, *args, **kwargs):
         try:
-            # Get reservation
             reservation = self.get_object()
 
-            # Extract passenger data
             main_passenger = request.data.get('main_passenger', {})
             other_passengers = request.data.get('other_passengers', [])
             extra_capacity_passengers = request.data.get('extra_capacity_passengers', [])
 
-            # Validate main_passenger fields
+            # Validate main_passenger
             if not all(key in main_passenger for key in ['first_name', 'last_name', 'mobile_number']):
                 return Response(
                     {"error": _("Main passenger must have first_name, last_name, and mobile_number")},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Validate passenger counts against room capacity
+            # Validate capacities
             rooms = reservation.reservation_rooms.all()
-            total_capacity = sum(room.room.quantity * room.room.room_capacity for room in rooms)
-            total_extra_capacity = sum(room.room.quantity * room.room.extra_capacity for room in rooms)
-            total_other_passengers = len(other_passengers)
-            total_extra_passengers = len(extra_capacity_passengers)
+            total_capacity = sum(r.room.quantity * r.room.room_capacity for r in rooms)
+            total_extra_capacity = sum(r.room.quantity * r.room.extra_capacity for r in rooms)
 
-            if total_other_passengers > total_capacity - 1:
+            if len(other_passengers) > total_capacity - 1:
                 return Response(
                     {"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            if total_extra_passengers > total_extra_capacity:
+            if len(extra_capacity_passengers) > total_extra_capacity:
                 return Response(
                     {"error": _(f"Too many extra capacity passengers. Maximum allowed: {total_extra_capacity}")},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update reservation with main_passenger details
+            # Update reservation
             reservation.reserver_first_name = main_passenger['first_name']
             reservation.reserver_last_name = main_passenger['last_name']
             reservation.reserver_phone_number = main_passenger['mobile_number']
             reservation.reserver_national_code = main_passenger.get('national_code')
             reservation.save()
 
-            # Clear existing passengers (if any)
+            # Clear passengers
             for room in rooms:
                 room.passengers.all().delete()
 
-            # Add passengers to the first room (simplified distribution)
+            # Add to first room
             first_room = rooms.first()
             if first_room:
-                # Add main passenger
                 ReservationRoomPassenger.objects.create(
                     reservation_room=first_room,
                     first_name=main_passenger['first_name'],
@@ -2727,14 +2741,7 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     national_code=main_passenger.get('national_code'),
                     passenger_type='primary'
                 )
-
-                # Add other passengers
                 for passenger in other_passengers:
-                    if not all(key in passenger for key in ['first_name', 'last_name']):
-                        return Response(
-                            {"error": _("Other passengers must have first_name and last_name")},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
                     ReservationRoomPassenger.objects.create(
                         reservation_room=first_room,
                         first_name=passenger['first_name'],
@@ -2742,14 +2749,7 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                         national_code=passenger.get('national_code'),
                         passenger_type='secondary'
                     )
-
-                # Add extra capacity passengers
                 for passenger in extra_capacity_passengers:
-                    if not all(key in passenger for key in ['first_name', 'last_name']):
-                        return Response(
-                            {"error": _("Extra capacity passengers must have first_name and last_name")},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
                     ReservationRoomPassenger.objects.create(
                         reservation_room=first_room,
                         first_name=passenger['first_name'],
@@ -2758,17 +2758,16 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                         passenger_type='extra'
                     )
 
-            # Serialize response
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
             return Response(
-                {"error": str(e)},
+                {"error": str(e), "traceback": traceback.format_exc()},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
-                {"error": _("An unexpected error occurred")},
+                {"error": str(e), "traceback": traceback.format_exc()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
