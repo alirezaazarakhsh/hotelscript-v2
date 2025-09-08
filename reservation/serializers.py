@@ -730,6 +730,11 @@ class ReservationCreateInputSerializer(serializers.Serializer):
         required=True
     )
 
+    def validate_date(self, value):
+        if 'start' not in value or 'end' not in value:
+            raise serializers.ValidationError(_("Date must contain 'start' and 'end' fields"))
+        return value
+
 class ReservationUpdatePassengersInputSerializer(serializers.Serializer):
     main_passenger = serializers.DictField(
         child=serializers.CharField(allow_null=True),
@@ -801,7 +806,6 @@ class ReservationSerializer(serializers.ModelSerializer):
         )
 
     def get_main_image(self, obj):
-        # Prepend base URL to main_image
         main_image = obj.reservation_rooms.first().room.hotel.main_image
         if main_image:
             return f"https://safarnameh24.com{main_image}"
@@ -809,20 +813,20 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     def get_date(self, obj):
         return {
-            'property1': obj.check_in_date.strftime('%Y-%m-%d'),
-            'property2': obj.check_out_date.strftime('%Y-%m-%d')
+            'start': obj.check_in_date.strftime('%Y-%m-%d'),
+            'end': obj.check_out_date.strftime('%Y-%m-%d')
         }
 
     def get_time(self, obj):
         return {
-            'property1': '14:00',
-            'property2': '12:00'
+            'start': '14:00',
+            'end': '12:00'
         }
 
     def get_half_charge_price(self, obj):
         return {
-            'property1': str(obj.half_day_in_charge),
-            'property2': str(obj.half_day_out_charge)
+            'start': str(obj.half_day_in_charge),
+            'end': str(obj.half_day_out_charge)
         }
 
     def get_reserver(self, obj):
@@ -836,8 +840,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_half_charge(self, obj):
         hotel = obj.reservation_rooms.first().room.hotel
         return {
-            'property1': hotel.has_check_in_half_day_charge,
-            'property2': hotel.has_check_out_half_day_charge
+            'start': hotel.has_check_in_half_day_charge,
+            'end': hotel.has_check_out_half_day_charge
         }
 
     def get_invoice(self, obj):

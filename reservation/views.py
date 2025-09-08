@@ -2554,11 +2554,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             hotel_id = request.data.get('hotel_id')
             room_ids = request.data.get('room_id', [])
             date_data = request.data.get('date', {})
-            enter_date = date_data.get('property1')
-            exit_date = date_data.get('property2')
+            start_date = date_data.get('start')
+            end_date = date_data.get('end')
 
             # Validate required fields
-            if not (hotel_id and room_ids and enter_date and exit_date):
+            if not (hotel_id and room_ids and start_date and end_date):
                 return Response(
                     {"error": _("Missing required fields")},
                     status=status.HTTP_400_BAD_REQUEST
@@ -2566,8 +2566,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             # Convert string dates to jdatetime.date
             try:
-                check_in_date = jdatetime.datetime.strptime(enter_date, '%Y-%m-%d').date()
-                check_out_date = jdatetime.datetime.strptime(exit_date, '%Y-%m-%d').date()
+                check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+                check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
             except ValueError:
                 return Response(
                     {"error": _("Invalid date format. Use YYYY-MM-DD")},
