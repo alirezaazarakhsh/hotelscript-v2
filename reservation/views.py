@@ -15,6 +15,7 @@ from reservation.models import Hotel
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
+from django.utils.translation import gettext_lazy as _
 from authentication import serializers
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from .utils import Round
