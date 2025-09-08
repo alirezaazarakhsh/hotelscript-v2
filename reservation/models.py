@@ -68,7 +68,7 @@ class Province(models.Model):
 
     class Meta:
         verbose_name = 'استان'
-        verbose_name_plural = 'استان‌ها'
+        verbose_name_plural = '6- اضافه کردن استان ها'
         
     def __str__(self):
         return self.name
@@ -109,7 +109,7 @@ class City(models.Model):
 
     class Meta:
         verbose_name = 'شهر'
-        verbose_name_plural = 'شهرها'
+        verbose_name_plural = '7- اضافه کردن شهر '
         constraints = [
             models.UniqueConstraint(
                 fields=[
@@ -138,7 +138,7 @@ class HotelType(models.Model):
 
     class Meta:
         verbose_name = 'نوع اقامتگاه'
-        verbose_name_plural = 'نوع اقامتگاه'
+        verbose_name_plural = '8-اضافه کردن نوع اقامتگاه'
 
     def __str__(self):
         return self.title
@@ -407,7 +407,7 @@ class Hotel(models.Model):
 
     class Meta:
         verbose_name = 'هتل'
-        verbose_name_plural = 'هتل‌ها'
+        verbose_name_plural = '3-هتل ها'
 
     def __str__(self):
         return self.name
@@ -431,7 +431,7 @@ class HotelGallery(models.Model):
 
     class Meta:
         verbose_name = 'گالری تصاویر هتل'
-        verbose_name_plural = 'گالری‌های تصاویر هتل'
+        verbose_name_plural = '9- گالری تصاویر هتل '
 
     def __str__(self):
         return f'{self.title} ({self.hotel})'
@@ -526,7 +526,7 @@ class NearbyPlace(models.Model):
 
     class Meta:
         verbose_name = 'مکان اطراف هتل'
-        verbose_name_plural = 'اماکن اطراف هتل'
+        verbose_name_plural = '9-1 - اضافه کردن اماکن اطراف هتل ها'
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
@@ -842,7 +842,7 @@ class Room(models.Model):
 
     class Meta:
         verbose_name = 'اتاق'
-        verbose_name_plural = 'اتاق‌ها'
+        verbose_name_plural = '4-اتاق ها'
         constraints = [
             models.CheckConstraint(
                 check=models.Q(count__gte=0),
@@ -1017,7 +1017,7 @@ class RoomDatePrice(models.Model):
 
     class Meta:
         verbose_name = _('قیمت اتاق بر اساس سطح و بازه')
-        verbose_name_plural = _('بازه زمانی اتاق‌ها')
+        verbose_name_plural = _('5- بازه های زمانی اتاق')
         ordering = ['room', 'start_date', 'user_level']
         constraints = [
             models.UniqueConstraint(
@@ -1332,7 +1332,7 @@ class Reservationhotel(models.Model):
 
     class Meta:
         verbose_name = _('رزرو')
-        verbose_name_plural = _('رزروها')
+        verbose_name_plural = _('1- رزرو ها')
 
     def __str__(self):
         return f'رزرو {self.tracking_code} توسط {self.buyer.phone_number}'
@@ -1374,6 +1374,7 @@ class Reservationhotel(models.Model):
             total += (room.room_capacity + room.extra_capacity) * res_room.quantity
         return total
 
+# ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
         Reservationhotel,
@@ -1387,75 +1388,55 @@ class ReservationRoom(models.Model):
         verbose_name='اتاق',
         related_name='reservation_rooms',
     )
-    quantity = models.PositiveIntegerField(
-        verbose_name='تعداد اتاق',
-        default=1,
-        validators=[MinValueValidator(1)],
-    )
-    price_per_night = models.DecimalField(
-        verbose_name='قیمت هر شب',
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    subtotal = models.DecimalField(
-        verbose_name='جمع فرعی',
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'
-        verbose_name_plural = 'اتاق‌های رزرو شده'
+        verbose_name_plural = '2-مسافران اتاق های رزرو شده '
 
     def __str__(self):
-        return f'{self.quantity} اتاق {self.room.title} در رزرو {self.reservation.tracking_code}'
+        return f'{self.room.title} در رزرو {self.reservation.tracking_code}'
 
-    def clean(self):
-        super().clean()
-        if self.quantity > self.room.inventory:
-            raise ValidationError(
-                f'تعداد اتاق‌های درخواستی ({self.quantity}) از موجودی ({self.room.inventory}) بیشتر است.'
-            )
-
-    def save(self, *args, **kwargs):
-        nights = self.reservation.nights_count
-        if nights > 0 and self.price_per_night:
-            self.subtotal = self.price_per_night * nights * self.quantity
-        super().save(*args, **kwargs)
-
-        # آپدیت موجودی اتاق
-        self.room.inventory = max(self.room.inventory - self.quantity, 0)
-        self.room.save(update_fields=['inventory'])
 
 # ---------------- ReservationRoomPassenger ----------------
 class ReservationRoomPassenger(models.Model):
+    PASSENGER_TYPE_CHOICES = [
+        ('primary', 'مسافر اصلی'),
+        ('extra', 'نفر اضافه'),
+        ('secondary', 'مسافر فرعی'),
+    ]
+
+    # هر مسافر به یک اتاق متصل است
     reservation_room = models.ForeignKey(
         ReservationRoom,
         on_delete=models.CASCADE,
         related_name='passengers',
         verbose_name='اتاق رزرو شده'
     )
-    is_primary = models.BooleanField(
-        default=False,
-        verbose_name='مسافر اصلی'
+    
+    passenger_type = models.CharField(
+        max_length=20,
+        choices=PASSENGER_TYPE_CHOICES,
+        default='secondary',
+        verbose_name='نوع مسافر'
     )
+    
     first_name = models.CharField('نام', max_length=100)
     last_name = models.CharField('نام خانوادگی', max_length=100)
     mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
-    national_code = models.CharField('کد ملی', max_length=10)
+    national_code = models.CharField('کد ملی', max_length=10, blank=True, null=True)
 
     class Meta:
         verbose_name = 'مسافر'
         verbose_name_plural = 'مسافرها'
 
     def save(self, *args, **kwargs):
-        if not self.is_primary:
+        # اگر اولین مسافر اتاق باشه، خودکار primary میشه
+        if not self.pk and not self.reservation_room.passengers.exists():
+            self.passenger_type = 'primary'
+        # اگر primary هست شماره موبایل حتما باشه، برای سایرین اختیاری
+        if self.passenger_type != 'primary':
             self.mobile_number = None
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.first_name} {self.last_name}'
+        return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'

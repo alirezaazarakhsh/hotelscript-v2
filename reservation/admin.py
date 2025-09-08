@@ -1,9 +1,9 @@
+import logging
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 import jdatetime
-import nested_admin
 from authentication import forms
 from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
@@ -602,43 +602,32 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
             return False
         return True
     
+    
 
-
-
+logger = logging.getLogger(__name__)
 
 # ---------------- Passenger Inline ----------------
-class ReservationRoomPassengerInline(nested_admin.NestedTabularInline):
+class ReservationRoomPassengerInline(admin.TabularInline):
     model = ReservationRoomPassenger
-    extra = 1
-    max_num = 8  # حداکثر 8 مسافر
-    fk_name = 'reservation_room'
-    fields = ('is_primary', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    verbose_name = _('مسافر')
-    verbose_name_plural = _('مسافران')
-
+    extra = 0
+    max_num = 8
+    fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
+    can_delete = True
+    autocomplete_fields = ()
 
 # ---------------- Room Inline ----------------
-class ReservationRoomInline(nested_admin.NestedTabularInline):
+class ReservationRoomInline(admin.TabularInline):
     model = ReservationRoom
-    extra = 1
-    max_num = 3  # حداکثر 3 اتاق
-    fields = ('room', 'quantity', 'price_per_night', 'subtotal', 'room_capacity_display', 'extra_capacity_display')
-    readonly_fields = ('subtotal', 'room_capacity_display', 'extra_capacity_display')
+    extra = 0
+    max_num = 3
+    fields = ('room',)
     autocomplete_fields = ('room',)
-    inlines = [ReservationRoomPassengerInline]
+    show_change_link = True
+    can_delete = True
 
-    def room_capacity_display(self, obj):
-        return obj.room.room_capacity if obj.room else 0
-    room_capacity_display.short_description = 'ظرفیت اصلی اتاق'
-
-    def extra_capacity_display(self, obj):
-        return obj.room.extra_capacity if obj.room else 0
-    extra_capacity_display.short_description = 'ظرفیت نفر اضافه'
-
-
-# ---------------- Reservation Admin ----------------
+# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
-class ReservationhotelAdmin(nested_admin.NestedModelAdmin):
+class ReservationhotelAdmin(admin.ModelAdmin):
     list_display = (
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
@@ -649,9 +638,9 @@ class ReservationhotelAdmin(nested_admin.NestedModelAdmin):
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
-    list_filter = ('status', 'check_in_date', 'check_out_date',)
+    list_filter = ('status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
-    inlines = [ReservationRoomInline]
+    inlines = [ReservationRoomInline]  # فقط اتاق‌ها
 
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
@@ -700,3 +689,16 @@ class ReservationhotelAdmin(nested_admin.NestedModelAdmin):
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
     total_guests_fa.short_description = 'کل مهمان‌ها'
+
+# ---------------- ReservationRoom Admin ----------------
+@admin.register(ReservationRoom)
+class ReservationRoomAdmin(admin.ModelAdmin):
+    list_display = ('room', 'reservation_display')
+    search_fields = ('room__title', 'reservation__tracking_code')
+    autocomplete_fields = ('room', 'reservation')
+    inlines = [ReservationRoomPassengerInline]  # Inline مسافران زیر هر اتاق
+
+    def reservation_display(self, obj):
+        return obj.reservation.tracking_code
+    reservation_display.short_description = 'رزرو'
+
