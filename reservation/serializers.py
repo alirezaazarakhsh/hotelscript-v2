@@ -722,7 +722,27 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
         
 
 
+class ReservationCreateInputSerializer(serializers.Serializer):
+    hotel_id = serializers.IntegerField(source='hotel-id')
+    room_id = serializers.ListField(child=serializers.IntegerField(), source='room-id')
+    date = serializers.DictField(
+        child=serializers.CharField(),
+        required=True
+    )
 
+class AddPassengersInputSerializer(serializers.Serializer):
+    main_passenger = serializers.DictField(
+        child=serializers.CharField(allow_null=True),
+        required=True
+    )
+    other_passengers = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField(allow_null=True)),
+        required=False
+    )
+    extra_capacity_passengers = serializers.ListField(
+        child=serializers.DictField(child=serializers.CharField(allow_null=True)),
+        required=False
+    )
 
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField()
@@ -736,7 +756,7 @@ class RoomSerializer(serializers.Serializer):
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
     extra_capacity_price = serializers.DecimalField(
-        source='room.date_prices.first.price',  # Simplified, adjust based on date
+        source='room.date_prices.first.price',
         max_digits=12,
         decimal_places=0
     )
@@ -788,8 +808,8 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     def get_time(self, obj):
         return {
-            'enter': '14:00',  # Default check-in time
-            'exit': '12:00'    # Default check-out time
+            'enter': '14:00',
+            'exit': '12:00'
         }
 
     def get_half_charge_price(self, obj):

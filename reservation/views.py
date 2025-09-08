@@ -88,6 +88,7 @@ from .models import (
     SuggestedCommentItem,
 )
 from .serializers import (
+    AddPassengersInputSerializer,
     CitySerializer,
     BestHotelsSerializer,
     ClosedDateSerializer,
@@ -106,6 +107,7 @@ from .serializers import (
     HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
+    ReservationCreateInputSerializer,
     ReservationSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
@@ -2513,35 +2515,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 # ای پی ای رزرو 
 # Swagger manual parameters for Create Reservation
-reservation_create_manual_params = [
-    openapi.Parameter(
-        'hotel-id', 
-        openapi.IN_BODY, 
-        description="شناسه هتل", 
-        type=openapi.TYPE_INTEGER, 
-        required=True
-    ),
-    openapi.Parameter(
-        'room-id', 
-        openapi.IN_BODY, 
-        description="لیست شناسه‌های اتاق‌ها", 
-        type=openapi.TYPE_ARRAY, 
-        items=openapi.Items(type=openapi.TYPE_INTEGER), 
-        required=True
-    ),
-    openapi.Parameter(
-        'date', 
-        openapi.IN_BODY, 
-        description="تاریخ ورود و خروج (فرمت: YYYY-MM-DD)", 
-        type=openapi.TYPE_OBJECT, 
-        properties={
-            'enter': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
-            'exit': openapi.Schema(type=openapi.TYPE_STRING, format='date')
-        },
-        required=True
-    ),
-]
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2549,36 +2522,30 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو جدید برای هتل",
         operation_description="ایجاد رزرو جدید برای یک هتل مشخص با اطلاعات اتاق‌ها و تاریخ. رزرو با وضعیت 'در حال بررسی' ایجاد می‌شود و کد پیگیری برای افزودن مسافران بازگردانده می‌شود.",
-        tags=["reservation-hotel"],
-        manual_parameters=reservation_create_manual_params,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'hotel-id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'room-id': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Items(type=openapi.TYPE_INTEGER)
-                ),
-                'date': openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'enter': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
-                        'exit': openapi.Schema(type=openapi.TYPE_STRING, format='date')
-                    }
-                ),
-            },
-            required=['hotel-id', 'room-id', 'date']
-        ),
+        tags=["reservation-api"],
+        request_body=ReservationCreateInputSerializer,
         responses={
             201: openapi.Response(
                 description="رزرو با موفقیت ثبت شد",
                 schema=ReservationSerializer
             ),
             400: openapi.Response(
-                description="خطای ورودی یا اعتبارسنجی"
+                description="خطای ورودی یا اعتبارسنجی",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
             ),
             404: openapi.Response(
-                description="هتل یا اتاق یافت نشد"
+                description="هتل یا اتاق یافت نشد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
             )
         }
     )
@@ -2622,12 +2589,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             # Create Reservationhotel instance
             reservation = Reservationhotel(
                 buyer=request.user,
-                reserver_first_name="Pending",  # Placeholder until passengers are added
+                reserver_first_name="Pending",
                 reserver_last_name="Pending",
                 reserver_phone_number="00000000000",
                 check_in_date=check_in_date,
                 check_out_date=check_out_date,
-                status='unconfirmed'  # در حال بررسی
+                status='unconfirmed'
             )
 
             # Generate unique tracking code
@@ -2645,13 +2612,151 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reservation_room = ReservationRoom(
                     reservation=reservation,
                     room=room,
-                    quantity=1  # Assuming one room per room_id
+                    quantity=1
                 )
                 reservation_room.save()
 
             # Serialize response
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": _("An unexpected error occurred")},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AddPassengersAPIView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ReservationSerializer
+
+    @swagger_auto_schema(
+        operation_summary="افزودن مسافران به رزرو",
+        operation_description="افزودن اطلاعات مسافران به رزرو موجود با استفاده از کد پیگیری. تعداد مسافران باید با ظرفیت اتاق‌ها و ظرفیت اضافه مطابقت داشته باشد.",
+        tags=["reservation-api"],
+        request_body=AddPassengersInputSerializer,
+        responses={
+            200: openapi.Response(
+                description="مسافران با موفقیت به رزرو اضافه شدند",
+                schema=ReservationSerializer
+            ),
+            400: openapi.Response(
+                description="خطای ورودی یا اعتبارسنجی",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
+            )
+        }
+    )
+    def post(self, request, tracking_code):
+        try:
+            # Get reservation
+            reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code, buyer=request.user)
+
+            # Extract passenger data
+            main_passenger = request.data.get('main_passenger', {})
+            other_passengers = request.data.get('other_passengers', [])
+            extra_capacity_passengers = request.data.get('extra_capacity_passengers', [])
+
+            # Validate main_passenger fields
+            if not all(key in main_passenger for key in ['first_name', 'last_name', 'mobile_number']):
+                return Response(
+                    {"error": _("Main passenger must have first_name, last_name, and mobile_number")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate passenger counts against room capacity
+            rooms = reservation.reservation_rooms.all()
+            total_capacity = sum(room.room.quantity * room.room.room_capacity for room in rooms)
+            total_extra_capacity = sum(room.room.quantity * room.room.extra_capacity for room in rooms)
+            total_other_passengers = len(other_passengers)
+            total_extra_passengers = len(extra_capacity_passengers)
+
+            if total_other_passengers > total_capacity - 1:
+                return Response(
+                    {"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if total_extra_passengers > total_extra_capacity:
+                return Response(
+                    {"error": _(f"Too many extra capacity passengers. Maximum allowed: {total_extra_capacity}")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Update reservation with main_passenger details
+            reservation.reserver_first_name = main_passenger['first_name']
+            reservation.reserver_last_name = main_passenger['last_name']
+            reservation.reserver_phone_number = main_passenger['mobile_number']
+            reservation.reserver_national_code = main_passenger.get('national_code')
+            reservation.save()
+
+            # Clear existing passengers (if any)
+            for room in rooms:
+                room.passengers.all().delete()
+
+            # Add passengers to the first room (simplified distribution)
+            first_room = rooms.first()
+            if first_room:
+                # Add main passenger
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=first_room,
+                    first_name=main_passenger['first_name'],
+                    last_name=main_passenger['last_name'],
+                    mobile_number=main_passenger['mobile_number'],
+                    national_code=main_passenger.get('national_code'),
+                    passenger_type='primary'
+                )
+
+                # Add other passengers
+                for passenger in other_passengers:
+                    if not all(key in passenger for key in ['first_name', 'last_name']):
+                        return Response(
+                            {"error": _("Other passengers must have first_name and last_name")},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    ReservationRoomPassenger.objects.create(
+                        reservation_room=first_room,
+                        first_name=passenger['first_name'],
+                        last_name=passenger['last_name'],
+                        national_code=passenger.get('national_code'),
+                        passenger_type='secondary'
+                    )
+
+                # Add extra capacity passengers
+                for passenger in extra_capacity_passengers:
+                    if not all(key in passenger for key in ['first_name', 'last_name']):
+                        return Response(
+                            {"error": _("Extra capacity passengers must have first_name and last_name")},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    ReservationRoomPassenger.objects.create(
+                        reservation_room=first_room,
+                        first_name=passenger['first_name'],
+                        last_name=passenger['last_name'],
+                        national_code=passenger.get('national_code'),
+                        passenger_type='extra'
+                    )
+
+            # Serialize response
+            serializer = ReservationSerializer(reservation)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
         except ValidationError as e:
             return Response(
