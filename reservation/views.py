@@ -2552,7 +2552,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if rooms.count() != len(room_ids):
                 return Response({"error": _("One or more rooms not found or invalid")}, status=status.HTTP_400_BAD_REQUEST)
 
-            # مرحله ۱: ایجاد رزرو (فقط اطلاعات پایه، بدون محاسبه قیمت)
+            # ایجاد رزرو اصلی
             reservation = Reservationhotel.objects.create(
                 buyer=request.user,
                 reserver_first_name="Pending",
@@ -2563,16 +2563,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # مرحله ۲: ایجاد اتاق‌ها
+            # ایجاد رزرو اتاق‌ها بدون quantity
             for room in rooms:
                 ReservationRoom.objects.create(
                     reservation=reservation,
-                    room=room,
-                    quantity=1
+                    room=room
                 )
-
-            # مرحله ۳: ذخیره دوباره برای محاسبه قیمت‌ها
-            reservation.save()
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
