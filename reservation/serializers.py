@@ -721,7 +721,6 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
         
         
 
-
 class ReservationCreateInputSerializer(serializers.Serializer):
     hotel_id = serializers.IntegerField()
     room_id = serializers.ListField(child=serializers.IntegerField())
@@ -731,8 +730,8 @@ class ReservationCreateInputSerializer(serializers.Serializer):
     )
 
     def validate_date(self, value):
-        if 'property1' not in value or 'property2' not in value:
-            raise serializers.ValidationError(_("Date must contain 'property1' and 'property2' fields"))
+        if 'start' not in value or 'end' not in value:
+            raise serializers.ValidationError(_("Date must contain 'start' and 'end' fields"))
         return value
 
 class ReservationUpdatePassengersInputSerializer(serializers.Serializer):

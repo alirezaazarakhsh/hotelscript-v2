@@ -2555,8 +2555,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             hotel_id = request.data.get('hotel_id')
             room_ids = request.data.get('room_id', [])
             date_data = request.data.get('date', {})
-            start_date = date_data.get('property1')
-            end_date = date_data.get('property2')
+            start_date = date_data.get('start')
+            end_date = date_data.get('end')
 
             # Validate required fields
             if not (hotel_id and room_ids and start_date and end_date):
@@ -2583,7 +2583,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if rooms.count() != len(room_ids):
                 return Response(
                     {"error": _("One or more rooms not found or do not belong to the specified hotel")},
-                    status=status.HTTP_400_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Create Reservationhotel instance
@@ -2772,5 +2772,3 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 {"error": _("An unexpected error occurred")},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
