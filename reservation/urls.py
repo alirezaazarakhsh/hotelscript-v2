@@ -69,6 +69,6 @@ urlpatterns = [
 
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
-    path('api/v1/hotel/hotels/room/reservations/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),
-    path('api/v1/hotel/hotels/room/reservations/<str:tracking_code>/update-passengers/', ReservationUpdatePassengersAPIView.as_view(), name='update-passengers'),
+    path('hotels/room/reservations/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),
+    path('hotels/room/reservations/<str:tracking_code>/update-passengers/', ReservationUpdatePassengersAPIView.as_view(), name='update-passengers'),
 ]
