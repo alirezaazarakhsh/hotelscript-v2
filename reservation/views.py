@@ -88,7 +88,6 @@ from .models import (
     SuggestedCommentItem,
 )
 from .serializers import (
-    AddPassengersInputSerializer,
     CitySerializer,
     BestHotelsSerializer,
     ClosedDateSerializer,
