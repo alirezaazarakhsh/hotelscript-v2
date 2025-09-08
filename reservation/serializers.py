@@ -731,8 +731,8 @@ class ReservationCreateInputSerializer(serializers.Serializer):
     )
 
     def validate_date(self, value):
-        if 'start' not in value or 'end' not in value:
-            raise serializers.ValidationError(_("Date must contain 'start' and 'end' fields"))
+        if 'property1' not in value or 'property2' not in value:
+            raise serializers.ValidationError(_("Date must contain 'property1' and 'property2' fields"))
         return value
 
 class ReservationUpdatePassengersInputSerializer(serializers.Serializer):
