@@ -723,14 +723,14 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
 
 
 class ReservationCreateInputSerializer(serializers.Serializer):
-    hotel_id = serializers.IntegerField(source='hotel-id')
-    room_id = serializers.ListField(child=serializers.IntegerField(), source='room-id')
+    hotel_id = serializers.IntegerField()
+    room_id = serializers.ListField(child=serializers.IntegerField())
     date = serializers.DictField(
         child=serializers.CharField(),
         required=True
     )
 
-class AddPassengersInputSerializer(serializers.Serializer):
+class ReservationUpdatePassengersInputSerializer(serializers.Serializer):
     main_passenger = serializers.DictField(
         child=serializers.CharField(allow_null=True),
         required=True
@@ -745,10 +745,10 @@ class AddPassengersInputSerializer(serializers.Serializer):
     )
 
 class PersonSerializer(serializers.Serializer):
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
-    mobile_number = serializers.CharField(allow_null=True)
-    national_code = serializers.CharField(allow_null=True)
+    first_name = serializers.CharField(allow_blank=True, allow_null=True)
+    last_name = serializers.CharField(allow_blank=True, allow_null=True)
+    mobile_number = serializers.CharField(allow_blank=True, allow_null=True)
+    national_code = serializers.CharField(allow_blank=True, allow_null=True)
 
 class RoomSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='room.id')
@@ -758,26 +758,26 @@ class RoomSerializer(serializers.Serializer):
     extra_capacity_price = serializers.DecimalField(
         source='room.date_prices.first.price',
         max_digits=12,
-        decimal_places=0
+        decimal_places=0,
+        allow_null=True
     )
     passengers = serializers.SerializerMethodField()
 
     def get_passengers(self, obj):
-        passengers = obj.passengers.all()
-        main_passenger = passengers.filter(passenger_type='primary').first()
-        other_passengers = passengers.filter(passenger_type='secondary')
-        extra_passengers = passengers.filter(passenger_type='extra')
+        # Return empty passenger fields based on capacity
+        capacity = obj.room.room_capacity
+        extra_capacity = obj.room.extra_capacity
         return {
-            'main_passenger': PersonSerializer(main_passenger).data if main_passenger else None,
-            'other_passengers': PersonSerializer(other_passengers, many=True).data,
-            'extra_capacity_passengers': PersonSerializer(extra_passengers, many=True).data
+            'main_passenger': None,
+            'other_passengers': [{} for _ in range(capacity - 1)],
+            'extra_capacity_passengers': [{} for _ in range(extra_capacity)]
         }
 
 class ReservationSerializer(serializers.ModelSerializer):
     hotel_id = serializers.IntegerField(source='reservation_rooms.first.room.hotel.id')
     hotel_slug = serializers.CharField(source='reservation_rooms.first.room.hotel.slug')
     hotel_name = serializers.CharField(source='reservation_rooms.first.room.hotel.name')
-    main_image = serializers.CharField(source='reservation_rooms.first.room.hotel.main_image')
+    main_image = serializers.SerializerMethodField()
     city = serializers.CharField(source='reservation_rooms.first.room.hotel.city')
     number_of_nights = serializers.IntegerField(source='nights_count')
     date = serializers.SerializerMethodField()
@@ -787,7 +787,7 @@ class ReservationSerializer(serializers.ModelSerializer):
     rooms = RoomSerializer(source='reservation_rooms', many=True)
     half_charge = serializers.SerializerMethodField()
     invoice = serializers.SerializerMethodField()
-    description = serializers.CharField(source='additional_notes')
+    description = serializers.CharField(source='additional_notes', allow_blank=True)
     reservation_id = serializers.CharField(source='tracking_code')
     created_at = serializers.SerializerMethodField()
     status = serializers.CharField()
@@ -800,22 +800,29 @@ class ReservationSerializer(serializers.ModelSerializer):
             'rooms', 'half_charge', 'invoice', 'description', 'status'
         )
 
+    def get_main_image(self, obj):
+        # Prepend base URL to main_image
+        main_image = obj.reservation_rooms.first().room.hotel.main_image
+        if main_image:
+            return f"https://safarnameh24.com{main_image}"
+        return None
+
     def get_date(self, obj):
         return {
-            'enter': obj.check_in_date.strftime('%Y-%m-%d'),
-            'exit': obj.check_out_date.strftime('%Y-%m-%d')
+            'property1': obj.check_in_date.strftime('%Y-%m-%d'),
+            'property2': obj.check_out_date.strftime('%Y-%m-%d')
         }
 
     def get_time(self, obj):
         return {
-            'enter': '14:00',
-            'exit': '12:00'
+            'property1': '14:00',
+            'property2': '12:00'
         }
 
     def get_half_charge_price(self, obj):
         return {
-            'enter': str(obj.half_day_in_charge),
-            'exit': str(obj.half_day_out_charge)
+            'property1': str(obj.half_day_in_charge),
+            'property2': str(obj.half_day_out_charge)
         }
 
     def get_reserver(self, obj):
@@ -829,8 +836,8 @@ class ReservationSerializer(serializers.ModelSerializer):
     def get_half_charge(self, obj):
         hotel = obj.reservation_rooms.first().room.hotel
         return {
-            'enter': hotel.has_check_in_half_day_charge,
-            'exit': hotel.has_check_out_half_day_charge
+            'property1': hotel.has_check_in_half_day_charge,
+            'property2': hotel.has_check_out_half_day_charge
         }
 
     def get_invoice(self, obj):

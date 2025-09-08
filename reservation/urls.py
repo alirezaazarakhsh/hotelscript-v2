@@ -1,7 +1,6 @@
 from django.urls import path
 from . import views
 from .views import (
-    AddPassengersAPIView,
     AmazingHotelsListView,
     CommentPointsAndSuggestionsView,
     GetPriceRangeAPI,
@@ -11,6 +10,7 @@ from .views import (
     CreateCommentView,
     BestSellersListView,
     ReservationCreateAPIView,
+    ReservationUpdatePassengersAPIView,
     SuggesteHotelListView,
 )
 
@@ -70,5 +70,5 @@ urlpatterns = [
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
     path('hotels/room/reservations/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),
-    path('hotels/room/reservations/<str:tracking_code>/add-passengers/', AddPassengersAPIView.as_view(), name='add-passengers'),
+    path('hotels/room/reservations/<str:tracking_code>/update-passengers/', ReservationUpdatePassengersAPIView.as_view(), name='update-passengers'),
 ]

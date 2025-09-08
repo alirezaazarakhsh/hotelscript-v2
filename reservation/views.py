@@ -109,6 +109,7 @@ from .serializers import (
     HotelTypeSerializer,
     ReservationCreateInputSerializer,
     ReservationSerializer,
+    ReservationUpdatePassengersInputSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
     RoomSerializer,
@@ -2514,19 +2515,18 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-# Swagger manual parameters for Create Reservation
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
 
     @swagger_auto_schema(
-        operation_summary="ایجاد رزرو جدید برای هتل",
-        operation_description="ایجاد رزرو جدید برای یک هتل مشخص با اطلاعات اتاق‌ها و تاریخ. رزرو با وضعیت 'در حال بررسی' ایجاد می‌شود و کد پیگیری برای افزودن مسافران بازگردانده می‌شود.",
+        operation_summary="ایجاد رزرو موقت و دریافت اطلاعات هتل و اتاق",
+        operation_description="ایجاد رزرو موقت با اطلاعات هتل، اتاق‌ها و تاریخ. اطلاعات هتل، اتاق‌ها و فیلدهای خالی برای مسافران بازگردانده می‌شود.",
         tags=["reservation-api"],
         request_body=ReservationCreateInputSerializer,
         responses={
             201: openapi.Response(
-                description="رزرو با موفقیت ثبت شد",
+                description="رزرو موقت با موفقیت ایجاد شد",
                 schema=ReservationSerializer
             ),
             400: openapi.Response(
@@ -2552,11 +2552,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         try:
             # Extract input data
-            hotel_id = request.data.get('hotel-id')
-            room_ids = request.data.get('room-id', [])
+            hotel_id = request.data.get('hotel_id')
+            room_ids = request.data.get('room_id', [])
             date_data = request.data.get('date', {})
-            enter_date = date_data.get('enter')
-            exit_date = date_data.get('exit')
+            enter_date = date_data.get('property1')
+            exit_date = date_data.get('property2')
 
             # Validate required fields
             if not (hotel_id and room_ids and enter_date and exit_date):
@@ -2604,7 +2604,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     reservation.tracking_code = code
                     break
 
-            # Save reservation to calculate prices
+            # Save reservation
             reservation.save()
 
             # Create ReservationRoom instances
@@ -2631,18 +2631,22 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class AddPassengersAPIView(generics.GenericAPIView):
+class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
+    lookup_field = 'tracking_code'
+
+    def get_queryset(self):
+        return Reservationhotel.objects.filter(buyer=self.request.user)
 
     @swagger_auto_schema(
-        operation_summary="افزودن مسافران به رزرو",
-        operation_description="افزودن اطلاعات مسافران به رزرو موجود با استفاده از کد پیگیری. تعداد مسافران باید با ظرفیت اتاق‌ها و ظرفیت اضافه مطابقت داشته باشد.",
+        operation_summary="ویرایش اطلاعات مسافران رزرو",
+        operation_description="ویرایش اطلاعات مسافران (مسافر اصلی، سایر مسافران، مسافران ظرفیت اضافه) برای رزرو موجود با استفاده از کد پیگیری. تعداد مسافران باید با ظرفیت اتاق‌ها و ظرفیت اضافه مطابقت داشته باشد.",
         tags=["reservation-api"],
-        request_body=AddPassengersInputSerializer,
+        request_body=ReservationUpdatePassengersInputSerializer,
         responses={
             200: openapi.Response(
-                description="مسافران با موفقیت به رزرو اضافه شدند",
+                description="مسافران با موفقیت به‌روزرسانی شدند",
                 schema=ReservationSerializer
             ),
             400: openapi.Response(
@@ -2665,10 +2669,10 @@ class AddPassengersAPIView(generics.GenericAPIView):
             )
         }
     )
-    def post(self, request, tracking_code):
+    def put(self, request, *args, **kwargs):
         try:
             # Get reservation
-            reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code, buyer=request.user)
+            reservation = self.get_object()
 
             # Extract passenger data
             main_passenger = request.data.get('main_passenger', {})
