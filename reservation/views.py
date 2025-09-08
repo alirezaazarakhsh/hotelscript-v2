@@ -2515,22 +2515,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import random
-import jdatetime
-import traceback
-from django.shortcuts import get_object_or_404
-from django.core.exceptions import ValidationError
-from rest_framework import generics, status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from django.utils.translation import gettext_lazy as _
-
-from .models import Reservationhotel, ReservationRoom, ReservationRoomPassenger, Room, Hotel
-from .serializers import ReservationSerializer, ReservationCreateInputSerializer, ReservationUpdatePassengersInputSerializer
-
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2541,71 +2525,35 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         tags=["reservation-api"],
         request_body=ReservationCreateInputSerializer,
         responses={
-            201: openapi.Response(
-                description="رزرو موقت با موفقیت ایجاد شد",
-                schema=ReservationSerializer
-            ),
-            400: openapi.Response(
-                description="خطای ورودی یا اعتبارسنجی",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
-            ),
-            404: openapi.Response(
-                description="هتل یا اتاق یافت نشد",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
-            )
+            201: openapi.Response(description="رزرو موقت با موفقیت ایجاد شد", schema=ReservationSerializer),
+            400: openapi.Response(description="خطای ورودی یا اعتبارسنجی"),
+            404: openapi.Response(description="هتل یا اتاق یافت نشد"),
         }
     )
     def post(self, request, *args, **kwargs):
         try:
-            # Extract input data
             hotel_id = request.data.get('hotel_id')
             room_ids = request.data.get('room_id', [])
             date_data = request.data.get('date', {})
             start_date = date_data.get('start')
             end_date = date_data.get('end')
 
-            # Validate required fields
             if not (hotel_id and room_ids and start_date and end_date):
-                return Response(
-                    {"error": _("Missing required fields")},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"error": _("Missing required fields")}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Convert string dates to jdatetime.date
             try:
                 check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
                 check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
             except ValueError:
-                return Response(
-                    {"error": _("Invalid date format. Use YYYY-MM-DD")},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"error": _("Invalid date format. Use YYYY-MM-DD")}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate hotel
             hotel = get_object_or_404(Hotel, id=hotel_id)
-
-            # Validate rooms
             rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
             if rooms.count() != len(room_ids):
-                return Response(
-                    {"error": _("One or more rooms not found or do not belong to the specified hotel")},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"error": _("One or more rooms not found or invalid")}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Create Reservationhotel
-            reservation = Reservationhotel(
+            # مرحله ۱: ایجاد رزرو (فقط اطلاعات پایه، بدون محاسبه قیمت)
+            reservation = Reservationhotel.objects.create(
                 buyer=request.user,
                 reserver_first_name="Pending",
                 reserver_last_name="Pending",
@@ -2613,19 +2561,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 check_in_date=check_in_date,
                 check_out_date=check_out_date,
                 status='unconfirmed',
-                final_price=0  # جلوگیری از خطای NOT NULL
             )
 
-            # Generate tracking code
-            while True:
-                code = 'safa' + str(random.randint(10000, 99999))
-                if not Reservationhotel.objects.filter(tracking_code=code).exists():
-                    reservation.tracking_code = code
-                    break
-
-            reservation.save()
-
-            # Create ReservationRoom
+            # مرحله ۲: ایجاد اتاق‌ها
             for room in rooms:
                 ReservationRoom.objects.create(
                     reservation=reservation,
@@ -2633,19 +2571,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     quantity=1
                 )
 
+            # مرحله ۳: ذخیره دوباره برای محاسبه قیمت‌ها
+            reservation.save()
+
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
-            return Response(
-                {"error": str(e), "traceback": traceback.format_exc()},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"error": str(e), "traceback": traceback.format_exc()},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
@@ -2726,11 +2661,11 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
             reservation.reserver_national_code = main_passenger.get('national_code')
             reservation.save()
 
-            # Clear passengers
+            # Clear old passengers
             for room in rooms:
                 room.passengers.all().delete()
 
-            # Add to first room
+            # Add passengers to the first room
             first_room = rooms.first()
             if first_room:
                 ReservationRoomPassenger.objects.create(
@@ -2744,16 +2679,16 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 for passenger in other_passengers:
                     ReservationRoomPassenger.objects.create(
                         reservation_room=first_room,
-                        first_name=passenger['first_name'],
-                        last_name=passenger['last_name'],
+                        first_name=passenger.get('first_name'),
+                        last_name=passenger.get('last_name'),
                         national_code=passenger.get('national_code'),
                         passenger_type='secondary'
                     )
                 for passenger in extra_capacity_passengers:
                     ReservationRoomPassenger.objects.create(
                         reservation_room=first_room,
-                        first_name=passenger['first_name'],
-                        last_name=passenger['last_name'],
+                        first_name=passenger.get('first_name'),
+                        last_name=passenger.get('last_name'),
                         national_code=passenger.get('national_code'),
                         passenger_type='extra'
                     )

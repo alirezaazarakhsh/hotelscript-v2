@@ -734,19 +734,21 @@ class ReservationCreateInputSerializer(serializers.Serializer):
             raise serializers.ValidationError(_("Date must contain 'start' and 'end' fields"))
         return value
 
+
 class ReservationUpdatePassengersInputSerializer(serializers.Serializer):
     main_passenger = serializers.DictField(
-        child=serializers.CharField(allow_null=True),
+        child=serializers.CharField(allow_null=True, allow_blank=True),
         required=True
     )
     other_passengers = serializers.ListField(
-        child=serializers.DictField(child=serializers.CharField(allow_null=True)),
+        child=serializers.DictField(child=serializers.CharField(allow_null=True, allow_blank=True)),
         required=False
     )
     extra_capacity_passengers = serializers.ListField(
-        child=serializers.DictField(child=serializers.CharField(allow_null=True)),
+        child=serializers.DictField(child=serializers.CharField(allow_null=True, allow_blank=True)),
         required=False
     )
+
 
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(allow_blank=True, allow_null=True)
@@ -754,21 +756,22 @@ class PersonSerializer(serializers.Serializer):
     mobile_number = serializers.CharField(allow_blank=True, allow_null=True)
     national_code = serializers.CharField(allow_blank=True, allow_null=True)
 
+
 class RoomSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='room.id')
     name = serializers.CharField(source='room.title')
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
-    extra_capacity_price = serializers.DecimalField(
-        source='room.date_prices.first.price',
-        max_digits=12,
-        decimal_places=0,
-        allow_null=True
-    )
+    extra_capacity_price = serializers.SerializerMethodField()
     passengers = serializers.SerializerMethodField()
 
+    def get_extra_capacity_price(self, obj):
+        price_obj = obj.room.date_prices.first()
+        if price_obj:
+            return str(price_obj.price)
+        return None
+
     def get_passengers(self, obj):
-        # Return empty passenger fields based on capacity
         capacity = obj.room.room_capacity
         extra_capacity = obj.room.extra_capacity
         return {
@@ -777,12 +780,13 @@ class RoomSerializer(serializers.Serializer):
             'extra_capacity_passengers': [{} for _ in range(extra_capacity)]
         }
 
+
 class ReservationSerializer(serializers.ModelSerializer):
-    hotel_id = serializers.IntegerField(source='reservation_rooms.first.room.hotel.id')
-    hotel_slug = serializers.CharField(source='reservation_rooms.first.room.hotel.slug')
-    hotel_name = serializers.CharField(source='reservation_rooms.first.room.hotel.name')
+    hotel_id = serializers.SerializerMethodField()
+    hotel_slug = serializers.SerializerMethodField()
+    hotel_name = serializers.SerializerMethodField()
     main_image = serializers.SerializerMethodField()
-    city = serializers.CharField(source='reservation_rooms.first.room.hotel.city')
+    city = serializers.SerializerMethodField()
     number_of_nights = serializers.IntegerField(source='nights_count')
     date = serializers.SerializerMethodField()
     time = serializers.SerializerMethodField()
@@ -804,12 +808,34 @@ class ReservationSerializer(serializers.ModelSerializer):
             'rooms', 'half_charge', 'invoice', 'description', 'status'
         )
 
+    # -------- Hotel fields --------
+    def _get_hotel(self, obj):
+        first_room = obj.reservation_rooms.first()
+        return first_room.room.hotel if first_room else None
+
+    def get_hotel_id(self, obj):
+        hotel = self._get_hotel(obj)
+        return hotel.id if hotel else None
+
+    def get_hotel_slug(self, obj):
+        hotel = self._get_hotel(obj)
+        return hotel.slug if hotel else None
+
+    def get_hotel_name(self, obj):
+        hotel = self._get_hotel(obj)
+        return hotel.name if hotel else None
+
     def get_main_image(self, obj):
-        main_image = obj.reservation_rooms.first().room.hotel.main_image
-        if main_image:
-            return f"https://safarnameh24.com{main_image}"
+        hotel = self._get_hotel(obj)
+        if hotel and hotel.main_image:
+            return f"https://safarnameh24.com{hotel.main_image}"
         return None
 
+    def get_city(self, obj):
+        hotel = self._get_hotel(obj)
+        return hotel.city if hotel else None
+
+    # -------- Other fields --------
     def get_date(self, obj):
         return {
             'start': obj.check_in_date.strftime('%Y-%m-%d'),
@@ -817,15 +843,12 @@ class ReservationSerializer(serializers.ModelSerializer):
         }
 
     def get_time(self, obj):
-        return {
-            'start': '14:00',
-            'end': '12:00'
-        }
+        return {'start': '14:00', 'end': '12:00'}
 
     def get_half_charge_price(self, obj):
         return {
-            'start': str(obj.half_day_in_charge),
-            'end': str(obj.half_day_out_charge)
+            'start': str(obj.half_day_in_charge or 0),
+            'end': str(obj.half_day_out_charge or 0)
         }
 
     def get_reserver(self, obj):
@@ -837,16 +860,16 @@ class ReservationSerializer(serializers.ModelSerializer):
         }
 
     def get_half_charge(self, obj):
-        hotel = obj.reservation_rooms.first().room.hotel
-        return {
-            'start': hotel.has_check_in_half_day_charge,
-            'end': hotel.has_check_out_half_day_charge
-        }
+        hotel = self._get_hotel(obj)
+        if hotel:
+            return {
+                'start': hotel.has_check_in_half_day_charge,
+                'end': hotel.has_check_out_half_day_charge
+            }
+        return {'start': False, 'end': False}
 
     def get_invoice(self, obj):
-        return {
-            'total_price': str(obj.final_price)
-        }
+        return {'total_price': str(obj.final_price or 0)}
 
     def get_created_at(self, obj):
         return obj.created_at.strftime('%Y-%m-%d %H:%M:%S')

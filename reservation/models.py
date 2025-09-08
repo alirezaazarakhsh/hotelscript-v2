@@ -1244,6 +1244,7 @@ class BestHotels(models.Model):
 #مدل رزرو های کاربران سایت 
 logger = logging.getLogger(__name__)
 
+# ---------------- Reservationhotel ----------------
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
         ('paid', _('پرداخت شده')),
@@ -1259,90 +1260,24 @@ class Reservationhotel(models.Model):
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
     )
-    reserver_first_name = models.CharField(
-        verbose_name=_('نام رزرو کننده'),
-        max_length=256,
-    )
-    reserver_last_name = models.CharField(
-        verbose_name=_('نام خانوادگی رزرو کننده'),
-        max_length=256,
-    )
-    reserver_phone_number = models.CharField(
-        verbose_name=_('شماره تماس رزرو کننده'),
-        max_length=11,
-    )
-    reserver_national_code = models.CharField(
-        verbose_name=_('کد ملی رزرو کننده'),
-        max_length=10,
-        blank=True,
-        null=True,
-    )
-    check_in_date = jmodels.jDateField(
-        verbose_name=_('تاریخ ورود'),
-    )
-    check_out_date = jmodels.jDateField(
-        verbose_name=_('تاریخ خروج'),
-    )
-    total_price = models.DecimalField(
-        verbose_name=_('مجموع قیمت'),
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    discount = models.DecimalField(
-        verbose_name=_('تخفیف'),
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    final_price = models.DecimalField(
-        verbose_name=_('قیمت نهایی'),
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    half_day_in_charge = models.DecimalField(
-        verbose_name=_('نیم‌شارژ ورود'),
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    half_day_out_charge = models.DecimalField(
-        verbose_name=_('نیم‌شارژ خروج'),
-        max_digits=12,
-        decimal_places=0,
-        default=0,
-        validators=[MinValueValidator(0)],
-    )
-    tracking_code = models.CharField(
-        verbose_name=_('کد پیگیری'),
-        max_length=9,
-        unique=True,
-        editable=False,
-    )
-    additional_notes = models.TextField(
-        verbose_name=_('توضیحات تکمیلی'),
-        blank=True,
-        default='',
-    )
-    status = models.CharField(
-        verbose_name=_('وضعیت رزرو'),
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='unpaid',
-    )
-    created_at = jmodels.jDateTimeField(
-        verbose_name=_('تاریخ ایجاد'),
-        auto_now_add=True,
-    )
-    updated_at = jmodels.jDateTimeField(
-        verbose_name=_('تاریخ به‌روزرسانی'),
-        auto_now=True,
-    )
+    reserver_first_name = models.CharField(_('نام رزرو کننده'), max_length=256)
+    reserver_last_name = models.CharField(_('نام خانوادگی رزرو کننده'), max_length=256)
+    reserver_phone_number = models.CharField(_('شماره تماس رزرو کننده'), max_length=11)
+    reserver_national_code = models.CharField(_('کد ملی رزرو کننده'), max_length=10, blank=True, null=True)
+    check_in_date = jmodels.jDateField(_('تاریخ ورود'))
+    check_out_date = jmodels.jDateField(_('تاریخ خروج'))
+
+    total_price = models.DecimalField(_('مجموع قیمت'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    discount = models.DecimalField(_('تخفیف'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    final_price = models.DecimalField(_('قیمت نهایی'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+
+    tracking_code = models.CharField(_('کد پیگیری'), max_length=9, unique=True, editable=False)
+    additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
+    status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
+    updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
 
     class Meta:
         verbose_name = _('رزرو')
@@ -1360,18 +1295,12 @@ class Reservationhotel(models.Model):
                 raise ValidationError(_(f'تعداد اتاق‌های درخواستی ({res_room.quantity}) برای {res_room.room.title} از موجودی ({res_room.room.inventory}) بیشتر است.'))
 
     def calculate_total_price(self):
-        """
-        محاسبه مجموع قیمت رزرو با در نظر گرفتن نیم‌شارژ ورود و خروج هتل و تخفیف‌ها.
-        - قیمت پایه: جمع قیمت کامل شب‌ها (از check_in تا check_out - 1 روز) از RoomDatePrice.
-        - نیم‌شارژ ورود: اگر has_check_in_half_day_charge=True، نصف قیمت شب اول.
-        - نیم‌شارژ خروج: اگر has_check_out_half_day_charge=True، نصف قیمت شب آخر.
-        - تخفیف‌ها: بر اساس discount_type و discount_value در RoomDatePrice اعمال می‌شود.
-        - قیمت نفر اضافه: اگر تعداد مسافران بیشتر از ظرفیت پایه اتاق باشد، محاسبه می‌شود.
-        """
+        if not self.pk:  # هنوز ذخیره نشده
+            return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
+
         if not self.reservation_rooms.exists():
             return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
-        # اطمینان از اینکه تمام اتاق‌ها از یک هتل هستند
         hotel = self.reservation_rooms.first().room.hotel
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError(_('تمام اتاق‌ها باید از یک هتل باشند.'))
@@ -1380,31 +1309,22 @@ class Reservationhotel(models.Model):
         half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
         total_discount = Decimal('0')
-
-        # تعداد شب‌ها
         nights = self.nights_count
+
         if nights <= 0:
             return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
-        # سطح کاربری خریدار (فرض می‌کنیم BaseUser فیلد user_level دارد)
         user_level = getattr(self.buyer, 'user_level', None)
-
-        # تاریخ‌های شب اول و آخر
-        first_night = self.check_in_date
-        last_night = self.check_out_date - jmodels.timedelta(days=1)
 
         for res_room in self.reservation_rooms.all():
             room = res_room.room
             quantity = res_room.quantity
-
-            # تعداد کل مسافران برای این اتاق
             total_guests = res_room.passengers.count()
             base_capacity = room.room_capacity * quantity
             extra_guests = max(0, total_guests - base_capacity)
 
             for night in range(nights):
                 date = self.check_in_date + jmodels.timedelta(days=night)
-                # انتخاب قیمت بر اساس سطح کاربری یا بدون سطح کاربری
                 price_obj = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
@@ -1420,36 +1340,23 @@ class Reservationhotel(models.Model):
 
                 daily_price = Decimal(price_obj.price)
                 extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
-
-                # محاسبه تخفیف
                 discount = Decimal('0')
+
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date and date <= price_obj.discount_date:
                     discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    # فرض می‌کنیم فقط برای اولین رزرو اعمال می‌شود
                     if not self.buyer.reservations.exclude(pk=self.pk).exists():
                         discount = Decimal(price_obj.discount_value)
 
-                # اضافه کردن قیمت شب (با کسر تخفیف)
-                if night != 0 and night != nights - 1:
-                    total += (daily_price - discount + extra_price) * quantity
-                    total_discount += discount * quantity
-                elif night == 0:
-                    # شب اول: قیمت کامل + نیم‌شارژ ورود
-                    total += (daily_price - discount + extra_price) * quantity
-                    total_discount += discount * quantity
-                    if hotel.has_check_in_half_day_charge:
-                        half_day_in_charge += (daily_price / Decimal('2')) * quantity
-                elif night == nights - 1:
-                    # شب آخر: قیمت کامل + نیم‌شارژ خروج
-                    total += (daily_price - discount + extra_price) * quantity
-                    total_discount += discount * quantity
-                    if hotel.has_check_out_half_day_charge:
-                        half_day_out_charge += (daily_price / Decimal('2')) * quantity
+                total += (daily_price - discount + extra_price) * quantity
+                total_discount += discount * quantity
 
-        # اضافه کردن نیم‌شارژها به مجموع
+                if night == 0 and hotel.has_check_in_half_day_charge:
+                    half_day_in_charge += (daily_price / Decimal('2')) * quantity
+                if night == nights - 1 and hotel.has_check_out_half_day_charge:
+                    half_day_out_charge += (daily_price / Decimal('2')) * quantity
+
         total += half_day_in_charge + half_day_out_charge
-
         return total, total_discount, half_day_in_charge, half_day_out_charge
 
     def save(self, *args, **kwargs):
@@ -1460,7 +1367,10 @@ class Reservationhotel(models.Model):
                     self.tracking_code = code
                     break
 
-        # محاسبه total_price و تخفیف
+        is_new = self.pk is None
+        super().save(*args, **kwargs)  # اول ذخیره کن تا pk بگیره
+
+        # بعد از ذخیره، قیمت‌ها رو محاسبه کن
         total_price, total_discount, half_day_in_charge, half_day_out_charge = self.calculate_total_price()
         self.total_price = total_price
         self.discount = total_discount
@@ -1468,7 +1378,9 @@ class Reservationhotel(models.Model):
         self.half_day_out_charge = half_day_out_charge
         self.final_price = self.total_price - self.discount
 
-        super().save(*args, **kwargs)
+        # فقط وقتی تغییر کردن دوباره ذخیره کن
+        if not is_new:
+            super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
 
     @property
     def nights_count(self):
@@ -1488,28 +1400,20 @@ class Reservationhotel(models.Model):
             total += (room.room_capacity + room.extra_capacity) * res_room.quantity
         return total
 
+
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
-    reservation = models.ForeignKey(
-        Reservationhotel,
-        on_delete=models.CASCADE,
-        verbose_name='رزرو',
-        related_name='reservation_rooms',
-    )
-    room = models.ForeignKey(
-        Room,
-        on_delete=models.CASCADE,
-        verbose_name='اتاق',
-        related_name='reservation_rooms',
-    )
-  
+    reservation = models.ForeignKey(Reservationhotel, on_delete=models.CASCADE, verbose_name='رزرو', related_name='reservation_rooms')
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, verbose_name='اتاق', related_name='reservation_rooms')
+    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'
-        verbose_name_plural = 'مسافران اتاق های رزرو شده '
+        verbose_name_plural = 'اتاق‌های رزرو شده'
 
     def __str__(self):
         return f'{self.room.title} در رزرو {self.reservation.tracking_code}'
+
 
 # ---------------- ReservationRoomPassenger ----------------
 class ReservationRoomPassenger(models.Model):
@@ -1519,20 +1423,8 @@ class ReservationRoomPassenger(models.Model):
         ('secondary', 'مسافر فرعی'),
     ]
 
-    reservation_room = models.ForeignKey(
-        ReservationRoom,
-        on_delete=models.CASCADE,
-        related_name='passengers',
-        verbose_name='اتاق رزرو شده'
-    )
-    
-    passenger_type = models.CharField(
-        max_length=20,
-        choices=PASSENGER_TYPE_CHOICES,
-        default='secondary',
-        verbose_name='نوع مسافر'
-    )
-    
+    reservation_room = models.ForeignKey(ReservationRoom, on_delete=models.CASCADE, related_name='passengers', verbose_name='اتاق رزرو شده')
+    passenger_type = models.CharField(max_length=20, choices=PASSENGER_TYPE_CHOICES, default='secondary', verbose_name='نوع مسافر')
     first_name = models.CharField('نام', max_length=100)
     last_name = models.CharField('نام خانوادگی', max_length=100)
     mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
