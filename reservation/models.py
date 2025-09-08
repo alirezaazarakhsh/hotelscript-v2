@@ -1502,11 +1502,7 @@ class ReservationRoom(models.Model):
         verbose_name='اتاق',
         related_name='reservation_rooms',
     )
-    quantity = models.PositiveIntegerField(
-        verbose_name=_('تعداد اتاق'),
-        default=1,
-        validators=[MinValueValidator(1)],
-    )
+  
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'

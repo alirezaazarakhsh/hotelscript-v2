@@ -5,6 +5,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 import jdatetime
 from authentication import forms
+from nested_admin import NestedModelAdmin, NestedTabularInline
 from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
@@ -605,30 +606,32 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
 
+
 logger = logging.getLogger(__name__)
 
 # ---------------- Passenger Inline ----------------
-class ReservationRoomPassengerInline(admin.TabularInline):
+class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 0
+    extra = 8
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    can_delete = True
+    can_delete = False
     autocomplete_fields = ()
 
 # ---------------- Room Inline ----------------
-class ReservationRoomInline(admin.TabularInline):
+class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 0
+    extra = 3
     max_num = 3
-    fields = ('room', 'quantity')
+    fields = ('room',)
     autocomplete_fields = ('room',)
-    show_change_link = True
-    can_delete = True
+    show_change_link = False
+    can_delete =False
+    inlines = [ReservationRoomPassengerInline]  # تودرتو کردن مسافران زیر اتاق‌ها
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
-class ReservationhotelAdmin(admin.ModelAdmin):
+class ReservationhotelAdmin(NestedModelAdmin):
     list_display = (
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
@@ -690,15 +693,3 @@ class ReservationhotelAdmin(admin.ModelAdmin):
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
     total_guests_fa.short_description = 'کل مهمان‌ها'
-
-# ---------------- ReservationRoom Admin ----------------
-@admin.register(ReservationRoom)
-class ReservationRoomAdmin(admin.ModelAdmin):
-    list_display = ('room', 'reservation_display', 'quantity')
-    search_fields = ('room__title', 'reservation__tracking_code')
-    autocomplete_fields = ('room', 'reservation')
-    inlines = [ReservationRoomPassengerInline]
-
-    def reservation_display(self, obj):
-        return obj.reservation.tracking_code
-    reservation_display.short_description = 'رزرو'
