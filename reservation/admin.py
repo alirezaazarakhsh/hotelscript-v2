@@ -17,8 +17,6 @@ from .models import (
     HotelTag,
     Facilities,
     ReservationApprovalDuration,
-    ReservationRoom,
-    ReservationRoomPassenger,
     Reservationhotel,
     RoomDatePrice,
     RoomFacilities,
@@ -34,6 +32,7 @@ from .models import (
     Room,
     Passenger,
     SuggestedCommentItem,
+    Reservationhotel, ReservationRoom, ReservationRoomPassenger
 )
 
 
@@ -603,6 +602,8 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
         return True
     
     
+    
+    
 
 logger = logging.getLogger(__name__)
 
@@ -620,7 +621,7 @@ class ReservationRoomInline(admin.TabularInline):
     model = ReservationRoom
     extra = 0
     max_num = 3
-    fields = ('room',)
+    fields = ('room', 'quantity')
     autocomplete_fields = ('room',)
     show_change_link = True
     can_delete = True
@@ -632,7 +633,7 @@ class ReservationhotelAdmin(admin.ModelAdmin):
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'final_price', 'status', 'created_jalali'
+        'total_price', 'half_day_in_charge', 'half_day_out_charge', 'discount', 'final_price', 'status', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
@@ -640,11 +641,11 @@ class ReservationhotelAdmin(admin.ModelAdmin):
     )
     list_filter = ('status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
-    inlines = [ReservationRoomInline]  # فقط اتاق‌ها
+    inlines = [ReservationRoomInline]
 
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'created_jalali', 'updated_jalali', 'final_price'
+        'created_jalali', 'updated_jalali', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'final_price'
     )
 
     fieldsets = (
@@ -658,7 +659,7 @@ class ReservationhotelAdmin(admin.ModelAdmin):
             'fields': ('check_in_date', 'check_out_date')
         }),
         (_('قیمت و وضعیت'), {
-            'fields': ('total_price', 'discount', 'final_price', 'status')
+            'fields': ('total_price', 'half_day_in_charge', 'half_day_out_charge', 'discount', 'final_price', 'status')
         }),
         (_('اطلاعات سیستم'), {
             'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
@@ -693,12 +694,11 @@ class ReservationhotelAdmin(admin.ModelAdmin):
 # ---------------- ReservationRoom Admin ----------------
 @admin.register(ReservationRoom)
 class ReservationRoomAdmin(admin.ModelAdmin):
-    list_display = ('room', 'reservation_display')
+    list_display = ('room', 'reservation_display', 'quantity')
     search_fields = ('room__title', 'reservation__tracking_code')
     autocomplete_fields = ('room', 'reservation')
-    inlines = [ReservationRoomPassengerInline]  # Inline مسافران زیر هر اتاق
+    inlines = [ReservationRoomPassengerInline]
 
     def reservation_display(self, obj):
         return obj.reservation.tracking_code
     reservation_display.short_description = 'رزرو'
-
