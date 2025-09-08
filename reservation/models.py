@@ -68,7 +68,7 @@ class Province(models.Model):
 
     class Meta:
         verbose_name = 'استان'
-        verbose_name_plural = '6- اضافه کردن استان ها'
+        verbose_name_plural = 'اضافه کردن استان ها'
         
     def __str__(self):
         return self.name
@@ -109,7 +109,7 @@ class City(models.Model):
 
     class Meta:
         verbose_name = 'شهر'
-        verbose_name_plural = '7- اضافه کردن شهر '
+        verbose_name_plural = 'اضافه کردن شهر '
         constraints = [
             models.UniqueConstraint(
                 fields=[
@@ -138,7 +138,7 @@ class HotelType(models.Model):
 
     class Meta:
         verbose_name = 'نوع اقامتگاه'
-        verbose_name_plural = '8-اضافه کردن نوع اقامتگاه'
+        verbose_name_plural = 'اضافه کردن نوع اقامتگاه'
 
     def __str__(self):
         return self.title
@@ -407,7 +407,7 @@ class Hotel(models.Model):
 
     class Meta:
         verbose_name = 'هتل'
-        verbose_name_plural = '3-هتل ها'
+        verbose_name_plural = 'هتل ها'
 
     def __str__(self):
         return self.name
@@ -431,7 +431,7 @@ class HotelGallery(models.Model):
 
     class Meta:
         verbose_name = 'گالری تصاویر هتل'
-        verbose_name_plural = '9- گالری تصاویر هتل '
+        verbose_name_plural = ' گالری تصاویر هتل '
 
     def __str__(self):
         return f'{self.title} ({self.hotel})'
@@ -526,7 +526,7 @@ class NearbyPlace(models.Model):
 
     class Meta:
         verbose_name = 'مکان اطراف هتل'
-        verbose_name_plural = '9-1 - اضافه کردن اماکن اطراف هتل ها'
+        verbose_name_plural = 'اضافه کردن اماکن اطراف هتل ها'
 
     def __str__(self):
         return f'{self.title} - {self.hotel}'
@@ -842,7 +842,7 @@ class Room(models.Model):
 
     class Meta:
         verbose_name = 'اتاق'
-        verbose_name_plural = '4-اتاق ها'
+        verbose_name_plural = 'اتاق ها'
         constraints = [
             models.CheckConstraint(
                 check=models.Q(count__gte=0),
@@ -1017,7 +1017,7 @@ class RoomDatePrice(models.Model):
 
     class Meta:
         verbose_name = _('قیمت اتاق بر اساس سطح و بازه')
-        verbose_name_plural = _('5- بازه های زمانی اتاق')
+        verbose_name_plural = _('بازه های زمانی اتاق')
         ordering = ['room', 'start_date', 'user_level']
         constraints = [
             models.UniqueConstraint(
@@ -1346,7 +1346,7 @@ class Reservationhotel(models.Model):
 
     class Meta:
         verbose_name = _('رزرو')
-        verbose_name_plural = _('1- رزرو ها')
+        verbose_name_plural = _('رزرو ها')
 
     def __str__(self):
         return f'رزرو {self.tracking_code} توسط {self.buyer.phone_number}'
@@ -1506,7 +1506,7 @@ class ReservationRoom(models.Model):
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'
-        verbose_name_plural = '2-مسافران اتاق های رزرو شده '
+        verbose_name_plural = 'مسافران اتاق های رزرو شده '
 
     def __str__(self):
         return f'{self.room.title} در رزرو {self.reservation.tracking_code}'

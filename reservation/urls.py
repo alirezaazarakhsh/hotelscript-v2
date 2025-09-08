@@ -9,6 +9,7 @@ from .views import (
     HotelCommentsBySlugView,
     CreateCommentView,
     BestSellersListView,
+    ReservationCreateAPIView,
     SuggesteHotelListView,
 )
 
@@ -67,4 +68,6 @@ urlpatterns = [
 
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
+    path('hotels/room/reservations/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),
+
 ]

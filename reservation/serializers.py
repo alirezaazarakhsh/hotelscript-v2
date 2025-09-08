@@ -16,6 +16,7 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
+    Reservationhotel,
     Room,
     RoomDatePrice,
     RoomFacilities,
@@ -721,3 +722,101 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
         
 
 
+
+
+class PersonSerializer(serializers.Serializer):
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    mobile_number = serializers.CharField(allow_null=True)
+    national_code = serializers.CharField(allow_null=True)
+
+class RoomSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='room.id')
+    name = serializers.CharField(source='room.title')
+    capacity = serializers.IntegerField(source='room.room_capacity')
+    extra_capacity = serializers.IntegerField(source='room.extra_capacity')
+    extra_capacity_price = serializers.DecimalField(
+        source='room.date_prices.first.price',  # Simplified, adjust based on date
+        max_digits=12,
+        decimal_places=0
+    )
+    passengers = serializers.SerializerMethodField()
+
+    def get_passengers(self, obj):
+        passengers = obj.passengers.all()
+        main_passenger = passengers.filter(passenger_type='primary').first()
+        other_passengers = passengers.filter(passenger_type='secondary')
+        extra_passengers = passengers.filter(passenger_type='extra')
+        return {
+            'main_passenger': PersonSerializer(main_passenger).data if main_passenger else None,
+            'other_passengers': PersonSerializer(other_passengers, many=True).data,
+            'extra_capacity_passengers': PersonSerializer(extra_passengers, many=True).data
+        }
+
+class ReservationSerializer(serializers.ModelSerializer):
+    hotel_id = serializers.IntegerField(source='reservation_rooms.first.room.hotel.id')
+    hotel_slug = serializers.CharField(source='reservation_rooms.first.room.hotel.slug')
+    hotel_name = serializers.CharField(source='reservation_rooms.first.room.hotel.name')
+    main_image = serializers.CharField(source='reservation_rooms.first.room.hotel.main_image')
+    city = serializers.CharField(source='reservation_rooms.first.room.hotel.city')
+    number_of_nights = serializers.IntegerField(source='nights_count')
+    date = serializers.SerializerMethodField()
+    time = serializers.SerializerMethodField()
+    half_charge_price = serializers.SerializerMethodField()
+    reserver = serializers.SerializerMethodField()
+    rooms = RoomSerializer(source='reservation_rooms', many=True)
+    half_charge = serializers.SerializerMethodField()
+    invoice = serializers.SerializerMethodField()
+    description = serializers.CharField(source='additional_notes')
+    reservation_id = serializers.CharField(source='tracking_code')
+    created_at = serializers.SerializerMethodField()
+    status = serializers.CharField()
+
+    class Meta:
+        model = Reservationhotel
+        fields = (
+            'reservation_id', 'hotel_id', 'hotel_slug', 'hotel_name', 'created_at', 'main_image',
+            'city', 'number_of_nights', 'date', 'time', 'half_charge_price', 'reserver',
+            'rooms', 'half_charge', 'invoice', 'description', 'status'
+        )
+
+    def get_date(self, obj):
+        return {
+            'enter': obj.check_in_date.strftime('%Y-%m-%d'),
+            'exit': obj.check_out_date.strftime('%Y-%m-%d')
+        }
+
+    def get_time(self, obj):
+        return {
+            'enter': '14:00',  # Default check-in time
+            'exit': '12:00'    # Default check-out time
+        }
+
+    def get_half_charge_price(self, obj):
+        return {
+            'enter': str(obj.half_day_in_charge),
+            'exit': str(obj.half_day_out_charge)
+        }
+
+    def get_reserver(self, obj):
+        return {
+            'first_name': obj.reserver_first_name,
+            'last_name': obj.reserver_last_name,
+            'mobile_number': obj.reserver_phone_number,
+            'national_code': obj.reserver_national_code
+        }
+
+    def get_half_charge(self, obj):
+        hotel = obj.reservation_rooms.first().room.hotel
+        return {
+            'enter': hotel.has_check_in_half_day_charge,
+            'exit': hotel.has_check_out_half_day_charge
+        }
+
+    def get_invoice(self, obj):
+        return {
+            'total_price': str(obj.final_price)
+        }
+
+    def get_created_at(self, obj):
+        return obj.created_at.strftime('%Y-%m-%d %H:%M:%S')

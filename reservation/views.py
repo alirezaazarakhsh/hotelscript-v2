@@ -2,6 +2,7 @@ from collections import defaultdict
 import itertools
 from datetime import datetime, timedelta
 import logging
+import random
 import re
 import math
 import sys
@@ -69,6 +70,9 @@ from .models import (
     Hotel,
     HotelTag,
     HotelTagPublic,
+    ReservationRoom,
+    ReservationRoomPassenger,
+    Reservationhotel,
     Room,
     RoomDate,
     City,
@@ -102,6 +106,7 @@ from .serializers import (
     HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
+    ReservationSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
     RoomSerializer,
@@ -2501,3 +2506,160 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             "min_price": int(min(prices)),
             "max_price": int(max(prices)),
         })
+        
+        
+        
+
+
+# ای پی ای رزرو 
+# Swagger manual parameters for Create Reservation
+reservation_create_manual_params = [
+    openapi.Parameter(
+        'hotel-id', 
+        openapi.IN_BODY, 
+        description="شناسه هتل", 
+        type=openapi.TYPE_INTEGER, 
+        required=True
+    ),
+    openapi.Parameter(
+        'room-id', 
+        openapi.IN_BODY, 
+        description="لیست شناسه‌های اتاق‌ها", 
+        type=openapi.TYPE_ARRAY, 
+        items=openapi.Items(type=openapi.TYPE_INTEGER), 
+        required=True
+    ),
+    openapi.Parameter(
+        'date', 
+        openapi.IN_BODY, 
+        description="تاریخ ورود و خروج (فرمت: YYYY-MM-DD)", 
+        type=openapi.TYPE_OBJECT, 
+        properties={
+            'enter': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
+            'exit': openapi.Schema(type=openapi.TYPE_STRING, format='date')
+        },
+        required=True
+    ),
+]
+
+class ReservationCreateAPIView(generics.CreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = ReservationSerializer
+
+    @swagger_auto_schema(
+        operation_summary="ایجاد رزرو جدید برای هتل",
+        operation_description="ایجاد رزرو جدید برای یک هتل مشخص با اطلاعات اتاق‌ها و تاریخ. رزرو با وضعیت 'در حال بررسی' ایجاد می‌شود و کد پیگیری برای افزودن مسافران بازگردانده می‌شود.",
+        tags=["reservation-hotel"],
+        manual_parameters=reservation_create_manual_params,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'hotel-id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                'room-id': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_INTEGER)
+                ),
+                'date': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'enter': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
+                        'exit': openapi.Schema(type=openapi.TYPE_STRING, format='date')
+                    }
+                ),
+            },
+            required=['hotel-id', 'room-id', 'date']
+        ),
+        responses={
+            201: openapi.Response(
+                description="رزرو با موفقیت ثبت شد",
+                schema=ReservationSerializer
+            ),
+            400: openapi.Response(
+                description="خطای ورودی یا اعتبارسنجی"
+            ),
+            404: openapi.Response(
+                description="هتل یا اتاق یافت نشد"
+            )
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        try:
+            # Extract input data
+            hotel_id = request.data.get('hotel-id')
+            room_ids = request.data.get('room-id', [])
+            date_data = request.data.get('date', {})
+            enter_date = date_data.get('enter')
+            exit_date = date_data.get('exit')
+
+            # Validate required fields
+            if not (hotel_id and room_ids and enter_date and exit_date):
+                return Response(
+                    {"error": _("Missing required fields")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Convert string dates to jdatetime.date
+            try:
+                check_in_date = jdatetime.datetime.strptime(enter_date, '%Y-%m-%d').date()
+                check_out_date = jdatetime.datetime.strptime(exit_date, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"error": _("Invalid date format. Use YYYY-MM-DD")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate hotel
+            hotel = get_object_or_404(Hotel, id=hotel_id)
+
+            # Validate rooms and ensure they belong to the hotel
+            rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
+            if rooms.count() != len(room_ids):
+                return Response(
+                    {"error": _("One or more rooms not found or do not belong to the specified hotel")},
+                    status=status.HTTP_400_NOT_FOUND
+                )
+
+            # Create Reservationhotel instance
+            reservation = Reservationhotel(
+                buyer=request.user,
+                reserver_first_name="Pending",  # Placeholder until passengers are added
+                reserver_last_name="Pending",
+                reserver_phone_number="00000000000",
+                check_in_date=check_in_date,
+                check_out_date=check_out_date,
+                status='unconfirmed'  # در حال بررسی
+            )
+
+            # Generate unique tracking code
+            while True:
+                code = 'safa' + str(random.randint(10000, 99999))
+                if not Reservationhotel.objects.filter(tracking_code=code).exists():
+                    reservation.tracking_code = code
+                    break
+
+            # Save reservation to calculate prices
+            reservation.save()
+
+            # Create ReservationRoom instances
+            for room in rooms:
+                reservation_room = ReservationRoom(
+                    reservation=reservation,
+                    room=room,
+                    quantity=1  # Assuming one room per room_id
+                )
+                reservation_room.save()
+
+            # Serialize response
+            serializer = ReservationSerializer(reservation)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": _("An unexpected error occurred")},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
