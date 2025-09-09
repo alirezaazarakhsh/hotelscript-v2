@@ -2530,8 +2530,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 'room_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER)),
                 'date': openapi.Schema(type=openapi.TYPE_OBJECT,
                     properties={
-                        'start': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ شروع YYYY-MM-DD"),
-                        'end': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ پایان YYYY-MM-DD"),
+                        'start': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ شروع شمسی YYYY-MM-DD"),
+                        'end': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ پایان شمسی YYYY-MM-DD"),
                     }
                 ),
             },
@@ -2556,8 +2556,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             # تبدیل تاریخ‌ها از شمسی به میلادی
             try:
-                check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-                check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+                start_parts = list(map(int, start_date.split('-')))
+                end_parts = list(map(int, end_date.split('-')))
+                check_in_date = jdatetime.date(*start_parts).togregorian()
+                check_out_date = jdatetime.date(*end_parts).togregorian()
             except ValueError:
                 return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2601,6 +2603,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
