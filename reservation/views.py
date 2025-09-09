@@ -2541,6 +2541,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if not (hotel_id and room_ids and start_date and end_date):
                 return Response({"error": _("Missing required fields")}, status=status.HTTP_400_BAD_REQUEST)
 
+            # تبدیل تاریخ‌ها
             try:
                 check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
                 check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
@@ -2563,37 +2564,21 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها با قیمت، نفر اضافه و تخفیف
+            # ایجاد رزرو اتاق‌ها با quantity پیش‌فرض
             for room in rooms:
-                # گرفتن قیمت بر اساس بازه تاریخ رزرو
-                room_price_obj = RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=check_in_date,
-                    end_date__gte=check_in_date
-                ).order_by('start_date').first()
-
-                if not room_price_obj:
-                    return Response(
-                        {"error": _(f"No price defined for room {room.id} in selected date range")},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                # محاسبه قیمت نهایی با اعمال تخفیف
-                price = room_price_obj.price
-                discount_value = room_price_obj.discount_value or 0
-                if room_price_obj.discount_type == 'percentage':
-                    price = price - (price * discount_value // 100)
-                elif room_price_obj.discount_type == 'fixed' and room_price_obj.is_fixed_discount_one_time:
-                    price = max(price - discount_value, 0)  # اطمینان از مثبت بودن قیمت
-
                 ReservationRoom.objects.create(
                     reservation=reservation,
-                    room=room,
-                    price_per_night=price,
-                    extra_passenger_price=room_price_obj.extra_passenger_price,
-                    discount_type=room_price_obj.discount_type,
-                    discount_value=discount_value
+                    room=room
                 )
+
+            # محاسبه قیمت‌ها، نیم‌شارژها و تخفیف‌ها
+            total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
+            reservation.total_price = total_price
+            reservation.discount = total_discount
+            reservation.half_day_in_charge = half_day_in_charge
+            reservation.half_day_out_charge = half_day_out_charge
+            reservation.final_price = total_price - total_discount
+            reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2602,6 +2587,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
