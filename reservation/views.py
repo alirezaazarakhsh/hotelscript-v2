@@ -2589,6 +2589,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if check_in_date >= check_out_date:
                 return Response({"error": "Check-out date must be after check-in date"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # محاسبه تعداد شب‌ها
+            number_of_nights = (check_out_date - check_in_date).days
+            if number_of_nights <= 0:
+                return Response({"error": "Number of nights must be greater than zero"}, status=status.HTTP_400_BAD_REQUEST)
+
             # اعتبارسنجی هتل و اتاق‌ها
             hotel = get_object_or_404(Hotel, id=hotel_id)
             rooms = Room.objects.filter(id__in=room_ids_data, hotel=hotel)
@@ -2622,7 +2627,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها با price_per_night از RoomDatePrice
+            # ایجاد رزرو اتاق‌ها با price_per_night و subtotal
             for room_id in room_ids_data:
                 room = rooms.get(id=room_id)
                 price_obj = RoomDatePrice.objects.filter(
@@ -2636,12 +2641,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     end_date__gte=check_out_date,
                     user_level=request.user.user_level
                 ).first()
-                
+
+                # محاسبه subtotal
+                subtotal = price_obj.price * 1 * number_of_nights  # price_per_night * quantity * number_of_nights
+
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
                     quantity=1,
-                    price_per_night=price_obj.price  # قیمت از RoomDatePrice
+                    price_per_night=price_obj.price,
+                    subtotal=subtotal
                 )
 
             # محاسبه قیمت‌ها
@@ -2666,7 +2675,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
         
         
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
