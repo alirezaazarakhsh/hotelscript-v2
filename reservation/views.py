@@ -2563,11 +2563,36 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها بدون quantity
+            # ایجاد رزرو اتاق‌ها با قیمت، نفر اضافه و تخفیف
             for room in rooms:
+                # گرفتن قیمت بر اساس بازه تاریخ رزرو
+                room_price_obj = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_in_date
+                ).order_by('start_date').first()
+
+                if not room_price_obj:
+                    return Response(
+                        {"error": _(f"No price defined for room {room.id} in selected date range")},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                # محاسبه قیمت نهایی با اعمال تخفیف
+                price = room_price_obj.price
+                discount_value = room_price_obj.discount_value or 0
+                if room_price_obj.discount_type == 'percentage':
+                    price = price - (price * discount_value // 100)
+                elif room_price_obj.discount_type == 'fixed' and room_price_obj.is_fixed_discount_one_time:
+                    price = max(price - discount_value, 0)  # اطمینان از مثبت بودن قیمت
+
                 ReservationRoom.objects.create(
                     reservation=reservation,
-                    room=room
+                    room=room,
+                    price_per_night=price,
+                    extra_passenger_price=room_price_obj.extra_passenger_price,
+                    discount_type=room_price_obj.discount_type,
+                    discount_value=discount_value
                 )
 
             serializer = ReservationSerializer(reservation)
