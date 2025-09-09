@@ -2527,7 +2527,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'hotel_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'room_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER)),
+                'room_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT, properties={
+                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'quantity': openapi.Schema(type=openapi.TYPE_INTEGER, minimum=1)
+                })),
                 'date': openapi.Schema(type=openapi.TYPE_OBJECT,
                     properties={
                         'start': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ شروع شمسی YYYY-MM-DD"),
@@ -2546,15 +2549,24 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         try:
             hotel_id = request.data.get('hotel_id')
-            room_ids = request.data.get('room_id', [])
-            date_data = request.data.get('date', {})
-            start_date = date_data.get('start')
-            end_date = date_data.get('end')
+            room_ids_data = request.data.get('room_id')
+            date_data = request.data.get('date')
 
-            if not (hotel_id and room_ids and start_date and end_date):
+            # Validate required fields
+            if hotel_id is None or not room_ids_data or not date_data:
                 return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # تبدیل تاریخ‌ها از شمسی به میلادی
+            # Validate room_ids is a list
+            if not isinstance(room_ids_data, list):
+                return Response({"error": "room_id must be a list of room objects"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate date fields
+            start_date = date_data.get('start')
+            end_date = date_data.get('end')
+            if not start_date or not end_date:
+                return Response({"error": "Missing start or end date"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Convert Persian dates to Gregorian
             try:
                 start_parts = list(map(int, start_date.split('-')))
                 end_parts = list(map(int, end_date.split('-')))
@@ -2563,12 +2575,18 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             except ValueError:
                 return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Validate date order
+            if check_in_date >= check_out_date:
+                return Response({"error": "Check-out date must be after check-in date"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Validate hotel and rooms
             hotel = get_object_or_404(Hotel, id=hotel_id)
+            room_ids = [room['id'] for room in room_ids_data]
             rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
             if rooms.count() != len(room_ids):
                 return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # ایجاد رزرو اصلی
+            # Create reservation
             reservation = Reservationhotel.objects.create(
                 buyer=request.user,
                 reserver_first_name="Pending",
@@ -2579,22 +2597,29 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها با quantity پیش‌فرض
-            for room in rooms:
+            # Create room reservations with quantities
+            for room_data in room_ids_data:
+                room = rooms.get(id=room_data['id'])
+                quantity = room_data.get('quantity', 1)
+                if not isinstance(quantity, int) or quantity < 1:
+                    return Response({"error": f"Invalid quantity for room {room_data['id']}"}, status=status.HTTP_400_BAD_REQUEST)
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=1  # یا مقدار واقعی که کاربر انتخاب کرده
+                    quantity=quantity
                 )
 
-            # محاسبه قیمت‌ها، نیم‌شارژها و تخفیف‌ها
-            total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
-            reservation.total_price = total_price
-            reservation.discount = total_discount
-            reservation.half_day_in_charge = half_day_in_charge
-            reservation.half_day_out_charge = half_day_out_charge
-            reservation.final_price = total_price - total_discount
-            reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+            # Calculate prices
+            try:
+                total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
+                reservation.total_price = total_price
+                reservation.discount = total_discount
+                reservation.half_day_in_charge = half_day_in_charge
+                reservation.half_day_out_charge = half_day_out_charge
+                reservation.final_price = total_price - total_discount
+                reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+            except Exception as e:
+                return Response({"error": f"Error calculating prices: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2603,8 +2628,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+        
+        
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
