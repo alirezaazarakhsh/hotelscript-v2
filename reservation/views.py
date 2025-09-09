@@ -2527,11 +2527,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 'hotel_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                'room_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT, properties={
-                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'quantity': openapi.Schema(type=openapi.TYPE_INTEGER, minimum=1)
-                })),
-                'date': openapi.Schema(type=openapi.TYPE_OBJECT,
+                'room_id': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_INTEGER),
+                    description="می‌تواند یک عدد (برای یک اتاق) یا لیستی از اعداد (برای چند اتاق) باشد"
+                ),
+                'date': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
                     properties={
                         'start': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ شروع شمسی YYYY-MM-DD"),
                         'end': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ پایان شمسی YYYY-MM-DD"),
@@ -2552,21 +2554,27 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             room_ids_data = request.data.get('room_id')
             date_data = request.data.get('date')
 
-            # Validate required fields
-            if hotel_id is None or not room_ids_data or not date_data:
+            # اعتبارسنجی فیلدهای الزامی
+            if hotel_id is None or room_ids_data is None or not date_data:
                 return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate room_ids is a list
-            if not isinstance(room_ids_data, list):
-                return Response({"error": "room_id must be a list of room objects"}, status=status.HTTP_400_BAD_REQUEST)
+            # تبدیل room_id به لیست اگر یک عدد تکی باشد
+            if isinstance(room_ids_data, int):
+                room_ids_data = [room_ids_data]
+            elif not isinstance(room_ids_data, list):
+                return Response({"error": "room_id must be an integer or a list of integers"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate date fields
+            # اعتبارسنجی اینکه همه room_ids اعداد صحیح هستند
+            if not all(isinstance(room_id, int) for room_id in room_ids_data):
+                return Response({"error": "All room IDs must be integers"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # اعتبارسنجی تاریخ‌ها
             start_date = date_data.get('start')
             end_date = date_data.get('end')
             if not start_date or not end_date:
                 return Response({"error": "Missing start or end date"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Convert Persian dates to Gregorian
+            # تبدیل تاریخ‌های شمسی به میلادی
             try:
                 start_parts = list(map(int, start_date.split('-')))
                 end_parts = list(map(int, end_date.split('-')))
@@ -2575,18 +2583,17 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             except ValueError:
                 return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate date order
+            # اعتبارسنجی ترتیب تاریخ‌ها
             if check_in_date >= check_out_date:
                 return Response({"error": "Check-out date must be after check-in date"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate hotel and rooms
+            # اعتبارسنجی هتل و اتاق‌ها
             hotel = get_object_or_404(Hotel, id=hotel_id)
-            room_ids = [room['id'] for room in room_ids_data]
-            rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
-            if rooms.count() != len(room_ids):
+            rooms = Room.objects.filter(id__in=room_ids_data, hotel=hotel)
+            if rooms.count() != len(room_ids_data):
                 return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Create reservation
+            # ایجاد رزرو اصلی
             reservation = Reservationhotel.objects.create(
                 buyer=request.user,
                 reserver_first_name="Pending",
@@ -2597,19 +2604,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # Create room reservations with quantities
-            for room_data in room_ids_data:
-                room = rooms.get(id=room_data['id'])
-                quantity = room_data.get('quantity', 1)
-                if not isinstance(quantity, int) or quantity < 1:
-                    return Response({"error": f"Invalid quantity for room {room_data['id']}"}, status=status.HTTP_400_BAD_REQUEST)
+            # ایجاد رزرو اتاق‌ها با quantity پیش‌فرض
+            for room_id in room_ids_data:
+                room = rooms.get(id=room_id)
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=quantity
+                    quantity=1
                 )
 
-            # Calculate prices
+            # محاسبه قیمت‌ها
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 reservation.total_price = total_price
