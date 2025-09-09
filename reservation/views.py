@@ -1,4 +1,5 @@
 from collections import defaultdict
+from decimal import Decimal
 import itertools
 from datetime import datetime, timedelta
 import logging
@@ -2515,8 +2516,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-logger = logging.getLogger(__name__)
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2597,8 +2596,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             # اعتبارسنجی هتل و اتاق‌ها
             hotel = get_object_or_404(Hotel, id=hotel_id)
             rooms = Room.objects.filter(id__in=room_ids_data, hotel=hotel)
-            if rooms.count() != len(set(room_ids_data)):  # اجازه تکرار room_id برای quantity >1 نمی‌دهیم، اما اگر بخواهید می‌تونید تغییر بدید
+            if rooms.count() != len(set(room_ids_data)):
                 return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # دسترسی به سطح کاربری از natural_profile
+            user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
 
             # بررسی وجود قیمت برای تمام شب‌ها در هر اتاق
             for room in rooms:
@@ -2607,7 +2609,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     price_obj = room.date_prices.filter(
                         start_date__lte=current_date,
                         end_date__gte=current_date,
-                        user_level=request.user.user_level
+                        user_level=user_level
                     ).first() or room.date_prices.filter(
                         start_date__lte=current_date,
                         end_date__gte=current_date,
@@ -2628,22 +2630,20 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها - quantity=1 برای هر room_id منحصر به فرد
-            for room_id in set(room_ids_data):  # جلوگیری از تکرار
+            # ایجاد رزرو اتاق‌ها
+            for room_id in set(room_ids_data):
                 room = rooms.get(id=room_id)
-                quantity = room_ids_data.count(room_id)  # اگر room_id تکرار شده، quantity افزایش پیدا کنه
-                # محاسبه price_per_night متوسط یا اولین، اما چون ممکنه متفاوت باشه، بهتره در calculate_total_price مدیریت بشه
+                quantity = room_ids_data.count(room_id)
                 price_obj = room.date_prices.filter(
                     start_date__lte=check_in_date,
                     end_date__gte=check_in_date,
-                    user_level=request.user.user_level
+                    user_level=user_level
                 ).first() or room.date_prices.filter(
                     start_date__lte=check_in_date,
                     end_date__gte=check_in_date,
                     user_level__isnull=True
                 ).first()
 
-                # subtotal تقریبی، بعدا در save به‌روزرسانی می‌شه
                 subtotal = price_obj.price * quantity * number_of_nights if price_obj else 0
 
                 ReservationRoom.objects.create(
@@ -2654,7 +2654,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     subtotal=subtotal
                 )
 
-            # محاسبه قیمت‌ها و به‌روزرسانی subtotalها
+            # محاسبه قیمت‌ها و به‌روزرسانی
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 reservation.total_price = total_price
@@ -2664,13 +2664,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reservation.final_price = total_price - total_discount
                 reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
 
-                # به‌روزرسانی subtotal هر اتاق بر اساس محاسبات دقیق
                 for res_room in reservation.reservation_rooms.all():
-                    res_room.subtotal = self._calculate_room_subtotal(res_room, check_in_date, number_of_nights, request.user.user_level)
+                    res_room.subtotal = self._calculate_room_subtotal(res_room, check_in_date, number_of_nights, user_level)
                     res_room.save(update_fields=['subtotal'])
 
             except ValidationError as ve:
-                reservation.delete()  # پاک کردن رزرو ناقص
+                reservation.delete()
                 return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
                 reservation.delete()
@@ -2704,8 +2703,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             ).first()
             if price_obj:
                 daily_price = Decimal(price_obj.price)
-                subtotal += daily_price * quantity  # فقط قیمت پایه، بدون extra و discount اینجا
+                subtotal += daily_price * quantity
         return subtotal
+
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
@@ -2762,12 +2762,12 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Validate capacities - کل ظرفیت بر اساس تمام اتاق‌ها
+            # Validate capacities
             rooms = reservation.reservation_rooms.all()
             total_capacity = sum(r.room.room_capacity * r.quantity for r in rooms)
             total_extra_capacity = sum(r.room.extra_capacity * r.quantity for r in rooms)
 
-            if len(other_passengers) > total_capacity - 1:  # -1 برای main
+            if len(other_passengers) > total_capacity - 1:
                 return Response(
                     {"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")},
                     status=status.HTTP_400_BAD_REQUEST
@@ -2789,12 +2789,12 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
             for room in rooms:
                 room.passengers.all().delete()
 
-            # توزیع مسافران بین اتاق‌ها برای جلوگیری از مشکل extra_guests
-            all_secondary = other_passengers[:]  # کپی لیست
-            all_extra = extra_capacity_passengers[:]
+            # توزیع مسافران بین اتاق‌ها
+            room_list = list(rooms)
+            room_index = 0
 
-            # اضافه کردن main به اولین اتاق
-            first_room = rooms.first()
+            # اضافه کردن main_passenger به اولین اتاق
+            first_room = room_list[0] if room_list else None
             if first_room:
                 ReservationRoomPassenger.objects.create(
                     reservation_room=first_room,
@@ -2805,10 +2805,8 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     passenger_type='primary'
                 )
 
-            # توزیع secondary و extra بین اتاق‌ها به صورت round-robin
-            room_list = list(rooms)
-            room_index = 0
-            for passenger in all_secondary:
+            # توزیع other_passengers
+            for passenger in other_passengers:
                 current_room = room_list[room_index % len(room_list)]
                 ReservationRoomPassenger.objects.create(
                     reservation_room=current_room,
@@ -2819,8 +2817,8 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 )
                 room_index += 1
 
-            room_index = 0
-            for passenger in all_extra:
+            # توزیع extra_capacity_passengers
+            for passenger in extra_capacity_passengers:
                 current_room = room_list[room_index % len(room_list)]
                 ReservationRoomPassenger.objects.create(
                     reservation_room=current_room,
@@ -2831,7 +2829,7 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 )
                 room_index += 1
 
-            # بازمحاسبه قیمت‌ها بعد از اضافه کردن مسافران (برای extra_price)
+            # بازمحاسبه قیمت‌ها
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 hotel = reservation.reservation_rooms.first().room.hotel

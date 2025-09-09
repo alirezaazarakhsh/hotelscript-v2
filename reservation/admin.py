@@ -604,10 +604,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    
-
-
-logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
@@ -626,7 +623,7 @@ class ReservationRoomInline(NestedTabularInline):
     fields = ('room',)
     autocomplete_fields = ('room',)
     show_change_link = False
-    can_delete =False
+    can_delete = False
     inlines = [ReservationRoomPassengerInline]  # تودرتو کردن مسافران زیر اتاق‌ها
 
 # ---------------- Reservationhotel Admin ----------------
@@ -643,7 +640,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
     list_filter = ('status', 'check_in_date', 'check_out_date')
-    autocomplete_fields = ('buyer',)
+    autocomplete_fields = ('buyer',)  # حالا بدون مشکل کار می‌کنه
     inlines = [ReservationRoomInline]
 
     readonly_fields = (

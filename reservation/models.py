@@ -1242,8 +1242,6 @@ class BestHotels(models.Model):
 
 
 #مدل رزرو های کاربران سایت 
-logger = logging.getLogger(__name__)
-
 # ---------------- Reservationhotel ----------------
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
@@ -1255,7 +1253,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        BaseUser,  # فرض می‌کنیم مدل BaseUser از قبل تعریف شده
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1264,6 +1262,7 @@ class Reservationhotel(models.Model):
     reserver_last_name = models.CharField(_('نام خانوادگی رزرو کننده'), max_length=256)
     reserver_phone_number = models.CharField(_('شماره تماس رزرو کننده'), max_length=11)
     reserver_national_code = models.CharField(_('کد ملی رزرو کننده'), max_length=10, blank=True, null=True)
+
     check_in_date = jmodels.jDateField(_('تاریخ ورود'))
     check_out_date = jmodels.jDateField(_('تاریخ خروج'))
 
@@ -1276,6 +1275,7 @@ class Reservationhotel(models.Model):
     tracking_code = models.CharField(_('کد پیگیری'), max_length=9, unique=True, editable=False)
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
+
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
 
@@ -1295,10 +1295,7 @@ class Reservationhotel(models.Model):
                 raise ValidationError(_(f'تعداد اتاق‌های درخواستی ({res_room.quantity}) برای {res_room.room.title} از موجودی ({res_room.room.inventory}) بیشتر است.'))
 
     def calculate_total_price(self):
-        if not self.pk:  # هنوز ذخیره نشده
-            return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
-
-        if not self.reservation_rooms.exists():
+        if not self.pk or not self.reservation_rooms.exists():
             return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
         hotel = self.reservation_rooms.first().room.hotel
@@ -1306,15 +1303,15 @@ class Reservationhotel(models.Model):
             raise ValidationError(_('تمام اتاق‌ها باید از یک هتل باشند.'))
 
         total = Decimal('0')
+        total_discount = Decimal('0')
         half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
-        total_discount = Decimal('0')
         nights = self.nights_count
 
         if nights <= 0:
-            return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
+            return total, total_discount, half_day_in_charge, half_day_out_charge
 
-        user_level = getattr(self.buyer, 'user_level', None)
+        user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
 
         for res_room in self.reservation_rooms.all():
             room = res_room.room
@@ -1368,9 +1365,8 @@ class Reservationhotel(models.Model):
                     break
 
         is_new = self.pk is None
-        super().save(*args, **kwargs)  # اول ذخیره کن تا pk بگیره
+        super().save(*args, **kwargs)
 
-        # بعد از ذخیره، قیمت‌ها رو محاسبه کن
         total_price, total_discount, half_day_in_charge, half_day_out_charge = self.calculate_total_price()
         self.total_price = total_price
         self.discount = total_discount
@@ -1378,7 +1374,6 @@ class Reservationhotel(models.Model):
         self.half_day_out_charge = half_day_out_charge
         self.final_price = self.total_price - self.discount
 
-        # فقط وقتی تغییر کردن دوباره ذخیره کن
         if not is_new:
             super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
 
@@ -1399,8 +1394,8 @@ class Reservationhotel(models.Model):
             room = res_room.room
             total += (room.room_capacity + room.extra_capacity) * res_room.quantity
         return total
-
-
+    
+    
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(Reservationhotel, on_delete=models.CASCADE, verbose_name='رزرو', related_name='reservation_rooms')
