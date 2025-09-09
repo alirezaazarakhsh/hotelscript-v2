@@ -2521,9 +2521,22 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت و دریافت اطلاعات هتل و اتاق",
-        operation_description="ایجاد رزرو موقت با اطلاعات هتل، اتاق‌ها و تاریخ. کاربر می‌تواند تعداد اتاق و نفر اضافه را مشخص کند.",
+        operation_description="ایجاد رزرو موقت با اطلاعات هتل، اتاق‌ها و تاریخ. اطلاعات هتل، اتاق‌ها و فیلدهای خالی برای مسافران بازگردانده می‌شود.",
         tags=["reservation-api"],
-        request_body=ReservationCreateInputSerializer,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'hotel_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                'room_id': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_INTEGER)),
+                'date': openapi.Schema(type=openapi.TYPE_OBJECT,
+                    properties={
+                        'start': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ شروع YYYY-MM-DD"),
+                        'end': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ پایان YYYY-MM-DD"),
+                    }
+                ),
+            },
+            required=['hotel_id', 'room_id', 'date']
+        ),
         responses={
             201: openapi.Response(description="رزرو موقت با موفقیت ایجاد شد", schema=ReservationSerializer),
             400: openapi.Response(description="خطای ورودی یا اعتبارسنجی"),
@@ -2533,22 +2546,25 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         try:
             hotel_id = request.data.get('hotel_id')
-            rooms_data = request.data.get('rooms', [])  # [{'room_id': 1, 'quantity': 2, 'extra_guests': 1}, ...]
+            room_ids = request.data.get('room_id', [])
             date_data = request.data.get('date', {})
             start_date = date_data.get('start')
             end_date = date_data.get('end')
 
-            if not (hotel_id and rooms_data and start_date and end_date):
-                return Response({"error": _("Missing required fields")}, status=status.HTTP_400_BAD_REQUEST)
+            if not (hotel_id and room_ids and start_date and end_date):
+                return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
             # تبدیل تاریخ‌ها
             try:
                 check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
                 check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
             except ValueError:
-                return Response({"error": _("Invalid date format. Use YYYY-MM-DD")}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
 
             hotel = get_object_or_404(Hotel, id=hotel_id)
+            rooms = Room.objects.filter(id__in=room_ids, hotel=hotel)
+            if rooms.count() != len(room_ids):
+                return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
             # ایجاد رزرو اصلی
             reservation = Reservationhotel.objects.create(
@@ -2561,28 +2577,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد اتاق‌ها
-            for room_item in rooms_data:
-                room_id = room_item.get('room_id')
-                quantity = room_item.get('quantity', 1)
-                extra_guests = room_item.get('extra_guests', 0)
-
-                room = get_object_or_404(Room, id=room_id, hotel=hotel)
-
-                res_room = ReservationRoom.objects.create(
+            # ایجاد رزرو اتاق‌ها با quantity پیش‌فرض
+            for room in rooms:
+                ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=quantity
+                    quantity=1
                 )
-
-                # اضافه کردن نفر اضافه
-                for i in range(extra_guests):
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=res_room,
-                        first_name=f'Extra {i+1}',
-                        last_name='Guest',
-                        passenger_type='extra'
-                    )
 
             # محاسبه قیمت‌ها، نیم‌شارژها و تخفیف‌ها
             total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
@@ -2600,9 +2601,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
