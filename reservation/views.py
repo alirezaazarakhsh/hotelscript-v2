@@ -2636,8 +2636,9 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
 
             # Validate capacities
             rooms = reservation.reservation_rooms.all()
-            total_capacity = sum(r.room.quantity * r.room.room_capacity for r in rooms)
-            total_extra_capacity = sum(r.room.quantity * r.room.extra_capacity for r in rooms)
+            # هر اتاق به‌صورت یک واحد حساب می‌شود
+            total_capacity = sum(r.room.room_capacity for r in rooms)
+            total_extra_capacity = sum(r.room.extra_capacity for r in rooms)
 
             if len(other_passengers) > total_capacity - 1:
                 return Response(
