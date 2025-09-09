@@ -2516,8 +2516,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
@@ -2534,7 +2534,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 'room_id': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_INTEGER),
-                    description="می‌تواند یک عدد یا لیستی از اعداد باشد"
+                    description="می‌تواند یک عدد (برای یک اتاق) یا لیستی از اعداد (برای چند اتاق) باشد"
                 ),
                 'date': openapi.Schema(
                     type=openapi.TYPE_OBJECT,
@@ -2574,7 +2574,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if not start_date or not end_date:
                 return Response({"error": "Missing start or end date"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # تبدیل تاریخ شمسی به میلادی
             try:
                 start_parts = list(map(int, start_date.split('-')))
                 end_parts = list(map(int, end_date.split('-')))
@@ -2597,7 +2596,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
 
-            # بررسی قیمت‌ها برای هر شب
             for room in rooms:
                 current_date = check_in_date
                 while current_date < check_out_date:
@@ -2637,6 +2635,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     user_level__isnull=True
                 ).first()
                 subtotal = price_obj.price * quantity * number_of_nights if price_obj else 0
+
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
@@ -2645,7 +2644,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     subtotal=subtotal
                 )
 
-            # محاسبه و به‌روزرسانی قیمت نهایی
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 reservation.total_price = total_price
@@ -2658,6 +2656,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 for res_room in reservation.reservation_rooms.all():
                     res_room.subtotal = self._calculate_room_subtotal(res_room, check_in_date, number_of_nights, user_level)
                     res_room.save(update_fields=['subtotal'])
+
+            except ValidationError as ve:
+                reservation.delete()
+                return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
                 reservation.delete()
                 logger.error(f"Error calculating prices: {str(e)}")
@@ -2666,6 +2668,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        except ValidationError as e:
+            logger.error(f"Validation error: {str(e)}")
+            return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2686,7 +2691,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 user_level__isnull=True
             ).first()
             if price_obj:
-                subtotal += Decimal(price_obj.price) * quantity
+                daily_price = Decimal(price_obj.price)
+                subtotal += daily_price * quantity
         return subtotal
 
 
@@ -2704,9 +2710,30 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
         tags=["reservation-api"],
         request_body=ReservationUpdatePassengersInputSerializer,
         responses={
-            200: openapi.Response(description="مسافران با موفقیت به‌روزرسانی شدند", schema=ReservationSerializer),
-            400: openapi.Response(description="خطای ورودی یا اعتبارسنجی"),
-            404: openapi.Response(description="رزرو یافت نشد"),
+            200: openapi.Response(
+                description="مسافران با موفقیت به‌روزرسانی شدند",
+                schema=ReservationSerializer
+            ),
+            400: openapi.Response(
+                description="خطای ورودی یا اعتبارسنجی",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'traceback': openapi.Schema(type=openapi.TYPE_STRING),
+                    }
+                )
+            )
         }
     )
     def put(self, request, *args, **kwargs):
@@ -2718,33 +2745,40 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
             extra_capacity_passengers = request.data.get('extra_capacity_passengers', [])
 
             if not all(key in main_passenger for key in ['first_name', 'last_name', 'mobile_number']):
-                return Response({"error": _("Main passenger must have first_name, last_name, and mobile_number")}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": _("Main passenger must have first_name, last_name, and mobile_number")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             rooms = reservation.reservation_rooms.all()
             total_capacity = sum(r.room.room_capacity * r.quantity for r in rooms)
             total_extra_capacity = sum(r.room.extra_capacity * r.quantity for r in rooms)
 
             if len(other_passengers) > total_capacity - 1:
-                return Response({"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             if len(extra_capacity_passengers) > total_extra_capacity:
-                return Response({"error": _(f"Too many extra capacity passengers. Maximum allowed: {total_extra_capacity}")}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": _(f"Too many extra capacity passengers. Maximum allowed: {total_extra_capacity}")},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            # بروزرسانی اطلاعات مسافر اصلی
             reservation.reserver_first_name = main_passenger['first_name']
             reservation.reserver_last_name = main_passenger['last_name']
             reservation.reserver_phone_number = main_passenger['mobile_number']
             reservation.reserver_national_code = main_passenger.get('national_code')
             reservation.save()
 
-            # حذف مسافران قبلی
             for room in rooms:
                 room.passengers.all().delete()
 
             room_list = list(rooms)
             room_index = 0
 
-            if room_list:
-                first_room = room_list[0]
+            first_room = room_list[0] if room_list else None
+            if first_room:
                 ReservationRoomPassenger.objects.create(
                     reservation_room=first_room,
                     first_name=main_passenger['first_name'],
@@ -2776,7 +2810,6 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                 )
                 room_index += 1
 
-            # محاسبه مجدد قیمت‌ها
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 hotel = reservation.reservation_rooms.first().room.hotel
@@ -2793,5 +2826,13 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
+        except ValidationError as e:
+            return Response(
+                {"error": str(e), "traceback": traceback.format_exc()},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
-            return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e), "traceback": traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
