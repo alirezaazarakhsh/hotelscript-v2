@@ -23,7 +23,7 @@ class FileManager:
                 if os.path.isfile(os.path.join(backup_dir, f)) and
                 (f.endswith(".tar.gz") or f.endswith(".sql"))
             ]
-            if len(files) > MAX_BACKUPS:
+            if len(files) > MAX_BACKUPS and MAX_BACKUPS > 0:  # بررسی صفر بودن MAX_BACKUPS
                 # مرتب‌سازی بر اساس زمان ایجاد
                 files.sort(key=lambda x: os.path.getctime(os.path.join(backup_dir, x)))
                 for old_file in files[:-MAX_BACKUPS]:
@@ -63,7 +63,11 @@ class FileManager:
         """استخراج تاریخ شمسی از نام فایل"""
         try:
             # فرمت نام فایل: db_1404-06-16-06-13.sql یا media_1404-06-16-06-13.tar.gz
+            if '_' not in filename:
+                raise ValueError("نام فایل فرمت موردنظر را ندارد")
             date_part = filename.split('_')[1]  # گرفتن 1404-06-16-06-13
+            if not date_part:
+                raise ValueError("بخش تاریخ در نام فایل خالی است")
             miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d-%H-%M")
             shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
             return shamsi_datetime.strftime("%Y-%m-%d %H:%M")  # فرمت شمسی

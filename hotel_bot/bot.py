@@ -643,7 +643,7 @@ async def show_backup_list(query, user_id, context):
     keyboard = []
     for f in files:
         file_type, filename = f.split(":", 1)
-        file_datetime = FileManager.get_file_datetime(filename)
+        file_datetime = FileManager.get_file_datetime(filename)  # اطمینان از وجود متد
         keyboard.append([
             InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
             InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
@@ -679,7 +679,7 @@ async def delete_backup(query, user_id, context):
     if files:
         for f in files:
             file_type, filename = f.split(":", 1)
-            file_datetime = FileManager.get_file_datetime(filename)
+            file_datetime = FileManager.get_file_datetime(filename)  # اطمینان از وجود متد
             keyboard.append([
                 InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
                 InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
