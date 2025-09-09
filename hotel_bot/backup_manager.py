@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 from jdatetime import datetime as jdatetime
 from config import PROJECT_DIR, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MEDIA_BASE_URL
+from hotel_bot.file_manager import FileManager
 from menu_manager import MenuManager
 
 # تنظیم لاگ
