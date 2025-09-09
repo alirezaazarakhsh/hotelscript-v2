@@ -2597,24 +2597,25 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             # اعتبارسنجی هتل و اتاق‌ها
             hotel = get_object_or_404(Hotel, id=hotel_id)
             rooms = Room.objects.filter(id__in=room_ids_data, hotel=hotel)
-            if rooms.count() != len(room_ids_data):
+            if rooms.count() != len(set(room_ids_data)):  # اجازه تکرار room_id برای quantity >1 نمی‌دهیم، اما اگر بخواهید می‌تونید تغییر بدید
                 return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # بررسی قیمت برای اتاق‌ها در بازه زمانی
+            # بررسی وجود قیمت برای تمام شب‌ها در هر اتاق
             for room in rooms:
-                price_obj = RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=check_in_date,
-                    end_date__gte=check_out_date,
-                    user_level__isnull=True
-                ).first() or RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=check_in_date,
-                    end_date__gte=check_out_date,
-                    user_level=request.user.user_level
-                ).first()
-                if not price_obj:
-                    return Response({"error": f"No price defined for room ID {room.id} in the given date range"}, status=status.HTTP_400_BAD_REQUEST)
+                current_date = check_in_date
+                while current_date < check_out_date:
+                    price_obj = room.date_prices.filter(
+                        start_date__lte=current_date,
+                        end_date__gte=current_date,
+                        user_level=request.user.user_level
+                    ).first() or room.date_prices.filter(
+                        start_date__lte=current_date,
+                        end_date__gte=current_date,
+                        user_level__isnull=True
+                    ).first()
+                    if not price_obj:
+                        return Response({"error": f"No price defined for room ID {room.id} on date {current_date}"}, status=status.HTTP_400_BAD_REQUEST)
+                    current_date += timedelta(days=1)
 
             # ایجاد رزرو اصلی
             reservation = Reservationhotel.objects.create(
@@ -2627,42 +2628,52 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها با price_per_night و subtotal
-            for room_id in room_ids_data:
+            # ایجاد رزرو اتاق‌ها - quantity=1 برای هر room_id منحصر به فرد
+            for room_id in set(room_ids_data):  # جلوگیری از تکرار
                 room = rooms.get(id=room_id)
-                price_obj = RoomDatePrice.objects.filter(
-                    room=room,
+                quantity = room_ids_data.count(room_id)  # اگر room_id تکرار شده، quantity افزایش پیدا کنه
+                # محاسبه price_per_night متوسط یا اولین، اما چون ممکنه متفاوت باشه، بهتره در calculate_total_price مدیریت بشه
+                price_obj = room.date_prices.filter(
                     start_date__lte=check_in_date,
-                    end_date__gte=check_out_date,
-                    user_level__isnull=True
-                ).first() or RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=check_in_date,
-                    end_date__gte=check_out_date,
+                    end_date__gte=check_in_date,
                     user_level=request.user.user_level
+                ).first() or room.date_prices.filter(
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_in_date,
+                    user_level__isnull=True
                 ).first()
 
-                # محاسبه subtotal
-                subtotal = price_obj.price * 1 * number_of_nights  # price_per_night * quantity * number_of_nights
+                # subtotal تقریبی، بعدا در save به‌روزرسانی می‌شه
+                subtotal = price_obj.price * quantity * number_of_nights if price_obj else 0
 
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=1,
-                    price_per_night=price_obj.price,
+                    quantity=quantity,
+                    price_per_night=price_obj.price if price_obj else 0,
                     subtotal=subtotal
                 )
 
-            # محاسبه قیمت‌ها
+            # محاسبه قیمت‌ها و به‌روزرسانی subtotalها
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 reservation.total_price = total_price
                 reservation.discount = total_discount
-                reservation.half_day_in_charge = half_day_in_charge
-                reservation.half_day_out_charge = half_day_out_charge
+                reservation.half_day_in_charge = half_day_in_charge if hotel.has_check_in_half_day_charge else 0
+                reservation.half_day_out_charge = half_day_out_charge if hotel.has_check_out_half_day_charge else 0
                 reservation.final_price = total_price - total_discount
                 reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+
+                # به‌روزرسانی subtotal هر اتاق بر اساس محاسبات دقیق
+                for res_room in reservation.reservation_rooms.all():
+                    res_room.subtotal = self._calculate_room_subtotal(res_room, check_in_date, number_of_nights, request.user.user_level)
+                    res_room.save(update_fields=['subtotal'])
+
+            except ValidationError as ve:
+                reservation.delete()  # پاک کردن رزرو ناقص
+                return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
+                reservation.delete()
                 logger.error(f"Error calculating prices: {str(e)}")
                 return Response({"error": f"Error calculating prices: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2675,8 +2686,27 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        
+
+    def _calculate_room_subtotal(self, res_room, check_in_date, nights, user_level):
+        subtotal = Decimal('0')
+        room = res_room.room
+        quantity = res_room.quantity
+        for night in range(nights):
+            date = check_in_date + timedelta(days=night)
+            price_obj = room.date_prices.filter(
+                start_date__lte=date,
+                end_date__gte=date,
+                user_level=user_level
+            ).first() or room.date_prices.filter(
+                start_date__lte=date,
+                end_date__gte=date,
+                user_level__isnull=True
+            ).first()
+            if price_obj:
+                daily_price = Decimal(price_obj.price)
+                subtotal += daily_price * quantity  # فقط قیمت پایه، بدون extra و discount اینجا
+        return subtotal
+
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2732,13 +2762,12 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Validate capacities
+            # Validate capacities - کل ظرفیت بر اساس تمام اتاق‌ها
             rooms = reservation.reservation_rooms.all()
-            # هر اتاق به‌صورت یک واحد حساب می‌شود
-            total_capacity = sum(r.room.room_capacity for r in rooms)
-            total_extra_capacity = sum(r.room.extra_capacity for r in rooms)
+            total_capacity = sum(r.room.room_capacity * r.quantity for r in rooms)
+            total_extra_capacity = sum(r.room.extra_capacity * r.quantity for r in rooms)
 
-            if len(other_passengers) > total_capacity - 1:
+            if len(other_passengers) > total_capacity - 1:  # -1 برای main
                 return Response(
                     {"error": _(f"Too many other passengers. Maximum allowed: {total_capacity - 1}")},
                     status=status.HTTP_400_BAD_REQUEST
@@ -2749,7 +2778,7 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Update reservation
+            # Update reservation reserver info
             reservation.reserver_first_name = main_passenger['first_name']
             reservation.reserver_last_name = main_passenger['last_name']
             reservation.reserver_phone_number = main_passenger['mobile_number']
@@ -2760,7 +2789,11 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
             for room in rooms:
                 room.passengers.all().delete()
 
-            # Add passengers to the first room
+            # توزیع مسافران بین اتاق‌ها برای جلوگیری از مشکل extra_guests
+            all_secondary = other_passengers[:]  # کپی لیست
+            all_extra = extra_capacity_passengers[:]
+
+            # اضافه کردن main به اولین اتاق
             first_room = rooms.first()
             if first_room:
                 ReservationRoomPassenger.objects.create(
@@ -2771,22 +2804,46 @@ class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):
                     national_code=main_passenger.get('national_code'),
                     passenger_type='primary'
                 )
-                for passenger in other_passengers:
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=first_room,
-                        first_name=passenger.get('first_name'),
-                        last_name=passenger.get('last_name'),
-                        national_code=passenger.get('national_code'),
-                        passenger_type='secondary'
-                    )
-                for passenger in extra_capacity_passengers:
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=first_room,
-                        first_name=passenger.get('first_name'),
-                        last_name=passenger.get('last_name'),
-                        national_code=passenger.get('national_code'),
-                        passenger_type='extra'
-                    )
+
+            # توزیع secondary و extra بین اتاق‌ها به صورت round-robin
+            room_list = list(rooms)
+            room_index = 0
+            for passenger in all_secondary:
+                current_room = room_list[room_index % len(room_list)]
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=current_room,
+                    first_name=passenger.get('first_name'),
+                    last_name=passenger.get('last_name'),
+                    national_code=passenger.get('national_code'),
+                    passenger_type='secondary'
+                )
+                room_index += 1
+
+            room_index = 0
+            for passenger in all_extra:
+                current_room = room_list[room_index % len(room_list)]
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=current_room,
+                    first_name=passenger.get('first_name'),
+                    last_name=passenger.get('last_name'),
+                    national_code=passenger.get('national_code'),
+                    passenger_type='extra'
+                )
+                room_index += 1
+
+            # بازمحاسبه قیمت‌ها بعد از اضافه کردن مسافران (برای extra_price)
+            try:
+                total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
+                hotel = reservation.reservation_rooms.first().room.hotel
+                reservation.total_price = total_price
+                reservation.discount = total_discount
+                reservation.half_day_in_charge = half_day_in_charge if hotel.has_check_in_half_day_charge else 0
+                reservation.half_day_out_charge = half_day_out_charge if hotel.has_check_out_half_day_charge else 0
+                reservation.final_price = total_price - total_discount
+                reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+            except Exception as e:
+                logger.error(f"Error recalculating prices after passengers update: {str(e)}")
+                return Response({"error": f"Error recalculating prices: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_200_OK)
