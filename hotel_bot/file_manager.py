@@ -1,30 +1,72 @@
 import os
+import logging
 from datetime import datetime
-from jdatetime import datetime as jdatetime  # برای تبدیل به تاریخ شمسی
+from jdatetime import datetime as jdatetime
 from config import MAX_BACKUPS
+
+# تنظیم لاگ برای دیباگ
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class FileManager:
     @staticmethod
     def cleanup_old_backups(backup_dir):
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-        files = sorted(os.listdir(backup_dir))
-        zip_files = [f for f in files if f.endswith(".zip") or f.endswith(".tar.gz") or f.endswith(".sql")]
-        while len(zip_files) > MAX_BACKUPS:
-            oldest = zip_files.pop(0)
-            os.remove(os.path.join(backup_dir, oldest))
+        """حذف بکاپ‌های قدیمی‌تر از حد مجاز (MAX_BACKUPS)"""
+        try:
+            if not os.path.exists(backup_dir):
+                os.makedirs(backup_dir)
+                logger.debug(f"Created directory: {backup_dir}")
+            
+            # فقط فایل‌ها را بررسی کن
+            files = [
+                f for f in os.listdir(backup_dir)
+                if os.path.isfile(os.path.join(backup_dir, f)) and
+                (f.endswith(".tar.gz") or f.endswith(".sql"))
+            ]
+            if len(files) > MAX_BACKUPS:
+                # مرتب‌سازی بر اساس زمان ایجاد
+                files.sort(key=lambda x: os.path.getctime(os.path.join(backup_dir, x)))
+                for old_file in files[:-MAX_BACKUPS]:
+                    file_path = os.path.join(backup_dir, old_file)
+                    os.remove(file_path)
+                    logger.debug(f"Removed old backup: {file_path}")
+        except Exception as e:
+            logger.error(f"Error cleaning up old backups in {backup_dir}: {e}")
 
     @staticmethod
-    def latest_file(backup_dir, extension=None):
-        files = [f for f in os.listdir(backup_dir) if (extension is None or f.endswith(extension))]
-        return sorted(files, reverse=True)[0] if files else None
+    def latest_file(backup_dir, extension):
+        """پیدا کردن جدیدترین فایل با پسوند مشخص"""
+        try:
+            if not os.path.exists(backup_dir):
+                logger.error(f"Directory does not exist: {backup_dir}")
+                return None
+            
+            # فقط فایل‌ها را بررسی کن
+            files = [
+                f for f in os.listdir(backup_dir)
+                if os.path.isfile(os.path.join(backup_dir, f)) and f.endswith(extension)
+            ]
+            if not files:
+                logger.error(f"No files with extension {extension} found in {backup_dir}")
+                return None
+            
+            # مرتب‌سازی بر اساس زمان ایجاد فایل
+            latest_file = max(files, key=lambda x: os.path.getctime(os.path.join(backup_dir, x)))
+            logger.debug(f"Latest file found in {backup_dir}: {latest_file}")
+            return latest_file
+        except Exception as e:
+            logger.error(f"Error finding latest file in {backup_dir}: {e}")
+            return None
 
     @staticmethod
     def get_file_datetime(filename):
+        """استخراج تاریخ شمسی از نام فایل"""
         try:
-            date_part = filename.split('_')[1] + '_' + filename.split('_')[2].split('.')[0]
-            miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S")
+            # فرمت نام فایل: db_1404-06-16-06-13.sql یا media_1404-06-16-06-13.tar.gz
+            date_part = filename.split('_')[1]  # گرفتن 1404-06-16-06-13
+            miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d-%H-%M")
             shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
-            return shamsi_datetime.strftime("%Y-%m-%d %H:%M:%S")  # فرمت شمسی
-        except:
+            return shamsi_datetime.strftime("%Y-%m-%d %H:%M")  # فرمت شمسی
+        except Exception as e:
+            logger.error(f"Error parsing date from filename {filename}: {e}")
             return "نامشخص"
