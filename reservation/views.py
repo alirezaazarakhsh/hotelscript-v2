@@ -2515,6 +2515,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+logger = logging.getLogger(__name__)
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
@@ -2593,6 +2595,22 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if rooms.count() != len(room_ids_data):
                 return Response({"error": "One or more rooms not found or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # بررسی قیمت برای اتاق‌ها در بازه زمانی
+            for room in rooms:
+                price_obj = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_out_date,
+                    user_level__isnull=True
+                ).first() or RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_out_date,
+                    user_level=request.user.user_level
+                ).first()
+                if not price_obj:
+                    return Response({"error": f"No price defined for room ID {room.id} in the given date range"}, status=status.HTTP_400_BAD_REQUEST)
+
             # ایجاد رزرو اصلی
             reservation = Reservationhotel.objects.create(
                 buyer=request.user,
@@ -2604,13 +2622,26 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد رزرو اتاق‌ها با quantity پیش‌فرض
+            # ایجاد رزرو اتاق‌ها با price_per_night از RoomDatePrice
             for room_id in room_ids_data:
                 room = rooms.get(id=room_id)
+                price_obj = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_out_date,
+                    user_level__isnull=True
+                ).first() or RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=check_in_date,
+                    end_date__gte=check_out_date,
+                    user_level=request.user.user_level
+                ).first()
+                
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=1
+                    quantity=1,
+                    price_per_night=price_obj.price  # قیمت از RoomDatePrice
                 )
 
             # محاسبه قیمت‌ها
@@ -2623,15 +2654,19 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reservation.final_price = total_price - total_discount
                 reservation.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
             except Exception as e:
+                logger.error(f"Error calculating prices: {str(e)}")
                 return Response({"error": f"Error calculating prices: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
+            logger.error(f"Validation error: {str(e)}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
         
         
 class ReservationUpdatePassengersAPIView(generics.UpdateAPIView):

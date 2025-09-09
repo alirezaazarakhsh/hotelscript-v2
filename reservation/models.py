@@ -1406,6 +1406,7 @@ class ReservationRoom(models.Model):
     reservation = models.ForeignKey(Reservationhotel, on_delete=models.CASCADE, verbose_name='رزرو', related_name='reservation_rooms')
     room = models.ForeignKey(Room, on_delete=models.CASCADE, verbose_name='اتاق', related_name='reservation_rooms')
     quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
+    price_per_night = models.DecimalField('قیمت هر شب', max_digits=12, decimal_places=0, validators=[MinValueValidator(0)])
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'
