@@ -2554,7 +2554,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if not (hotel_id and room_ids and start_date and end_date):
                 return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # تبدیل تاریخ‌ها
+            # تبدیل تاریخ‌ها از شمسی به میلادی
             try:
                 check_in_date = jdatetime.datetime.strptime(start_date, '%Y-%m-%d').date()
                 check_out_date = jdatetime.datetime.strptime(end_date, '%Y-%m-%d').date()
@@ -2582,7 +2582,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 ReservationRoom.objects.create(
                     reservation=reservation,
                     room=room,
-                    quantity=1
+                    quantity=1  # یا مقدار واقعی که کاربر انتخاب کرده
                 )
 
             # محاسبه قیمت‌ها، نیم‌شارژها و تخفیف‌ها
