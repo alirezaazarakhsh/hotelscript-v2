@@ -2,7 +2,7 @@ import os
 import logging
 from datetime import datetime
 from jdatetime import datetime as jdatetime
-from config import MAX_BACKUPS
+from hotel_bot.config import MAX_BACKUPS
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')

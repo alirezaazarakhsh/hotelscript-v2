@@ -1,9 +1,10 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import SUPER_ADMINS, PERM_DISPLAY
-from access_manager import AccessManager
-from menu_manager import MenuManager
-from receipt_manager import ReceiptManager
+from hotel_bot.config import SUPER_ADMINS, PERM_DISPLAY
+from hotel_bot.access_manager import AccessManager
+from hotel_bot.menu_manager import MenuManager
+from hotel_bot.receipt_manager import ReceiptManager
 import logging
+
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')

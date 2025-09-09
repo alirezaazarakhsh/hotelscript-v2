@@ -1,6 +1,7 @@
 import os
 import json
-from config import ADMINS_FILE, SUPER_ADMINS
+from hotel_bot.config import ADMINS_FILE, SUPER_ADMINS
+
 
 class AccessManager:
     _cached_data = None

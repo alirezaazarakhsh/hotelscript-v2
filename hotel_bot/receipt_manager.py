@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config import SUPER_ADMINS
+from hotel_bot.config import SUPER_ADMINS
 import json
 import os
 import logging
@@ -8,6 +8,7 @@ from datetime import datetime
 import pytz
 from telegram.error import BadRequest
 from jdatetime import datetime as jdatetime
+
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(

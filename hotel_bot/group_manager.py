@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import PERM_DISPLAY
+from hotel_bot.config import PERM_DISPLAY
+
 
 class GroupManager:
     @staticmethod

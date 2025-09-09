@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import MAX_BACKUPS, PERM_DISPLAY, SUPER_ADMINS
-from access_manager import AccessManager
+from hotel_bot.config import MAX_BACKUPS, PERM_DISPLAY, SUPER_ADMINS
+from hotel_bot.access_manager import AccessManager
 
 class MenuManager:
     @staticmethod

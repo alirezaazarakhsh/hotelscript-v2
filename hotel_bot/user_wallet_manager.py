@@ -1,8 +1,9 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config import SUPER_ADMINS
-from access_manager import AccessManager
-from receipt_manager import ReceiptManager
+from hotel_bot.config import SUPER_ADMINS
+from hotel_bot.access_manager import AccessManager
+from hotel_bot.receipt_manager import ReceiptManager
+
 
 class UserWalletManager:
     @staticmethod

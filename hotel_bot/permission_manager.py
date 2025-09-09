@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import PERMISSIONS, PERM_DISPLAY
+from hotel_bot.config import PERMISSIONS, PERM_DISPLAY
 
 class PermissionManager:
     @staticmethod
