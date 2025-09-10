@@ -74,7 +74,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "list_backups" and not AccessManager.is_allowed(user_id, 'list_backups'):
             await query.edit_message_text("❌ شما مجوز مشاهده لیست بکاپ‌ها را ندارید!")
             return
-        if data.startswith("delete:") and not AccessManager.is_allowed(user_id, 'delete_backups'):
+        if data.startswith("delete_db::") or data.startswith("delete_media::") and not AccessManager.is_allowed(user_id, 'delete_backups'):
             await query.edit_message_text("❌ شما مجوز حذف بکاپ‌ها را ندارید!")
             return
         if data == "restore_backup" and not (AccessManager.is_allowed(user_id, 'restore_db') or AccessManager.is_allowed(user_id, 'restore_media')):
@@ -115,13 +115,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await BackupManager.backup_media(user_id, context)
             await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "list_backups":
-            await show_backup_list(query, user_id, context)
-        elif data.startswith("copy_name:"):
-            filename = data.split(":", 1)[1]
-            await query.message.reply_text(filename)
-            return
-        elif data.startswith("delete:"):
-            await delete_backup(query, user_id, context)
+            await BackupManager.list_backups(user_id, context)
+        elif data == "list_db_backups":
+            await BackupManager.list_backups(user_id, context, backup_type="db")
+        elif data == "list_media_backups":
+            await BackupManager.list_backups(user_id, context, backup_type="media")
+        elif data.startswith("delete_db::"):
+            file_path = data.split("::", 1)[1]
+            await BackupManager.delete_backup(user_id, context, file_path)
+        elif data.startswith("delete_media::"):
+            file_path = data.split("::", 1)[1]
+            await BackupManager.delete_backup(user_id, context, file_path)
+        elif data.startswith("send_db::"):
+            file_path = data.split("::", 1)[1]
+            await BackupManager.send_backup_file(user_id, context, file_path, "db")
         elif data == "restore_backup":
             await MenuManager.show_restore_menu(query, user_id, context)
         elif data == "backup_info":
@@ -627,99 +634,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
-
-# نمایش لیست بکاپ‌ها
-async def show_backup_list(query, user_id, context):
-    try:
-        from hotel_bot.config import MAX_BACKUPS
-        logger.debug(f"User {user_id} requested backup list")
-
-        # استفاده از BackupManager برای دریافت لیست بکاپ‌ها
-        valid_files = await BackupManager.list_backups(user_id, context, backup_type=None)  # None برای نمایش همه بکاپ‌ها
-
-        if not valid_files:
-            logger.info(f"No valid backup files found for user {user_id}")
-            keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                "در حال حاضر هیچ بکاپی با فرمت استاندارد در لیست موجود نیست.",
-                reply_markup=reply_markup
-            )
-            return
-
-        keyboard = []
-        for file_info in valid_files:
-            file_type, filename = file_info['type'], file_info['filename']
-            file_datetime = FileManager.get_file_datetime(filename)
-            if file_datetime == "نامشخص":
-                logger.warning(f"Skipping file with invalid datetime: {filename}")
-                continue
-            keyboard.append([
-                InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
-                InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
-            ])
-        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            "📁 بخش بکاپ‌ها\n"
-            f"در این بخش می‌توانید لیست {MAX_BACKUPS} بکاپ آخر از دیتابیس و مدیا را مشاهده کنید.\n\n"
-            "با کلیک روی دکمه (حذف):\n"
-            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
-            "با کلیک روی اسم فایل:\n"
-            "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.error(f"Error in show_backup_list for user {user_id}: {str(e)}")
-        await query.edit_message_text(
-            f"❌ خطا در نمایش لیست بکاپ‌ها: {str(e)}",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
-        )
-
-# حذف بکاپ
-async def delete_backup(query, user_id, context):
-    try:
-        from hotel_bot.config import MAX_BACKUPS
-        _, file_type, filename = query.data.split(":", 2)
-        logger.debug(f"User {user_id} attempting to delete {file_type}:{filename}")
-
-        # استفاده از BackupManager برای حذف بکاپ
-        file_path = os.path.join(DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR, filename)
-        await BackupManager.delete_backup(user_id, context, file_path)
-
-        # به‌روزرسانی لیست بکاپ‌ها
-        valid_files = await BackupManager.list_backups(user_id, context, backup_type=None)
-
-        keyboard = []
-        if valid_files:
-            for file_info in valid_files:
-                file_type, filename = file_info['type'], file_info['filename']
-                file_datetime = FileManager.get_file_datetime(filename)
-                if file_datetime == "نامشخص":
-                    logger.warning(f"Skipping file with invalid datetime: {filename}")
-                    continue
-                keyboard.append([
-                    InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
-                    InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
-                ])
-        keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_text(
-            "📁 بخش بکاپ‌ها\n"
-            f"در این بخش می‌توانید لیست {MAX_BACKUPS} بکاپ آخر از دیتابیس و مدیا را مشاهده کنید.\n\n"
-            "با کلیک روی دکمه (حذف):\n"
-            "بکاپ فایل موردنظر را می‌توانید پاک کنید.\n\n"
-            "با کلیک روی اسم فایل:\n"
-            "نام فایل برای شما نمایش داده می‌شود تا بتوانید آن را کپی کنید.",
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.error(f"Error in delete_backup for user {user_id}: {str(e)}")
-        await query.edit_message_text(
-            f"❌ خطا در حذف بکاپ: {str(e)}",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
-        )
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
