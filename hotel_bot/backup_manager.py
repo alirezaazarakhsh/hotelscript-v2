@@ -168,7 +168,7 @@ class BackupManager:
         await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
-    async def list_backups(user_id, context, backup_type=None):
+    async def list_backups(user_id, context, backup_type=None, chat_id=None, message_id=None):
         """نمایش لیست بکاپ‌ها با امکان فیلتر بر اساس نوع"""
         if not backup_type:
             text = ("📦 بخش لیست بکاپ‌ها\n\n"
@@ -180,81 +180,100 @@ class BackupManager:
                 [
                     InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="list_db_backups"),
                     InlineKeyboardButton("📁 بکاپ مدیا", callback_data="list_media_backups")
-                ],
-                [InlineKeyboardButton("🔙 بازگشت", callback_data="backup_menu")]
+                ]
             ]
-            await context.bot.send_message(
-                chat_id=user_id, 
-                text=text,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            if BackupManager.is_super_admin(user_id):
+                keyboard.append([
+                    InlineKeyboardButton("📁 بکاپ دیتابیس سیستم", callback_data="list_system_db_backups"),
+                    InlineKeyboardButton("📁 بکاپ مدیا سیستم", callback_data="list_system_media_backups")
+                ])
+            keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="backup_menu")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if chat_id and message_id:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+            else:
+                await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
             return
         
-        if backup_type == "db":
-            await BackupManager._list_db_backups(user_id, context)
-        elif backup_type == "media":
-            await BackupManager._list_media_backups(user_id, context)
+        is_system = backup_type.startswith("system_")
+        effective_user_id = "system" if is_system else user_id
+        effective_backup_type = backup_type.replace("system_", "")
+        
+        if effective_backup_type == "db":
+            await BackupManager._list_db_backups(user_id, context, effective_user_id, chat_id, message_id)
+        elif effective_backup_type == "media":
+            await BackupManager._list_media_backups(user_id, context, effective_user_id, chat_id, message_id)
 
     @staticmethod
-    async def _list_db_backups(user_id, context):
+    async def _list_db_backups(user_id, context, effective_user_id, chat_id=None, message_id=None):
         """لیست بکاپ‌های دیتابیس"""
-        dir_path = BackupManager.user_backup_dir(user_id, "db")
+        dir_path = BackupManager.user_backup_dir(effective_user_id, "db")
         db_files = FileManager.list_latest_files(dir_path, ".sql", BackupManager.MAX_LIST)
         
         if not db_files:
-            await context.bot.send_message(chat_id=user_id, text="❌ هیچ بکاپ دیتابیسی موجود نیست!")
+            text = "❌ هیچ بکاپ دیتابیسی موجود نیست!"
+            if chat_id and message_id:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            else:
+                await context.bot.send_message(chat_id=user_id, text=text)
             return
         
         keyboard = []
+        is_system = effective_user_id == "system"
         for idx, file_name in enumerate(db_files, 1):
             file_path = os.path.join(dir_path, file_name)
             file_datetime = FileManager.get_file_datetime(file_name)
-            keyboard.append([
-                InlineKeyboardButton(f"{idx}. {file_name} ({file_datetime})", callback_data=f"send_db::{file_path}"),
-                InlineKeyboardButton("🗑️", callback_data=f"delete_db::{file_path}")
-            ])
+            row = [InlineKeyboardButton(f"{idx}. {file_name} ({file_datetime})", callback_data=f"send_db::{file_path}")]
+            if not is_system:
+                row.append(InlineKeyboardButton("🗑️", callback_data=f"delete_db::{file_path}"))
+            keyboard.append(row)
         
         keyboard.append([
             InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")
         ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(
-            chat_id=user_id, 
-            text="📦 آخرین بکاپ‌های دیتابیس:",
-            reply_markup=reply_markup
-        )
+        text = f"📦 آخرین بکاپ‌های دیتابیس{' سیستم' if is_system else ''}:"
+        if chat_id and message_id:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+        else:
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
 
     @staticmethod
-    async def _list_media_backups(user_id, context):
+    async def _list_media_backups(user_id, context, effective_user_id, chat_id=None, message_id=None):
         """لیست بکاپ‌های مدیا"""
-        dir_path = BackupManager.user_backup_dir(user_id, "media")
+        dir_path = BackupManager.user_backup_dir(effective_user_id, "media")
         media_files = FileManager.list_latest_files(dir_path, ".tar.gz", BackupManager.MAX_LIST)
         
         if not media_files:
-            await context.bot.send_message(chat_id=user_id, text="❌ هیچ بکاپ مدیایی موجود نیست!")
+            text = "❌ هیچ بکاپ مدیایی موجود نیست!"
+            if chat_id and message_id:
+                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            else:
+                await context.bot.send_message(chat_id=user_id, text=text)
             return
         
         keyboard = []
+        is_system = effective_user_id == "system"
         for idx, file_name in enumerate(media_files, 1):
             file_path = os.path.join(dir_path, file_name)
             file_datetime = FileManager.get_file_datetime(file_name)
-            url = f"{MEDIA_BASE_URL}{user_id}/{file_name}"
-            keyboard.append([
-                InlineKeyboardButton(f"{idx}. {file_name} ({file_datetime})", url=url),
-                InlineKeyboardButton("🗑️", callback_data=f"delete_media::{file_path}")
-            ])
+            url = f"{MEDIA_BASE_URL}{effective_user_id}/{file_name}"
+            row = [InlineKeyboardButton(f"{idx}. {file_name} ({file_datetime})", url=url)]
+            if not is_system:
+                row.append(InlineKeyboardButton("🗑️", callback_data=f"delete_media::{file_path}"))
+            keyboard.append(row)
         
         keyboard.append([
             InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")
         ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(
-            chat_id=user_id, 
-            text="📦 آخرین بکاپ‌های مدیا:",
-            reply_markup=reply_markup
-        )
+        text = f"📦 آخرین بکاپ‌های مدیا{' سیستم' if is_system else ''}:"
+        if chat_id and message_id:
+            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+        else:
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
 
     @staticmethod
     async def send_backup_file(user_id, context, file_path, backup_type):
@@ -270,7 +289,9 @@ class BackupManager:
             elif backup_type == "media" and os.path.exists(file_path):
                 file_name = os.path.basename(file_path)
                 file_datetime = FileManager.get_file_datetime(file_name)
-                url = f"{MEDIA_BASE_URL}{user_id}/{file_name}"
+                # Assuming effective_user_id from file_path
+                effective_user_id = "system" if "/system/" in file_path else user_id
+                url = f"{MEDIA_BASE_URL}{effective_user_id}/{file_name}"
                 await context.bot.send_message(
                     chat_id=user_id, 
                     text=f"📦 بکاپ مدیا\n{file_datetime}\n💾 لینک: {url}"
@@ -286,14 +307,18 @@ class BackupManager:
     async def delete_backup(user_id, context, file_path):
         """حذف فایل بکاپ"""
         try:
+            if "/system/" in file_path:
+                await context.bot.send_message(chat_id=user_id, text="❌ بکاپ‌های سیستم قابل حذف نیستند!")
+                return
             if os.path.exists(file_path):
                 os.remove(file_path)
                 await context.bot.send_message(chat_id=user_id, text="✅ بکاپ با موفقیت حذف شد!")
                 backup_type = "db" if file_path.endswith(".sql") else "media"
+                effective_user_id = user_id  # Since system backups can't be deleted
                 if backup_type == "db":
-                    await BackupManager._list_db_backups(user_id, context)
+                    await BackupManager._list_db_backups(user_id, context, effective_user_id)
                 else:
-                    await BackupManager._list_media_backups(user_id, context)
+                    await BackupManager._list_media_backups(user_id, context, effective_user_id)
             else:
                 await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ یافت نشد!")
                 logger.warning(f"Attempted to delete non-existent file: {file_path}")
