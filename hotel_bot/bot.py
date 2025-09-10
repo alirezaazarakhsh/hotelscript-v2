@@ -23,23 +23,22 @@ from hotel_bot.wallet_manager import WalletManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.user_wallet_manager import UserWalletManager
 
-# تنظیم لاگ برای دیباگ
+# Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Handler برای دستور /start
+# Handler for /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data['user_id'] = user_id
     if not AccessManager.is_allowed(user_id):
         await update.message.reply_text(
-            "💢 دسترسی غیرفعال\n\n"
-            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
+            "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
         )
         return
     await MenuManager.show_main_menu(user_id, context)
 
-# Handler برای مدیریت دکمه‌ها
+# Handler for button interactions
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -47,11 +46,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat_id
     message_id = query.message.message_id
     await query.answer()
+    logger.debug(f"Received callback data: {query.data}")
 
     if not AccessManager.is_allowed(user_id):
         await query.edit_message_text(
-            "💢 دسترسی غیرفعال\n\n"
-            "متأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
+            "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
         )
         return
 
@@ -110,25 +109,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await MenuManager.show_backup_menu(query, user_id, context)
         elif data == "backup_db":
             await BackupManager.backup_database(user_id, context)
-            await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "backup_media":
             await BackupManager.backup_media(user_id, context)
-            await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "list_backups":
             await BackupManager.list_backups(user_id, context)
         elif data == "list_db_backups":
-            await BackupManager.list_backups(user_id, context, backup_type="db")
+            await BackupManager._list_db_backups(user_id, context)
         elif data == "list_media_backups":
-            await BackupManager.list_backups(user_id, context, backup_type="media")
+            await BackupManager._list_media_backups(user_id, context)
+        elif data.startswith("send_db::"):
+            file_path = data.split("::", 1)[1]
+            await BackupManager.send_backup_file(user_id, context, file_path, "db")
         elif data.startswith("delete_db::"):
             file_path = data.split("::", 1)[1]
             await BackupManager.delete_backup(user_id, context, file_path)
         elif data.startswith("delete_media::"):
             file_path = data.split("::", 1)[1]
             await BackupManager.delete_backup(user_id, context, file_path)
-        elif data.startswith("send_db::"):
-            file_path = data.split("::", 1)[1]
-            await BackupManager.send_backup_file(user_id, context, file_path, "db")
         elif data == "restore_backup":
             await MenuManager.show_restore_menu(query, user_id, context)
         elif data == "backup_info":
@@ -430,12 +427,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
 
-# Handler برای مدیریت پیام‌های متنی و فایل‌ها
+# Handler for text and file messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data['user_id'] = user_id
     state = context.user_data.get('state')
-    logger.debug(f"Handling message for user {user_id}, state: {state}, message type: {type(update.message).__name__}, content: {update.message}")
+    logger.debug(f"Handling message for user {user_id}, state: {state}, message type: {type(update.message).__name__}, content: {update.message.text if update.message.text else 'No text'}")
     text = update.message.text if update.message.text else "No text"
     data = AccessManager.load_data()
     admins = data['admins']

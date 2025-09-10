@@ -21,18 +21,10 @@ class BackupManager:
     WEEKLY_LIMIT = 7
     MAX_LIST = 7
 
-
-
-
-
     @staticmethod
     def is_super_admin(user_id):
         """چک کردن سوپر ادمین بودن کاربر"""
         return user_id in SUPER_ADMINS
-
-
-
-
 
     @staticmethod
     def user_backup_dir(user_id, backup_type):
@@ -44,10 +36,6 @@ class BackupManager:
             return os.path.join(MEDIA_BACKUP_DIR, user_id_str)
         return None
 
-
-
-
-
     @staticmethod
     def get_timestamp():
         """گرفتن زمان به فرمت شمسی"""
@@ -57,9 +45,6 @@ class BackupManager:
             "display": shamsi.strftime("%Y-%m-%d - %H:%M"),
             "file": shamsi.strftime("%Y-%m-%d-%H-%M")
         }
-        
-        
-      
 
     @staticmethod
     def get_backup_count_today(user_id, backup_type):
@@ -67,15 +52,10 @@ class BackupManager:
         dir_path = BackupManager.user_backup_dir(user_id, backup_type)
         if not os.path.exists(dir_path):
             return 0
-        
         today = datetime.now().strftime("%Y-%m-%d")
         files = [f for f in os.listdir(dir_path) 
-                if os.path.isfile(os.path.join(dir_path, f)) and today in f]
+                 if os.path.isfile(os.path.join(dir_path, f)) and today in f]
         return len(files)
-    
-    
-    
-    
 
     @staticmethod
     def cleanup_old_weekly_backups():
@@ -83,17 +63,13 @@ class BackupManager:
         try:
             for backup_type in ["db", "media"]:
                 base_dir = DB_BACKUP_DIR if backup_type == "db" else MEDIA_BACKUP_DIR
-                
                 if not os.path.exists(base_dir):
                     continue
-                
                 start_of_week = datetime.now() - timedelta(days=datetime.now().weekday())
-                
                 for user_dir in os.listdir(base_dir):
                     user_path = os.path.join(base_dir, user_dir)
                     if not os.path.isdir(user_path):
                         continue
-                    
                     for file_name in os.listdir(user_path):
                         file_path = os.path.join(user_path, file_name)
                         if os.path.isfile(file_path):
@@ -108,16 +84,11 @@ class BackupManager:
         except Exception as e:
             logger.error(f"Error in weekly cleanup: {e}")
 
-
-
-
-
     @staticmethod
     async def weekly_auto_backup():
         """بکاپ هفتگی اتوماتیک"""
         try:
             timestamp = BackupManager.get_timestamp()
-            
             backup_script = os.path.join(PROJECT_DIR, "backup.sh")
             # بکاپ دیتابیس
             result = subprocess.run(f"{backup_script} db auto_{timestamp['file']} system", 
@@ -130,17 +101,12 @@ class BackupManager:
                                   shell=True, capture_output=True, text=True)
             logger.info(f"Weekly media backup result: {result.stdout}")
             if result.returncode != 0:
-                logger.error(f"Weekly media backup failed: {result.stderr}")      
+                logger.error(f"Weekly media backup failed: {result.stderr}")
             # پاکسازی قدیمی‌ها
             FileManager.cleanup_old_backups(BackupManager.user_backup_dir("system", "db"), max_files=BackupManager.WEEKLY_LIMIT)
             FileManager.cleanup_old_backups(BackupManager.user_backup_dir("system", "media"), max_files=BackupManager.WEEKLY_LIMIT)
-            
         except Exception as e:
             logger.error(f"Error in weekly auto backup: {e}")
-
-
-
-
 
     @staticmethod
     async def backup_database(user_id, context):
@@ -154,14 +120,12 @@ class BackupManager:
 
         timestamp = BackupManager.get_timestamp()
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        
         result = subprocess.run(f"{backup_script} db {timestamp['file']} {user_id}", 
                               shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در بکاپ‌گیری دیتابیس: {result.stderr}")
             return
-        logger.debug(result.stdout)
-        logger.debug(result.stderr)
+        logger.debug(f"DB backup stdout: {result.stdout}, stderr: {result.stderr}")
 
         db_file = FileManager.latest_file(dir_path, ".sql")
         if db_file:
@@ -173,10 +137,6 @@ class BackupManager:
         
         FileManager.cleanup_old_backups(dir_path, max_files=BackupManager.WEEKLY_LIMIT)
         await MenuManager.show_main_menu(user_id, context)
-
-
-
-
 
     @staticmethod
     async def backup_media(user_id, context):
@@ -190,14 +150,12 @@ class BackupManager:
 
         timestamp = BackupManager.get_timestamp()
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
-        
         result = subprocess.run(f"{backup_script} media {timestamp['file']} {user_id}", 
                               shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در بکاپ‌گیری مدیا: {result.stderr}")
             return
-        logger.debug(result.stdout)
-        logger.debug(result.stderr)
+        logger.debug(f"Media backup stdout: {result.stdout}, stderr: {result.stderr}")
 
         media_file = FileManager.latest_file(dir_path, ".tar.gz")
         if media_file:
@@ -208,10 +166,6 @@ class BackupManager:
         
         FileManager.cleanup_old_backups(dir_path, max_files=BackupManager.WEEKLY_LIMIT)
         await MenuManager.show_main_menu(user_id, context)
-
-
-
-
 
     @staticmethod
     async def list_backups(user_id, context, backup_type=None):
@@ -240,10 +194,6 @@ class BackupManager:
             await BackupManager._list_db_backups(user_id, context)
         elif backup_type == "media":
             await BackupManager._list_media_backups(user_id, context)
-
-
-
-
 
     @staticmethod
     async def _list_db_backups(user_id, context):
@@ -274,10 +224,6 @@ class BackupManager:
             text="📦 آخرین بکاپ‌های دیتابیس:",
             reply_markup=reply_markup
         )
-
-
-
-
 
     @staticmethod
     async def _list_media_backups(user_id, context):
@@ -310,10 +256,6 @@ class BackupManager:
             reply_markup=reply_markup
         )
 
-
-
-
-
     @staticmethod
     async def send_backup_file(user_id, context, file_path, backup_type):
         """ارسال مجدد فایل بکاپ"""
@@ -335,13 +277,10 @@ class BackupManager:
                 )
             else:
                 await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ یافت نشد!")
+                logger.warning(f"Backup file not found at: {file_path}")
         except Exception as e:
             logger.error(f"Error sending backup file: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در ارسال فایل بکاپ: {str(e)}")
-
-
-
-
 
     @staticmethod
     async def delete_backup(user_id, context, file_path):
@@ -350,7 +289,6 @@ class BackupManager:
             if os.path.exists(file_path):
                 os.remove(file_path)
                 await context.bot.send_message(chat_id=user_id, text="✅ بکاپ با موفقیت حذف شد!")
-                
                 backup_type = "db" if file_path.endswith(".sql") else "media"
                 if backup_type == "db":
                     await BackupManager._list_db_backups(user_id, context)
@@ -358,6 +296,7 @@ class BackupManager:
                     await BackupManager._list_media_backups(user_id, context)
             else:
                 await context.bot.send_message(chat_id=user_id, text="❌ فایل بکاپ یافت نشد!")
+                logger.warning(f"Attempted to delete non-existent file: {file_path}")
         except Exception as e:
             logger.error(f"Error deleting backup: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در حذف بکاپ: {str(e)}")
