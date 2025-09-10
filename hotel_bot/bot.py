@@ -24,7 +24,7 @@ from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.user_wallet_manager import UserWalletManager
 
 # تنظیم لاگ برای دیباگ
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Handler برای دستور /start
