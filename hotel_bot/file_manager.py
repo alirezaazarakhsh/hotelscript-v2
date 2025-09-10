@@ -73,17 +73,20 @@ class FileManager:
             logger.error(f"Error listing latest files in {backup_dir}: {e}")
             return []
 
-    @staticmethod
-    def get_file_datetime(filename):
-        """استخراج تاریخ شمسی از نام فایل"""
-        try:
-            # فرمت نام فایل: db_1404-06-16-06-13.sql یا media_1404-06-16-06-13.tar.gz
-            if '_' not in filename:
-                raise ValueError("نام فایل فرمت موردنظر را ندارد")
-            date_part = filename.split('_')[1].split('.')[0]  # گرفتن 1404-06-16-06-13
-            miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d-%H-%M")
-            shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
-            return shamsi_datetime.strftime("%Y-%m-%d %H:%M")  # فرمت شمسی
-        except Exception as e:
-            logger.error(f"Error parsing date from filename {filename}: {e}")
+@staticmethod
+def get_file_datetime(filename):
+    """استخراج تاریخ شمسی از نام فایل"""
+    try:
+        # فرمت نام فایل: db_1404-06-16-06-13.sql یا media_1404-06-16-06-13.tar.gz
+        if '_' not in filename:
+            logger.warning(f"Invalid filename format (no underscore): {filename}")
             return "نامشخص"
+        date_part = filename.split('_')[1].split('.')[0]  # گرفتن 1404-06-16-06-13
+        miladi_datetime = datetime.strptime(date_part, "%Y-%m-%d-%H-%M")
+        shamsi_datetime = jdatetime.fromgregorian(datetime=miladi_datetime)
+        formatted_date = shamsi_datetime.strftime("%Y-%m-%d %H:%M")
+        logger.debug(f"Parsed datetime for {filename}: {formatted_date}")
+        return formatted_date
+    except Exception as e:
+        logger.warning(f"Error parsing date from filename {filename}: {str(e)}")
+        return "نامشخص"
