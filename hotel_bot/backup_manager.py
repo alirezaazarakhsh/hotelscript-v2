@@ -170,12 +170,13 @@ class BackupManager:
     @staticmethod
     async def list_backups(user_id, context, backup_type=None, chat_id=None, message_id=None):
         """نمایش لیست بکاپ‌ها با امکان فیلتر بر اساس نوع"""
+        query = context._user_context_data.get('query')  # Access the callback query if available
         if not backup_type:
             text = ("📦 بخش لیست بکاپ‌ها\n\n"
                     "در این بخش می‌توانید حداکثر ۷ بکاپ جدید را مشاهده کنید. "
                     "بکاپ‌های قدیمی‌تر به طور خودکار پاک می‌شوند.\n"
                     "با کلیک روی نام فایل، می‌توانید فایل دیتابیس را دانلود یا لینک مدیا را دریافت کنید.\n"
-                    "با کلیک روی 🗑️، فایل حذف می‌شود.")
+                    "با کلیک روی 🗑️، فایل حذف می‌شود (فقط بکاپ‌های کاربر).")
             keyboard = [
                 [
                     InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="list_db_backups"),
@@ -189,8 +190,8 @@ class BackupManager:
                 ])
             keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="backup_menu")])
             reply_markup = InlineKeyboardMarkup(keyboard)
-            if chat_id and message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+            if query and chat_id and message_id:
+                await query.edit_message_text(text=text, reply_markup=reply_markup)
             else:
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
             return
@@ -212,8 +213,9 @@ class BackupManager:
         
         if not db_files:
             text = "❌ هیچ بکاپ دیتابیسی موجود نیست!"
-            if chat_id and message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            query = context._user_context_data.get('query')
+            if query and chat_id and message_id:
+                await query.edit_message_text(text=text)
             else:
                 await context.bot.send_message(chat_id=user_id, text=text)
             return
@@ -234,8 +236,9 @@ class BackupManager:
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = f"📦 آخرین بکاپ‌های دیتابیس{' سیستم' if is_system else ''}:"
-        if chat_id and message_id:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+        query = context._user_context_data.get('query')
+        if query and chat_id and message_id:
+            await query.edit_message_text(text=text, reply_markup=reply_markup)
         else:
             await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
 
@@ -247,8 +250,9 @@ class BackupManager:
         
         if not media_files:
             text = "❌ هیچ بکاپ مدیایی موجود نیست!"
-            if chat_id and message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text)
+            query = context._user_context_data.get('query')
+            if query and chat_id and message_id:
+                await query.edit_message_text(text=text)
             else:
                 await context.bot.send_message(chat_id=user_id, text=text)
             return
@@ -270,8 +274,9 @@ class BackupManager:
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = f"📦 آخرین بکاپ‌های مدیا{' سیستم' if is_system else ''}:"
-        if chat_id and message_id:
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup)
+        query = context._user_context_data.get('query')
+        if query and chat_id and message_id:
+            await query.edit_message_text(text=text, reply_markup=reply_markup)
         else:
             await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
 
