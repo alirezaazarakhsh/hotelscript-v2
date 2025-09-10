@@ -11,8 +11,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS
-from hotel_bot.access_manager import AccessManager
+from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS, PERMISSIONS, PERM_DISPLAY
 from hotel_bot.backup_manager import BackupManager
 from hotel_bot.file_manager import FileManager
 from hotel_bot.menu_manager import MenuManager
@@ -632,19 +631,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # نمایش لیست بکاپ‌ها
 async def show_backup_list(query, user_id, context):
     try:
-        from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+        from hotel_bot.config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
         logger.debug(f"User {user_id} requested backup list")
         logger.debug(f"DB_BACKUP_DIR: {DB_BACKUP_DIR}")
         logger.debug(f"MEDIA_BACKUP_DIR: {MEDIA_BACKUP_DIR}")
         
         if not os.path.exists(DB_BACKUP_DIR):
             logger.warning(f"DB_BACKUP_DIR does not exist, creating: {DB_BACKUP_DIR}")
-            os.makedirs(DB_BACKUP_DIR)
+            os.makedirs(DB_BACKUP_DIR, exist_ok=True)
         if not os.path.exists(MEDIA_BACKUP_DIR):
             logger.warning(f"MEDIA_BACKUP_DIR does not exist, creating: {MEDIA_BACKUP_DIR}")
-            os.makedirs(MEDIA_BACKUP_DIR)
+            os.makedirs(MEDIA_BACKUP_DIR, exist_ok=True)
         
-        # فقط فایل‌های با فرمت استاندارد (db_*.sql و media_*.tar.gz)
+        # فقط فایل‌های با فرمت استاندارد
         db_files = [f for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql") and f.startswith("db_")]
         media_files = [f for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz") and f.startswith("media_")]
         logger.debug(f"DB files found: {db_files}")
@@ -668,7 +667,6 @@ async def show_backup_list(query, user_id, context):
                 logger.warning(f"Skipping invalid file {f}: {str(e)}")
                 continue
         
-        # مرتب‌سازی و محدود کردن به MAX_BACKUPS
         valid_files = sorted(valid_files, key=lambda x: x[1], reverse=True)[:MAX_BACKUPS]
         logger.debug(f"Sorted valid files: {[f[0] for f in valid_files]}")
         
@@ -710,7 +708,7 @@ async def show_backup_list(query, user_id, context):
 # حذف بکاپ
 async def delete_backup(query, user_id, context):
     try:
-        from config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+        from hotel_bot.config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
         _, file_type, filename = query.data.split(":", 2)
         logger.debug(f"User {user_id} attempting to delete {file_type}:{filename}")
         
@@ -782,6 +780,7 @@ async def delete_backup(query, user_id, context):
             f"❌ خطا در حذف بکاپ: {str(e)}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
         )
+        
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
