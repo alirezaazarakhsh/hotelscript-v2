@@ -11,7 +11,8 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS, PERMISSIONS, PERM_DISPLAY
+from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+from hotel_bot.access_manager import AccessManager
 from hotel_bot.backup_manager import BackupManager
 from hotel_bot.file_manager import FileManager
 from hotel_bot.menu_manager import MenuManager
@@ -21,7 +22,6 @@ from hotel_bot.permission_manager import PermissionManager
 from hotel_bot.wallet_manager import WalletManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.user_wallet_manager import UserWalletManager
-
 
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
