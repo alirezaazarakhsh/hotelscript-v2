@@ -631,45 +631,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # نمایش لیست بکاپ‌ها
 async def show_backup_list(query, user_id, context):
     try:
-        from hotel_bot.config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+        from hotel_bot.config import MAX_BACKUPS
         logger.debug(f"User {user_id} requested backup list")
-        logger.debug(f"DB_BACKUP_DIR: {DB_BACKUP_DIR}")
-        logger.debug(f"MEDIA_BACKUP_DIR: {MEDIA_BACKUP_DIR}")
-        
-        if not os.path.exists(DB_BACKUP_DIR):
-            logger.warning(f"DB_BACKUP_DIR does not exist, creating: {DB_BACKUP_DIR}")
-            os.makedirs(DB_BACKUP_DIR, exist_ok=True)
-        if not os.path.exists(MEDIA_BACKUP_DIR):
-            logger.warning(f"MEDIA_BACKUP_DIR does not exist, creating: {MEDIA_BACKUP_DIR}")
-            os.makedirs(MEDIA_BACKUP_DIR, exist_ok=True)
-        
-        # فقط فایل‌های با فرمت استاندارد
-        db_files = [f for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql") and f.startswith("db_")]
-        media_files = [f for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz") and f.startswith("media_")]
-        logger.debug(f"DB files found: {db_files}")
-        logger.debug(f"Media files found: {media_files}")
-        
-        files = []
-        files.extend([f"db:{f}" for f in db_files])
-        files.extend([f"media:{f}" for f in media_files])
-        logger.debug(f"Combined files: {files}")
-        
-        valid_files = []
-        for f in files:
-            try:
-                file_type, filename = f.split(":", 1)
-                file_datetime = FileManager.get_file_datetime(filename)
-                if file_datetime == "نامشخص":
-                    logger.warning(f"Skipping file with invalid datetime: {filename}")
-                    continue
-                valid_files.append((f, file_datetime))
-            except Exception as e:
-                logger.warning(f"Skipping invalid file {f}: {str(e)}")
-                continue
-        
-        valid_files = sorted(valid_files, key=lambda x: x[1], reverse=True)[:MAX_BACKUPS]
-        logger.debug(f"Sorted valid files: {[f[0] for f in valid_files]}")
-        
+
+        # استفاده از BackupManager برای دریافت لیست بکاپ‌ها
+        valid_files = await BackupManager.list_backups(user_id, context, backup_type=None)  # None برای نمایش همه بکاپ‌ها
+
         if not valid_files:
             logger.info(f"No valid backup files found for user {user_id}")
             keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
@@ -679,10 +646,14 @@ async def show_backup_list(query, user_id, context):
                 reply_markup=reply_markup
             )
             return
-        
+
         keyboard = []
-        for f, file_datetime in valid_files:
-            file_type, filename = f.split(":", 1)
+        for file_info in valid_files:
+            file_type, filename = file_info['type'], file_info['filename']
+            file_datetime = FileManager.get_file_datetime(filename)
+            if file_datetime == "نامشخص":
+                logger.warning(f"Skipping file with invalid datetime: {filename}")
+                continue
             keyboard.append([
                 InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
                 InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
@@ -708,63 +679,32 @@ async def show_backup_list(query, user_id, context):
 # حذف بکاپ
 async def delete_backup(query, user_id, context):
     try:
-        from hotel_bot.config import DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+        from hotel_bot.config import MAX_BACKUPS
         _, file_type, filename = query.data.split(":", 2)
         logger.debug(f"User {user_id} attempting to delete {file_type}:{filename}")
-        
-        backup_dir = DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR
-        file_path = os.path.join(backup_dir, filename)
-        
-        if not (filename.startswith("db_") or filename.startswith("media_")):
-            logger.warning(f"Invalid file format for deletion: {filename}")
-            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} فرمت معتبری ندارد!")
-            return
-        
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            logger.info(f"File {file_path} deleted by user {user_id}")
-            await context.bot.send_message(chat_id=user_id, text=f"✅ فایل {filename} حذف شد.")
-        else:
-            logger.warning(f"File {file_path} not found for deletion by user {user_id}")
-            await context.bot.send_message(chat_id=user_id, text=f"❌ فایل {filename} پیدا نشد!")
-        
+
+        # استفاده از BackupManager برای حذف بکاپ
+        file_path = os.path.join(DB_BACKUP_DIR if file_type == "db" else MEDIA_BACKUP_DIR, filename)
+        await BackupManager.delete_backup(user_id, context, file_path)
+
         # به‌روزرسانی لیست بکاپ‌ها
-        db_files = [f for f in os.listdir(DB_BACKUP_DIR) if f.endswith(".sql") and f.startswith("db_")]
-        media_files = [f for f in os.listdir(MEDIA_BACKUP_DIR) if f.endswith(".tar.gz") and f.startswith("media_")]
-        logger.debug(f"DB files after deletion: {db_files}")
-        logger.debug(f"Media files after deletion: {media_files}")
-        
-        files = []
-        files.extend([f"db:{f}" for f in db_files])
-        files.extend([f"media:{f}" for f in media_files])
-        
-        valid_files = []
-        for f in files:
-            try:
-                file_type, filename = f.split(":", 1)
+        valid_files = await BackupManager.list_backups(user_id, context, backup_type=None)
+
+        keyboard = []
+        if valid_files:
+            for file_info in valid_files:
+                file_type, filename = file_info['type'], file_info['filename']
                 file_datetime = FileManager.get_file_datetime(filename)
                 if file_datetime == "نامشخص":
                     logger.warning(f"Skipping file with invalid datetime: {filename}")
                     continue
-                valid_files.append((f, file_datetime))
-            except Exception as e:
-                logger.warning(f"Skipping invalid file {f} after deletion: {str(e)}")
-                continue
-        
-        valid_files = sorted(valid_files, key=lambda x: x[1], reverse=True)[:MAX_BACKUPS]
-        logger.debug(f"Sorted valid files after deletion: {[f[0] for f in valid_files]}")
-        
-        keyboard = []
-        if valid_files:
-            for f, file_datetime in valid_files:
-                file_type, filename = f.split(":", 1)
                 keyboard.append([
                     InlineKeyboardButton(f"{filename} ({file_datetime}) [{file_type}]", callback_data=f"copy_name:{filename}"),
                     InlineKeyboardButton("🗑 حذف", callback_data=f"delete:{file_type}:{filename}")
                 ])
         keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await query.edit_message_text(
             "📁 بخش بکاپ‌ها\n"
             f"در این بخش می‌توانید لیست {MAX_BACKUPS} بکاپ آخر از دیتابیس و مدیا را مشاهده کنید.\n\n"
@@ -780,7 +720,6 @@ async def delete_backup(query, user_id, context):
             f"❌ خطا در حذف بکاپ: {str(e)}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
         )
-        
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
