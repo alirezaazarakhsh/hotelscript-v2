@@ -76,31 +76,33 @@ class BackupManager:
         FileManager.cleanup_old_backups(MEDIA_BACKUP_DIR, max_files=MAX_BACKUPS)
         await MenuManager.show_main_menu(user_id, context)
 
-    @staticmethod
-    async def list_backups(user_id, context):
-        # دکمه برای آخرین ۷ بکاپ دیتابیس
-        db_files = FileManager.list_latest_files(DB_BACKUP_DIR, extension=".sql", max_files=MAX_BACKUPS)
-        media_files = FileManager.list_latest_files(MEDIA_BACKUP_DIR, extension=".tar.gz", max_files=MAX_BACKUPS)
+@staticmethod
+async def list_backups(user_id, context):
+    db_files = FileManager.list_latest_files(DB_BACKUP_DIR, extension=".sql", max_files=MAX_BACKUPS)
+    media_files = FileManager.list_latest_files(MEDIA_BACKUP_DIR, extension=".tar.gz", max_files=MAX_BACKUPS)
+    
+    logger.debug(f"DB files: {db_files}")
+    logger.debug(f"Media files: {media_files}")
 
-        keyboard = []
-        if db_files:
-            keyboard.append([InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="none")])
-            for f in db_files:
-                path = os.path.join(DB_BACKUP_DIR, f)
-                keyboard.append([InlineKeyboardButton(f"📄 {f}", callback_data=f"db::{path}")])
-        if media_files:
-            keyboard.append([InlineKeyboardButton("📁 بکاپ مدیا", callback_data="none")])
-            for f in media_files:
-                url = MEDIA_BASE_URL + f
-                keyboard.append([InlineKeyboardButton(f"📄 {f}", url=url)])
+    keyboard = []
+    if db_files:
+        keyboard.append([InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="none")])
+        for f in db_files:
+            path = os.path.join(DB_BACKUP_DIR, f)
+            keyboard.append([InlineKeyboardButton(f"📄 {f}", callback_data=f"db::{path}")])
+    if media_files:
+        keyboard.append([InlineKeyboardButton("📁 بکاپ مدیا", callback_data="none")])
+        for f in media_files:
+            url = MEDIA_BASE_URL + f
+            keyboard.append([InlineKeyboardButton(f"📄 {f}", url=url)])
 
-        if not keyboard:
-            await context.bot.send_message(chat_id=user_id, text="❌ بکاپی موجود نیست!")
-            return
+    if not keyboard:
+        await context.bot.send_message(chat_id=user_id, text="❌ بکاپی موجود نیست!")
+        return
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=user_id, text="📦 آخرین بکاپ‌ها:", reply_markup=reply_markup)
-
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(chat_id=user_id, text="📦 آخرین بکاپ‌ها:", reply_markup=reply_markup)
+    
     @staticmethod
     def get_timestamp():
         now = datetime.now(TEHRAN_TZ)
