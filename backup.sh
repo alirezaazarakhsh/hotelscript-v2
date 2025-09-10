@@ -1,15 +1,16 @@
-#!/bin/bash
-# ===================== مسیرهای ذخیره بکاپ =====================
-DB_BACKUP_DIR="/var/lib/backsafarname/alirezaazarakhsh20_gmail.com"
-MEDIA_BACKUP_DIR="/var/backups/sf24_9xkLp7"
+# =#==================== مسیرهای ذخیره بکاپ =====================
+DB_BACKUP_DIR="${DB_BACKUP_DIR:-/var/lib/backsafarname/alirezaazarakhsh20_gmail.com}"
+MEDIA_BACKUP_DIR="${MEDIA_BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
+MEDIA_SOURCE_DIR="${MEDIA_ROOT:-/app/media}"
 
 # ===================== تنظیم نام فایل با زمان شمسی از آرگومان =====================
 TIMESTAMP="$2"  # زمان شمسی از Python (مثل 1404-06-16-06-13)
-USER_ID="$3"    # اضافه‌شده: user_id یا "system"
+USER_ID="$3"    # user_id یا "system"
 DB_NAME="${DB_NAME:-safarname24}"
 DB_USER="${DB_USER:-postgres}"
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
+DB_PASSWORD="${DB_PASSWORD:-admin}"
 
 # مسیرهای نهایی با user_id
 DB_USER_DIR="$DB_BACKUP_DIR/$USER_ID"
@@ -19,11 +20,12 @@ MEDIA_USER_DIR="$MEDIA_BACKUP_DIR/$USER_ID"
 DB_FILE="$DB_USER_DIR/db_$TIMESTAMP.sql"
 MEDIA_FILE="$MEDIA_USER_DIR/media_$TIMESTAMP.tar.gz"
 
-# ===================== ایجاد پوشه‌ها =====================
+# ===================== بررسی و ایجاد پوشه‌ها =====================
+echo "📂 بررسی و ایجاد پوشه‌های بکاپ..."
 mkdir -p "$DB_USER_DIR" || { echo "❌ خطا: نمی‌توان $DB_USER_DIR را ایجاد کرد!"; exit 1; }
 mkdir -p "$MEDIA_USER_DIR" || { echo "❌ خطا: نمی‌توان $MEDIA_USER_DIR را ایجاد کرد!"; exit 1; }
 
-# ===================== بررسی دسترسی =====================
+# ===================== بررسی دسترسی‌ها =====================
 if [ ! -w "$DB_USER_DIR" ]; then
     echo "❌ خطا: پوشه $DB_USER_DIR قابل نوشتن نیست!"
     exit 1
@@ -52,9 +54,10 @@ if [ "$BACKUP_TYPE" == "db" ]; then
     fi
 
 elif [ "$BACKUP_TYPE" == "media" ]; then
-    MEDIA_SOURCE_DIR="/app/media"
     if [ -d "$MEDIA_SOURCE_DIR" ]; then
         echo "📦 در حال بکاپ گرفتن از مدیا..."
+        echo "📂 محتویات $MEDIA_SOURCE_DIR:"
+        ls -la "$MEDIA_SOURCE_DIR" || { echo "❌ خطا: نمی‌توان محتویات $MEDIA_SOURCE_DIR را لیست کرد!"; exit 1; }
         tar -czf "$MEDIA_FILE" -C "$MEDIA_SOURCE_DIR" . 2> /tmp/tar_error.log
         if [ $? -eq 0 ]; then
             echo "✅ بکاپ مدیا با موفقیت گرفته شد: $MEDIA_FILE"

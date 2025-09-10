@@ -46,5 +46,3 @@ if settings.DEBUG:
     ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-   # مسیر بکاپ فایل ها مدیا در ربت 
-    urlpatterns += static('/sf24_9xkLp7/', document_root='/var/backups/sf24_9xkLp7/')
