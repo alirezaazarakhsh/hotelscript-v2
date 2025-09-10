@@ -1,3 +1,4 @@
+#!/bin/sh
 # =#==================== مسیرهای ذخیره بکاپ =====================
 DB_BACKUP_DIR="${DB_BACKUP_DIR:-/var/lib/backsafarname/alirezaazarakhsh20_gmail.com}"
 MEDIA_BACKUP_DIR="${MEDIA_BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
@@ -38,7 +39,7 @@ fi
 # ===================== بررسی نوع بکاپ =====================
 BACKUP_TYPE="$1"
 
-if [ "$BACKUP_TYPE" == "db" ]; then
+if [ "$BACKUP_TYPE" = "db" ]; then
     echo "📦 در حال بکاپ گرفتن از دیتابیس..."
     if [ -z "$DB_PASSWORD" ]; then
         echo "❌ خطا: متغیر DB_PASSWORD تنظیم نشده است!"
@@ -53,7 +54,7 @@ if [ "$BACKUP_TYPE" == "db" ]; then
         exit 1
     fi
 
-elif [ "$BACKUP_TYPE" == "media" ]; then
+elif [ "$BACKUP_TYPE" = "media" ]; then
     if [ -d "$MEDIA_SOURCE_DIR" ]; then
         echo "📦 در حال بکاپ گرفتن از مدیا..."
         echo "📂 محتویات $MEDIA_SOURCE_DIR:"
