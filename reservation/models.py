@@ -1302,6 +1302,14 @@ class Reservationhotel(models.Model):
         if self.check_in_date and self.check_out_date:
             check_in = self.check_in_date
             check_out = self.check_out_date
+
+            # اگر رشته است، به jdatetime.date تبدیل می‌کنیم
+            if isinstance(check_in, str):
+                check_in = jdate.fromisoformat(check_in)
+            if isinstance(check_out, str):
+                check_out = jdate.fromisoformat(check_out)
+
+            # محاسبه تعداد شب‌ها با تبدیل به datetime استاندارد
             return (check_out.togregorian() - check_in.togregorian()).days
         return 0
 
