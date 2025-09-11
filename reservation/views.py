@@ -2533,13 +2533,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تبدیل رشته‌ها به datetime.date
-        check_in_date = datetime.strptime(data['date']['enter'], "%Y-%m-%d").date()
-        check_out_date = datetime.strptime(data['date']['exit'], "%Y-%m-%d").date()
+        # تبدیل رشته‌ها به jdatetime.date
+        check_in_date = jdate.fromisoformat(data['date']['enter'])
+        check_out_date = jdate.fromisoformat(data['date']['exit'])
 
-        # محاسبه تعداد شب‌ها
-        number_of_nights = (check_out_date - check_in_date).days
-        if number_of_nights <= 0:
+        if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
         # ایجاد رزرو اصلی
@@ -2553,44 +2551,29 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             buyer=request.user
         )
 
-        total_price = 0
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
 
+        # ایجاد ReservationRoom
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
-
-            price_obj = RoomDatePrice.objects.filter(
-                room=room,
-                start_date__lte=check_in_date,
-                end_date__gte=check_out_date,
-                user_level=getattr(request.user, 'user_level', None)
-            ).first()
-
-            price_per_night = price_obj.price if price_obj else 0
-
-            if price_obj:
-                if price_obj.discount_type == 'percentage' and price_obj.discount_date >= check_in_date:
-                    price_per_night = int(price_per_night * (1 - price_obj.discount_value / 100))
-                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    price_per_night -= price_obj.discount_value
-
-            subtotal = price_per_night * number_of_nights
-            total_price += subtotal
-
-            # ایجاد ReservationRoom با ظرفیت اصلی و اضافه از مدل اتاق
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=1,
-                price_per_night=price_per_night,
-                subtotal=subtotal,
+                price_per_night=0,  # placeholder، بعدا calculate_total_price حساب می‌کنه
+                subtotal=0,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
             )
 
+        # محاسبه قیمت‌ها
+        total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
         reservation.total_price = total_price
-        reservation.final_price = total_price
+        reservation.discount = total_discount
+        reservation.half_day_in_charge = half_day_in_charge
+        reservation.half_day_out_charge = half_day_out_charge
+        reservation.final_price = total_price - total_discount
         reservation.save()
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
