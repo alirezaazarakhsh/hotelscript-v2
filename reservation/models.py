@@ -17,7 +17,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
-from jdatetime import date as jdate
+from jdatetime import date as jdate, timedelta as jtimedelta
+
 
 
 # 🛠️ Django Model Fields و Expressions
@@ -1299,14 +1300,13 @@ class Reservationhotel(models.Model):
     @property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
-            # تبدیل رشته به jdatetime.date در صورت نیاز
             check_in = self.check_in_date
             check_out = self.check_out_date
 
             if isinstance(check_in, str):
-                check_in = jdate.fromisoformat(check_in)
+                check_in = jdatetime.date.fromisoformat(check_in)
             if isinstance(check_out, str):
-                check_out = jdate.fromisoformat(check_out)
+                check_out = jdatetime.date.fromisoformat(check_out)
 
             return (check_out - check_in).days
         return 0
@@ -1350,7 +1350,7 @@ class Reservationhotel(models.Model):
             extra_guests = max(0, total_guests - base_capacity)
 
             for night in range(nights):
-                date = self.check_in_date + jmodels.timedelta(days=night)
+                date = self.check_in_date + timedelta(days=night)  # اصلاح شد
                 price_obj = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
@@ -1405,8 +1405,8 @@ class Reservationhotel(models.Model):
 
         if not is_new:
             super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
-    
-    
+            
+            
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(Reservationhotel, on_delete=models.CASCADE, verbose_name='رزرو', related_name='reservation_rooms')

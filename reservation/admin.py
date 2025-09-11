@@ -604,8 +604,8 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    logger = logging.getLogger(__name__)
-
+    
+    
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -613,18 +613,18 @@ class ReservationRoomPassengerInline(NestedTabularInline):
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = False
-    autocomplete_fields = ()
+    autocomplete_fields = ()  # فقط خالی می‌ماند
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
     max_num = 3
-    fields = ('room',)
-    autocomplete_fields = ('room',)
+    fields = ('room', 'quantity', 'price_per_night', 'subtotal')
+    autocomplete_fields = ()  # حذف شد، فقط buyer در Reservationhotel فعال است
     show_change_link = False
     can_delete = False
-    inlines = [ReservationRoomPassengerInline]  # تودرتو کردن مسافران زیر اتاق‌ها
+    inlines = [ReservationRoomPassengerInline]
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -640,7 +640,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
     list_filter = ('status', 'check_in_date', 'check_out_date')
-    autocomplete_fields = ('buyer',)  # حالا بدون مشکل کار می‌کنه
+    autocomplete_fields = ('buyer',)  # فقط خریدار autocomplete دارد
     inlines = [ReservationRoomInline]
 
     readonly_fields = (
@@ -649,19 +649,19 @@ class ReservationhotelAdmin(NestedModelAdmin):
     )
 
     fieldsets = (
-        (_('اطلاعات رزرو کننده'), {
+        ('اطلاعات رزرو کننده', {
             'fields': (
                 'buyer', 'reserver_first_name', 'reserver_last_name',
                 'reserver_phone_number', 'reserver_national_code', 'additional_notes'
             )
         }),
-        (_('تاریخ رزرو'), {
+        ('تاریخ رزرو', {
             'fields': ('check_in_date', 'check_out_date')
         }),
-        (_('قیمت و وضعیت'), {
+        ('قیمت و وضعیت', {
             'fields': ('total_price', 'half_day_in_charge', 'half_day_out_charge', 'discount', 'final_price', 'status')
         }),
-        (_('اطلاعات سیستم'), {
+        ('اطلاعات سیستم', {
             'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
                        'created_jalali', 'updated_jalali')
         }),
