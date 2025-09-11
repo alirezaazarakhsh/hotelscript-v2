@@ -1427,6 +1427,8 @@ class ReservationRoom(models.Model):
     quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
     price_per_night = models.DecimalField('قیمت هر شب', max_digits=12, decimal_places=0, validators=[MinValueValidator(0)])
     subtotal = models.PositiveBigIntegerField(verbose_name='مجموع قیمت (تومان)', null=False, blank=False, default=0)
+    primary_passengers_count = models.PositiveIntegerField(default=1, verbose_name='تعداد نفر اصلی')
+    extra_passengers_count = models.PositiveIntegerField(default=0, verbose_name='تعداد نفر اضافه')
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'
@@ -1435,14 +1437,6 @@ class ReservationRoom(models.Model):
     def __str__(self):
         return f'{self.room.title} در رزرو {self.reservation.tracking_code}'
     
-    @property
-    def primary_passengers_count(self):
-        return self.passengers.filter(passenger_type='primary').count()
-
-    @property
-    def extra_passengers_count(self):
-        return self.passengers.filter(passenger_type='extra').count()
-
 
 # ---------------- ReservationRoomPassenger ----------------
 class ReservationRoomPassenger(models.Model):
