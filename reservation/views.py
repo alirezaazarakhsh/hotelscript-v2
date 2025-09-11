@@ -2520,7 +2520,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="ایجاد رزرو موقت چند اتاقه",
+        operation_summary="ایجاد رزرو موقت",
         operation_description="ایجاد یک رزرو جدید و بازگرداندن reservation_id",
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -2533,30 +2533,27 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تبدیل تاریخ‌ها از string به datetime.date
-        check_in_date = parse_date(data['date']['enter'])
-        check_out_date = parse_date(data['date']['exit'])
+        # تبدیل رشته‌ها به datetime.date
+        check_in_date = datetime.strptime(data['date']['enter'], "%Y-%m-%d").date()
+        check_out_date = datetime.strptime(data['date']['exit'], "%Y-%m-%d").date()
 
-        if not check_in_date or not check_out_date:
-            raise ValidationError("تاریخ ورود یا خروج معتبر نیست.")
-
-        if check_out_date <= check_in_date:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-
+        # محاسبه تعداد شب‌ها
         number_of_nights = (check_out_date - check_in_date).days
+        if number_of_nights <= 0:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
         # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
-            reserver_first_name=getattr(request.user, 'first_name', ''),
-            reserver_last_name=getattr(request.user, 'last_name', ''),
+            reserver_first_name=request.user.first_name,
+            reserver_last_name=request.user.last_name,
             reserver_phone_number=getattr(request.user, 'phone_number', ''),
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             buyer=request.user
         )
 
-        total_price = Decimal('0')
+        total_price = 0
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
 
@@ -2570,29 +2567,28 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 user_level=getattr(request.user, 'user_level', None)
             ).first()
 
-            price_per_night = Decimal(price_obj.price) if price_obj else Decimal('0')
+            price_per_night = price_obj.price if price_obj else 0
 
             if price_obj:
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date >= check_in_date:
-                    price_per_night = price_per_night * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
+                    price_per_night = int(price_per_night * (1 - price_obj.discount_value / 100))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    price_per_night -= Decimal(price_obj.discount_value)
+                    price_per_night -= price_obj.discount_value
 
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
-            # ایجاد رزرو برای هر اتاق با ظرفیت اصلی و اضافه
+            # ایجاد ReservationRoom با ظرفیت اصلی و اضافه از مدل اتاق
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=1,  # هر آیتم یک اتاق
+                quantity=1,
                 price_per_night=price_per_night,
                 subtotal=subtotal,
-                primary_passengers_count=room.room_capacity,  # تعداد نفر اصلی
-                extra_passengers_count=room.extra_capacity   # تعداد نفر اضافه
+                primary_passengers_count=room.room_capacity,
+                extra_passengers_count=room.extra_capacity
             )
 
-        # بروزرسانی قیمت کل رزرو
         reservation.total_price = total_price
         reservation.final_price = total_price
         reservation.save()
