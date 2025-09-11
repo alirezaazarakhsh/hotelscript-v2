@@ -211,6 +211,7 @@ class BackupManager:
                 await BackupManager.delete_backup(user_id, context, file_path)
             elif callback_data.startswith("list_"):
                 backup_type = callback_data.replace("list_", "")
+                logger.debug(f"Processing list backup for type: {backup_type}")
                 await BackupManager.list_backups(user_id, context, backup_type=backup_type)
             elif callback_data == "backup_menu":
                 await MenuManager.show_main_menu(user_id, context)
@@ -220,7 +221,7 @@ class BackupManager:
         except Exception as e:
             logger.error(f"Error handling callback: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا: {str(e)}")
-            # بازگشت به منوی اصلی بکاپ‌ها
+            # بازگشت به منوی بکاپ‌ها به جای منوی اصلی
             await BackupManager.list_backups(user_id, context)
 
     @staticmethod
