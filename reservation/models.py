@@ -1300,17 +1300,21 @@ class Reservationhotel(models.Model):
     @property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
+            # اگر jdatetime.date است، به datetime.date تبدیل می‌کنیم
             check_in = self.check_in_date
             check_out = self.check_out_date
 
-            # اگر رشته است، به jdatetime.date تبدیل می‌کنیم
-            if isinstance(check_in, str):
-                check_in = jdate.fromisoformat(check_in)
-            if isinstance(check_out, str):
-                check_out = jdate.fromisoformat(check_out)
+            try:
+                check_in = check_in.togregorian()
+            except AttributeError:
+                pass
 
-            # محاسبه تعداد شب‌ها با تبدیل به datetime استاندارد
-            return (check_out.togregorian() - check_in.togregorian()).days
+            try:
+                check_out = check_out.togregorian()
+            except AttributeError:
+                pass
+
+            return (check_out - check_in).days
         return 0
 
     @property
