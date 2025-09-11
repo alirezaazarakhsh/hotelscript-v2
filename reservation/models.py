@@ -1344,6 +1344,12 @@ class Reservationhotel(models.Model):
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
 
+        # تبدیل check_in_date به datetime.date استاندارد
+        if isinstance(self.check_in_date, str):
+            check_in_date_std = jdate.fromisoformat(self.check_in_date).togregorian()
+        else:
+            check_in_date_std = self.check_in_date.togregorian()
+
         for res_room in self.reservation_rooms.all():
             room = res_room.room
             quantity = res_room.quantity
@@ -1352,26 +1358,27 @@ class Reservationhotel(models.Model):
             extra_guests = max(0, total_guests - base_capacity)
 
             for night in range(nights):
-                # استفاده از jdatetime.timedelta
-                date = self.check_in_date + jtimedelta(days=night)
+                # تاریخ هر شب به صورت datetime.date استاندارد
+                current_date = check_in_date_std + timedelta(days=night)
+
                 price_obj = room.date_prices.filter(
-                    start_date__lte=date,
-                    end_date__gte=date,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
                     user_level=user_level
                 ).first() or room.date_prices.filter(
-                    start_date__lte=date,
-                    end_date__gte=date,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
                     user_level__isnull=True
                 ).first()
 
                 if not price_obj:
-                    raise ValidationError(_(f'قیمت برای تاریخ {date} در اتاق {room.title} موجود نیست.'))
+                    raise ValidationError(_(f'قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.'))
 
                 daily_price = Decimal(price_obj.price)
                 extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
                 discount = Decimal('0')
 
-                if price_obj.discount_type == 'percentage' and price_obj.discount_date and date <= price_obj.discount_date:
+                if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
                     discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     if not self.buyer.reservations.exclude(pk=self.pk).exists():
@@ -1387,6 +1394,7 @@ class Reservationhotel(models.Model):
 
         total += half_day_in_charge + half_day_out_charge
         return total, total_discount, half_day_in_charge, half_day_out_charge
+
 
     def save(self, *args, **kwargs):
         if not self.tracking_code:
@@ -1408,6 +1416,9 @@ class Reservationhotel(models.Model):
 
         if not is_new:
             super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+            
+            
+            
             
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
