@@ -72,8 +72,6 @@ from .models import (
     Hotel,
     HotelTag,
     HotelTagPublic,
-    ReservationRoom,
-    Reservationhotel,
     Room,
     RoomDate,
     City,
@@ -107,9 +105,7 @@ from .serializers import (
     HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
-    ReservationCreateInputSerializer,
-    ReservationSerializer,
-    ReservationUpdatePassengersInputSerializer,
+    ReservationCreateSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
     RoomSerializer,
@@ -2522,7 +2518,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     """
     API برای ایجاد رزرو موقت
     """
-    serializer_class = ReservationSerializer
+    serializer_class = ReservationCreateSerializer
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",

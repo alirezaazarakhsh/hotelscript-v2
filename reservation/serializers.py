@@ -720,3 +720,23 @@ class HotelTagPublicSerializer(serializers.ModelSerializer):
         
         
 
+
+
+
+
+class ReservationCreateSerializer(serializers.Serializer):
+    hotel_id = serializers.IntegerField(required=True, help_text="آیدی هتل")
+    room_id = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        help_text="لیست آیدی اتاق‌ها"
+    )
+    date = serializers.DictField(
+        child=serializers.CharField(),
+        required=True,
+        help_text="تاریخ ورود و خروج با کلیدهای 'enter' و 'exit'"
+    )
+    number_of_nights = serializers.IntegerField(required=True, help_text="تعداد شب‌ها")
+
+class ReservationCreateResponseSerializer(serializers.Serializer):
+    reservation_id = serializers.CharField(read_only=True, help_text="کد رزرو با فرمت sfaXXXXXXXXXX")
