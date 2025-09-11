@@ -2511,6 +2511,14 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+import random
+from rest_framework import generics, status
+from rest_framework.response import Response
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from .serializers import ReservationCreateSerializer
+from .models import Reservationhotel, ReservationRoom
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
 
@@ -2534,9 +2542,27 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
+        # تولید reservation_id
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # اینجا می‌تونید رزرو واقعی را در دیتابیس ایجاد کنید
+        # ایجاد رزرو اصلی در دیتابیس
+        reservation = Reservationhotel.objects.create(
+            tracking_code=reservation_id,
+            reserver_first_name=data.get('first_name', ''),
+            reserver_last_name=data.get('last_name', ''),
+            reserver_phone_number=data.get('phone_number', ''),
+            check_in_date=data['date']['enter'],
+            check_out_date=data['date']['exit'],
+            # buyer = data.get('buyer') اگر فیلد buyer دارید
+        )
+
+        # ایجاد رزرو اتاق‌ها
+        for room_id in data.get('room_id', []):
+            ReservationRoom.objects.create(
+                reservation=reservation,
+                room_id=room_id
+            )
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
