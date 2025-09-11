@@ -107,6 +107,7 @@ from .serializers import (
     HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
+    ReservationCreateResponseSerializer,
     ReservationCreateSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
