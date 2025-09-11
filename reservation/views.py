@@ -2515,24 +2515,12 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import random
-from decimal import Decimal
-from datetime import datetime
-from django.shortcuts import get_object_or_404
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.core.exceptions import ValidationError
-from .models import Room, Reservationhotel, ReservationRoom, RoomDatePrice
-from .serializers import ReservationCreateSerializer, ReservationCreateResponseSerializer
-from django.utils.dateparse import parse_date  # استفاده از parse_date استاندارد
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="ایجاد رزرو موقت",
+        operation_summary="ایجاد رزرو موقت چند اتاقه",
         operation_description="ایجاد یک رزرو جدید و بازگرداندن reservation_id",
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -2543,10 +2531,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # تولید کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تبدیل تاریخ‌ها از رشته به datetime.date
+        # تبدیل تاریخ‌ها از string به datetime.date
         check_in_date = parse_date(data['date']['enter'])
         check_out_date = parse_date(data['date']['exit'])
 
@@ -2556,7 +2543,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # محاسبه تعداد شب‌ها
         number_of_nights = (check_out_date - check_in_date).days
 
         # ایجاد رزرو اصلی
@@ -2577,7 +2563,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
-            # پیدا کردن قیمت مناسب بر اساس بازه زمانی و سطح کاربری
             price_obj = RoomDatePrice.objects.filter(
                 room=room,
                 start_date__lte=check_in_date,
@@ -2587,7 +2572,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             price_per_night = Decimal(price_obj.price) if price_obj else Decimal('0')
 
-            # اعمال تخفیف
             if price_obj:
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date >= check_in_date:
                     price_per_night = price_per_night * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
@@ -2597,15 +2581,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
-            # ایجاد ReservationRoom با تعداد نفر اصلی و اضافه از مدل Room
+            # ایجاد رزرو برای هر اتاق با ظرفیت اصلی و اضافه
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=1,
+                quantity=1,  # هر آیتم یک اتاق
                 price_per_night=price_per_night,
                 subtotal=subtotal,
-                primary_passengers_count=room.room_capacity,
-                extra_passengers_count=room.extra_capacity
+                primary_passengers_count=room.room_capacity,  # تعداد نفر اصلی
+                extra_passengers_count=room.extra_capacity   # تعداد نفر اضافه
             )
 
         # بروزرسانی قیمت کل رزرو
