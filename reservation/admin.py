@@ -669,13 +669,22 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     def created_jalali(self, obj):
         if obj.created_at:
-            return jdatetime.datetime.fromgregorian(datetime=obj.created_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            # اطمینان از اینکه ورودی datetime است
+            dt = obj.created_at
+            if isinstance(dt, str):
+                from datetime import datetime
+                dt = datetime.fromisoformat(dt)
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%d %B %Y ساعت %H:%M:%S')
         return '-'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
     def updated_jalali(self, obj):
         if obj.updated_at:
-            return jdatetime.datetime.fromgregorian(datetime=obj.updated_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            dt = obj.updated_at
+            if isinstance(dt, str):
+                from datetime import datetime
+                dt = datetime.fromisoformat(dt)
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%d %B %Y ساعت %H:%M:%S')
         return '-'
     updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
 
