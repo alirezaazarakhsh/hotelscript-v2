@@ -27,7 +27,8 @@ class BackupManager:
     def user_backup_dir(user_id, backup_type):
         user_id_str = str(user_id) if user_id != "system" else "system"
         if backup_type == "db":
-            return os.path.join(DB_BACKUP_DIR, user_id_str)
+            # اضافه کردن زیرپوشه 5839876171 به مسیر دیتابیس
+            return os.path.join(DB_BACKUP_DIR, user_id_str, user_id_str)
         elif backup_type == "media":
             return os.path.join(MEDIA_BACKUP_DIR, user_id_str)
         return None
@@ -185,7 +186,7 @@ class BackupManager:
             file_time = datetime.fromtimestamp(os.path.getmtime(file_path), tz=TEHRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
             url = f"{MEDIA_BASE_URL}{effective_user_id}/{file}"
             message += f"{idx}. {file} (اندازه: {file_size:.2f} MB, زمان: {file_time})\n"
-            row = [InlineKeyboardButton(f"{idx}. {file}", url=url)]
+            row = [InlineKeyboardButton(f"{idx}. {file}", callback_data=f"send_media::{file_path}")]
             if not is_system:
                 row.append(InlineKeyboardButton("🗑️", callback_data=f"delete_media::{file_path}"))
             keyboard.append(row)
@@ -221,7 +222,6 @@ class BackupManager:
         except Exception as e:
             logger.error(f"Error handling callback: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا: {str(e)}")
-            # بازگشت به منوی بکاپ‌ها به جای منوی اصلی
             await BackupManager.list_backups(user_id, context)
 
     @staticmethod
