@@ -17,6 +17,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
+from jdatetime import date as jdate
+
 
 # 🛠️ Django Model Fields و Expressions
 from django.db.models import (
@@ -1297,9 +1299,14 @@ class Reservationhotel(models.Model):
     @property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
-            # اطمینان از اینکه تاریخ‌ها به صورت jDate هستند
+            # تبدیل رشته به jdatetime.date در صورت نیاز
             check_in = self.check_in_date
             check_out = self.check_out_date
+
+            if isinstance(check_in, str):
+                check_in = jdate.fromisoformat(check_in)
+            if isinstance(check_out, str):
+                check_out = jdate.fromisoformat(check_out)
 
             return (check_out - check_in).days
         return 0
