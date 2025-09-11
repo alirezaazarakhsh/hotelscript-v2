@@ -669,24 +669,17 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     def created_jalali(self, obj):
         if obj.created_at:
-            # اطمینان از اینکه ورودی datetime است
-            dt = obj.created_at
-            if isinstance(dt, str):
-                from datetime import datetime
-                dt = datetime.fromisoformat(dt)
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%d %B %Y ساعت %H:%M:%S')
+            # چون jDateTimeField استفاده شده، مستقیم strftime بزن
+            return obj.created_at.strftime('%d %B %Y ساعت %H:%M:%S')
         return '-'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
     def updated_jalali(self, obj):
         if obj.updated_at:
-            dt = obj.updated_at
-            if isinstance(dt, str):
-                from datetime import datetime
-                dt = datetime.fromisoformat(dt)
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%d %B %Y ساعت %H:%M:%S')
+            return obj.updated_at.strftime('%d %B %Y ساعت %H:%M:%S')
         return '-'
     updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
+    
 
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
