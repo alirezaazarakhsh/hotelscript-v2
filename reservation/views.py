@@ -2515,7 +2515,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
-    permission_classes = [IsAuthenticated]  # فقط کاربران لاگین شده
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
@@ -2539,25 +2539,57 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # تولید reservation_id
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # ایجاد رزرو اصلی در دیتابیس با buyer
+        # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
-            buyer=request.user,  # اینجا کاربر جاری
             tracking_code=reservation_id,
             reserver_first_name=data.get('first_name', ''),
             reserver_last_name=data.get('last_name', ''),
             reserver_phone_number=data.get('phone_number', ''),
             check_in_date=data['date']['enter'],
             check_out_date=data['date']['exit'],
+            buyer=request.user
         )
 
-        # ایجاد رزرو اتاق‌ها
-        for room_id in data.get('room_id', []):
+        total_price = 0
+
+        for room_data in data.get('rooms', []):
+            room = get_object_or_404(Room, id=room_data['room_id'])
+            quantity = room_data.get('quantity', 1)
+            extra_passengers = room_data.get('extra_passengers', 0)
+
+            # پیدا کردن قیمت بازه مناسب برای کاربر
+            price_obj = RoomDatePrice.objects.filter(
+                room=room,
+                start_date__lte=data['date']['enter'],
+                end_date__gte=data['date']['exit'],
+                user_level=getattr(request.user, 'user_level', None)
+            ).first()
+
+            price_per_night = price_obj.price if price_obj else 0
+
+            # اعمال تخفیف
+            if price_obj:
+                if price_obj.discount_type == 'percentage' and price_obj.discount_date >= data['date']['enter']:
+                    price_per_night = int(price_per_night * (1 - price_obj.discount_value / 100))
+                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                    price_per_night -= price_obj.discount_value
+
+            subtotal = (price_per_night + (price_obj.extra_passenger_price * extra_passengers if price_obj else 0)) * quantity * data.get('number_of_nights', 1)
+            total_price += subtotal
+
             ReservationRoom.objects.create(
                 reservation=reservation,
-                room_id=room_id
+                room=room,
+                quantity=quantity,
+                price_per_night=price_per_night,
+                subtotal=subtotal
             )
+
+        # بروزرسانی قیمت کل رزرو
+        reservation.total_price = total_price
+        reservation.final_price = total_price  # اگر میخوای تخفیف کلی رزرو اعمال شود، اینجا اضافه کن
+        reservation.save()
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
