@@ -2511,64 +2511,32 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-
 class ReservationCreateAPIView(generics.CreateAPIView):
-    """
-    API برای ایجاد رزرو موقت
-    """
     serializer_class = ReservationCreateSerializer
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
-        operation_description="""
-        این API یک رزرو جدید ایجاد می‌کند.
-
-        **پارامترهای ورودی (POST):**
-        ```json
-        {
-          "hotel_id": 2,
-          "room_id": [5],
-          "date": {
-            "enter": "1404-07-01",
-            "exit": "1404-07-04"
-          },
-          "number_of_nights": 3
-        }
-        ```
-
-        **خروجی موفق:**
-        ```json
-        {
-          "reservation_id": "sfa1234567890"
-        }
-        ```
-        """,
+        operation_description="ایجاد یک رزرو جدید و بازگرداندن reservation_id",
         tags=["reservation-api"],
-        manual_parameters=[
-            openapi.Parameter(
-                'hotel_id', openapi.IN_BODY,
-                description="آیدی هتل",
-                type=openapi.TYPE_INTEGER
-            ),
-            openapi.Parameter(
-                'room_id', openapi.IN_BODY,
-                description="لیست آیدی اتاق‌ها",
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_INTEGER)
-            ),
-            openapi.Parameter(
-                'date', openapi.IN_BODY,
-                description="تاریخ ورود و خروج",
-                type=openapi.TYPE_OBJECT
-            ),
-            openapi.Parameter(
-                'number_of_nights', openapi.IN_BODY,
-                description="تعداد شب‌ها",
-                type=openapi.TYPE_INTEGER
-            ),
-        ]
+        request_body=ReservationCreateSerializer,
+        responses={
+            200: openapi.Response(
+                description="رزرو ایجاد شد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'reservation_id': openapi.Schema(type=openapi.TYPE_STRING, example='sfa1234567890')
+                    }
+                )
+            )
+        }
     )
     def post(self, request, *args, **kwargs):
-        data = request.data
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
+
+        # اینجا می‌تونید رزرو واقعی را در دیتابیس ایجاد کنید
+
+        return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
