@@ -1421,14 +1421,42 @@ class Reservationhotel(models.Model):
             
             
 # ---------------- ReservationRoom ----------------
+
 class ReservationRoom(models.Model):
-    reservation = models.ForeignKey(Reservationhotel, on_delete=models.CASCADE, verbose_name='رزرو', related_name='reservation_rooms')
-    room = models.ForeignKey(Room, on_delete=models.CASCADE, verbose_name='اتاق', related_name='reservation_rooms')
+    reservation = models.ForeignKey(
+        'Reservationhotel',
+        on_delete=models.CASCADE,
+        verbose_name='رزرو',
+        related_name='reservation_rooms'
+    )
+    room = models.ForeignKey(
+        'Room',
+        on_delete=models.CASCADE,
+        verbose_name='اتاق',
+        related_name='reservation_rooms'
+    )
     quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
-    price_per_night = models.DecimalField('قیمت هر شب', max_digits=12, decimal_places=0, validators=[MinValueValidator(0)])
-    subtotal = models.PositiveBigIntegerField(verbose_name='مجموع قیمت (تومان)', null=False, blank=False, default=0)
-    primary_passengers_count = models.PositiveIntegerField(default=1, verbose_name='تعداد نفر اصلی')
-    extra_passengers_count = models.PositiveIntegerField(default=0, verbose_name='تعداد نفر اضافه')
+    price_per_night = models.DecimalField(
+        'قیمت هر شب',
+        max_digits=12,
+        decimal_places=0,
+        validators=[MinValueValidator(0)],
+        default=Decimal('0')
+    )
+    subtotal = models.PositiveBigIntegerField(
+        verbose_name='مجموع قیمت (تومان)',
+        null=False,
+        blank=False,
+        default=0
+    )
+    primary_passengers_count = models.PositiveIntegerField(
+        default=1,
+        verbose_name='تعداد نفر اصلی'
+    )
+    extra_passengers_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name='تعداد نفر اضافه'
+    )
 
     class Meta:
         verbose_name = 'اتاق رزرو شده'

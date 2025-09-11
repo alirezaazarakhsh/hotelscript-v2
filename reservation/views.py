@@ -2515,6 +2515,18 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+import random
+from decimal import Decimal
+from datetime import datetime
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from .models import Room, Reservationhotel, ReservationRoom, RoomDatePrice
+from .serializers import ReservationCreateSerializer, ReservationCreateResponseSerializer
+from django.utils.dateparse import parse_date  # استفاده از parse_date استاندارد
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2531,11 +2543,18 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # تولید کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تبدیل تاریخ‌ها از استرینگ به تاریخ پایتون
+        # تبدیل تاریخ‌ها از رشته به datetime.date
         check_in_date = parse_date(data['date']['enter'])
         check_out_date = parse_date(data['date']['exit'])
+
+        if not check_in_date or not check_out_date:
+            raise ValidationError("تاریخ ورود یا خروج معتبر نیست.")
+
+        if check_out_date <= check_in_date:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
         # محاسبه تعداد شب‌ها
         number_of_nights = (check_out_date - check_in_date).days
@@ -2543,21 +2562,22 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
-            reserver_first_name=request.user.first_name,
-            reserver_last_name=request.user.last_name,
+            reserver_first_name=getattr(request.user, 'first_name', ''),
+            reserver_last_name=getattr(request.user, 'last_name', ''),
             reserver_phone_number=getattr(request.user, 'phone_number', ''),
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             buyer=request.user
         )
 
-        total_price = 0
+        total_price = Decimal('0')
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
 
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
+            # پیدا کردن قیمت مناسب بر اساس بازه زمانی و سطح کاربری
             price_obj = RoomDatePrice.objects.filter(
                 room=room,
                 start_date__lte=check_in_date,
@@ -2565,17 +2585,19 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 user_level=getattr(request.user, 'user_level', None)
             ).first()
 
-            price_per_night = price_obj.price if price_obj else 0
+            price_per_night = Decimal(price_obj.price) if price_obj else Decimal('0')
 
+            # اعمال تخفیف
             if price_obj:
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date >= check_in_date:
-                    price_per_night = int(price_per_night * (1 - price_obj.discount_value / 100))
+                    price_per_night = price_per_night * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    price_per_night -= price_obj.discount_value
+                    price_per_night -= Decimal(price_obj.discount_value)
 
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
+            # ایجاد ReservationRoom با تعداد نفر اصلی و اضافه از مدل Room
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
@@ -2586,6 +2608,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 extra_passengers_count=room.extra_capacity
             )
 
+        # بروزرسانی قیمت کل رزرو
         reservation.total_price = total_price
         reservation.final_price = total_price
         reservation.save()
