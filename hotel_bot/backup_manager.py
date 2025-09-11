@@ -43,19 +43,21 @@ class BackupManager:
         dir_path = BackupManager.user_backup_dir(user_id, backup_type)
         if not os.path.exists(dir_path):
             return 0
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(TEHRAN_TZ).strftime("%Y-%m-%d")
         files = [f for f in os.listdir(dir_path) 
                  if os.path.isfile(os.path.join(dir_path, f)) and today in f]
+        logger.debug(f"Backup count today for user {user_id}, type {backup_type}: {len(files)}")
         return len(files)
 
     @staticmethod
     async def backup_database(user_id, context):
         logger.debug(f"Starting database backup for user {user_id}")
         if not BackupManager.is_super_admin(user_id) and BackupManager.get_backup_count_today(user_id, "db") >= BackupManager.DAILY_LIMIT:
-            await context.bot.send_message(chat_id=user_id, text="❌ شما امروز به حد مجاز بکاپ دیتابیس رسیدید!")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ شما امروز به حد مجاز بکاپ دیتابیس ({BackupManager.DAILY_LIMIT} در روز) رسیدید!")
             return
 
         dir_path = BackupManager.user_backup_dir(user_id, "db")
+        logger.debug(f"Database backup path: {dir_path}")
         os.makedirs(dir_path, exist_ok=True)
         timestamp = BackupManager.get_timestamp()
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
@@ -67,20 +69,23 @@ class BackupManager:
             return
         db_file = FileManager.latest_file(dir_path, ".sql")
         if db_file:
+            file_path = os.path.join(dir_path, db_file)
+            logger.debug(f"Sending database backup file: {file_path}")
             await context.bot.send_document(chat_id=user_id,
-                                          document=open(os.path.join(dir_path, db_file), "rb"),
+                                          document=open(file_path, "rb"),
                                           caption=f"📦 بکاپ دیتابیس\n{timestamp['display']}")
-        # نمایش منوی اصلی بکاپ‌ها
-        await BackupManager.list_backups(user_id, context)
+        # اجرای دستور /start (نمایش منوی اصلی)
+        await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
     async def backup_media(user_id, context):
         logger.debug(f"Starting media backup for user {user_id}")
         if not BackupManager.is_super_admin(user_id) and BackupManager.get_backup_count_today(user_id, "media") >= BackupManager.DAILY_LIMIT:
-            await context.bot.send_message(chat_id=user_id, text="❌ شما امروز به حد مجاز بکاپ مدیا رسیدید!")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ شما امروز به حد مجاز بکاپ مدیا ({BackupManager.DAILY_LIMIT} در روز) رسیدید!")
             return
 
         dir_path = BackupManager.user_backup_dir(user_id, "media")
+        logger.debug(f"Media backup path: {dir_path}")
         os.makedirs(dir_path, exist_ok=True)
         timestamp = BackupManager.get_timestamp()
         backup_script = os.path.join(PROJECT_DIR, "backup.sh")
@@ -93,9 +98,10 @@ class BackupManager:
         media_file = FileManager.latest_file(dir_path, ".tar.gz")
         if media_file:
             url = f"{MEDIA_BASE_URL}{user_id}/{media_file}"
+            logger.debug(f"Sending media backup URL: {url}")
             await context.bot.send_message(chat_id=user_id, text=f"📦 بکاپ مدیا آماده شد.\n💾 لینک: {url}")
-        # نمایش منوی اصلی بکاپ‌ها
-        await BackupManager.list_backups(user_id, context)
+        # اجرای دستور /start (نمایش منوی اصلی)
+        await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
     async def list_backups(user_id, context, backup_type=None):
@@ -103,8 +109,8 @@ class BackupManager:
         if not backup_type:
             # منوی اصلی بکاپ‌ها
             keyboard = [
-                [InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="list_db_backups"),
-                 InlineKeyboardButton("📁 بکاپ مدیا", callback_data="list_media_backups")]
+                [InlineKeyboardButton("📁 لیست بکاپ‌های دیتابیس", callback_data="list_db_backups"),
+                 InlineKeyboardButton("📁 لیست بکاپ‌های مدیا", callback_data="list_media_backups")]
             ]
             if BackupManager.is_super_admin(user_id):
                 keyboard.append([
@@ -113,7 +119,7 @@ class BackupManager:
                 ])
             keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="backup_menu")])
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await context.bot.send_message(chat_id=user_id, text="📦 بخش لیست بکاپ‌ها", reply_markup=reply_markup)
+            await context.bot.send_message(chat_id=user_id, text="📦 بخش مدیریت بکاپ‌ها", reply_markup=reply_markup)
             return
         
         # نمایش لیست فایل‌ها
@@ -142,11 +148,11 @@ class BackupManager:
         keyboard = []
         is_system = effective_user_id == "system"
         message = "📦 آخرین بکاپ‌های دیتابیس:\n\n"
-        message += "ℹ️ راهنما:\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
+        message += "ℹ️ راهنما:\n- فایل‌های دیتابیس (.sql) برای بازگردانی پایگاه داده استفاده می‌شوند.\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
             file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
-            file_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
+            file_time = datetime.fromtimestamp(os.path.getmtime(file_path), tz=TEHRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
             message += f"{idx}. {file} (اندازه: {file_size:.2f} MB, زمان: {file_time})\n"
             row = [InlineKeyboardButton(f"{idx}. {file}", callback_data=f"send_db::{file_path}")]
             if not is_system:
@@ -172,11 +178,11 @@ class BackupManager:
         keyboard = []
         is_system = effective_user_id == "system"
         message = "📦 آخرین بکاپ‌های مدیا:\n\n"
-        message += "ℹ️ راهنما:\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
+        message += "ℹ️ راهنما:\n- فایل‌های مدیا (.tar.gz) برای بازگردانی فایل‌های چندرسانه‌ای استفاده می‌شوند.\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
             file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
-            file_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
+            file_time = datetime.fromtimestamp(os.path.getmtime(file_path), tz=TEHRAN_TZ).strftime("%Y-%m-%d %H:%M:%S")
             url = f"{MEDIA_BASE_URL}{effective_user_id}/{file}"
             message += f"{idx}. {file} (اندازه: {file_size:.2f} MB, زمان: {file_time})\n"
             row = [InlineKeyboardButton(f"{idx}. {file}", url=url)]
