@@ -1272,7 +1272,7 @@ class Reservationhotel(models.Model):
     half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
 
-    tracking_code = models.CharField(_('کد پیگیری'), max_length=9, unique=True, editable=False)
+    tracking_code = models.CharField(max_length=20, unique=True)  
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
 
