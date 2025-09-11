@@ -637,6 +637,7 @@ class ReservationRoomInline(NestedTabularInline):
     extra_passengers_count.short_description = 'تعداد نفر اضافه'
 
 # ---------------- Reservationhotel Admin ----------------
+# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     list_display = (
@@ -680,32 +681,29 @@ class ReservationhotelAdmin(NestedModelAdmin):
     )
 
     # ---------------- Jalali Dates ----------------
-    
+    @admin.display(description='تاریخ ایجاد (شمسی)')
     def created_jalali(self, obj):
         if obj.created_at:
-            import jdatetime
-            local_dt = localtime(obj.created_at)  # تبدیل به timezone محلی
+            local_dt = localtime(obj.created_at)
             return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
-    created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
+    @admin.display(description='تاریخ به‌روزرسانی (شمسی)')
     def updated_jalali(self, obj):
         if obj.updated_at:
-            import jdatetime
-            local_dt = localtime(obj.updated_at)  # تبدیل به timezone محلی
+            local_dt = localtime(obj.updated_at)
             return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
-    updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
 
     # ---------------- Counts ----------------
+    @admin.display(description='تعداد شب‌ها')
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
-    nights_count_fa.short_description = 'تعداد شب‌ها'
 
+    @admin.display(description='کل اتاق‌ها')
     def total_rooms_fa(self, obj):
         return obj.total_rooms if obj.pk else 0
-    total_rooms_fa.short_description = 'کل اتاق‌ها'
 
+    @admin.display(description='کل مهمان‌ها')
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
-    total_guests_fa.short_description = 'کل مهمان‌ها'
