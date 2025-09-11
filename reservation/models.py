@@ -1297,13 +1297,10 @@ class Reservationhotel(models.Model):
     @property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
+            # اطمینان از اینکه تاریخ‌ها به صورت jDate هستند
             check_in = self.check_in_date
             check_out = self.check_out_date
-            # تبدیل رشته به jdatetime در صورت نیاز
-            if isinstance(check_in, str):
-                check_in = jdate.fromisoformat(check_in)
-            if isinstance(check_out, str):
-                check_out = jdate.fromisoformat(check_out)
+
             return (check_out - check_in).days
         return 0
 
