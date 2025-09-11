@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
-from jdatetime import date as jdate, timedelta as jtimedelta
+from jdatetime import date as jdate
 
 
 
