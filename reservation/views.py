@@ -72,6 +72,7 @@ from .models import (
     Hotel,
     HotelTag,
     HotelTagPublic,
+    ReservationRoom,
     Room,
     RoomDate,
     City,
@@ -2511,16 +2512,9 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import random
-from rest_framework import generics, status
-from rest_framework.response import Response
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from .serializers import ReservationCreateSerializer
-from .models import Reservationhotel, ReservationRoom
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
+    permission_classes = [IsAuthenticated]  # فقط کاربران لاگین شده
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
@@ -2547,15 +2541,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # تولید reservation_id
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # ایجاد رزرو اصلی در دیتابیس
+        # ایجاد رزرو اصلی در دیتابیس با buyer
         reservation = Reservationhotel.objects.create(
+            buyer=request.user,  # اینجا کاربر جاری
             tracking_code=reservation_id,
             reserver_first_name=data.get('first_name', ''),
             reserver_last_name=data.get('last_name', ''),
             reserver_phone_number=data.get('phone_number', ''),
             check_in_date=data['date']['enter'],
             check_out_date=data['date']['exit'],
-            # buyer = data.get('buyer') اگر فیلد buyer دارید
         )
 
         # ایجاد رزرو اتاق‌ها
