@@ -2513,17 +2513,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import random
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-from django.shortcuts import get_object_or_404
-
-from reservation.models import Reservationhotel, ReservationRoom, Room, RoomDatePrice
-from reservation.serializers import ReservationCreateSerializer
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2593,9 +2582,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
-            # تعداد نفرات اصلی و اضافه
-            primary_passengers = data.get('primary_passengers', 1)
-            extra_passengers = data.get('extra_passengers', 0)
+            # تعداد نفرات اصلی و اضافه از مدل اتاق
+            primary_passengers = room.room_capacity
+            extra_passengers = room.extra_capacity
 
             # ایجاد ReservationRoom
             ReservationRoom.objects.create(
