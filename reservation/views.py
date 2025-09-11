@@ -2554,10 +2554,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         total_price = 0
         hotel_id = data.get('hotel_id')
-        room_ids = data.get('room_id', [])
+        rooms_data = data.get('rooms', [])  # هر اتاق شامل تعداد نفر اصلی و اضافه
 
-        for room_id in room_ids:
-            # مطمئن شو اتاق متعلق به هتل هست
+        for room_data in rooms_data:
+            room_id = room_data['room_id']
+            primary_count = room_data.get('primary_passengers', 1)
+            extra_count = room_data.get('extra_passengers', 0)
+
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
             # پیدا کردن قیمت مناسب بر اساس بازه زمانی و سطح کاربری
@@ -2577,19 +2580,35 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     price_per_night -= price_obj.discount_value
 
-            # subtotal برای یک اتاق
+            # محاسبه subtotal
             number_of_nights = data.get('number_of_nights', 1)
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
             # ایجاد ReservationRoom
-            ReservationRoom.objects.create(
+            reservation_room = ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=1,  # یک رزرو برای هر اتاق
+                quantity=1,  # هر رزرو یک رکورد
                 price_per_night=price_per_night,
                 subtotal=subtotal
             )
+
+            # ایجاد مسافرها
+            for _ in range(primary_count):
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=reservation_room,
+                    passenger_type='primary',
+                    first_name='-',  # در صورت نیاز بعداً بروزرسانی شود
+                    last_name='-'
+                )
+            for _ in range(extra_count):
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=reservation_room,
+                    passenger_type='extra',
+                    first_name='-',
+                    last_name='-'
+                )
 
         # بروزرسانی قیمت کل رزرو
         reservation.total_price = total_price
