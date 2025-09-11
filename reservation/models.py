@@ -1300,22 +1300,20 @@ class Reservationhotel(models.Model):
     @property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
-            # اگر jdatetime.date است، به datetime.date تبدیل می‌کنیم
-            check_in = self.check_in_date
-            check_out = self.check_out_date
+            # تبدیل به datetime.date استاندارد
+            if isinstance(self.check_in_date, jdatetime.date):
+                check_in = self.check_in_date.togregorian()
+            else:
+                check_in = self.check_in_date
 
-            try:
-                check_in = check_in.togregorian()
-            except AttributeError:
-                pass
-
-            try:
-                check_out = check_out.togregorian()
-            except AttributeError:
-                pass
+            if isinstance(self.check_out_date, jdatetime.date):
+                check_out = self.check_out_date.togregorian()
+            else:
+                check_out = self.check_out_date
 
             return (check_out - check_in).days
         return 0
+
 
     @property
     def total_rooms(self):
@@ -1329,78 +1327,79 @@ class Reservationhotel(models.Model):
             total += (room.room_capacity + room.extra_capacity) * res_room.quantity
         return total
 
-    def calculate_total_price(self):
-        if not self.pk or not self.reservation_rooms.exists():
-            return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
-        hotel = self.reservation_rooms.first().room.hotel
-        if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
-            raise ValidationError(_('تمام اتاق‌ها باید از یک هتل باشند.'))
+def calculate_total_price(self):
+    if not self.pk or not self.reservation_rooms.exists():
+        return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
-        total = Decimal('0')
-        total_discount = Decimal('0')
-        half_day_in_charge = Decimal('0')
-        half_day_out_charge = Decimal('0')
-        nights = self.nights_count
+    hotel = self.reservation_rooms.first().room.hotel
+    if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
+        raise ValidationError(_('تمام اتاق‌ها باید از یک هتل باشند.'))
 
-        if nights <= 0:
-            return total, total_discount, half_day_in_charge, half_day_out_charge
+    total = Decimal('0')
+    total_discount = Decimal('0')
+    half_day_in_charge = Decimal('0')
+    half_day_out_charge = Decimal('0')
+    nights = self.nights_count
 
-        user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
-
-        # تبدیل check_in_date به datetime.date استاندارد
-        if isinstance(self.check_in_date, str):
-            check_in_date_std = jdate.fromisoformat(self.check_in_date).togregorian()
-        else:
-            check_in_date_std = self.check_in_date.togregorian()
-
-        for res_room in self.reservation_rooms.all():
-            room = res_room.room
-            quantity = res_room.quantity
-            total_guests = res_room.passengers.count()
-            base_capacity = room.room_capacity * quantity
-            extra_guests = max(0, total_guests - base_capacity)
-
-            for night in range(nights):
-                # تاریخ هر شب به صورت datetime.date استاندارد
-                current_date = check_in_date_std + timedelta(days=night)
-
-                price_obj = room.date_prices.filter(
-                    start_date__lte=current_date,
-                    end_date__gte=current_date,
-                    user_level=user_level
-                ).first() or room.date_prices.filter(
-                    start_date__lte=current_date,
-                    end_date__gte=current_date,
-                    user_level__isnull=True
-                ).first()
-
-                if not price_obj:
-                    raise ValidationError(_(f'قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.'))
-
-                daily_price = Decimal(price_obj.price)
-                extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
-                discount = Decimal('0')
-
-                if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                    discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
-                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    if not self.buyer.reservations.exclude(pk=self.pk).exists():
-                        discount = Decimal(price_obj.discount_value)
-
-                total += (daily_price - discount + extra_price) * quantity
-                total_discount += discount * quantity
-
-                if night == 0 and hotel.has_check_in_half_day_charge:
-                    half_day_in_charge += (daily_price / Decimal('2')) * quantity
-                if night == nights - 1 and hotel.has_check_out_half_day_charge:
-                    half_day_out_charge += (daily_price / Decimal('2')) * quantity
-
-        total += half_day_in_charge + half_day_out_charge
+    if nights <= 0:
         return total, total_discount, half_day_in_charge, half_day_out_charge
 
+    user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
 
-    def save(self, *args, **kwargs):
+    # تبدیل تاریخ‌ها به datetime.date استاندارد
+    if isinstance(self.check_in_date, jdatetime.date):
+        check_in_date_std = self.check_in_date.togregorian()
+    else:
+        check_in_date_std = self.check_in_date
+
+    for res_room in self.reservation_rooms.all():
+        room = res_room.room
+        quantity = res_room.quantity
+        total_guests = res_room.passengers.count()
+        base_capacity = room.room_capacity * quantity
+        extra_guests = max(0, total_guests - base_capacity)
+
+        for night in range(nights):
+            current_date = check_in_date_std + timedelta(days=night)
+
+            price_obj = room.date_prices.filter(
+                start_date__lte=current_date,
+                end_date__gte=current_date,
+                user_level=user_level
+            ).first() or room.date_prices.filter(
+                start_date__lte=current_date,
+                end_date__gte=current_date,
+                user_level__isnull=True
+            ).first()
+
+            if not price_obj:
+                raise ValidationError(_(f'قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.'))
+
+            daily_price = Decimal(price_obj.price)
+            extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
+            discount = Decimal('0')
+
+            if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
+                discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
+            elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                if not self.buyer.reservations.exclude(pk=self.pk).exists():
+                    discount = Decimal(price_obj.discount_value)
+
+            total += (daily_price - discount + extra_price) * quantity
+            total_discount += discount * quantity
+
+            if night == 0 and hotel.has_check_in_half_day_charge:
+                half_day_in_charge += (daily_price / Decimal('2')) * quantity
+            if night == nights - 1 and hotel.has_check_out_half_day_charge:
+                half_day_out_charge += (daily_price / Decimal('2')) * quantity
+
+    total += half_day_in_charge + half_day_out_charge
+    return total, total_discount, half_day_in_charge, half_day_out_charge
+
+
+
+def save(self, *args, **kwargs):
         if not self.tracking_code:
             while True:
                 code = 'safa' + str(random.randint(10000, 99999))
