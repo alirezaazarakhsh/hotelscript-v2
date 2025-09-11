@@ -50,6 +50,7 @@ class BackupManager:
 
     @staticmethod
     async def backup_database(user_id, context):
+        logger.debug(f"Starting database backup for user {user_id}")
         if not BackupManager.is_super_admin(user_id) and BackupManager.get_backup_count_today(user_id, "db") >= BackupManager.DAILY_LIMIT:
             await context.bot.send_message(chat_id=user_id, text="❌ شما امروز به حد مجاز بکاپ دیتابیس رسیدید!")
             return
@@ -61,6 +62,7 @@ class BackupManager:
         result = subprocess.run(f"{backup_script} db {timestamp['file']} {user_id}", 
                                 shell=True, capture_output=True, text=True)
         if result.returncode != 0:
+            logger.error(f"Database backup failed: {result.stderr}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در بکاپ‌گیری دیتابیس: {result.stderr}")
             return
         db_file = FileManager.latest_file(dir_path, ".sql")
@@ -68,10 +70,12 @@ class BackupManager:
             await context.bot.send_document(chat_id=user_id,
                                           document=open(os.path.join(dir_path, db_file), "rb"),
                                           caption=f"📦 بکاپ دیتابیس\n{timestamp['display']}")
-        await MenuManager.show_main_menu(user_id, context)
+        # نمایش لیست بکاپ‌ها به جای منوی اصلی
+        await BackupManager.list_backups(user_id, context, backup_type="db")
 
     @staticmethod
     async def backup_media(user_id, context):
+        logger.debug(f"Starting media backup for user {user_id}")
         if not BackupManager.is_super_admin(user_id) and BackupManager.get_backup_count_today(user_id, "media") >= BackupManager.DAILY_LIMIT:
             await context.bot.send_message(chat_id=user_id, text="❌ شما امروز به حد مجاز بکاپ مدیا رسیدید!")
             return
@@ -83,17 +87,19 @@ class BackupManager:
         result = subprocess.run(f"{backup_script} media {timestamp['file']} {user_id}", 
                                 shell=True, capture_output=True, text=True)
         if result.returncode != 0:
+            logger.error(f"Media backup failed: {result.stderr}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در بکاپ‌گیری مدیا: {result.stderr}")
             return
         media_file = FileManager.latest_file(dir_path, ".tar.gz")
         if media_file:
             url = f"{MEDIA_BASE_URL}{user_id}/{media_file}"
             await context.bot.send_message(chat_id=user_id, text=f"📦 بکاپ مدیا آماده شد.\n💾 لینک: {url}")
-        await MenuManager.show_main_menu(user_id, context)
+        # نمایش لیست بکاپ‌ها به جای منوی اصلی
+        await BackupManager.list_backups(user_id, context, backup_type="media")
 
     @staticmethod
     async def list_backups(user_id, context, backup_type=None):
-        """نمایش منوی لیست بکاپ‌ها یا لیست خود فایل‌ها"""
+        logger.debug(f"Listing backups for user {user_id}, type {backup_type}")
         if not backup_type:
             # منوی اصلی
             keyboard = [
@@ -129,15 +135,19 @@ class BackupManager:
             return
         keyboard = []
         is_system = effective_user_id == "system"
+        message = "📦 آخرین بکاپ‌های دیتابیس:\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
+            file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
+            file_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
+            message += f"{idx}. {file} (اندازه: {file_size:.2f} MB, زمان: {file_time})\n"
             row = [InlineKeyboardButton(f"{idx}. {file}", callback_data=f"send_db::{file_path}")]
             if not is_system:
                 row.append(InlineKeyboardButton("🗑️", callback_data=f"delete_db::{file_path}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=user_id, text="📦 آخرین بکاپ‌های دیتابیس:", reply_markup=reply_markup)
+        await context.bot.send_message(chat_id=user_id, text=message, reply_markup=reply_markup)
 
     @staticmethod
     async def _list_media_backups(user_id, context, effective_user_id):
@@ -148,20 +158,24 @@ class BackupManager:
             return
         keyboard = []
         is_system = effective_user_id == "system"
+        message = "📦 آخرین بکاپ‌های مدیا:\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
+            file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
+            file_time = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M:%S")
             url = f"{MEDIA_BASE_URL}{effective_user_id}/{file}"
+            message += f"{idx}. {file} (اندازه: {file_size:.2f} MB, زمان: {file_time})\n"
             row = [InlineKeyboardButton(f"{idx}. {file}", url=url)]
             if not is_system:
                 row.append(InlineKeyboardButton("🗑️", callback_data=f"delete_media::{file_path}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_message(chat_id=user_id, text="📦 آخرین بکاپ‌های مدیا:", reply_markup=reply_markup)
+        await context.bot.send_message(chat_id=user_id, text=message, reply_markup=reply_markup)
 
     @staticmethod
     async def handle_callback(user_id, context, callback_data):
-        """Callback handler برای send/delete فایل‌ها و منوها"""
+        logger.debug(f"Received callback_data: {callback_data} for user {user_id}")
         try:
             if callback_data.startswith("send_db::"):
                 file_path = callback_data.split("::")[1]
@@ -176,17 +190,22 @@ class BackupManager:
                 file_path = callback_data.split("::")[1]
                 await BackupManager.delete_backup(user_id, context, file_path)
             elif callback_data.startswith("list_"):
-                # list_db_backups, list_media_backups, etc.
                 backup_type = callback_data.replace("list_", "")
                 await BackupManager.list_backups(user_id, context, backup_type=backup_type)
             elif callback_data == "backup_menu":
                 await MenuManager.show_main_menu(user_id, context)
+            else:
+                logger.warning(f"Unknown callback_data: {callback_data}")
+                await context.bot.send_message(chat_id=user_id, text="❌ دستور ناشناخته!")
         except Exception as e:
             logger.error(f"Error handling callback: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا: {str(e)}")
+            # بازگشت به لیست بکاپ‌ها به جای منوی اصلی
+            await BackupManager.list_backups(user_id, context)
 
     @staticmethod
     async def send_backup_file(user_id, context, file_path, backup_type):
+        logger.debug(f"Sending backup file: {file_path} for user {user_id}")
         if backup_type == "db" and os.path.exists(file_path):
             await context.bot.send_document(chat_id=user_id, document=open(file_path, "rb"))
         elif backup_type == "media" and os.path.exists(file_path):
@@ -194,10 +213,12 @@ class BackupManager:
             url = f"{MEDIA_BASE_URL}{effective_user_id}/{os.path.basename(file_path)}"
             await context.bot.send_message(chat_id=user_id, text=f"💾 لینک: {url}")
         else:
+            logger.error(f"File not found: {file_path}")
             await context.bot.send_message(chat_id=user_id, text="❌ فایل یافت نشد!")
 
     @staticmethod
     async def delete_backup(user_id, context, file_path):
+        logger.debug(f"Deleting backup file: {file_path} for user {user_id}")
         if "/system/" in file_path:
             await context.bot.send_message(chat_id=user_id, text="❌ بکاپ سیستم قابل حذف نیست!")
             return
@@ -208,4 +229,5 @@ class BackupManager:
             backup_type = "db" if file_path.endswith(".sql") else "media"
             await BackupManager.list_backups(user_id, context, backup_type=backup_type)
         else:
+            logger.error(f"File not found for deletion: {file_path}")
             await context.bot.send_message(chat_id=user_id, text="❌ فایل پیدا نشد!")
