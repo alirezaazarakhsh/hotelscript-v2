@@ -12,10 +12,10 @@ import copy
 import jdatetime
 from itertools import combinations
 from reservation.models import Hotel 
+from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
-from datetime import timedelta, datetime
 from django.utils.translation import gettext_lazy as _
 from authentication import serializers
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
@@ -73,7 +73,6 @@ from .models import (
     HotelTag,
     HotelTagPublic,
     ReservationRoom,
-    ReservationRoomPassenger,
     Reservationhotel,
     Room,
     RoomDate,
@@ -2518,54 +2517,16 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
 
-# ------------------- Create Reservation API -------------------
 class ReservationCreateAPIView(generics.CreateAPIView):
-    """
-    API برای ایجاد رزرو موقت هتل و اتاق‌ها.
-    
-    درخواست POST شامل هتل، اتاق‌ها و تاریخ‌ها می‌باشد.
-    در پاسخ، اطلاعات رزرو و اتاق‌ها و مسافران خالی (پیش‌فرض) بازگردانده می‌شود.
-    """
     permission_classes = [IsAuthenticated]
     serializer_class = ReservationSerializer
 
-    @swagger_auto_schema(
-        operation_summary="ایجاد رزرو موقت و دریافت اطلاعات هتل و اتاق",
-        operation_description="ایجاد رزرو موقت با اطلاعات هتل، اتاق‌ها و تاریخ. اطلاعات هتل، اتاق‌ها و فیلدهای خالی برای مسافران بازگردانده می‌شود.",
-        tags=["reservation-api"],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'hotel_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="آیدی هتل"),
-                'room_id': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Items(type=openapi.TYPE_INTEGER),
-                    description="می‌تواند یک عدد یا لیستی از اعداد باشد"
-                ),
-                'date': openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'enter': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ ورود شمسی YYYY-MM-DD"),
-                        'exit': openapi.Schema(type=openapi.TYPE_STRING, description="تاریخ خروج شمسی YYYY-MM-DD"),
-                    }
-                ),
-            },
-            required=['hotel_id', 'room_id', 'date']
-        ),
-        responses={
-            201: openapi.Response(description="رزرو موقت با موفقیت ایجاد شد", schema=ReservationSerializer),
-            400: openapi.Response(description="خطای ورودی یا اعتبارسنجی"),
-            404: openapi.Response(description="هتل یا اتاق یافت نشد"),
-        }
-    )
     def post(self, request, *args, **kwargs):
         try:
-            # دریافت داده‌ها از درخواست
             hotel_id = request.data.get('hotel_id')
             room_ids_data = request.data.get('room_id')
             date_data = request.data.get('date')
 
-            # اعتبارسنجی اولیه
             if hotel_id is None or room_ids_data is None or not date_data:
                 return Response({"error": "فیلدهای مورد نیاز را وارد کنید"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2576,7 +2537,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if not all(isinstance(room_id, int) for room_id in room_ids_data):
                 return Response({"error": "تمام آیدی‌های اتاق باید عدد باشند"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # تبدیل تاریخ شمسی به میلادی
             enter_date = date_data.get('enter')
             exit_date = date_data.get('exit')
             if not enter_date or not exit_date:
@@ -2597,7 +2557,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             if number_of_nights <= 0:
                 return Response({"error": "تعداد شب‌ها باید بیشتر از صفر باشد"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # بررسی وجود هتل و اتاق‌ها
             hotel = get_object_or_404(Hotel, id=hotel_id)
             rooms = Room.objects.filter(id__in=room_ids_data, hotel=hotel)
             if rooms.count() != len(set(room_ids_data)):
@@ -2605,7 +2564,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
 
-            # بررسی قیمت هر روز
             for room in rooms:
                 current_date = check_in_date
                 while current_date < check_out_date:
@@ -2622,7 +2580,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                         return Response({"error": f"قیمت برای اتاق {room.id} در تاریخ {current_date} تعریف نشده"}, status=status.HTTP_400_BAD_REQUEST)
                     current_date += timedelta(days=1)
 
-            # ایجاد رزرو جدید
             reservation = Reservationhotel.objects.create(
                 buyer=request.user,
                 reserver_first_name="در حال انتظار",
@@ -2633,7 +2590,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 status='unconfirmed',
             )
 
-            # ایجاد اتاق‌های رزرو شده
             unique_room_ids = set(room_ids_data)
             for room_id in unique_room_ids:
                 room = rooms.get(id=room_id)
@@ -2657,7 +2613,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     subtotal=subtotal
                 )
 
-            # محاسبه قیمت نهایی
             try:
                 total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
                 reservation.total_price = total_price
@@ -2675,17 +2630,17 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
                 reservation.delete()
-                logger.error(f"خطا در محاسبه قیمت‌ها: {str(e)}")
-                return Response({"error": f"خطا در محاسبه قیمت‌ها: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                logger.error(f"خطا در محاسبه قیمت‌ها: {str(e)}", exc_info=True)
+                return Response({"error": f"خطا در محاسبه قیمت‌ها: {str(e)}", "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             serializer = ReservationSerializer(reservation)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
-            logger.error(f"خطای اعتبارسنجی: {str(e)}")
+            logger.error(f"خطای اعتبارسنجی: {str(e)}", exc_info=True)
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"خطای غیرمنتظره: {str(e)}")
+            logger.error(f"خطای غیرمنتظره: {str(e)}", exc_info=True)
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _calculate_room_subtotal(self, res_room, check_in_date, nights, user_level):
