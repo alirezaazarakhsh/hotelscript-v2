@@ -736,7 +736,6 @@ class ReservationCreateSerializer(serializers.Serializer):
         required=True,
         help_text="تاریخ ورود و خروج با کلیدهای 'enter' و 'exit'"
     )
-    number_of_nights = serializers.IntegerField(required=True, help_text="تعداد شب‌ها")
 
 class ReservationCreateResponseSerializer(serializers.Serializer):
     reservation_id = serializers.CharField(read_only=True, help_text="کد رزرو با فرمت sfaXXXXXXXXXX")
