@@ -12,6 +12,7 @@ import copy
 import jdatetime
 from itertools import combinations
 from reservation.models import Hotel 
+from reservation.models import Reservationhotel, ReservationRoom
 from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
