@@ -637,7 +637,6 @@ class ReservationRoomInline(NestedTabularInline):
     extra_passengers_count.short_description = 'تعداد نفر اضافه'
 
 # ---------------- Reservationhotel Admin ----------------
-# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     list_display = (
@@ -647,10 +646,12 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'total_price', 'half_day_in_charge', 'half_day_out_charge',
         'discount', 'final_price', 'status', 'created_jalali', 'updated_jalali'
     )
+    
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
+    
     list_filter = ('status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
@@ -684,15 +685,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description='تاریخ ایجاد (شمسی)')
     def created_jalali(self, obj):
         if obj.created_at:
-            local_dt = localtime(obj.created_at)
-            return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
     @admin.display(description='تاریخ به‌روزرسانی (شمسی)')
     def updated_jalali(self, obj):
         if obj.updated_at:
-            local_dt = localtime(obj.updated_at)
-            return jdatetime.datetime.fromgregorian(datetime=local_dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
     # ---------------- Counts ----------------
