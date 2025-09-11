@@ -605,7 +605,8 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    
+
+
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -613,18 +614,26 @@ class ReservationRoomPassengerInline(NestedTabularInline):
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = False
-    autocomplete_fields = ()  # فقط خالی می‌ماند
+    autocomplete_fields = ()
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
     max_num = 3
-    fields = ('room', 'quantity', 'price_per_night', 'subtotal')
-    autocomplete_fields = ()  # حذف شد، فقط buyer در Reservationhotel فعال است
+    fields = ('room', 'quantity', 'price_per_night', 'subtotal', 'primary_passengers_count', 'extra_passengers_count')
+    readonly_fields = ('primary_passengers_count', 'extra_passengers_count')
     show_change_link = False
     can_delete = False
     inlines = [ReservationRoomPassengerInline]
+    
+    def primary_passengers_count(self, obj):
+        return obj.primary_passengers_count
+    primary_passengers_count.short_description = 'تعداد نفر اصلی'
+
+    def extra_passengers_count(self, obj):
+        return obj.extra_passengers_count
+    extra_passengers_count.short_description = 'تعداد نفر اضافه'
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -633,19 +642,21 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price', 'half_day_in_charge', 'half_day_out_charge', 'discount', 'final_price', 'status', 'created_jalali'
+        'total_price', 'half_day_in_charge', 'half_day_out_charge',
+        'discount', 'final_price', 'status', 'created_jalali', 'updated_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
     list_filter = ('status', 'check_in_date', 'check_out_date')
-    autocomplete_fields = ('buyer',)  # فقط خریدار autocomplete دارد
+    autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
 
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'created_jalali', 'updated_jalali', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'final_price'
+        'created_jalali', 'updated_jalali',
+        'total_price', 'half_day_in_charge', 'half_day_out_charge', 'final_price'
     )
 
     fieldsets = (
@@ -667,20 +678,22 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # ---------------- Jalali Dates ----------------
     def created_jalali(self, obj):
         if obj.created_at:
-            # چون jDateTimeField استفاده شده، مستقیم strftime بزن
-            return obj.created_at.strftime('%d %B %Y ساعت %H:%M:%S')
+            import jdatetime
+            return jdatetime.datetime.fromgregorian(datetime=obj.created_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
     def updated_jalali(self, obj):
         if obj.updated_at:
-            return obj.updated_at.strftime('%d %B %Y ساعت %H:%M:%S')
+            import jdatetime
+            return jdatetime.datetime.fromgregorian(datetime=obj.updated_at).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
     updated_jalali.short_description = 'تاریخ به‌روزرسانی (شمسی)'
-    
 
+    # ---------------- Counts ----------------
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
     nights_count_fa.short_description = 'تعداد شب‌ها'

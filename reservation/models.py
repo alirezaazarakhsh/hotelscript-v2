@@ -1434,6 +1434,14 @@ class ReservationRoom(models.Model):
 
     def __str__(self):
         return f'{self.room.title} در رزرو {self.reservation.tracking_code}'
+    
+    @property
+    def primary_passengers_count(self):
+        return self.passengers.filter(passenger_type='primary').count()
+
+    @property
+    def extra_passengers_count(self):
+        return self.passengers.filter(passenger_type='extra').count()
 
 
 # ---------------- ReservationRoomPassenger ----------------
