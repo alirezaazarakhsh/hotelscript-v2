@@ -2522,12 +2522,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         operation_description="ایجاد یک رزرو جدید و بازگرداندن reservation_id",
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
-        responses={
-            200: openapi.Response(
-                description="رزرو ایجاد شد",
-                schema=ReservationCreateResponseSerializer
-            )
-        }
+        responses={200: ReservationCreateResponseSerializer}
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -2536,32 +2531,19 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تاریخ ورود و خروج
-        check_in_date = data['date']['enter']
-        check_out_date = data['date']['exit']
+        # تبدیل تاریخ‌ها از استرینگ به تاریخ پایتون
+        check_in_date = parse_date(data['date']['enter'])
+        check_out_date = parse_date(data['date']['exit'])
 
         # محاسبه تعداد شب‌ها
-        try:
-            check_in = datetime.strptime(check_in_date, "%Y-%m-%d")
-            check_out = datetime.strptime(check_out_date, "%Y-%m-%d")
-            number_of_nights = (check_out - check_in).days
-            if number_of_nights <= 0:
-                return Response(
-                    {"error": "تاریخ خروج باید بعد از تاریخ ورود باشد"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except Exception as e:
-            return Response(
-                {"error": f"خطا در پردازش تاریخ‌ها: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        number_of_nights = (check_out_date - check_in_date).days
 
         # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
-            reserver_first_name=data.get('first_name', ''),
-            reserver_last_name=data.get('last_name', ''),
-            reserver_phone_number=data.get('phone_number', ''),
+            reserver_first_name=request.user.first_name,
+            reserver_last_name=request.user.last_name,
+            reserver_phone_number=getattr(request.user, 'phone_number', ''),
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             buyer=request.user
