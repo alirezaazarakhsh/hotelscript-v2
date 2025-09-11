@@ -70,8 +70,8 @@ class BackupManager:
             await context.bot.send_document(chat_id=user_id,
                                           document=open(os.path.join(dir_path, db_file), "rb"),
                                           caption=f"📦 بکاپ دیتابیس\n{timestamp['display']}")
-        # نمایش لیست بکاپ‌ها به جای منوی اصلی
-        await BackupManager.list_backups(user_id, context, backup_type="db")
+        # نمایش منوی اصلی بکاپ‌ها
+        await BackupManager.list_backups(user_id, context)
 
     @staticmethod
     async def backup_media(user_id, context):
@@ -94,14 +94,14 @@ class BackupManager:
         if media_file:
             url = f"{MEDIA_BASE_URL}{user_id}/{media_file}"
             await context.bot.send_message(chat_id=user_id, text=f"📦 بکاپ مدیا آماده شد.\n💾 لینک: {url}")
-        # نمایش لیست بکاپ‌ها به جای منوی اصلی
-        await BackupManager.list_backups(user_id, context, backup_type="media")
+        # نمایش منوی اصلی بکاپ‌ها
+        await BackupManager.list_backups(user_id, context)
 
     @staticmethod
     async def list_backups(user_id, context, backup_type=None):
         logger.debug(f"Listing backups for user {user_id}, type {backup_type}")
         if not backup_type:
-            # منوی اصلی
+            # منوی اصلی بکاپ‌ها
             keyboard = [
                 [InlineKeyboardButton("📁 بکاپ دیتابیس", callback_data="list_db_backups"),
                  InlineKeyboardButton("📁 بکاپ مدیا", callback_data="list_media_backups")]
@@ -116,7 +116,7 @@ class BackupManager:
             await context.bot.send_message(chat_id=user_id, text="📦 بخش لیست بکاپ‌ها", reply_markup=reply_markup)
             return
         
-        # لیست واقعی فایل‌ها
+        # نمایش لیست فایل‌ها
         is_system = backup_type.startswith("system_")
         effective_user_id = "system" if is_system else user_id
         effective_type = backup_type.replace("system_", "")
@@ -131,11 +131,18 @@ class BackupManager:
         dir_path = BackupManager.user_backup_dir(effective_user_id, "db")
         files = FileManager.list_latest_files(dir_path, ".sql", BackupManager.MAX_LIST)
         if not files:
-            await context.bot.send_message(chat_id=user_id, text="❌ هیچ بکاپ دیتابیسی موجود نیست!")
+            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ هیچ بکاپ دیتابیسی موجود نیست!\nبرای بازگشت به منوی بکاپ‌ها، از دکمه زیر استفاده کنید.",
+                reply_markup=reply_markup
+            )
             return
         keyboard = []
         is_system = effective_user_id == "system"
-        message = "📦 آخرین بکاپ‌های دیتابیس:\n"
+        message = "📦 آخرین بکاپ‌های دیتابیس:\n\n"
+        message += "ℹ️ راهنما:\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
             file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
@@ -154,11 +161,18 @@ class BackupManager:
         dir_path = BackupManager.user_backup_dir(effective_user_id, "media")
         files = FileManager.list_latest_files(dir_path, ".tar.gz", BackupManager.MAX_LIST)
         if not files:
-            await context.bot.send_message(chat_id=user_id, text="❌ هیچ بکاپ مدیایی موجود نیست!")
+            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="list_backups")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ هیچ بکاپ مدیایی موجود نیست!\nبرای بازگشت به منوی بکاپ‌ها، از دکمه زیر استفاده کنید.",
+                reply_markup=reply_markup
+            )
             return
         keyboard = []
         is_system = effective_user_id == "system"
-        message = "📦 آخرین بکاپ‌های مدیا:\n"
+        message = "📦 آخرین بکاپ‌های مدیا:\n\n"
+        message += "ℹ️ راهنما:\n- برای دانلود فایل، روی نام فایل کلیک کنید.\n- برای حذف فایل (در صورت مجاز بودن)، روی 🗑️ کلیک کنید.\n\n"
         for idx, file in enumerate(files, 1):
             file_path = os.path.join(dir_path, file)
             file_size = os.path.getsize(file_path) / (1024 * 1024)  # اندازه به مگابایت
@@ -200,7 +214,7 @@ class BackupManager:
         except Exception as e:
             logger.error(f"Error handling callback: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا: {str(e)}")
-            # بازگشت به لیست بکاپ‌ها به جای منوی اصلی
+            # بازگشت به منوی اصلی بکاپ‌ها
             await BackupManager.list_backups(user_id, context)
 
     @staticmethod
