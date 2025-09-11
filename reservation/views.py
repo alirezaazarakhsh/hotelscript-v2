@@ -2525,12 +2525,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         responses={
             200: openapi.Response(
                 description="رزرو ایجاد شد",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'reservation_id': openapi.Schema(type=openapi.TYPE_STRING, example='sfa1234567890')
-                    }
-                )
+                schema=ReservationCreateResponseSerializer
             )
         }
     )
@@ -2541,14 +2536,34 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
+        # تاریخ ورود و خروج
+        check_in_date = data['date']['enter']
+        check_out_date = data['date']['exit']
+
+        # محاسبه تعداد شب‌ها
+        try:
+            check_in = datetime.strptime(check_in_date, "%Y-%m-%d")
+            check_out = datetime.strptime(check_out_date, "%Y-%m-%d")
+            number_of_nights = (check_out - check_in).days
+            if number_of_nights <= 0:
+                return Response(
+                    {"error": "تاریخ خروج باید بعد از تاریخ ورود باشد"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {"error": f"خطا در پردازش تاریخ‌ها: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
             reserver_first_name=data.get('first_name', ''),
             reserver_last_name=data.get('last_name', ''),
             reserver_phone_number=data.get('phone_number', ''),
-            check_in_date=data['date']['enter'],
-            check_out_date=data['date']['exit'],
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
             buyer=request.user
         )
 
@@ -2557,47 +2572,36 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         room_ids = data.get('room_id', [])
 
         for room_id in room_ids:
-            # مطمئن شو اتاق متعلق به هتل هست
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
-            # پیدا کردن قیمت مناسب بر اساس بازه زمانی و سطح کاربری
             price_obj = RoomDatePrice.objects.filter(
                 room=room,
-                start_date__lte=data['date']['enter'],
-                end_date__gte=data['date']['exit'],
+                start_date__lte=check_in_date,
+                end_date__gte=check_out_date,
                 user_level=getattr(request.user, 'user_level', None)
             ).first()
 
             price_per_night = price_obj.price if price_obj else 0
 
-            # اعمال تخفیف
             if price_obj:
-                if price_obj.discount_type == 'percentage' and price_obj.discount_date >= data['date']['enter']:
+                if price_obj.discount_type == 'percentage' and price_obj.discount_date >= check_in_date:
                     price_per_night = int(price_per_night * (1 - price_obj.discount_value / 100))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     price_per_night -= price_obj.discount_value
 
-            # subtotal برای یک اتاق
-            number_of_nights = data.get('number_of_nights', 1)
             subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
-            # تعداد نفرات اصلی و اضافه از مدل اتاق
-            primary_passengers = room.room_capacity
-            extra_passengers = room.extra_capacity
-
-            # ایجاد ReservationRoom
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=1,
                 price_per_night=price_per_night,
                 subtotal=subtotal,
-                primary_passengers_count=primary_passengers,
-                extra_passengers_count=extra_passengers
+                primary_passengers_count=room.room_capacity,
+                extra_passengers_count=room.extra_capacity
             )
 
-        # بروزرسانی قیمت کل رزرو
         reservation.total_price = total_price
         reservation.final_price = total_price
         reservation.save()
