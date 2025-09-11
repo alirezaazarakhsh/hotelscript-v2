@@ -1256,7 +1256,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        BaseUser, 
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1275,7 +1275,7 @@ class Reservationhotel(models.Model):
     half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
 
-    tracking_code = models.CharField(max_length=20, unique=True)  
+    tracking_code = models.CharField(max_length=20, unique=True)
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
 
@@ -1302,13 +1302,7 @@ class Reservationhotel(models.Model):
         if self.check_in_date and self.check_out_date:
             check_in = self.check_in_date
             check_out = self.check_out_date
-
-            if isinstance(check_in, str):
-                check_in = jdatetime.date.fromisoformat(check_in)
-            if isinstance(check_out, str):
-                check_out = jdatetime.date.fromisoformat(check_out)
-
-            return (check_out - check_in).days
+            return (check_out.togregorian() - check_in.togregorian()).days
         return 0
 
     @property
@@ -1350,7 +1344,8 @@ class Reservationhotel(models.Model):
             extra_guests = max(0, total_guests - base_capacity)
 
             for night in range(nights):
-                date = self.check_in_date + timedelta(days=night)  # اصلاح شد
+                # استفاده از jdatetime.timedelta
+                date = self.check_in_date + jtimedelta(days=night)
                 price_obj = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
@@ -1405,7 +1400,6 @@ class Reservationhotel(models.Model):
 
         if not is_new:
             super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
-            
             
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
