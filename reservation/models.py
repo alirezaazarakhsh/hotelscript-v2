@@ -1253,7 +1253,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,  # فرض می‌کنیم مدل BaseUser از قبل تعریف شده
+        BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1293,6 +1293,31 @@ class Reservationhotel(models.Model):
         for res_room in self.reservation_rooms.all():
             if res_room.quantity > res_room.room.inventory:
                 raise ValidationError(_(f'تعداد اتاق‌های درخواستی ({res_room.quantity}) برای {res_room.room.title} از موجودی ({res_room.room.inventory}) بیشتر است.'))
+
+    @property
+    def nights_count(self):
+        if self.check_in_date and self.check_out_date:
+            check_in = self.check_in_date
+            check_out = self.check_out_date
+            # تبدیل رشته به jdatetime در صورت نیاز
+            if isinstance(check_in, str):
+                check_in = jdate.fromisoformat(check_in)
+            if isinstance(check_out, str):
+                check_out = jdate.fromisoformat(check_out)
+            return (check_out - check_in).days
+        return 0
+
+    @property
+    def total_rooms(self):
+        return self.reservation_rooms.aggregate(total=models.Sum('quantity'))['total'] or 0
+
+    @property
+    def total_guests(self):
+        total = 0
+        for res_room in self.reservation_rooms.all():
+            room = res_room.room
+            total += (room.room_capacity + room.extra_capacity) * res_room.quantity
+        return total
 
     def calculate_total_price(self):
         if not self.pk or not self.reservation_rooms.exists():
@@ -1376,35 +1401,6 @@ class Reservationhotel(models.Model):
 
         if not is_new:
             super().save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
-
-@property
-def nights_count(self):
-    if self.check_in_date and self.check_out_date:
-        # اگر رشته هست، تبدیل کن
-        if isinstance(self.check_in_date, str):
-            check_in = jdatetime.date.fromisoformat(self.check_in_date)
-        else:
-            check_in = self.check_in_date
-
-        if isinstance(self.check_out_date, str):
-            check_out = jdatetime.date.fromisoformat(self.check_out_date)
-        else:
-            check_out = self.check_out_date
-
-        return (check_out - check_in).days
-    return 0
-
-    @property
-    def total_rooms(self):
-        return self.reservation_rooms.aggregate(total=models.Sum('quantity'))['total'] or 0
-
-    @property
-    def total_guests(self):
-        total = 0
-        for res_room in self.reservation_rooms.all():
-            room = res_room.room
-            total += (room.room_capacity + room.extra_capacity) * res_room.quantity
-        return total
     
     
 # ---------------- ReservationRoom ----------------
