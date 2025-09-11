@@ -2531,6 +2531,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
         # تبدیل رشته‌ها به jdatetime.date
@@ -2551,29 +2552,61 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             buyer=request.user
         )
 
+        total_price = Decimal('0')
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
 
-        # ایجاد ReservationRoom
+        nights = reservation.nights_count
+
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
+
+            # محاسبه قیمت هر شب
+            room_total_price = Decimal('0')
+            for night in range(nights):
+                current_date = check_in_date.togregorian() + timedelta(days=night)
+
+                price_obj = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    user_level=getattr(request.user, 'user_level', None)
+                ).first() or RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    user_level__isnull=True
+                ).first()
+
+                if not price_obj:
+                    raise ValidationError(f"قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.")
+
+                daily_price = Decimal(price_obj.price)
+
+                # اعمال تخفیف
+                if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
+                    daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
+                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                    daily_price = daily_price - Decimal(price_obj.discount_value)
+
+                room_total_price += daily_price
+
+            subtotal = room_total_price
+            total_price += subtotal
+
+            # ایجاد ReservationRoom با ظرفیت اصلی و اضافه
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=1,
-                price_per_night=0,  # placeholder، بعدا calculate_total_price حساب می‌کنه
-                subtotal=0,
+                price_per_night=room_total_price / nights,
+                subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
             )
 
-        # محاسبه قیمت‌ها
-        total_price, total_discount, half_day_in_charge, half_day_out_charge = reservation.calculate_total_price()
         reservation.total_price = total_price
-        reservation.discount = total_discount
-        reservation.half_day_in_charge = half_day_in_charge
-        reservation.half_day_out_charge = half_day_out_charge
-        reservation.final_price = total_price - total_discount
+        reservation.final_price = total_price
         reservation.save()
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
