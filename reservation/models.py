@@ -1276,8 +1276,8 @@ class Reservationhotel(models.Model):
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
 
-    created_at = jmodels.jDateField(_('تاریخ ایجاد'), auto_now_add=True)
-    updated_at = jmodels.jDateField(_('تاریخ به‌روزرسانی'), auto_now=True)
+    created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
+    updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
 
     class Meta:
         verbose_name = _('رزرو')

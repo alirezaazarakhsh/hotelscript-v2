@@ -2553,13 +2553,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         total_price = 0
+        hotel_id = data.get('hotel_id')
+        room_ids = data.get('room_id', [])
 
-        for room_data in data.get('rooms', []):
-            room = get_object_or_404(Room, id=room_data['room_id'])
-            quantity = room_data.get('quantity', 1)
-            extra_passengers = room_data.get('extra_passengers', 0)
+        for room_id in room_ids:
+            # مطمئن شو اتاق متعلق به هتل هست
+            room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
-            # پیدا کردن قیمت بازه مناسب برای کاربر
+            # پیدا کردن قیمت مناسب بر اساس بازه زمانی و سطح کاربری
             price_obj = RoomDatePrice.objects.filter(
                 room=room,
                 start_date__lte=data['date']['enter'],
@@ -2576,20 +2577,23 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     price_per_night -= price_obj.discount_value
 
-            subtotal = (price_per_night + (price_obj.extra_passenger_price * extra_passengers if price_obj else 0)) * quantity * data.get('number_of_nights', 1)
+            # subtotal برای یک اتاق
+            number_of_nights = data.get('number_of_nights', 1)
+            subtotal = price_per_night * number_of_nights
             total_price += subtotal
 
+            # ایجاد ReservationRoom
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=quantity,
+                quantity=1,  # یک رزرو برای هر اتاق
                 price_per_night=price_per_night,
                 subtotal=subtotal
             )
 
         # بروزرسانی قیمت کل رزرو
         reservation.total_price = total_price
-        reservation.final_price = total_price  # اگر میخوای تخفیف کلی رزرو اعمال شود، اینجا اضافه کن
+        reservation.final_price = total_price
         reservation.save()
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
