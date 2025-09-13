@@ -1275,7 +1275,7 @@ class Reservationhotel(models.Model):
     half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
 
-    tracking_code = models.CharField(max_length=20, unique=True , verbose_name='کد پیگیری رزرو')
+    tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
 
@@ -1296,7 +1296,7 @@ class Reservationhotel(models.Model):
         if self.check_in_date and self.check_out_date:
             check_in = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
             check_out = self.check_out_date.togregorian() if isinstance(self.check_out_date, jdatetime.date) else self.check_out_date
-            return (check_out - check_in).days
+            return max(0, (check_out - check_in).days)  # جلوگیری از مقدار منفی
         return 0
 
     @property
@@ -1313,10 +1313,6 @@ class Reservationhotel(models.Model):
 
     # ---------------- متد محاسبه قیمت ----------------
     def calculate_total_price(self):
-        from decimal import Decimal
-        from django.core.exceptions import ValidationError
-        import jdatetime
-
         if not self.pk or not self.reservation_rooms.exists():
             return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
@@ -1326,8 +1322,8 @@ class Reservationhotel(models.Model):
 
         total = Decimal('0')  # مجموع قیمت اتاق‌ها (بدون نیم‌شارژ)
         total_discount = Decimal('0')  # تخفیف کل
-        half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود (فقط اگر فعال باشه)
-        half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج (فقط اگر فعال باشه)
+        half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود (فقط اگر مقدار داشته باشه)
+        half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج (فقط اگر مقدار داشته باشه)
 
         nights = self.nights_count
         if nights <= 0:
@@ -1360,7 +1356,7 @@ class Reservationhotel(models.Model):
             extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
             discount = Decimal('0')
 
-            # محاسبه تخفیف (مانند قبل)
+            # محاسبه تخفیف
             if price_obj.discount_type == 'percentage' and price_obj.discount_date and check_in_date_std <= price_obj.discount_date:
                 discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
             elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
@@ -1370,9 +1366,9 @@ class Reservationhotel(models.Model):
             # قیمت اتاق بدون نیم‌شارژ
             room_total = (daily_price + extra_price) * quantity * nights
             total += room_total
-            total_discount += discount * quantity * nights  # تخفیف فقط روی اتاق
+            total_discount += discount * quantity * nights
 
-            # اعمال نیم‌شارژ فقط اگر فعال باشه (فرض: اگر half_day_in_price > 0)
+            # اعمال نیم‌شارژ فقط اگر مقدارش بیشتر از صفر باشه (فعال بودن رو از مقدار قیمت فرض می‌کنیم)
             if res_room.half_day_in_price > 0:
                 half_day_in_charge += res_room.half_day_in_price
             if res_room.half_day_out_price > 0:
@@ -1384,6 +1380,16 @@ class Reservationhotel(models.Model):
             final_price = Decimal('0')
 
         return total, total_discount, half_day_in_charge, half_day_out_charge, final_price
+
+    def save(self, *args, **kwargs):
+        # محاسبه و آپدیت قیمت‌ها قبل از سیو
+        total, discount, half_in, half_out, final = self.calculate_total_price()
+        self.total_price = total
+        self.discount = discount
+        self.half_day_in_charge = half_in
+        self.half_day_out_charge = half_out
+        self.final_price = final
+        super().save(*args, **kwargs)
                 
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
