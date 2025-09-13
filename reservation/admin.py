@@ -608,6 +608,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
+
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -622,12 +623,28 @@ class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
     max_num = 3
-    fields = ('room', 'quantity', 'price_per_night', 'subtotal', 'primary_passengers_count', 'extra_passengers_count')
-    readonly_fields = ('primary_passengers_count', 'extra_passengers_count')
+    fields = (
+        'room',
+        'quantity',
+        'price_per_night',
+        'subtotal',
+        'primary_passengers_count',
+        'extra_passengers_count',
+        'half_day_in_price',
+        'half_day_out_price',
+        'half_day_in_selected',
+        'half_day_out_selected',
+    )
+    readonly_fields = (
+        'primary_passengers_count',
+        'extra_passengers_count',
+        'half_day_in_price',
+        'half_day_out_price'
+    )
     show_change_link = False
     can_delete = False
     inlines = [ReservationRoomPassengerInline]
-    
+
     def primary_passengers_count(self, obj):
         return obj.primary_passengers_count
     primary_passengers_count.short_description = 'تعداد نفر اصلی'
@@ -635,6 +652,8 @@ class ReservationRoomInline(NestedTabularInline):
     def extra_passengers_count(self, obj):
         return obj.extra_passengers_count
     extra_passengers_count.short_description = 'تعداد نفر اضافه'
+
+# ---------------- Reservationhotel Admin ----------------
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -708,3 +727,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description='کل مهمان‌ها')
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
+
+    # ---------------- Save Model ----------------
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # محاسبه قیمت‌ها (۵ خروجی شامل final_price)
+        total_price, total_discount, half_day_in_charge, half_day_out_charge, final_price = obj.calculate_total_price()
+        obj.total_price = total_price
+        obj.discount = total_discount
+        obj.half_day_in_charge = half_day_in_charge
+        obj.half_day_out_charge = half_day_out_charge
+        obj.final_price = final_price
+        obj.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
