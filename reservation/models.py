@@ -1311,8 +1311,8 @@ class Reservationhotel(models.Model):
             total += (room.room_capacity + room.extra_capacity) * res_room.quantity
         return total
 
-    # ---------------- متد محاسبه قیمت ----------------
-   def calculate_total_price(self):
+# ---------------- متد محاسبه قیمت ----------------
+def calculate_total_price(self):
     from decimal import Decimal
     from django.core.exceptions import ValidationError
     from django.utils.translation import gettext_lazy as _
