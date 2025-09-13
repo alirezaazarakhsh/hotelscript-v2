@@ -656,6 +656,7 @@ class ReservationRoomInline(NestedTabularInline):
 # ---------------- Reservationhotel Admin ----------------
 
 # ---------------- Reservationhotel Admin ----------------
+# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     list_display = (
@@ -730,8 +731,14 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     # ---------------- Save Model ----------------
     def save_model(self, request, obj, form, change):
+        """فقط ذخیره رزرو، بدون محاسبه قیمت (چون inlines هنوز ذخیره نشدن)"""
         super().save_model(request, obj, form, change)
-        # محاسبه قیمت‌ها (۵ خروجی شامل final_price)
+
+    # ---------------- Save Related ----------------
+    def save_related(self, request, form, formsets, change):
+        """بعد از ذخیره شدن inlines، قیمت‌ها محاسبه و آپدیت میشن"""
+        super().save_related(request, form, formsets, change)
+        obj = form.instance
         total_price, total_discount, half_day_in_charge, half_day_out_charge, final_price = obj.calculate_total_price()
         obj.total_price = total_price
         obj.discount = total_discount
