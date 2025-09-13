@@ -1296,7 +1296,7 @@ class Reservationhotel(models.Model):
         if self.check_in_date and self.check_out_date:
             check_in = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
             check_out = self.check_out_date.togregorian() if isinstance(self.check_out_date, jdatetime.date) else self.check_out_date
-            return max(0, (check_out - check_in).days)  # جلوگیری از مقدار منفی
+            return max(0, (check_out - check_in).days)
         return 0
 
     @property
@@ -1322,8 +1322,8 @@ class Reservationhotel(models.Model):
 
         total = Decimal('0')  # مجموع قیمت اتاق‌ها (بدون نیم‌شارژ)
         total_discount = Decimal('0')  # تخفیف کل
-        half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود (فقط اگر مقدار داشته باشه)
-        half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج (فقط اگر مقدار داشته باشه)
+        half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود (فقط اگر فعال باشه)
+        half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج (فقط اگر فعال باشه)
 
         nights = self.nights_count
         if nights <= 0:
@@ -1368,10 +1368,10 @@ class Reservationhotel(models.Model):
             total += room_total
             total_discount += discount * quantity * nights
 
-            # اعمال نیم‌شارژ فقط اگر مقدارش بیشتر از صفر باشه (فعال بودن رو از مقدار قیمت فرض می‌کنیم)
-            if res_room.half_day_in_price > 0:
+            # اعمال نیم‌شارژ فقط اگر فعال باشه (فرض بر فیلد بولی is_half_day_in_active و is_half_day_out_active در ReservationRoom)
+            if res_room.is_half_day_in_active:
                 half_day_in_charge += res_room.half_day_in_price
-            if res_room.half_day_out_price > 0:
+            if res_room.is_half_day_out_active:
                 half_day_out_charge += res_room.half_day_out_price
 
         # نهایی: مجموع اتاق + نیم‌شارژها - تخفیف
