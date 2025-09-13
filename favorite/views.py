@@ -476,3 +476,24 @@ class FavoriteItemStatusAPI(APIView):
             return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
         return Response({"error": "مقدار is_favorited معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+    
+    
+class FavoriteCollectionUpdateTitleAPI(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="به‌روزرسانی عنوان کالکشن",
+        operation_description="این API امکان تغییر عنوان یک کالکشن علاقه‌مندی را فراهم می‌کند.",
+        tags=["favorite-panel"],
+        request_body=FavoriteCollectionCreateSerializer,
+        responses={200: FavoriteCollectionCreateSerializer},
+    )
+    def put(self, request, pk):
+        collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
+        serializer = FavoriteCollectionCreateSerializer(collection, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=200)
+        return Response(serializer.errors, status=400)

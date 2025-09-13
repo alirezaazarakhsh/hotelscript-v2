@@ -5,6 +5,8 @@ from .views import (
     FavoriteItemListCreateAPI,
     FavoriteItemDetailAPI,
     FavoriteItemStatusAPI,
+    FavoriteCollectionUpdateTitleAPI,
+    
 )
 
 app_name = "favorites"
@@ -13,6 +15,7 @@ urlpatterns = [
     # کالکشن‌ها
     path("collections/", FavoriteCollectionListCreateAPI.as_view(), name="favorite-collections"),
     path("collections/<int:pk>/", FavoriteCollectionDetailAPI.as_view(), name="favorite-collection-detail"),
+    path("collections/<int:pk>/update/", FavoriteCollectionUpdateTitleAPI.as_view(), name="favorite-collection-update"),
 
     # آیتم‌های داخل کالکشن
     path("collections/<int:pk>/items/", FavoriteItemListCreateAPI.as_view(), name="favorite-items"),
