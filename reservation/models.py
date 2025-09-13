@@ -1324,10 +1324,10 @@ class Reservationhotel(models.Model):
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-        total = Decimal('0')
-        total_discount = Decimal('0')
-        half_day_in_charge = Decimal('0')
-        half_day_out_charge = Decimal('0')
+        total = Decimal('0')  # مجموع قیمت اتاق‌ها (بدون نیم‌شارژ)
+        total_discount = Decimal('0')  # تخفیف کل
+        half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود (فقط اگر فعال باشه)
+        half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج (فقط اگر فعال باشه)
 
         nights = self.nights_count
         if nights <= 0:
@@ -1360,26 +1360,31 @@ class Reservationhotel(models.Model):
             extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
             discount = Decimal('0')
 
+            # محاسبه تخفیف (مانند قبل)
             if price_obj.discount_type == 'percentage' and price_obj.discount_date and check_in_date_std <= price_obj.discount_date:
                 discount = daily_price * (Decimal(price_obj.discount_value) / Decimal('100'))
             elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                 if not self.buyer.reservations.exclude(pk=self.pk).exists():
                     discount = Decimal(price_obj.discount_value)
 
+            # قیمت اتاق بدون نیم‌شارژ
             room_total = (daily_price + extra_price) * quantity * nights
             total += room_total
-            total_discount += discount * quantity * nights
+            total_discount += discount * quantity * nights  # تخفیف فقط روی اتاق
 
-            half_day_in_charge += res_room.half_day_in_price
-            half_day_out_charge += res_room.half_day_out_price
+            # اعمال نیم‌شارژ فقط اگر فعال باشه (فرض: اگر half_day_in_price > 0)
+            if res_room.half_day_in_price > 0:
+                half_day_in_charge += res_room.half_day_in_price
+            if res_room.half_day_out_price > 0:
+                half_day_out_charge += res_room.half_day_out_price
 
-        total += half_day_in_charge + half_day_out_charge
-        final_price = total - total_discount
+        # نهایی: مجموع اتاق + نیم‌شارژها - تخفیف
+        final_price = total + half_day_in_charge + half_day_out_charge - total_discount
         if final_price < 0:
             final_price = Decimal('0')
 
         return total, total_discount, half_day_in_charge, half_day_out_charge, final_price
-            
+                
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
