@@ -643,6 +643,7 @@ class ReservationRoomInline(NestedTabularInline):
     )
     show_change_link = False
     can_delete = False
+    autocomplete_fields = ('room',)
     inlines = [ReservationRoomPassengerInline]
 
     def primary_passengers_count(self, obj):

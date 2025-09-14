@@ -1481,7 +1481,7 @@ class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
         ('primary', 'مسافر اصلی'),
         ('extra', 'نفر اضافه'),
-        ('secondary', 'مسافر فرعی'),
+        ('secondary', 'سایر مسافران'),
     ]
 
     reservation_room = models.ForeignKey(ReservationRoom, on_delete=models.CASCADE, related_name='passengers', verbose_name='اتاق رزرو شده')
