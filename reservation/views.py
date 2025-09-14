@@ -2694,9 +2694,10 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی امتیاز کاربر
-        if discount_obj.required_points > getattr(request.user, 'points', 0):
-            return Response({"error": "امتیاز کافی برای استفاده از این کد را ندارید."},
+        # بررسی امتیاز کاربر - اگر در activated_users باشد، امتیاز چک نشود
+        user_points = getattr(request.user, 'points', 0)
+        if discount_obj.required_points > user_points and request.user not in discount_obj.activated_users.all():
+            return Response({"error": f"امتیاز کافی برای استفاده از این کد را ندارید. امتیاز مورد نیاز: {discount_obj.required_points}, امتیاز شما: {user_points}."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         # بررسی محدودیت استفاده
