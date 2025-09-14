@@ -11,7 +11,7 @@ import traceback
 import copy
 import jdatetime
 from itertools import combinations
-from bashgah_moshtarian.models import RoomDiscountCode
+from bashgah_moshtarian.models import DiscountActivationRecord, RoomDiscountCode
 from reservation.models import Hotel 
 from reservation.models import Reservationhotel, ReservationRoom
 from datetime import timedelta
