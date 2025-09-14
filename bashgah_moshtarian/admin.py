@@ -32,14 +32,13 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     autocomplete_fields = ('room', 'user_level')
     list_editable = (
         'discount_value',
-        'usage_limit',
         'required_points',
         'user_level',
         'expires_at',
-    )
+    )  # usage_limit از list_editable حذف شده
     list_per_page = 25
-    readonly_fields = ('created_at', 'remaining_uses')
-    filter_horizontal = ('users', 'activated_users')  # مشابه NotificationAdmin
+    readonly_fields = ('created_at', 'remaining_uses', 'usage_limit')  # usage_limit به readonly_fields اضافه شده
+    filter_horizontal = ('users', 'activated_users')
 
     fieldsets = (
         (_('اطلاعات اصلی'), {
@@ -85,7 +84,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
         return super().formfield_for_manytomany(db_field, request, **kwargs)
     
-
+    
 @admin.register(ShoppingCenterDiscountCode)
 class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     list_display = (

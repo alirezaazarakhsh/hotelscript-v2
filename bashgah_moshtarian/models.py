@@ -108,17 +108,30 @@ class RoomDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
+    def apply_discount(self, user):
+        """
+        متد برای اعمال کد تخفیف و کاهش usage_limit و remaining_uses
+        """
+        if self.remaining_uses <= 0:
+            raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
+        if user in self.activated_users.all():
+            raise ValueError("این کاربر قبلاً از این کد استفاده کرده است.")
+        
+        # کاهش هر دو فیلد
+        self.usage_limit -= 1
+        self.remaining_uses -= 1
+        self.activated_users.add(user)
+        self.save()
+
     def save(self, *args, **kwargs):
-        # تنظیم remaining_uses به مقدار اولیه usage_limit اگر هنوز ست نشده باشه
-        if not self.pk or self.remaining_uses == 0:
+        # تنظیم remaining_uses به مقدار اولیه usage_limit اگر هنوز ست نشده باشد
+        if not self.pk and self.remaining_uses == 0:
             self.remaining_uses = self.usage_limit
         super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
-        
-        
         
 
 

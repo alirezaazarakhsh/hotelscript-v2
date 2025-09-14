@@ -2618,7 +2618,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     
     
 # ای پی ای کد تخفیف برای رزرو 
-class ApplyDiscountCodeAPIView(generics.GenericAPIView):
+class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
@@ -2655,23 +2655,27 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         tags=["reservation-api"]
     )
     def post(self, request, tracking_code, *args, **kwargs):
+        # دریافت کد تخفیف از درخواست
         code = request.data.get("discount_code")
 
+        # بررسی وجود کد تخفیف در درخواست
         if not code:
             return Response({"error": "discount_code الزامی است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # بررسی وجود رزرو با کد پیگیری و تطابق با کاربر
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
         except Reservationhotel.DoesNotExist:
             return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
+        # بررسی وجود کد تخفیف
         try:
             discount_obj = RoomDiscountCode.objects.get(code=code)
         except RoomDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی انقضا
+        # بررسی تاریخ انقضا (شمسی)
         now_j = jdt.now().date()
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2680,7 +2684,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی مطابقت اتاق
+        # بررسی مطابقت اتاق رزرو با اتاق کد تخفیف
         if not any(rr.room == discount_obj.room for rr in reservation.reservation_rooms.all()):
             return Response({"error": "این کد تخفیف برای اتاق‌های این رزرو معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2694,7 +2698,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی فعال‌سازی جایزه
+        # بررسی فعال‌سازی کد تخفیف توسط کاربر
         activation_record = DiscountActivationRecord.objects.filter(
             user=request.user,
             room_discount_code=discount_obj,
@@ -2704,40 +2708,33 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی محدودیت استفاده
-        if request.user in discount_obj.activated_users.all():
-            return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        if discount_obj.remaining_uses <= 0:
-            return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی و محاسبه مجدد)
-        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)  # محدود به مقدار باقی‌مانده
+        # محاسبه تخفیف و قیمت نهایی
+        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
         total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
-        
-        # اضافه کردن تخفیف کد به تخفیف موجود
-        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))  # محدودیت به discount_value
+
+        # محاسبه تخفیف کل
+        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
-        
-        # آپدیت فیلدها
+
+        try:
+            # اعمال کد تخفیف و کاهش usage_limit و remaining_uses
+            discount_obj.apply_discount(request.user)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # به‌روزرسانی رزرو
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
-        reservation.total_price = total  # total_price بدون تغییر
+        reservation.total_price = total
         reservation.half_day_in_charge = half_in
         reservation.half_day_out_charge = half_out
-        
-        # ذخیره با فلگ برای جلوگیری از overwrite
-        reservation._skip_price_calculation = True  # فلگ موقت
+
+        # ذخیره رزرو
+        reservation._skip_price_calculation = True
         reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge'])
-        delattr(reservation, '_skip_price_calculation')  # پاک کردن فلگ
+        delattr(reservation, '_skip_price_calculation')
 
-        # کاهش تعداد دفعات باقی‌مانده و ثبت استفاده کاربر
-        discount_obj.remaining_uses -= 1
-        discount_obj.activated_users.add(request.user)
-        discount_obj.save()
-
+        # پاسخ موفقیت‌آمیز
         return Response({
             "status": "ok",
             "tracking_code": reservation.tracking_code,
@@ -2745,5 +2742,6 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             "discount_value": int(discount_value),
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount),
-            "remaining_uses": discount_obj.remaining_uses
+            "remaining_uses": discount_obj.remaining_uses,
+            "usage_limit": discount_obj.usage_limit
         }, status=status.HTTP_200_OK)
