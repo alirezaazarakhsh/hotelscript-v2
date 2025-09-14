@@ -11,6 +11,7 @@ from .views import (
     BestSellersListView,
     ReservationCreateAPIView,
     SuggesteHotelListView,
+    
 )
 
 app_name = 'reservation'
@@ -69,4 +70,8 @@ urlpatterns = [
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
     path('hotels/room/reservations/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),
+    
+    # ==== discount code reservation ===
+    path('reservations/apply-discount/<int:reservation_id>', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
+
 ]

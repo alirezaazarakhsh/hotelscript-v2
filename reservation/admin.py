@@ -653,9 +653,7 @@ class ReservationRoomInline(NestedTabularInline):
         return obj.extra_passengers_count
     extra_passengers_count.short_description = 'تعداد نفر اضافه'
 
-# ---------------- Reservationhotel Admin ----------------
 
-# ---------------- Reservationhotel Admin ----------------
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
