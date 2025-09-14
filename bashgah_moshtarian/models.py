@@ -78,9 +78,9 @@ class RoomDiscountCode(models.Model):
     activated_users = models.ManyToManyField(
         BaseUser,
         related_name='activated_room_discount_codes',
-        verbose_name=_("کاربران فعال‌کننده"),
+        verbose_name=_("کاربران استفاده‌کننده"),
         blank=True,
-        help_text=_("کاربرانی که این کد را فعال کرده‌اند.")
+        help_text=_("کاربرانی که از این کد تخفیف برای رزرو استفاده کرده‌اند.")
     )
 
     def __str__(self):
@@ -115,7 +115,7 @@ class RoomDiscountCode(models.Model):
         if self.remaining_uses <= 0:
             raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
         if user in self.activated_users.all():
-            raise ValueError("این کاربر قبلاً از این کد استفاده کرده است.")
+            raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
         
         # کاهش هر دو فیلد
         self.usage_limit -= 1
@@ -124,8 +124,8 @@ class RoomDiscountCode(models.Model):
         self.save()
 
     def save(self, *args, **kwargs):
-        # تنظیم remaining_uses به مقدار اولیه usage_limit اگر هنوز ست نشده باشد
-        if not self.pk and self.remaining_uses == 0:
+        # تنظیم remaining_uses به مقدار اولیه usage_limit فقط در زمان ایجاد
+        if not self.pk:
             self.remaining_uses = self.usage_limit
         super().save(*args, **kwargs)
 
@@ -133,7 +133,7 @@ class RoomDiscountCode(models.Model):
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
         
-
+        
 
 # کد تخفیف باشگاه مشتریان برای مراکز خرید 
 class ShoppingCenterDiscountCode(models.Model):

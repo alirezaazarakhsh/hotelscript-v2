@@ -32,12 +32,13 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     autocomplete_fields = ('room', 'user_level')
     list_editable = (
         'discount_value',
+        'usage_limit',  # اضافه شده برای ویرایش
         'required_points',
         'user_level',
         'expires_at',
-    )  # usage_limit از list_editable حذف شده
+    )
     list_per_page = 25
-    readonly_fields = ('created_at', 'remaining_uses', 'usage_limit')  # usage_limit به readonly_fields اضافه شده
+    readonly_fields = ('created_at', 'remaining_uses')  # usage_limit حذف شده
     filter_horizontal = ('users', 'activated_users')
 
     fieldsets = (
@@ -51,7 +52,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         }),
         (_('اطلاعات تکمیلی'), {
             'fields': ('activation_rules', 'activated_users'),
-            'description': _('قوانین و کاربران فعال‌کننده کد تخفیف.'),
+            'description': _('قوانین و کاربران استفاده‌کننده کد تخفیف.'),
         }),
     )
 
@@ -64,7 +65,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
 
     def get_activated_users_display(self, obj):
         return ", ".join(obj.get_activated_users_with_names())
-    get_activated_users_display.short_description = "کاربران فعال‌کننده (شماره و نام)"
+    get_activated_users_display.short_description = "کاربران استفاده‌کننده (شماره و نام)"
 
     def remaining_uses(self, obj):
         return obj.remaining_uses

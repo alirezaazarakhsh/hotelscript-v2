@@ -2641,7 +2641,9 @@ class ApplyDiscountCodeAPIView(APIView):
                         "discount_code": "NMJ2516NJH",
                         "discount_value": 2000000,
                         "final_price": 8000000,
-                        "total_discount": 2000000
+                        "total_discount": 2000000,
+                        "remaining_uses": 2,
+                        "usage_limit": 2
                     }
                 }
             ),
