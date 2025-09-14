@@ -2626,10 +2626,10 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'reservation_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه رزرو'),
+                'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری رزرو'),
                 'discount_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد تخفیف وارد شده'),
             },
-            required=['reservation_id', 'discount_code'],
+            required=['tracking_code', 'discount_code'],
         ),
         responses={
             200: openapi.Response(
@@ -2637,7 +2637,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
                 examples={
                     "application/json": {
                         "status": "ok",
-                        "reservation_id": 12,
+                        "tracking_code": "sfa0744301907",
                         "discount_code": "NMJ2516NJH",
                         "discount_value": 2000000,
                         "final_price": 8000000,
@@ -2655,17 +2655,17 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         tags=["reservation-api"]
     )
     def post(self, request, *args, **kwargs):
-        reservation_id = request.data.get("reservation_id")
+        tracking_code = request.data.get("tracking_code")
         code = request.data.get("discount_code")
 
-        if not reservation_id or not code:
-            return Response({"error": "reservation_id و discount_code الزامی هستند."},
+        if not tracking_code or not code:
+            return Response({"error": "tracking_code و discount_code الزامی هستند."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            reservation = Reservationhotel.objects.get(id=reservation_id, buyer=request.user)
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
         except Reservationhotel.DoesNotExist:
-            return Response({"error": "رزرو یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             discount_obj = RoomDiscountCode.objects.get(code=code)
@@ -2709,7 +2709,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # اعمال تخفیف
+        # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی)
         discount_value = Decimal(discount_obj.discount_value)
         old_final = reservation.final_price
         reservation.discount += discount_value
@@ -2722,7 +2722,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
 
         return Response({
             "status": "ok",
-            "reservation_id": reservation.id,
+            "tracking_code": reservation.tracking_code,
             "discount_code": discount_obj.code,
             "discount_value": int(discount_value),
             "final_price": int(reservation.final_price),
