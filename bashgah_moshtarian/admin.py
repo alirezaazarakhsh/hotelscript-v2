@@ -32,13 +32,13 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
     autocomplete_fields = ('room', 'user_level')
     list_editable = (
         'discount_value',
-        'usage_limit',  # اضافه شده برای ویرایش
+        'usage_limit',
         'required_points',
         'user_level',
         'expires_at',
     )
     list_per_page = 25
-    readonly_fields = ('created_at', 'remaining_uses')  # usage_limit حذف شده
+    readonly_fields = ('created_at', 'remaining_uses')
     filter_horizontal = ('users', 'activated_users')
 
     fieldsets = (

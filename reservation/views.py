@@ -2643,7 +2643,7 @@ class ApplyDiscountCodeAPIView(APIView):
                         "final_price": 8000000,
                         "total_discount": 2000000,
                         "remaining_uses": 2,
-                        "usage_limit": 2
+                        "usage_limit": 4
                     }
                 }
             ),
@@ -2657,86 +2657,74 @@ class ApplyDiscountCodeAPIView(APIView):
         tags=["reservation-api"]
     )
     def post(self, request, tracking_code, *args, **kwargs):
-        # دریافت کد تخفیف از درخواست
         code = request.data.get("discount_code")
 
-        # بررسی وجود کد تخفیف در درخواست
         if not code:
             return Response({"error": "discount_code الزامی است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی وجود رزرو با کد پیگیری و تطابق با کاربر
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
         except Reservationhotel.DoesNotExist:
             return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        # بررسی وجود کد تخفیف
         try:
             discount_obj = RoomDiscountCode.objects.get(code=code)
         except RoomDiscountCode.DoesNotExist:
             return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی تاریخ انقضا (شمسی)
-        now_j = jdt.now().date()
+        now_j = jdatetime.datetime.now().date()
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی هدف‌گذاری کاربران
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی مطابقت اتاق رزرو با اتاق کد تخفیف
         if not any(rr.room == discount_obj.room for rr in reservation.reservation_rooms.all()):
             return Response({"error": "این کد تخفیف برای اتاق‌های این رزرو معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی وضعیت رزرو
         if reservation.status in ['paid', 'cancelled']:
             return Response({"error": "نمی‌توان روی رزرو پرداخت‌شده یا لغو‌شده تخفیف اعمال کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی سطح کاربری
         user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
         if discount_obj.user_level and discount_obj.user_level != user_level:
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی فعال‌سازی کد تخفیف توسط کاربر
         activation_record = DiscountActivationRecord.objects.filter(
             user=request.user,
             room_discount_code=discount_obj,
-            reward_claimed=True
+            reward_claimed=False
         ).first()
         if not activation_record:
             return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # محاسبه تخفیف و قیمت نهایی
-        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
-        total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
-
-        # محاسبه تخفیف کل
-        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))
-        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
-
         try:
-            # اعمال کد تخفیف و کاهش usage_limit و remaining_uses
+            # اعمال کد تخفیف و کاهش remaining_uses
             discount_obj.apply_discount(request.user)
+            # به‌روزرسانی reward_claimed به True
+            activation_record.reward_claimed = True
+            activation_record.save()
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # به‌روزرسانی رزرو
+        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
+        total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
+
+        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))
+        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
+
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
         reservation.total_price = total
         reservation.half_day_in_charge = half_in
         reservation.half_day_out_charge = half_out
 
-        # ذخیره رزرو
         reservation._skip_price_calculation = True
         reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge'])
         delattr(reservation, '_skip_price_calculation')
 
-        # پاسخ موفقیت‌آمیز
         return Response({
             "status": "ok",
             "tracking_code": reservation.tracking_code,

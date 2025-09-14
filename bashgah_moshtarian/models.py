@@ -39,7 +39,7 @@ class RoomDiscountCode(models.Model):
     usage_limit = models.PositiveIntegerField(
         default=1,
         verbose_name=_("حداکثر دفعات استفاده"),
-        help_text=_("تعداد دفعات مجاز استفاده از این کد تخفیف")
+        help_text=_("تعداد کل دفعات مجاز استفاده از این کد تخفیف (ثابت)")
     )
     remaining_uses = models.PositiveIntegerField(
         default=0,
@@ -110,15 +110,14 @@ class RoomDiscountCode(models.Model):
 
     def apply_discount(self, user):
         """
-        متد برای اعمال کد تخفیف و کاهش usage_limit و remaining_uses
+        متد برای اعمال کد تخفیف و کاهش remaining_uses
         """
         if self.remaining_uses <= 0:
             raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
         if user in self.activated_users.all():
             raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
         
-        # کاهش هر دو فیلد
-        self.usage_limit -= 1
+        # فقط remaining_uses کاهش می‌یابد
         self.remaining_uses -= 1
         self.activated_users.add(user)
         self.save()
@@ -133,6 +132,7 @@ class RoomDiscountCode(models.Model):
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
         
+                
         
 
 # کد تخفیف باشگاه مشتریان برای مراکز خرید 
