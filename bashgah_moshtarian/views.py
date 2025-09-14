@@ -93,15 +93,11 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
             user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
 
         return (
-            ShoppingCenterDiscountCode.objects.annotate(
-                activated_count=Count('activated_users', distinct=True)
-            )
-            .filter(
+            ShoppingCenterDiscountCode.objects.filter(
                 ~Q(activated_users=user),  # حذف کدهایی که کاربر قبلاً فعال کرده است
                 Q(users=user) | 
                 Q(user_level=user_level) if user_level else Q(),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
-                Q(activated_count__lt=F('usage_limit'))
             )
             .distinct()
         )
@@ -113,7 +109,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         - به کاربر اختصاص داده شده یا با سطح کاربری او مطابقت دارند.
         - کاربر قبلاً آن‌ها را فعال نکرده است.
         - تاریخ انقضای آن‌ها نگذشته.
-        - تعداد استفاده‌شان به سقف نرسیده.
         """,
         tags=['discount-crm']
     )
@@ -126,7 +121,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 
