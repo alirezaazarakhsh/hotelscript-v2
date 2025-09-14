@@ -2702,7 +2702,11 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         ).first()
 
         # بررسی امتیاز فقط اگر جایزه فعال نشده
-        user_points = getattr(request.user.customer_points, 'points', 0)
+        try:
+            user_points = request.user.customer_points.points
+        except (AttributeError, CustomerClubPoint.DoesNotExist):
+            user_points = 0
+
         if not activation_record and discount_obj.required_points > user_points:
             return Response({"error": f"امتیاز کافی برای استفاده از این کد را ندارید. امتیاز مورد نیاز: {discount_obj.required_points}, امتیاز شما: {user_points}."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -2716,12 +2720,27 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی)
+        # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی و محاسبه مجدد)
         discount_value = Decimal(discount_obj.discount_value)
-        old_final = reservation.final_price
-        reservation.discount += discount_value
-        reservation.final_price = max(Decimal('0'), old_final - discount_value)
-        reservation.save(update_fields=['discount', 'final_price'])
+        
+        # محاسبه قیمت‌های جدید با در نظر گیری تخفیف کد
+        total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
+        
+        # اضافه کردن تخفیف کد به تخفیف موجود
+        new_total_discount = existing_discount + discount_value
+        new_final_price = max(Decimal('0'), final_without_promo - discount_value)
+        
+        # آپدیت فیلدها
+        reservation.discount = new_total_discount
+        reservation.final_price = new_final_price
+        reservation.total_price = total  # total_price بدون تغییر
+        reservation.half_day_in_charge = half_in
+        reservation.half_day_out_charge = half_out
+        
+        # ذخیره با فلگ برای جلوگیری از overwrite
+        reservation._skip_price_calculation = True  # فلگ موقت
+        reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge'])
+        delattr(reservation, '_skip_price_calculation')  # پاک کردن فلگ
 
         # ثبت استفاده کاربر
         discount_obj.activated_users.add(request.user)

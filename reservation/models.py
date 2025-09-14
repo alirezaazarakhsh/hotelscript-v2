@@ -1382,15 +1382,16 @@ class Reservationhotel(models.Model):
         return total, total_discount, half_day_in_charge, half_day_out_charge, final_price
 
     def save(self, *args, **kwargs):
-        # محاسبه و آپدیت قیمت‌ها قبل از سیو
-        total, discount, half_in, half_out, final = self.calculate_total_price()
-        self.total_price = total
-        self.discount = discount
-        self.half_day_in_charge = half_in
-        self.half_day_out_charge = half_out
-        self.final_price = final
+    # محاسبه و آپدیت قیمت‌ها قبل از سیو (فقط اگر فلگ نباشه)
+        if not getattr(self, '_skip_price_calculation', False):
+            total, discount, half_in, half_out, final = self.calculate_total_price()
+            self.total_price = total
+            self.discount = discount
+            self.half_day_in_charge = half_in
+            self.half_day_out_charge = half_out
+            self.final_price = final
         super().save(*args, **kwargs)
-        
+            
         
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
