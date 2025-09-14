@@ -2626,10 +2626,9 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری رزرو'),
                 'discount_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد تخفیف وارد شده'),
             },
-            required=['tracking_code', 'discount_code'],
+            required=['discount_code'],
         ),
         responses={
             200: openapi.Response(
@@ -2654,12 +2653,11 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         },
         tags=["reservation-api"]
     )
-    def post(self, request, *args, **kwargs):
-        tracking_code = request.data.get("tracking_code")
+    def post(self, request, tracking_code, *args, **kwargs):
         code = request.data.get("discount_code")
 
-        if not tracking_code or not code:
-            return Response({"error": "tracking_code و discount_code الزامی هستند."},
+        if not code:
+            return Response({"error": "discount_code الزامی است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         try:
