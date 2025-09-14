@@ -2623,7 +2623,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
 
     @swagger_auto_schema(
         operation_summary="اعمال کد تخفیف روی رزرو",
-        operation_description="این API کد تخفیف وارد شده توسط کاربر را بررسی و در صورت معتبر بودن روی رزرو اعمال می‌کند.",
+        operation_description="این API کد تخفیف وارد شده توسط کاربر را بررسی و در صورت معتبر بودن و فعال‌سازی قبلی روی رزرو اعمال می‌کند.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -2646,7 +2646,7 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
                 }
             ),
             400: openapi.Response(
-                description="کد تخفیف نامعتبر یا منقضی شده است."
+                description="کد تخفیف نامعتبر، منقضی شده، یا هنوز فعال نشده است."
             ),
             404: openapi.Response(
                 description="رزرو یافت نشد."
@@ -2694,24 +2694,17 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی فعال‌سازی جایزه (به جای activated_users)
+        # بررسی فعال‌سازی جایزه
         activation_record = DiscountActivationRecord.objects.filter(
             user=request.user,
             room_discount_code=discount_obj,
             reward_claimed=True
         ).first()
-
-        # بررسی امتیاز فقط اگر جایزه فعال نشده
-        try:
-            user_points = request.user.customer_points.points
-        except (AttributeError, CustomerClubPoint.DoesNotExist):
-            user_points = 0
-
-        if not activation_record and discount_obj.required_points > user_points:
-            return Response({"error": f"امتیاز کافی برای استفاده از این کد را ندارید. امتیاز مورد نیاز: {discount_obj.required_points}, امتیاز شما: {user_points}."},
+        if not activation_record:
+            return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی محدودیت استفاده (فقط اگر قبلاً استفاده نشده)
+        # بررسی محدودیت استفاده
         if reservation.buyer in discount_obj.activated_users.all():
             return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -2721,14 +2714,12 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی و محاسبه مجدد)
-        discount_value = Decimal(discount_obj.discount_value)
-        
-        # محاسبه قیمت‌های جدید با در نظر گیری تخفیف کد
+        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)  # محدود به مقدار باقی‌مونده
         total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
         
         # اضافه کردن تخفیف کد به تخفیف موجود
-        new_total_discount = existing_discount + discount_value
-        new_final_price = max(Decimal('0'), final_without_promo - discount_value)
+        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))  # محدودیت به discount_value
+        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
         
         # آپدیت فیلدها
         reservation.discount = new_total_discount
