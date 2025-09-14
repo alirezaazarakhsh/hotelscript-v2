@@ -16,10 +16,10 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'room',
         'discount_value',
         'usage_limit',
+        'remaining_uses',
         'required_points',
         'user_level',
         'expires_at',
-       
     )
     search_fields = (
         'code',
@@ -38,7 +38,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         'expires_at',
     )
     list_per_page = 25
-    readonly_fields = ('created_at',)
+    readonly_fields = ('created_at', 'remaining_uses')
     filter_horizontal = ('users', 'activated_users')  # مشابه NotificationAdmin
 
     fieldsets = (
@@ -47,7 +47,7 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             'description': _('اطلاعات اصلی کد تخفیف را وارد کنید.'),
         }),
         (_('تنظیمات استفاده'), {
-            'fields': ('usage_limit', 'required_points', 'user_level', 'expires_at'),
+            'fields': ('usage_limit', 'remaining_uses', 'required_points', 'user_level', 'expires_at'),
             'description': _('تنظیمات مربوط به محدودیت‌ها و شرایط استفاده از کد تخفیف.'),
         }),
         (_('اطلاعات تکمیلی'), {
@@ -67,6 +67,10 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
         return ", ".join(obj.get_activated_users_with_names())
     get_activated_users_display.short_description = "کاربران فعال‌کننده (شماره و نام)"
 
+    def remaining_uses(self, obj):
+        return obj.remaining_uses
+    remaining_uses.short_description = "دفعات باقی‌مانده"
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'room':
             kwargs['queryset'] = Room.objects.all().order_by('title')
@@ -74,28 +78,12 @@ class RoomDiscountCodeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = UserLevel.objects.all().order_by('title')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def get_users_with_names(self):
-        result = []
-        for user in self.users.select_related('natural_profile').all():
-            profile = getattr(user, 'natural_profile', None)
-            if profile and (profile.first_name or profile.last_name):
-                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
-                result.append(f"{user.phone_number} - {full_name}")
-            else:
-                result.append(user.phone_number)
-        return result
-
-    def get_activated_users_with_names(self):
-        result = []
-        for user in self.activated_users.select_related('natural_profile').all():
-            profile = getattr(user, 'natural_profile', None)
-            if profile and (profile.first_name or profile.last_name):
-                full_name = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
-                result.append(f"{user.phone_number} - {full_name}")
-            else:
-                result.append(user.phone_number)
-        return result
-    
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == 'users':
+            kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
+        if db_field.name == 'activated_users':
+            kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
     
 
 @admin.register(ShoppingCenterDiscountCode)
@@ -104,7 +92,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         'code',
         'shopping_center_name',
         'discount_value',
-        'usage_limit',
         'required_points',
         'user_level',
         'expires_at',
@@ -120,7 +107,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
     autocomplete_fields = ('user_level',)
     list_editable = (
         'discount_value',
-        'usage_limit',
         'required_points',
         'user_level',
         'expires_at',
@@ -141,7 +127,6 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
         }),
         (_('تنظیمات استفاده'), {
             'fields': (
-                'usage_limit',
                 'required_points',
                 'user_level',
                 'expires_at',
@@ -173,6 +158,13 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = UserLevel.objects.all().order_by('title')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == 'users':
+            kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
+        if db_field.name == 'activated_users':
+            kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     def get_users_with_names(self):
         result = []
         for user in self.users.select_related('natural_profile').all():
@@ -194,7 +186,7 @@ class ShoppingCenterDiscountCodeAdmin(admin.ModelAdmin):
             else:
                 result.append(user.phone_number)
         return result
-    
+
     
 @admin.register(CustomerClubPoint)
 class CustomerClubPointAdmin(admin.ModelAdmin):

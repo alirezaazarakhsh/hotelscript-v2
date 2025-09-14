@@ -16,8 +16,9 @@ class RoomDiscountCode(models.Model):
         related_name='discount_codes',
         verbose_name=_("اتاق")
     )
-    discount_value = models.CharField(
-        max_length=10,
+    discount_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
         validators=[RegexValidator(r'^\d+$', message=_("فقط مقادیر عددی مجاز هستند."))],
         verbose_name=_("مقدار تخفیف"),
         help_text=_("مقدار تخفیف را به تومان وارد کنید (فقط عدد).")
@@ -39,6 +40,11 @@ class RoomDiscountCode(models.Model):
         default=1,
         verbose_name=_("حداکثر دفعات استفاده"),
         help_text=_("تعداد دفعات مجاز استفاده از این کد تخفیف")
+    )
+    remaining_uses = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("دفعات باقی‌مانده"),
+        help_text=_("تعداد دفعات باقی‌مانده برای استفاده از این کد تخفیف")
     )
     required_points = models.PositiveIntegerField(
         default=0,
@@ -102,6 +108,12 @@ class RoomDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
+    def save(self, *args, **kwargs):
+        # تنظیم remaining_uses به مقدار اولیه usage_limit اگر هنوز ست نشده باشه
+        if not self.pk or self.remaining_uses == 0:
+            self.remaining_uses = self.usage_limit
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = _("کد تخفیف اتاق")
         verbose_name_plural = _("کد تخفیف باشگاه مشتری برای اتاق‌ها")
@@ -141,11 +153,6 @@ class ShoppingCenterDiscountCode(models.Model):
         unique=True,
         verbose_name=_("کد تخفیف"),
         help_text=_("کد تخفیف ۸ رقمی را وارد کنید.")
-    )
-    usage_limit = models.PositiveIntegerField(
-        default=1,
-        verbose_name=_("حداکثر دفعات استفاده"),
-        help_text=_("تعداد دفعات مجاز استفاده از این کد تخفیف")
     )
     required_points = models.PositiveIntegerField(
         default=0,
@@ -208,7 +215,6 @@ class ShoppingCenterDiscountCode(models.Model):
     class Meta:
         verbose_name = _("کد تخفیف مرکز خرید")
         verbose_name_plural = _("کدهای تخفیف باشگاه مشتری برای مراکز خرید")
-
         
         
 

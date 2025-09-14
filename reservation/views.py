@@ -2705,16 +2705,16 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         # بررسی محدودیت استفاده
-        if reservation.buyer in discount_obj.activated_users.all():
+        if request.user in discount_obj.activated_users.all():
             return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        if discount_obj.activated_users.count() >= discount_obj.usage_limit:
+        if discount_obj.remaining_uses <= 0:
             return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         # اعمال تخفیف (حل مشکل overwrite با ذخیره دستی و محاسبه مجدد)
-        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)  # محدود به مقدار باقی‌مونده
+        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)  # محدود به مقدار باقی‌مانده
         total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
         
         # اضافه کردن تخفیف کد به تخفیف موجود
@@ -2733,7 +2733,8 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
         reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge'])
         delattr(reservation, '_skip_price_calculation')  # پاک کردن فلگ
 
-        # ثبت استفاده کاربر
+        # کاهش تعداد دفعات باقی‌مانده و ثبت استفاده کاربر
+        discount_obj.remaining_uses -= 1
         discount_obj.activated_users.add(request.user)
         discount_obj.save()
 
@@ -2743,5 +2744,6 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             "discount_code": discount_obj.code,
             "discount_value": int(discount_value),
             "final_price": int(reservation.final_price),
-            "total_discount": int(reservation.discount)
+            "total_discount": int(reservation.discount),
+            "remaining_uses": discount_obj.remaining_uses
         }, status=status.HTTP_200_OK)
