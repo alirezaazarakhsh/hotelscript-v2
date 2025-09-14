@@ -2694,13 +2694,20 @@ class ApplyDiscountCodeAPIView(generics.GenericAPIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی امتیاز کاربر - اگر در activated_users باشد، امتیاز چک نشود
-        user_points = getattr(request.user, 'points', 0)
-        if discount_obj.required_points > user_points and request.user not in discount_obj.activated_users.all():
+        # بررسی فعال‌سازی جایزه (به جای activated_users)
+        activation_record = DiscountActivationRecord.objects.filter(
+            user=request.user,
+            room_discount_code=discount_obj,
+            reward_claimed=True
+        ).first()
+
+        # بررسی امتیاز فقط اگر جایزه فعال نشده
+        user_points = getattr(request.user.customer_points, 'points', 0)
+        if not activation_record and discount_obj.required_points > user_points:
             return Response({"error": f"امتیاز کافی برای استفاده از این کد را ندارید. امتیاز مورد نیاز: {discount_obj.required_points}, امتیاز شما: {user_points}."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی محدودیت استفاده
+        # بررسی محدودیت استفاده (فقط اگر قبلاً استفاده نشده)
         if reservation.buyer in discount_obj.activated_users.all():
             return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید."},
                             status=status.HTTP_400_BAD_REQUEST)
