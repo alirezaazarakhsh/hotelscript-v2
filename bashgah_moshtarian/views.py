@@ -189,7 +189,7 @@ class ActivateDiscountCodeView(APIView):
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
 
-                # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
+                # بررسی مجوز فعال‌سازی (کاربر یا سطح کاربری)
                 if (user not in discount_code.users.all() and 
                     (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
@@ -207,8 +207,7 @@ class ActivateDiscountCodeView(APIView):
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                # ثبت فعال‌سازی (بدون کاهش remaining_uses)
-                discount_code.activated_users.add(user)  # فقط کاربر را به لیست اضافه می‌کنیم
+                # فقط رکورد فعال‌سازی ایجاد می‌شود (بدون تغییر remaining_uses یا activated_users)
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
@@ -232,8 +231,7 @@ class ActivateDiscountCodeView(APIView):
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                # ثبت کاربر در activated_users
-                discount_code.activated_users.add(user)
+                # فقط رکورد فعال‌سازی ایجاد می‌شود
                 create_activation_record(discount_code)
 
             else:

@@ -2739,3 +2739,4 @@ class ApplyDiscountCodeAPIView(APIView):
             "remaining_uses": discount_obj.remaining_uses,
             "usage_limit": discount_obj.usage_limit
         }, status=status.HTTP_200_OK)
+        
