@@ -189,14 +189,6 @@ class ActivateDiscountCodeView(APIView):
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
 
-                # شرط 1: بررسی تعداد دفعات باقی‌مانده
-                if discount_code.remaining_uses <= 0:
-                    return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
-
-                # شرط 2: هر کاربر فقط یکبار می‌تواند فعال کند
-                if user in discount_code.activated_users.all():
-                    return Response({"error": "شما قبلاً این کد را فعال کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
-
                 # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
                 if (user not in discount_code.users.all() and 
                     (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
@@ -215,20 +207,12 @@ class ActivateDiscountCodeView(APIView):
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                # کاهش تعداد دفعات باقی‌مانده
-                discount_code.remaining_uses -= 1
-                discount_code.activated_users.add(user)
-                discount_code.save()
-
-                # ثبت فعال‌سازی
+                # ثبت فعال‌سازی (بدون کاهش remaining_uses)
+                discount_code.activated_users.add(user)  # فقط کاربر را به لیست اضافه می‌کنیم
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
                 discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
-
-                # شرط 1: هر کاربر فقط یکبار می‌تواند فعال کند
-                if user in discount_code.activated_users.all():
-                    return Response({"error": "شما قبلاً این کد را فعال کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
 
                 # بررسی مجوز فعال‌سازی
                 if (user not in discount_code.users.all() and 
@@ -250,9 +234,6 @@ class ActivateDiscountCodeView(APIView):
 
                 # ثبت کاربر در activated_users
                 discount_code.activated_users.add(user)
-                discount_code.save()
-
-                # ثبت فعال‌سازی
                 create_activation_record(discount_code)
 
             else:

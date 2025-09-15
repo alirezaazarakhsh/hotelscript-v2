@@ -2702,7 +2702,7 @@ class ApplyDiscountCodeAPIView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # اعمال کد تخفیف با استفاده از متد apply_discount
+            # اعمال کد تخفیف و کاهش remaining_uses
             discount_obj.apply_discount(request.user)
             # به‌روزرسانی reward_claimed به True
             activation_record.reward_claimed = True
