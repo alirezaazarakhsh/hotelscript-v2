@@ -2650,6 +2650,9 @@ class ApplyDiscountCodeAPIView(APIView):
             400: openapi.Response(
                 description="کد تخفیف نامعتبر، منقضی شده، یا هنوز فعال نشده است."
             ),
+            403: openapi.Response(
+                description="کاربر قبلاً این کد را فعال کرده و فقط یک‌بار می‌تواند استفاده کند."
+            ),
             404: openapi.Response(
                 description="رزرو یافت نشد."
             )
@@ -2677,15 +2680,17 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی اینکه آیا کد برای کاربر فعال شده است
+        # بررسی فعال‌سازی قبلی
         activation_record = DiscountActivationRecord.objects.filter(
             user=request.user,
-            room_discount_code=discount_obj,
-            reward_claimed=False
+            room_discount_code=discount_obj
         ).first()
         if not activation_record:
             return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
                             status=status.HTTP_400_BAD_REQUEST)
+        elif activation_record.reward_claimed:
+            return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                            status=status.HTTP_403_FORBIDDEN)
 
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2739,4 +2744,3 @@ class ApplyDiscountCodeAPIView(APIView):
             "remaining_uses": discount_obj.remaining_uses,
             "usage_limit": discount_obj.usage_limit
         }, status=status.HTTP_200_OK)
-        

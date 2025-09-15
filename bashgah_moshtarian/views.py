@@ -146,7 +146,7 @@ class ActivateDiscountCodeView(APIView):
         responses={
             200: "کد تخفیف با موفقیت فعال شد",
             400: "ورودی نامعتبر یا کد تخفیف موجود نیست",
-            403: "کاربر مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد",
+            403: "کاربر قبلاً این کد را فعال کرده یا مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد",
             500: "خطای سرور داخلی"
         },
         tags=['discount-crm']
@@ -177,7 +177,7 @@ class ActivateDiscountCodeView(APIView):
                 kwargs = {
                     "user": user,
                     "discount_type": discount_type,
-                    "reward_claimed": False  # در زمان فعال‌سازی، reward_claimed را False نگه می‌داریم
+                    "reward_claimed": False
                 }
                 if discount_type == "room":
                     kwargs["room_discount_code"] = discount_code
@@ -189,7 +189,12 @@ class ActivateDiscountCodeView(APIView):
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
 
-                # بررسی مجوز فعال‌سازی (کاربر یا سطح کاربری)
+                # بررسی فعال‌سازی قبلی
+                if DiscountActivationRecord.objects.filter(user=user, room_discount_code=discount_code).exists():
+                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                                  status=status.HTTP_403_FORBIDDEN)
+
+                # بررسی مجوز فعال‌سازی
                 if (user not in discount_code.users.all() and 
                     (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
@@ -207,11 +212,16 @@ class ActivateDiscountCodeView(APIView):
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                # فقط رکورد فعال‌سازی ایجاد می‌شود (بدون تغییر remaining_uses یا activated_users)
+                # فقط رکورد فعال‌سازی ایجاد می‌شود
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
                 discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+
+                # بررسی فعال‌سازی قبلی
+                if DiscountActivationRecord.objects.filter(user=user, shopping_discount_code=discount_code).exists():
+                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                                  status=status.HTTP_403_FORBIDDEN)
 
                 # بررسی مجوز فعال‌سازی
                 if (user not in discount_code.users.all() and 
@@ -249,7 +259,8 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            
+            
 
 
 # ای پی ای جوایز دریافتی کاربران 
