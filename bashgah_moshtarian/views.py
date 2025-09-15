@@ -177,7 +177,7 @@ class ActivateDiscountCodeView(APIView):
                 kwargs = {
                     "user": user,
                     "discount_type": discount_type,
-                    "reward_claimed": True
+                    "reward_claimed": False  # در زمان فعال‌سازی، reward_claimed را False نگه می‌داریم
                 }
                 if discount_type == "room":
                     kwargs["room_discount_code"] = discount_code
@@ -189,23 +189,24 @@ class ActivateDiscountCodeView(APIView):
             if discount_type == 'room':
                 discount_code = RoomDiscountCode.objects.get(code=code)
 
-                # شرط 2: هر کاربر فقط یکبار بتونه استفاده کنه
-                if user in discount_code.activated_users.all():
-                    return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
-
                 # شرط 1: بررسی تعداد دفعات باقی‌مانده
-                if discount_code.usage_limit <= 0:
-                    return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
+                if discount_code.remaining_uses <= 0:
+                    return Response({"error": "تعداد دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
+
+                # شرط 2: هر کاربر فقط یکبار می‌تواند فعال کند
+                if user in discount_code.activated_users.all():
+                    return Response({"error": "شما قبلاً این کد را فعال کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
 
                 # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
                 if (user not in discount_code.users.all() and 
-                    user not in discount_code.activated_users.all() and
                     (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
 
-                # بقیه چک‌ها
+                # بررسی امتیاز مورد نیاز
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
+
+                # بررسی تاریخ انقضا
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -214,42 +215,44 @@ class ActivateDiscountCodeView(APIView):
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                # کم کردن تعداد دفعات مجاز
-                discount_code.usage_limit -= 1
+                # کاهش تعداد دفعات باقی‌مانده
+                discount_code.remaining_uses -= 1
+                discount_code.activated_users.add(user)
                 discount_code.save()
 
                 # ثبت فعال‌سازی
-                discount_code.activated_users.add(user)
                 create_activation_record(discount_code)
 
             elif discount_type == 'shopping_center':
                 discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
 
+                # شرط 1: هر کاربر فقط یکبار می‌تواند فعال کند
                 if user in discount_code.activated_users.all():
-                    return Response({"error": "شما قبلاً از این کد استفاده کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
+                    return Response({"error": "شما قبلاً این کد را فعال کرده‌اید"}, status=status.HTTP_403_FORBIDDEN)
 
-                if discount_code.usage_limit <= 0:
-                    return Response({"error": "حداکثر دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
-
-                # بررسی مجوز فعال‌سازی (کاربر، کاربران فعال‌شده یا سطح کاربری)
+                # بررسی مجوز فعال‌سازی
                 if (user not in discount_code.users.all() and 
-                    user not in discount_code.activated_users.all() and
                     (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
                     return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
 
+                # بررسی امتیاز مورد نیاز
                 if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
                     return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
+
+                # بررسی تاریخ انقضا
                 if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
                     return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
 
+                # کسر امتیاز
                 if discount_code.required_points > 0:
                     customer_points.points -= discount_code.required_points
                     customer_points.save()
 
-                discount_code.usage_limit -= 1
+                # ثبت کاربر در activated_users
+                discount_code.activated_users.add(user)
                 discount_code.save()
 
-                discount_code.activated_users.add(user)
+                # ثبت فعال‌سازی
                 create_activation_record(discount_code)
 
             else:
@@ -267,7 +270,6 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 

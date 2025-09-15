@@ -109,24 +109,24 @@ class RoomDiscountCode(models.Model):
         return result
 
     def apply_discount(self, user):
-        """
-        متد برای اعمال کد تخفیف و کاهش remaining_uses
-        """
-        if self.remaining_uses <= 0:
-            raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
-        if user in self.activated_users.all():
-            raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
-        
-        # فقط remaining_uses کاهش می‌یابد
-        self.remaining_uses -= 1
-        self.activated_users.add(user)
-        self.save()
+            """
+            متد برای اعمال کد تخفیف و کاهش remaining_uses
+            """
+            if self.remaining_uses <= 0:
+                raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
+            if user in self.activated_users.all():
+                raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
+            
+            # فقط remaining_uses کاهش می‌یابد
+            self.remaining_uses -= 1
+            self.activated_users.add(user)
+            self.save()
 
     def save(self, *args, **kwargs):
-        # تنظیم remaining_uses به مقدار اولیه usage_limit فقط در زمان ایجاد
-        if not self.pk:
-            self.remaining_uses = self.usage_limit
-        super().save(*args, **kwargs)
+            # تنظیم remaining_uses به مقدار اولیه usage_limit فقط در زمان ایجاد
+            if not self.pk:
+                self.remaining_uses = self.usage_limit
+            super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("کد تخفیف اتاق")

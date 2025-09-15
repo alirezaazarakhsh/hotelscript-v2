@@ -2677,6 +2677,16 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # بررسی اینکه آیا کد برای کاربر فعال شده است
+        activation_record = DiscountActivationRecord.objects.filter(
+            user=request.user,
+            room_discount_code=discount_obj,
+            reward_claimed=False
+        ).first()
+        if not activation_record:
+            return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2691,17 +2701,8 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        activation_record = DiscountActivationRecord.objects.filter(
-            user=request.user,
-            room_discount_code=discount_obj,
-            reward_claimed=False
-        ).first()
-        if not activation_record:
-            return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            # اعمال کد تخفیف و کاهش remaining_uses
+            # اعمال کد تخفیف با استفاده از متد apply_discount
             discount_obj.apply_discount(request.user)
             # به‌روزرسانی reward_claimed به True
             activation_record.reward_claimed = True
@@ -2709,12 +2710,15 @@ class ApplyDiscountCodeAPIView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+        # محاسبه تخفیف و قیمت نهایی
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
         total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
 
-        new_total_discount = min(existing_discount + discount_value, Decimal(discount_obj.discount_value))
+        # اضافه کردن تخفیف جدید به تخفیف‌های موجود
+        new_total_discount = existing_discount + discount_value
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
 
+        # ذخیره مقادیر جدید در رزرو
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
         reservation.total_price = total
