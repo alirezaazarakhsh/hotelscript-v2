@@ -31,24 +31,20 @@ class FavoriteCollectionPagination(PageNumberPagination):
 
 class FavoriteCollectionListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = FavoriteCollectionPagination
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست کالکشن‌های علاقه‌مندی",
         operation_description="""
         این API تمامی کالکشن‌های علاقه‌مندی (چه هتل و چه مقاله) را نمایش می‌دهد.
         هر کالکشن شامل شناسه، عنوان و تعدادی تصویر thumbnail از آیتم‌های داخل لیست است.
-        پاسخ‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.
         """,
         tags=["favorite-panel"],
         responses={200: BaseFavoriteCollectionSerializer(many=True)},
     )
     def get(self, request):
         collections = FavoriteCollection.objects.filter(user=request.user)
-        paginator = self.pagination_class()
-        page = paginator.paginate_queryset(collections, request)
-        serializer = BaseFavoriteCollectionSerializer(page, many=True, context={"request": request})
-        return paginator.get_paginated_response(serializer.data)
+        serializer = BaseFavoriteCollectionSerializer(collections, many=True, context={"request": request})
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="ایجاد کالکشن علاقه‌مندی جدید",
@@ -61,8 +57,17 @@ class FavoriteCollectionListCreateAPI(APIView):
         responses={201: BaseFavoriteCollectionSerializer},
     )
     def post(self, request):
+        # چک محدودیت تعداد کالکشن‌ها
+        if FavoriteCollection.objects.filter(user=request.user).count() >= 10:
+            return Response({"error": "شما نمی‌توانید بیش از ۱۰ کالکشن ایجاد کنید."}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = FavoriteCollectionCreateSerializer(data=request.data)
         if serializer.is_valid():
+            title = serializer.validated_data['title']
+            # چک عنوان تکراری
+            if FavoriteCollection.objects.filter(user=request.user, title=title).exists():
+                return Response({"error": "کالکشن با این عنوان قبلاً وجود دارد."}, status=status.HTTP_400_BAD_REQUEST)
+            
             collection = serializer.save(user=request.user)
             return Response(BaseFavoriteCollectionSerializer(collection, context={"request": request}).data, status=201)
         return Response(serializer.errors, status=400)
@@ -79,11 +84,11 @@ class FavoriteCollectionDetailAPI(APIView):
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = timezone.now().date()  # 2025-08-30
+        today = timezone.now().date()
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
-        end_date = today + timedelta(days=1)  # 2025-08-31
+        end_date = today + timedelta(days=1)
 
         if check_in and check_out:
             try:
@@ -108,14 +113,12 @@ class FavoriteCollectionDetailAPI(APIView):
             }
 
             for room in rooms:
-                # تلاش برای یافتن قیمت‌ها با بازه دقیق
                 date_prices = room.date_prices.filter(
                     start_date__lte=end_date,
                     end_date__gte=start_date
                 )
                 logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices for range {start_date} to {end_date}")
 
-                # اگر هیچ قیمتی پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
                 if not date_prices.exists():
                     date_prices = room.date_prices.filter(
                         end_date__gte=today
@@ -130,7 +133,7 @@ class FavoriteCollectionDetailAPI(APIView):
                     discount_value = getattr(date_price, 'discount_value', 0)
                     discount_date = getattr(date_price, 'discount_date', None)
 
-                    if original_price > 0:  # فقط قیمت‌های غیرصفر را در نظر می‌گیریم
+                    if original_price > 0:
                         if discount_type == 'percentage' and discount_date and discount_date >= today:
                             total_price = original_price * (1 - discount_value / 100)
                         elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
@@ -148,7 +151,6 @@ class FavoriteCollectionDetailAPI(APIView):
 
             if min_total_price == float('inf'):
                 logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found with non-zero price")
-                # اگر هیچ قیمتی پیدا نشد، حداقل قیمت موجود را به عنوان پیش‌فرض استفاده می‌کنیم
                 fallback_prices = room.date_prices.filter(price__gt=0).order_by('price').first()
                 if fallback_prices:
                     min_price_data = {
@@ -189,7 +191,6 @@ class FavoriteCollectionDetailAPI(APIView):
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(favorites, request)
 
-        # فقط برای هتل‌ها قیمت‌ها را محاسبه می‌کنیم
         hotel_ids = [f.item_object_id for f in page if isinstance(f.item, Hotel)]
         hotel_min_price_map = {}
         if hotel_ids:
@@ -216,16 +217,22 @@ class FavoriteCollectionDetailAPI(APIView):
         return Response(status=204)
 
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
+class FavoriteItemPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class FavoriteItemListCreateAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = FavoriteItemPagination
 
     def get_hotel_min_price_map(self, hotels):
         hotel_min_price_map = {}
-        today = timezone.now().date()  # 2025-08-30
+        today = timezone.now().date()
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
         start_date = today
-        end_date = today + timedelta(days=1)  # 2025-08-31
+        end_date = today + timedelta(days=1)
 
         if check_in and check_out:
             try:
@@ -248,14 +255,12 @@ class FavoriteItemListCreateAPI(APIView):
             }
 
             for room in rooms:
-                # تلاش برای یافتن قیمت‌ها با بازه دقیق
                 date_prices = room.date_prices.filter(
                     start_date__lte=end_date,
                     end_date__gte=start_date
                 )
                 logger.debug(f"Hotel {hotel.id}, Room {room.id}: Found {date_prices.count()} date prices for range {start_date} to {end_date}")
 
-                # اگر هیچ قیمتی پیدا نشد، تمام قیمت‌های معتبر را بررسی می‌کنیم
                 if not date_prices.exists():
                     date_prices = room.date_prices.filter(
                         end_date__gte=today
@@ -270,7 +275,7 @@ class FavoriteItemListCreateAPI(APIView):
                     discount_value = getattr(date_price, 'discount_value', 0)
                     discount_date = getattr(date_price, 'discount_date', None)
 
-                    if original_price > 0:  # فقط قیمت‌های غیرصفر را در نظر می‌گیریم
+                    if original_price > 0:
                         if discount_type == 'percentage' and discount_date and discount_date >= today:
                             total_price = original_price * (1 - discount_value / 100)
                         elif discount_type == 'fixed' and getattr(date_price, 'is_fixed_discount_one_time', False):
@@ -288,7 +293,6 @@ class FavoriteItemListCreateAPI(APIView):
 
             if min_total_price == float('inf'):
                 logger.warning(f"Hotel {hotel.id}: No valid RoomDatePrice found with non-zero price")
-                # اگر هیچ قیمتی پیدا نشد، حداقل قیمت موجود را به عنوان پیش‌فرض استفاده می‌کنیم
                 fallback_prices = room.date_prices.filter(price__gt=0).order_by('price').first()
                 if fallback_prices:
                     min_price_data = {
@@ -315,17 +319,19 @@ class FavoriteItemListCreateAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت آیتم‌های داخل یک کالکشن",
-        operation_description="این API تمامی آیتم‌های (هتل یا مقاله) داخل یک کالکشن خاص را نمایش می‌دهد.",
+        operation_description="این API تمامی آیتم‌های (هتل یا مقاله) داخل یک کالکشن خاص را نمایش می‌دهد. آیتم‌ها به صورت صفحه‌بندی شده ارائه می‌شوند.",
         tags=["favorite-panel"],
         responses={200: FavoriteItemSerializer(many=True)},
     )
     def get(self, request, pk):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
+        favorites = collection.favorites.all()
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(favorites, request)
+
         hotel_content_type = ContentType.objects.get_for_model(Hotel)
-        favorite_hotels = Favorite.objects.filter(
-            list=collection,
-            item_content_type=hotel_content_type
-        ).values_list('item_object_id', flat=True)
+        favorite_hotels = [f.item_object_id for f in page if f.item_content_type == hotel_content_type]
         hotels = Hotel.objects.filter(id__in=favorite_hotels).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {
@@ -333,7 +339,8 @@ class FavoriteItemListCreateAPI(APIView):
             'hotel_min_price_map': hotel_min_price_map,
             'view': self
         }
-        return Response(FavoriteItemSerializer(collection.favorites.all(), many=True, context=context).data)
+        serializer = FavoriteItemSerializer(page, many=True, context=context)
+        return paginator.get_paginated_response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="افزودن آیتم به یک کالکشن",
@@ -376,24 +383,36 @@ class FavoriteItemListCreateAPI(APIView):
         }
         return Response(FavoriteItemSerializer(favorite, context=context).data, status=201)
 
-
+# ------------------ حذف آیتم از کالکشن در پنل ------------------
 class FavoriteItemDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="حذف آیتم از کالکشن",
-        operation_description="این API یک آیتم خاص (هتل یا مقاله) را از داخل کالکشن حذف می‌کند.",
+        operation_description="این API یک آیتم خاص (هتل یا مقاله) را از داخل کالکشن حذف می‌کند. نوع آیتم (hotel یا article) از طریق پارامتر type مشخص می‌شود.",
         tags=["favorite-panel"],
+        manual_parameters=[
+            openapi.Parameter(
+                "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
+            )
+        ],
+        responses={
+            204: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم با موفقیت حذف شد"),
+            400: openapi.Schema(type=openapi.TYPE_OBJECT, description="نوع آیتم نامعتبر است"),
+            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم یا کالکشن یافت نشد")
+        }
     )
     def delete(self, request, pk, item_id):
-        favorite = get_object_or_404(Favorite, id=item_id, list__id=pk, list__user=request.user)
+        item_type = request.query_params.get("type")
+        if item_type not in ["hotel", "article"]:
+            return Response({"error": "نوع آیتم نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
+
+        content_type = get_object_or_404(ContentType, model=item_type)
+        favorite = get_object_or_404(Favorite, list__id=pk, list__user=request.user, item_content_type=content_type, item_object_id=item_id)
         favorite.delete()
-        return Response(status=204)
-    
-    
-    
-    
-#ای پی ای فیوریت هتل برای صفحه داخلی هتل     
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+# ------------------ بررسی وضعیت علاقه‌مندی آیتم ------------------
 class FavoriteItemStatusAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -425,61 +444,48 @@ class FavoriteItemStatusAPI(APIView):
             list__user=request.user,
             item_content_type=content_type,
             item_object_id=item_id,
-            is_active=True,  # منطق داخلی همان است
+            is_active=True,
         ).exists()
 
         return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
+# ------------------ حذف آیتم از تمام کالکشن‌ها در وب‌سایت ------------------
+class FavoriteItemDeleteAPI(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     @swagger_auto_schema(
-        operation_summary="تغییر وضعیت علاقه‌مندی آیتم",
-        operation_description="این API وضعیت علاقه‌مندی یک آیتم (هتل یا مقاله) را تغییر می‌دهد.",
+        operation_summary="حذف آیتم از تمام کالکشن‌های علاقه‌مندی",
+        operation_description="این API یک آیتم خاص (هتل یا مقاله) را از تمام کالکشن‌های علاقه‌مندی کاربر حذف می‌کند. نوع آیتم (hotel یا article) از طریق پارامتر type مشخص می‌شود.",
         tags=["favorite-website"],
         manual_parameters=[
             openapi.Parameter(
                 "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
             )
         ],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت جدید علاقه‌مندی آیتم")
-            },
-            required=["is_favorited"]
-        ),
-        responses={200: openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت به‌روزرسانی‌شده آیتم")
-            }
-        )}
+        responses={
+            204: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم با موفقیت از تمام کالکشن‌ها حذف شد"),
+            400: openapi.Schema(type=openapi.TYPE_OBJECT, description="نوع آیتم نامعتبر است"),
+            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم یافت نشد")
+        }
     )
-    def put(self, request, item_id):
+    def delete(self, request, item_id):
         item_type = request.query_params.get("type")
         if item_type not in ["hotel", "article"]:
-            return Response({"error": "نوع آیتم معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "نوع آیتم نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
 
-        model = Hotel if item_type == "hotel" else Article
-        content_type = ContentType.objects.get_for_model(model)
-
+        content_type = get_object_or_404(ContentType, model=item_type)
         favorites = Favorite.objects.filter(
             list__user=request.user,
             item_content_type=content_type,
             item_object_id=item_id
         )
-
         if not favorites.exists():
-            return Response({"error": "آیتم در لیست علاقه‌مندی‌ها یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "آیتم در هیچ کالکشنی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
 
-        is_favorited = request.data.get("is_favorited")
-        if isinstance(is_favorited, bool):
-            favorites.update(is_active=is_favorited)  # منطق دیتابیس همان است
-            return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
+        favorites.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
-        return Response({"error": "مقدار is_favorited معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
-    
-    
-    
-    
+# ------------------ به‌روزرسانی عنوان کالکشن ------------------
 class FavoriteCollectionUpdateTitleAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -494,6 +500,9 @@ class FavoriteCollectionUpdateTitleAPI(APIView):
         collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
         serializer = FavoriteCollectionCreateSerializer(collection, data=request.data, partial=True)
         if serializer.is_valid():
+            title = serializer.validated_data.get('title')
+            if title and FavoriteCollection.objects.filter(user=request.user, title=title).exclude(id=pk).exists():
+                return Response({"error": "کالکشن با این عنوان قبلاً وجود دارد."}, status=status.HTTP_400_BAD_REQUEST)
             serializer.save()
             return Response(serializer.data, status=200)
         return Response(serializer.errors, status=400)
