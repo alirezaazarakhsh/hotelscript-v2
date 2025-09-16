@@ -434,12 +434,13 @@ class FavoriteItemDeleteAPI(APIView):
     @swagger_auto_schema(
         operation_summary="حذف آیتم از کالکشن در سایت",
         operation_description="""
-        این API یک آیتم خاص (هتل یا مقاله) را از کالکشن پیش‌فرض کاربر در سایت حذف می‌کند.
-        - `item_id`: شناسه ردیف Favorite (مثل 14، همان id نمایش‌داده‌شده در لیست آیتم‌ها).
+        این API یک آیتم خاص (هتل یا مقاله) را بر اساس شناسه هتل یا مقاله از کالکشن‌های کاربر در سایت حذف می‌کند.
+        اگر آیتم در چندین کالکشن وجود داشته باشد، از همه حذف می‌شود.
+        - `item_id`: شناسه هتل یا مقاله (مثل 3 برای هتل).
         - `type`: نوع آیتم (hotel یا article) که باید به صورت پارامتر کویری در URL ارسال شود.
         مثال درخواست:
         ```
-        DELETE /api/v1/favorite/items/14/?type=hotel
+        DELETE /api/v1/favorite/items/3/?type=hotel
         ```
         """,
         tags=["favorite-website"],
@@ -460,8 +461,12 @@ class FavoriteItemDeleteAPI(APIView):
             return Response({"error": "نوع آیتم نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
 
         content_type = get_object_or_404(ContentType, model=item_type)
-        favorite = get_object_or_404(Favorite, id=item_id, list__user=request.user, item_content_type=content_type)
-        favorite.delete()
+        favorites = Favorite.objects.filter(item_object_id=item_id, item_content_type=content_type, list__user=request.user)
+        
+        if not favorites.exists():
+            return Response({"error": "آیتم یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
+        
+        favorites.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 # ------------------ به‌روزرسانی عنوان کالکشن ------------------
