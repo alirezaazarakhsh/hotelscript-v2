@@ -489,6 +489,7 @@ class FavoriteCollectionUpdateTitleAPI(APIView):
     
     
 #---------------------- لیست ایتم های علاقه مندی در وب سایت ------------------------------------
+logger = logging.getLogger(__name__)
 class FavoriteCollectionWebsiteDetailAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -500,7 +501,7 @@ class FavoriteCollectionWebsiteDetailAPI(APIView):
         - `pk`: شناسه کالکشن (مثل 322).
         مثال درخواست:
         ```
-        GET /api/v1/favorite/collections/322/
+        GET /api/v1/favorite/website/collections/322/
         ```
         """,
         tags=["favorite-website"],
@@ -525,11 +526,25 @@ class FavoriteCollectionWebsiteDetailAPI(APIView):
         first_item = Favorite.objects.filter(list=collection).first()
         thumbnail = None
         if first_item:
-            item = first_item.item
-            if item:
-                thumbnail = getattr(item, 'thumbnail', None)
-                if thumbnail and hasattr(thumbnail, 'url'):
-                    thumbnail = request.build_absolute_uri(thumbnail.url)
+            try:
+                item_object = first_item.item
+                if item_object:
+                    logger.info(f"Item found for collection {pk}: {item_object}, content_type: {first_item.item_content_type}")
+                    # چک کردن نوع آیتم (hotel یا article)
+                    if first_item.item_content_type.model == 'hotel':
+                        thumbnail = getattr(item_object, 'main_image', None)
+                    else:  # فرض بر article
+                        thumbnail = getattr(item_object, 'thumbnail', None)
+                    
+                    if thumbnail and hasattr(thumbnail, 'url'):
+                        thumbnail = request.build_absolute_uri(thumbnail.url)
+                    else:
+                        logger.warning(f"No valid image field for item {item_object} in collection {pk}")
+                else:
+                    logger.warning(f"No item_object for favorite {first_item.id} in collection {pk}")
+            except (AttributeError, ValueError) as e:
+                logger.error(f"Error accessing item or image for collection {pk}: {str(e)}")
+                pass
 
         data = {
             "id": collection.id,
