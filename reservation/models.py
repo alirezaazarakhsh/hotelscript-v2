@@ -1400,13 +1400,13 @@ class Reservationhotel(models.Model):
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
-        'Reservationhotel',
+        Reservationhotel,
         on_delete=models.CASCADE,
         verbose_name='رزرو',
         related_name='reservation_rooms'
     )
     room = models.ForeignKey(
-        'Room',
+        Room,
         on_delete=models.CASCADE,
         verbose_name='اتاق',
         related_name='reservation_rooms'
