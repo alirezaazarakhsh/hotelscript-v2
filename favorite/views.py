@@ -432,15 +432,15 @@ class FavoriteItemDeleteAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="حذف آیتم از کالکشن در سایت",
+        operation_summary="حذف آیتم از کالکشن‌ها در سایت",
         operation_description="""
-        این API یک آیتم خاص (هتل یا مقاله) را بر اساس شناسه هتل یا مقاله از کالکشن‌های کاربر در سایت حذف می‌کند.
+        این API یک آیتم خاص (هتل یا مقاله) را بر اساس شناسه هتل یا مقاله از تمام کالکشن‌های کاربر در سایت حذف می‌کند.
         اگر آیتم در چندین کالکشن وجود داشته باشد، از همه حذف می‌شود.
-        - `item_id`: شناسه هتل یا مقاله (مثل 3 برای هتل).
+        - `item_id`: شناسه هتل یا مقاله (مثل 1 برای هتل).
         - `type`: نوع آیتم (hotel یا article) که باید به صورت پارامتر کویری در URL ارسال شود.
         مثال درخواست:
         ```
-        DELETE /api/v1/favorite/items/3/?type=hotel
+        DELETE /api/v1/favorite/items/1/?type=hotel
         ```
         """,
         tags=["favorite-website"],
@@ -468,7 +468,8 @@ class FavoriteItemDeleteAPI(APIView):
         
         favorites.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
+    
+    
 # ------------------ به‌روزرسانی عنوان کالکشن ------------------
 class FavoriteCollectionUpdateTitleAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
