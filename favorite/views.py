@@ -437,12 +437,15 @@ class FavoriteItemStatusAPI(APIView):
                 "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
             )
         ],
-        responses={200: openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت علاقه‌مندی آیتم")
-            }
-        )}
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت علاقه‌مندی آیتم"),
+                    "type": openapi.Schema(type=openapi.TYPE_STRING, description="نوع آیتم: hotel یا article")
+                }
+            )
+        }
     )
     def get(self, request, item_id):
         item_type = request.query_params.get("type")
@@ -459,8 +462,11 @@ class FavoriteItemStatusAPI(APIView):
             is_active=True,
         ).exists()
 
-        return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
-
+        return Response({
+            "is_favorited": is_favorited,
+            "type": item_type
+        }, status=status.HTTP_200_OK)
+        
 
 # ------------------ به‌روزرسانی عنوان کالکشن ------------------
 class FavoriteCollectionUpdateTitleAPI(APIView):
