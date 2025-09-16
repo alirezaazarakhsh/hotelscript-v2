@@ -48,10 +48,6 @@ class Favorite(models.Model):
         'item_object_id',
     )
     
-    is_active = models.BooleanField(
-        default=True,
-        verbose_name=_('فعال بودن')
-    )
 
     class Meta:
         verbose_name = 'علاقمندی'
