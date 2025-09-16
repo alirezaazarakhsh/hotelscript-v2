@@ -524,10 +524,12 @@ class FavoriteCollectionWebsiteDetailAPI(APIView):
         # گرفتن اولین آیتم برای thumbnail
         first_item = Favorite.objects.filter(list=collection).first()
         thumbnail = None
-        if first_item and first_item.item_object:
-            thumbnail = getattr(first_item.item_object, 'thumbnail', None)
-            if thumbnail:
-                thumbnail = request.build_absolute_uri(thumbnail.url) if hasattr(thumbnail, 'url') else thumbnail
+        if first_item:
+            item = first_item.item
+            if item:
+                thumbnail = getattr(item, 'thumbnail', None)
+                if thumbnail and hasattr(thumbnail, 'url'):
+                    thumbnail = request.build_absolute_uri(thumbnail.url)
 
         data = {
             "id": collection.id,
