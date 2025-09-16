@@ -216,6 +216,8 @@ class FavoriteCollectionDetailAPI(APIView):
         collection.delete()
         return Response(status=204)
 
+
+
 # ------------------ مدیریت آیتم‌های داخل کالکشن ------------------
 class FavoriteItemPagination(PageNumberPagination):
     page_size = 10
@@ -459,50 +461,6 @@ class FavoriteItemStatusAPI(APIView):
 
         return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
-
-# ------------------ حذف آیتم از تمام کالکشن‌ها در وب‌سایت ------------------
-class FavoriteItemDeleteAPI(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    @swagger_auto_schema(
-        operation_summary="حذف آیتم از تمام کالکشن‌های علاقه‌مندی",
-        operation_description="""
-        این API یک آیتم خاص (هتل یا مقاله) را از تمام کالکشن‌های علاقه‌مندی کاربر حذف می‌کند.
-        - `item_id`: شناسه واقعی آیتم (مثل id هتل یا مقاله، نه id ردیف Favorite).
-        - `type`: نوع آیتم (hotel یا article) که باید به صورت پارامتر کویری در URL ارسال شود.
-        مثال درخواست:
-        ```
-        DELETE /api/v1/favorite/favorites/3/delete/?type=hotel
-        ```
-        """,
-        tags=["favorite-website"],
-        manual_parameters=[
-            openapi.Parameter(
-                "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
-            )
-        ],
-        responses={
-            204: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم با موفقیت از تمام کالکشن‌ها حذف شد"),
-            400: openapi.Schema(type=openapi.TYPE_OBJECT, description="نوع آیتم نامعتبر است"),
-            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم در هیچ کالکشنی یافت نشد")
-        }
-    )
-    def delete(self, request, item_id):
-        item_type = request.query_params.get("type")
-        if item_type not in ["hotel", "article"]:
-            return Response({"error": "نوع آیتم نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
-
-        content_type = get_object_or_404(ContentType, model=item_type)
-        favorites = Favorite.objects.filter(
-            list__user=request.user,
-            item_content_type=content_type,
-            item_object_id=item_id
-        )
-        if not favorites.exists():
-            return Response({"error": "آیتم در هیچ کالکشنی یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
-
-        favorites.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 # ------------------ به‌روزرسانی عنوان کالکشن ------------------
 class FavoriteCollectionUpdateTitleAPI(APIView):

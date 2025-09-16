@@ -2,7 +2,6 @@ from django.urls import path
 from .views import (
     FavoriteCollectionListCreateAPI,
     FavoriteCollectionDetailAPI,
-    FavoriteItemDeleteAPI,
     FavoriteItemListCreateAPI,
     FavoriteItemDetailAPI,
     FavoriteItemStatusAPI,
@@ -24,5 +23,4 @@ urlpatterns = [
     
     # وضعیت هتل در علاقه‌مندی‌ها
 path("favorites/<int:item_id>/status/", FavoriteItemStatusAPI.as_view(), name="favorite-item-status"),
-path("favorites/<int:item_id>/delete/", FavoriteItemDeleteAPI.as_view(), name="favorite-item-delete"),
 ]
