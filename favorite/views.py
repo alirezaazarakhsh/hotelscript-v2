@@ -389,7 +389,16 @@ class FavoriteItemDetailAPI(APIView):
 
     @swagger_auto_schema(
         operation_summary="حذف آیتم از کالکشن",
-        operation_description="این API یک آیتم خاص (هتل یا مقاله) را از داخل کالکشن حذف می‌کند. نوع آیتم (hotel یا article) از طریق پارامتر type مشخص می‌شود.",
+        operation_description="""
+        این API یک آیتم خاص (هتل یا مقاله) را از یک کالکشن مشخص حذف می‌کند.
+        - `pk`: شناسه کالکشن (مثل 322).
+        - `item_id`: شناسه ردیف Favorite (مثل 14، همان id نمایش‌داده‌شده در لیست آیتم‌ها).
+        - `type`: نوع آیتم (hotel یا article) که باید به صورت پارامتر کویری در URL ارسال شود.
+        مثال درخواست:
+        ```
+        DELETE /api/v1/favorite/collections/322/items/14/?type=hotel
+        ```
+        """,
         tags=["favorite-panel"],
         manual_parameters=[
             openapi.Parameter(
@@ -408,10 +417,11 @@ class FavoriteItemDetailAPI(APIView):
             return Response({"error": "نوع آیتم نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
 
         content_type = get_object_or_404(ContentType, model=item_type)
-        favorite = get_object_or_404(Favorite, list__id=pk, list__user=request.user, item_content_type=content_type, item_object_id=item_id)
+        favorite = get_object_or_404(Favorite, id=item_id, list__id=pk, list__user=request.user, item_content_type=content_type)
         favorite.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
+    
+    
 # ------------------ بررسی وضعیت علاقه‌مندی آیتم ------------------
 class FavoriteItemStatusAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -449,13 +459,22 @@ class FavoriteItemStatusAPI(APIView):
 
         return Response({"is_favorited": is_favorited}, status=status.HTTP_200_OK)
 
+
 # ------------------ حذف آیتم از تمام کالکشن‌ها در وب‌سایت ------------------
 class FavoriteItemDeleteAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="حذف آیتم از تمام کالکشن‌های علاقه‌مندی",
-        operation_description="این API یک آیتم خاص (هتل یا مقاله) را از تمام کالکشن‌های علاقه‌مندی کاربر حذف می‌کند. نوع آیتم (hotel یا article) از طریق پارامتر type مشخص می‌شود.",
+        operation_description="""
+        این API یک آیتم خاص (هتل یا مقاله) را از تمام کالکشن‌های علاقه‌مندی کاربر حذف می‌کند.
+        - `item_id`: شناسه واقعی آیتم (مثل id هتل یا مقاله، نه id ردیف Favorite).
+        - `type`: نوع آیتم (hotel یا article) که باید به صورت پارامتر کویری در URL ارسال شود.
+        مثال درخواست:
+        ```
+        DELETE /api/v1/favorite/favorites/3/delete/?type=hotel
+        ```
+        """,
         tags=["favorite-website"],
         manual_parameters=[
             openapi.Parameter(
@@ -465,7 +484,7 @@ class FavoriteItemDeleteAPI(APIView):
         responses={
             204: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم با موفقیت از تمام کالکشن‌ها حذف شد"),
             400: openapi.Schema(type=openapi.TYPE_OBJECT, description="نوع آیتم نامعتبر است"),
-            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم یافت نشد")
+            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="آیتم در هیچ کالکشنی یافت نشد")
         }
     )
     def delete(self, request, item_id):
