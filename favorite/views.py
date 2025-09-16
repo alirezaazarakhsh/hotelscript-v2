@@ -490,66 +490,119 @@ class FavoriteCollectionUpdateTitleAPI(APIView):
     
 #---------------------- لیست ایتم های علاقه مندی در وب سایت ------------------------------------
 logger = logging.getLogger(__name__)
-class FavoriteCollectionWebsiteDetailAPI(APIView):
+
+class FavoriteCollectionWebsiteListAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="دریافت جزئیات کالکشن علاقه‌مندی در وب‌سایت",
+        operation_summary="دریافت لیست کالکشن‌های علاقه‌مندی در وب‌سایت",
         operation_description="""
-        این API جزئیات یک کالکشن خاص را برای وب‌سایت نمایش می‌دهد.
-        شامل شناسه کالکشن، نام، یک تصویر thumbnail از اولین آیتم کالکشن (در صورت وجود) و تعداد آیتم‌های داخل کالکشن است.
-        - `pk`: شناسه کالکشن (مثل 322).
+        این API لیست تمام کالکشن‌های علاقه‌مندی کاربر را برای وب‌سایت نمایش می‌دهد.
+        هر کالکشن شامل شناسه، نام، یک تصویر thumbnail از اولین آیتم کالکشن (در صورت وجود) و تعداد آیتم‌های داخل کالکشن است.
         مثال درخواست:
         ```
-        GET /api/v1/favorite/website/collections/322/
+        GET /api/v1/favorite/website/collections/
         ```
         """,
         tags=["favorite-website"],
         responses={
             200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="شناسه کالکشن"),
-                    "name": openapi.Schema(type=openapi.TYPE_STRING, description="نام کالکشن"),
-                    "thumbnail": openapi.Schema(type=openapi.TYPE_STRING, description="URL تصویر thumbnail اولین آیتم یا null"),
-                    "item_count": openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد آیتم‌های داخل کالکشن"),
-                }
-            ),
-            404: openapi.Schema(type=openapi.TYPE_OBJECT, description="کالکشن یافت نشد")
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Items(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "id": openapi.Schema(type=openapi.TYPE_INTEGER, description="شناسه کالکشن"),
+                        "name": openapi.Schema(type=openapi.TYPE_STRING, description="نام کالکشن"),
+                        "thumbnail": openapi.Schema(type=openapi.TYPE_STRING, description="URL تصویر thumbnail اولین آیتم یا null"),
+                        "item_count": openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد آیتم‌های داخل کالکشن"),
+                    }
+                )
+            )
         }
     )
-    def get(self, request, pk):
-        collection = get_object_or_404(FavoriteCollection, id=pk, user=request.user)
-        item_count = Favorite.objects.filter(list=collection).count()
-        
-        # گرفتن اولین آیتم برای thumbnail
-        first_item = Favorite.objects.filter(list=collection).first()
-        thumbnail = None
-        if first_item:
-            try:
-                item_object = first_item.item
-                if item_object:
-                    logger.info(f"Item found for collection {pk}: {item_object}, content_type: {first_item.item_content_type}")
-                    # چک کردن نوع آیتم (hotel یا article)
-                    if first_item.item_content_type.model == 'hotel':
-                        thumbnail = getattr(item_object, 'main_image', None)
-                    else:  # فرض بر article
-                        thumbnail = getattr(item_object, 'thumbnail', None)
-                    
-                    if thumbnail and hasattr(thumbnail, 'url'):
-                        thumbnail = request.build_absolute_uri(thumbnail.url)
-                    else:
-                        logger.warning(f"No valid image field for item {item_object} in collection {pk}")
-                else:
-                    logger.warning(f"No item_object for favorite {first_item.id} in collection {pk}")
-            except (AttributeError, ValueError) as e:
-                logger.error(f"Error accessing item or image for collection {pk}: {str(e)}")
-                pass
+    def get(self, request):
+        collections = FavoriteCollection.objects.filter(user=request.user)
+        result = []
 
-        data = {
-            "id": collection.id,
-            "name": collection.title,
-            "thumbnail": thumbnail,
-            "item_count": item_count
+        for collection in collections:
+            item_count = Favorite.objects.filter(list=collection).count()
+            
+            # گرفتن اولین آیتم برای thumbnail
+            first_item = Favorite.objects.filter(list=collection).first()
+            thumbnail = None
+            if first_item:
+                try:
+                    item_object = first_item.item
+                    if item_object:
+                        logger.info(f"Item found for collection {collection.id}: {item_object}, content_type: {first_item.item_content_type}")
+                        # چک کردن نوع آیتم (hotel یا article)
+                        if first_item.item_content_type.model == 'hotel':
+                            thumbnail = getattr(item_object, 'main_image', None)
+                        else:  # فرض بر article
+                            thumbnail = getattr(item_object, 'thumbnail', None)
+                        
+                        if thumbnail and hasattr(thumbnail, 'url'):
+                            thumbnail = request.build_absolute_uri(thumbnail.url)
+                        else:
+                            logger.warning(f"No valid image field for item {item_object} in collection {collection.id}")
+                    else:
+                        logger.warning(f"No item_object for favorite {first_item.id} in collection {collection.id}")
+                except (AttributeError, ValueError) as e:
+                    logger.error(f"Error accessing item or image for collection {collection.id}: {str(e)}")
+                    pass
+
+            data = {
+                "id": collection.id,
+                "name": collection.title,
+                "thumbnail": thumbnail,
+                "item_count": item_count
+            }
+            result.append(data)
+
+        return Response(result)
+    
+    
+    
+    
+# ------------------ بررسی وضعیت علاقه‌مندی آیتم ------------------
+class FavoriteItemStatusAPI(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="بررسی وضعیت علاقه‌مندی آیتم",
+        operation_description="این API بررسی می‌کند که یک آیتم (هتل یا مقاله) در لیست علاقه‌مندی‌های کاربر موجود است یا خیر.",
+        tags=["favorite-website"],
+        manual_parameters=[
+            openapi.Parameter(
+                "type", openapi.IN_QUERY, description="نوع آیتم: hotel یا article", type=openapi.TYPE_STRING, required=True
+            )
+        ],
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "is_favorited": openapi.Schema(type=openapi.TYPE_BOOLEAN, description="وضعیت علاقه‌مندی آیتم"),
+                    "type": openapi.Schema(type=openapi.TYPE_STRING, description="نوع آیتم: hotel یا article")
+                }
+            )
         }
-        return Response(data)
+    )
+    def get(self, request, item_id):
+        item_type = request.query_params.get("type")
+        if item_type not in ["hotel", "article"]:
+            return Response({"error": "نوع آیتم معتبر نیست"}, status=status.HTTP_400_BAD_REQUEST)
+
+        model = Hotel if item_type == "hotel" else Article
+        content_type = ContentType.objects.get_for_model(model)
+
+        is_favorited = Favorite.objects.filter(
+            list__user=request.user,
+            item_content_type=content_type,
+            item_object_id=item_id,
+            is_active=True,
+        ).exists()
+
+        return Response({
+            "is_favorited": is_favorited,
+            "type": item_type
+        }, status=status.HTTP_200_OK)
