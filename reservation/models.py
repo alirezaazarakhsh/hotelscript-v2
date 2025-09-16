@@ -1301,15 +1301,19 @@ class Reservationhotel(models.Model):
 
     @property
     def total_rooms(self):
+        if not hasattr(self, 'reservation_rooms'):
+            return 0
         return self.reservation_rooms.aggregate(total=models.Sum('quantity'))['total'] or 0
 
     @property
     def total_guests(self):
         total = 0
-        for res_room in self.reservation_rooms.all():
-            room = res_room.room
-            total += (room.room_capacity + room.extra_capacity) * res_room.quantity
+        if hasattr(self, 'reservation_rooms'):
+            for res_room in self.reservation_rooms.all():
+                if res_room.room:  # چک اضافه برای جلوگیری از ارور
+                    total += (res_room.room.room_capacity + res_room.room.extra_capacity) * res_room.quantity
         return total
+
 
     # ---------------- متد محاسبه قیمت ----------------
     
