@@ -428,6 +428,8 @@ class FavoriteItemDetailAPI(APIView):
     
     
 #------------------- حذف ایتم کالکشن در سایت ------------------------
+logger = logging.getLogger(__name__)
+
 class FavoriteItemDeleteAPI(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -463,12 +465,14 @@ class FavoriteItemDeleteAPI(APIView):
         content_type = get_object_or_404(ContentType, model=item_type)
         favorites = Favorite.objects.filter(item_object_id=item_id, item_content_type=content_type, list__user=request.user)
         
+        logger.info(f"Searching for favorites with item_id={item_id}, type={item_type}, user={request.user.id}")
         if not favorites.exists():
+            logger.warning(f"No favorites found for item_id={item_id}, type={item_type}, user={request.user.id}")
             return Response({"error": "آیتم یافت نشد"}, status=status.HTTP_404_NOT_FOUND)
         
+        logger.info(f"Deleting {favorites.count()} favorites for item_id={item_id}")
         favorites.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
     
 # ------------------ به‌روزرسانی عنوان کالکشن ------------------
 class FavoriteCollectionUpdateTitleAPI(APIView):
