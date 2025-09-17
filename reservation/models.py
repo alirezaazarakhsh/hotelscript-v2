@@ -1462,18 +1462,25 @@ class ReservationRoom(models.Model):
         verbose_name_plural = 'اتاق‌های رزرو شده'
 
     def __str__(self):
-        return f'{self.room.title} در رزرو {self.reservation.tracking_code}'
+        room_title = self.room.title if self.room_id else "اتاق نامشخص"
+        reservation_code = self.reservation.tracking_code if self.reservation_id else "رزرو نامشخص"
+        return f'{room_title} در رزرو {reservation_code}'
 
     def calculate_half_day_prices(self):
         """محاسبه قیمت نیم شارژ ورود و خروج برای این اتاق (در صورت فعال بودن)"""
+        if not self.room_id:  # اگر اتاق مشخص نشده باشه
+            self.half_day_in_price = Decimal('0')
+            self.half_day_out_price = Decimal('0')
+            return
+
         hotel = self.room.hotel
         half_in = Decimal('0')
         half_out = Decimal('0')
 
-        if self.half_day_in_selected and hotel.has_check_in_half_day_charge:
+        if self.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
             half_in = self.price_per_night / Decimal('2')
 
-        if self.half_day_out_selected and hotel.has_check_out_half_day_charge:
+        if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
             half_out = self.price_per_night / Decimal('2')
 
         self.half_day_in_price = half_in * self.quantity
@@ -1482,7 +1489,6 @@ class ReservationRoom(models.Model):
     def save(self, *args, **kwargs):
         self.calculate_half_day_prices()
         super().save(*args, **kwargs)
-    
 
 # ---------------- ReservationRoomPassenger ----------------
 class ReservationRoomPassenger(models.Model):
