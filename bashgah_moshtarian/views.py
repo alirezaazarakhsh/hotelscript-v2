@@ -35,25 +35,30 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         user = self.request.user
         today_jalali = jdatetime.date.today()
 
-        # دسترسی به سطح کاربر از مدل NaturalProfile
         try:
-            user_level = user.natural_profile.level  # دسترسی به سطح کاربر
+            user_level = user.natural_profile.level
         except (AttributeError, NaturalProfile.DoesNotExist):
-            user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
+            user_level = None
+
+        # فقط کدهایی که هنوز در DiscountActivationRecord فعال نشده‌اند نمایش داده شود
+        activated_codes = DiscountActivationRecord.objects.filter(
+            user=user,
+            discount_type='room'
+        ).values_list('room_discount_code_id', flat=True)
 
         return (
             RoomDiscountCode.objects.annotate(
                 activated_count=Count('activated_users', distinct=True)
             )
             .filter(
-                ~Q(activated_users=user),  # حذف کدهایی که کاربر قبلاً فعال کرده است
-                Q(users=user) | 
-                Q(user_level=user_level) if user_level else Q(),
+                ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+                Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
                 Q(activated_count__lt=F('usage_limit'))
             )
             .distinct()
         )
+
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
@@ -86,21 +91,25 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         user = self.request.user
         today_jalali = jdatetime.date.today()
 
-        # دسترسی به سطح کاربر از مدل NaturalProfile
         try:
-            user_level = user.natural_profile.level  # دسترسی به سطح کاربر
+            user_level = user.natural_profile.level
         except (AttributeError, NaturalProfile.DoesNotExist):
-            user_level = None  # در صورتی که پروفایل یا سطح وجود نداشته باشد
+            user_level = None
+
+        activated_codes = DiscountActivationRecord.objects.filter(
+            user=user,
+            discount_type='shopping_center'
+        ).values_list('shopping_discount_code_id', flat=True)
 
         return (
             ShoppingCenterDiscountCode.objects.filter(
-                ~Q(activated_users=user),  # حذف کدهایی که کاربر قبلاً فعال کرده است
-                Q(users=user) | 
-                Q(user_level=user_level) if user_level else Q(),
+                ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+                Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
                 Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
             )
             .distinct()
         )
+
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
