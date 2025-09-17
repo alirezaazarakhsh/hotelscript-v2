@@ -2537,9 +2537,17 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تبدیل رشته‌ها به jdatetime.date
-        check_in_date = jdate.fromisoformat(data['date']['enter'])
-        check_out_date = jdate.fromisoformat(data['date']['exit'])
+        # تابع امن برای تبدیل تاریخ
+        def parse_jdate(value):
+            if isinstance(value, str):
+                return jdate.date.fromisoformat(value)
+            elif isinstance(value, dict):
+                return jdate.date(value['year'], value['month'], value['day'])
+            else:
+                raise ValidationError("فرمت تاریخ نامعتبر است.")
+
+        check_in_date = parse_jdate(data['date']['enter'])
+        check_out_date = parse_jdate(data['date']['exit'])
 
         if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
@@ -2558,7 +2566,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         total_price = Decimal('0')
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
-
         nights = reservation.nights_count
 
         for room_id in room_ids:
@@ -2597,23 +2604,23 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             subtotal = room_total_price
             total_price += subtotal
 
-            # ایجاد ReservationRoom با ظرفیت اصلی و اضافه
+            # ایجاد ReservationRoom
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=1,
-                price_per_night=room_total_price / nights,
+                price_per_night=subtotal / nights,
                 subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
             )
 
+        # آپدیت قیمت کل رزرو
         reservation.total_price = total_price
         reservation.final_price = total_price
-        reservation.save()
+        reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
-    
     
     
     
