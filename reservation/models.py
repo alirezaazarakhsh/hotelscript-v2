@@ -1274,6 +1274,8 @@ class Reservationhotel(models.Model):
     final_price = models.DecimalField(_('قیمت نهایی'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    total_half_day_charge = models.DecimalField(_('مجموع نیم‌شارژها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
 
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
@@ -1319,20 +1321,21 @@ class Reservationhotel(models.Model):
     
     def calculate_total_price(self):
             if not self.pk or not self.reservation_rooms.exists():
-                return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
+                return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
             hotel = self.reservation_rooms.first().room.hotel
             if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
                 raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-            total = Decimal('0')  # مجموع قیمت اتاق‌ها (بدون نیم‌شارژ)
+            total = Decimal('0')  # مجموع قیمت اتاق‌ها (بدون نیم‌شارژ و نفر اضافه)
+            total_extra = Decimal('0')  # مجموع قیمت نفرات اضافه
             total_discount = Decimal('0')  # تخفیف کل
             half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود
             half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج
 
             nights = self.nights_count
             if nights <= 0:
-                return total, total_discount, half_day_in_charge, half_day_out_charge, total
+                return total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total, total
 
             user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
             check_in_date_std = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
@@ -1358,7 +1361,8 @@ class Reservationhotel(models.Model):
                     raise ValidationError(f'قیمت برای تاریخ {check_in_date_std} در اتاق {room.title} موجود نیست.')
 
                 daily_price = Decimal(price_obj.price)
-                extra_price = Decimal(price_obj.extra_passenger_price) * extra_guests
+                extra_price_per_person = Decimal(res_room.extra_passenger_price) if res_room.extra_passenger_price else Decimal(price_obj.extra_passenger_price)
+                extra_price = extra_price_per_person * extra_guests
                 discount = Decimal('0')
 
                 # محاسبه تخفیف
@@ -1368,10 +1372,14 @@ class Reservationhotel(models.Model):
                     if not self.buyer.reservations.exclude(pk=self.pk).exists():
                         discount = Decimal(price_obj.discount_value)
 
-                # قیمت اتاق بدون نیم‌شارژ
-                room_total = (daily_price + extra_price) * quantity * nights
+                # قیمت اتاق بدون نیم‌شارژ و نفر اضافه
+                room_total = daily_price * quantity * nights
                 total += room_total
                 total_discount += discount * quantity * nights
+
+                # قیمت نفرات اضافه
+                room_extra_total = extra_price * nights * quantity
+                total_extra += room_extra_total
 
                 # اعمال نیم‌شارژ
                 if res_room.half_day_in_price > 0:
@@ -1382,21 +1390,25 @@ class Reservationhotel(models.Model):
             # اعمال تخفیف‌های کد تخفیف (از فیلد discount مدل)
             total_discount += self.discount
 
-            # نهایی: مجموع اتاق + نیم‌شارژها - تخفیف
-            final_price = total + half_day_in_charge + half_day_out_charge - total_discount
+            total_half_day_charge = half_day_in_charge + half_day_out_charge
+
+            # نهایی: مجموع اتاق + نفر اضافه + نیم‌شارژها - تخفیف
+            final_price = total + total_extra + total_half_day_charge - total_discount
             if final_price < 0:
                 final_price = Decimal('0')
 
-            return total, total_discount, half_day_in_charge, half_day_out_charge, final_price
+            return total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_price
 
     def save(self, *args, **kwargs):
             # محاسبه و آپدیت قیمت‌ها قبل از سیو (فقط اگر فلگ نباشه)
             if not getattr(self, '_skip_price_calculation', False):
-                total, discount, half_in, half_out, final = self.calculate_total_price()
+                total, total_extra, discount, half_in, half_out, total_half, final = self.calculate_total_price()
                 self.total_price = total
                 self.discount = discount  # شامل تخفیف‌های کد تخفیف و تخفیف‌های قیمت اتاق
                 self.half_day_in_charge = half_in
                 self.half_day_out_charge = half_out
+                self.total_half_day_charge = total_half
+                self.total_extra_passenger_charge = total_extra
                 self.final_price = final
             super().save(*args, **kwargs)
                 
@@ -1422,6 +1434,16 @@ class ReservationRoom(models.Model):
         decimal_places=0,
         validators=[MinValueValidator(0)],
         default=Decimal('0')
+    )
+    extra_passenger_price = models.DecimalField(
+        'قیمت هر نفر اضافه',
+        max_digits=12,
+        decimal_places=0,
+        validators=[MinValueValidator(0)],
+        default=Decimal('0'),
+        blank=True,
+        null=True,
+        help_text='قیمت هر نفر اضافه (قابل تغییر؛ پیش‌فرض از RoomDatePrice گرفته می‌شود)'
     )
     subtotal = models.PositiveBigIntegerField(
         verbose_name='مجموع قیمت (تومان)',
@@ -1487,6 +1509,22 @@ class ReservationRoom(models.Model):
         self.half_day_out_price = half_out * self.quantity
 
     def save(self, *args, **kwargs):
+        # اگر قیمت نفر اضافه مشخص نشده باشه، از RoomDatePrice بگیر
+        if not self.extra_passenger_price and self.room:
+            check_in_date_std = self.reservation.check_in_date.togregorian() if isinstance(self.reservation.check_in_date, jdatetime.date) else self.reservation.check_in_date
+            user_level = getattr(getattr(self.reservation.buyer, 'natural_profile', None), 'level', None)
+            price_obj = self.room.date_prices.filter(
+                start_date__lte=check_in_date_std,
+                end_date__gte=check_in_date_std,
+                user_level=user_level
+            ).first() or self.room.date_prices.filter(
+                start_date__lte=check_in_date_std,
+                end_date__gte=check_in_date_std,
+                user_level__isnull=True
+            ).first()
+            if price_obj:
+                self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
+
         self.calculate_half_day_prices()
         super().save(*args, **kwargs)
 

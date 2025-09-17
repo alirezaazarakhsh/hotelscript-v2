@@ -302,8 +302,8 @@ class DiscountActivationRecord(models.Model):
 
     reward_claimed = models.BooleanField(
         default=False,
-        verbose_name=_("جایزه دریافت شده؟"),
-        help_text=_("نمایش وضعیت دریافت جایزه توسط کاربر")
+        verbose_name=_("جایزه استفاده شده ؟"),
+        help_text=_("نمایش وضعیت  جایزه استفاده شده  توسط کاربر")
     )
 
     class Meta:

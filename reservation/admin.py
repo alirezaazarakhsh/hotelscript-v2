@@ -612,21 +612,28 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 8
+    extra = 8  # بدون فرم خالی برای مسافران
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = False
     autocomplete_fields = ()
 
+    def get_max_num(self, request, obj=None, **kwargs):
+        """حداکثر تعداد مسافران برابر با ظرفیت کل اتاق (ظرفیت اصلی + ظرفیت اضافه)"""
+        if obj and hasattr(obj, 'room') and obj.room:  # بررسی وجود room
+            return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
+        return self.max_num  # بازگشت به مقدار پیش‌فرض
+
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 3
+    extra = 3  # بدون فرم خالی برای اتاق‌ها
     max_num = 3
     fields = (
         'room',
         'quantity',
         'price_per_night',
+        'extra_passenger_price',
         'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
@@ -639,7 +646,7 @@ class ReservationRoomInline(NestedTabularInline):
         'primary_passengers_count',
         'extra_passengers_count',
         'half_day_in_price',
-        'half_day_out_price'
+        'half_day_out_price',
     )
     show_change_link = False
     can_delete = False
@@ -648,12 +655,17 @@ class ReservationRoomInline(NestedTabularInline):
 
     def primary_passengers_count(self, obj):
         return obj.primary_passengers_count
-    primary_passengers_count.short_description = 'تعداد نفر اصلی'
+    primary_passengers_count.short_description = _('تعداد نفر اصلی')
 
     def extra_passengers_count(self, obj):
         return obj.extra_passengers_count
-    extra_passengers_count.short_description = 'تعداد نفر اضافه'
+    extra_passengers_count.short_description = _('تعداد نفر اضافه')
 
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        # اختیاری کردن فیلد room در فرم ادمین
+        formset.form.base_fields['room'].required = False
+        return formset
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -662,8 +674,9 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price', 'half_day_in_charge', 'half_day_out_charge',
-        'discount', 'final_price', 'status', 'created_jalali', 'updated_jalali'
+        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
+        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price', 
+        'status', 'created_jalali', 'updated_jalali'
     )
     
     search_fields = (
@@ -678,37 +691,42 @@ class ReservationhotelAdmin(NestedModelAdmin):
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
-        'total_price', 'half_day_in_charge', 'half_day_out_charge', 'final_price'
+        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
+        'half_day_out_charge', 'total_half_day_charge', 'final_price'
     )
 
     fieldsets = (
-        ('اطلاعات رزرو کننده', {
+        (_('اطلاعات رزرو کننده'), {
             'fields': (
                 'buyer', 'reserver_first_name', 'reserver_last_name',
                 'reserver_phone_number', 'reserver_national_code', 'additional_notes'
             )
         }),
-        ('تاریخ رزرو', {
+        (_('تاریخ رزرو'), {
             'fields': ('check_in_date', 'check_out_date')
         }),
-        ('قیمت و وضعیت', {
-            'fields': ('total_price', 'half_day_in_charge', 'half_day_out_charge', 'discount', 'final_price', 'status')
+        (_('قیمت و وضعیت'), {
+            'fields': (
+                'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
+                'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price', 
+                'status'
+            )
         }),
-        ('اطلاعات سیستم', {
+        (_('اطلاعات سیستم'), {
             'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
                        'created_jalali', 'updated_jalali')
         }),
     )
 
     # ---------------- Jalali Dates ----------------
-    @admin.display(description='تاریخ ایجاد (شمسی)')
+    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
         if obj.created_at:
             dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
-    @admin.display(description='تاریخ به‌روزرسانی (شمسی)')
+    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
     def updated_jalali(self, obj):
         if obj.updated_at:
             dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
@@ -716,15 +734,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
         return '-'
 
     # ---------------- Counts ----------------
-    @admin.display(description='تعداد شب‌ها')
+    @admin.display(description=_('تعداد شب‌ها'))
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
 
-    @admin.display(description='کل اتاق‌ها')
+    @admin.display(description=_('کل اتاق‌ها'))
     def total_rooms_fa(self, obj):
         return obj.total_rooms if obj.pk else 0
 
-    @admin.display(description='کل مهمان‌ها')
+    @admin.display(description=_('کل مهمان‌ها'))
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
 
@@ -738,10 +756,17 @@ class ReservationhotelAdmin(NestedModelAdmin):
         """بعد از ذخیره شدن inlines، قیمت‌ها محاسبه و آپدیت میشن"""
         super().save_related(request, form, formsets, change)
         obj = form.instance
-        total_price, total_discount, half_day_in_charge, half_day_out_charge, final_price = obj.calculate_total_price()
-        obj.total_price = total_price
-        obj.discount = total_discount
-        obj.half_day_in_charge = half_day_in_charge
-        obj.half_day_out_charge = half_day_out_charge
-        obj.final_price = final_price
-        obj.save(update_fields=['total_price', 'discount', 'half_day_in_charge', 'half_day_out_charge', 'final_price'])
+        if obj.reservation_rooms.exists():  # فقط اگر اتاقی وجود داشته باشد
+            total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_price = obj.calculate_total_price()
+            obj.total_price = total_price
+            obj.total_extra_passenger_charge = total_extra
+            obj.discount = total_discount
+            obj.half_day_in_charge = half_day_in_charge
+            obj.half_day_out_charge = half_day_out_charge
+            obj.total_half_day_charge = total_half_day_charge
+            obj.final_price = final_price
+            obj.save(update_fields=[
+                'total_price', 'total_extra_passenger_charge', 'discount', 
+                'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 
+                'final_price'
+            ])
