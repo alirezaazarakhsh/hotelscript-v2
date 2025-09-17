@@ -40,24 +40,20 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         except (AttributeError, NaturalProfile.DoesNotExist):
             user_level = None
 
-        # فقط کدهایی که هنوز در DiscountActivationRecord فعال نشده‌اند نمایش داده شود
+        # لیست کدهای فعال شده توسط کاربر
         activated_codes = DiscountActivationRecord.objects.filter(
             user=user,
             discount_type='room'
         ).values_list('room_discount_code_id', flat=True)
 
-        return (
-            RoomDiscountCode.objects.annotate(
-                activated_count=Count('activated_users', distinct=True)
-            )
-            .filter(
-                ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
-                Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
-                Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
-                Q(activated_count__lt=F('usage_limit'))
-            )
-            .distinct()
-        )
+        return RoomDiscountCode.objects.annotate(
+            activated_count=Count('activated_users', distinct=True)
+        ).filter(
+            ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+            Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
+            Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
+            Q(activated_count__lt=F('usage_limit'))
+        ).distinct()
 
 
     @swagger_auto_schema(
@@ -101,14 +97,12 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
             discount_type='shopping_center'
         ).values_list('shopping_discount_code_id', flat=True)
 
-        return (
-            ShoppingCenterDiscountCode.objects.filter(
-                ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
-                Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
-                Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
-            )
-            .distinct()
-        )
+        return ShoppingCenterDiscountCode.objects.filter(
+            ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+            Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
+            Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali)
+        ).distinct()
+
 
 
     @swagger_auto_schema(
