@@ -4,11 +4,11 @@ import os
 import random
 import re
 import uuid
-import jdatetime
 from decimal import Decimal
 from datetime import timedelta
 import jdatetime
 from functools import cached_property
+from jdatetime import date as jdate
 
 # 🌐 Django
 from django.db import models
