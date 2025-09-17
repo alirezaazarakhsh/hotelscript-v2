@@ -1538,6 +1538,7 @@ class ReservationRoomPassenger(models.Model):
 
     reservation_room = models.ForeignKey(ReservationRoom, on_delete=models.CASCADE, related_name='passengers', verbose_name='اتاق رزرو شده')
     passenger_type = models.CharField(max_length=20, choices=PASSENGER_TYPE_CHOICES, default='secondary', verbose_name='نوع مسافر')
+    is_primary = models.BooleanField(default=False, verbose_name='مسافر اصلی است؟')  # اضافه کردن فیلد is_primary
     first_name = models.CharField('نام', max_length=100)
     last_name = models.CharField('نام خانوادگی', max_length=100)
     mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
@@ -1548,8 +1549,11 @@ class ReservationRoomPassenger(models.Model):
         verbose_name_plural = 'مسافرها'
 
     def save(self, *args, **kwargs):
+        # تنظیم is_primary بر اساس passenger_type
+        self.is_primary = self.passenger_type == 'primary'
         if not self.pk and not self.reservation_room.passengers.exists():
             self.passenger_type = 'primary'
+            self.is_primary = True
         if self.passenger_type != 'primary':
             self.mobile_number = None
         super().save(*args, **kwargs)
