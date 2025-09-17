@@ -10,6 +10,7 @@ import json
 import traceback
 import copy
 import jdatetime
+from jdatetime import date as jdate  
 from itertools import combinations
 from bashgah_moshtarian.models import DiscountActivationRecord, RoomDiscountCode
 from reservation.models import Hotel 
@@ -2518,6 +2519,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+logger = logging.getLogger(__name__)
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2533,21 +2536,34 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        logger.debug(f"Request data: {data}")
 
         # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
         # تابع امن برای تبدیل تاریخ
         def parse_jdate(value):
+            logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
             if isinstance(value, str):
-                return jdate.date.fromisoformat(value)
+                try:
+                    return jdate.fromisoformat(value)  # استفاده مستقیم از jdate
+                except ValueError as e:
+                    raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, dict):
-                return jdate.date(value['year'], value['month'], value['day'])
+                try:
+                    return jdate(value['year'], value['month'], value['day'])  # استفاده مستقیم از jdate
+                except (KeyError, ValueError) as e:
+                    raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
+            elif isinstance(value, jdate):
+                return value  # اگر ورودی خودش یک شیء jdatetime.date است
             else:
-                raise ValidationError("فرمت تاریخ نامعتبر است.")
+                raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
-        check_in_date = parse_jdate(data['date']['enter'])
-        check_out_date = parse_jdate(data['date']['exit'])
+        try:
+            check_in_date = parse_jdate(data['date']['enter'])
+            check_out_date = parse_jdate(data['date']['exit'])
+        except KeyError as e:
+            raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
         if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
@@ -2609,7 +2625,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reservation=reservation,
                 room=room,
                 quantity=1,
-                price_per_night=subtotal / nights,
+                price_per_night=subtotal / nights if nights > 0 else subtotal,
                 subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
@@ -2621,7 +2637,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
-    
     
     
 # ای پی ای کد تخفیف برای رزرو 
