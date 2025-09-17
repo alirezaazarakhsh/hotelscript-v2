@@ -2639,39 +2639,17 @@ class ApplyDiscountCodeAPIView(APIView):
             required=['discount_code'],
         ),
         responses={
-            200: openapi.Response(
-                description="کد تخفیف با موفقیت اعمال شد.",
-                examples={
-                    "application/json": {
-                        "status": "ok",
-                        "tracking_code": "sfa0744301907",
-                        "discount_code": "NMJ2516NJH",
-                        "discount_value": 2000000,
-                        "final_price": 8000000,
-                        "total_discount": 2000000,
-                        "remaining_uses": 2,
-                        "usage_limit": 4
-                    }
-                }
-            ),
-            400: openapi.Response(
-                description="کد تخفیف نامعتبر، منقضی شده، یا هنوز فعال نشده است."
-            ),
-            403: openapi.Response(
-                description="کاربر قبلاً این کد را فعال کرده و فقط یک‌بار می‌تواند استفاده کند."
-            ),
-            404: openapi.Response(
-                description="رزرو یافت نشد."
-            )
+            200: openapi.Response(description="کد تخفیف با موفقیت اعمال شد."),
+            400: openapi.Response(description="کد تخفیف نامعتبر، منقضی شده یا هنوز فعال نشده است."),
+            403: openapi.Response(description="کاربر قبلاً این کد را استفاده کرده و فقط یک‌بار می‌تواند از آن استفاده کند."),
+            404: openapi.Response(description="رزرو یافت نشد.")
         },
         tags=["reservation-api"]
     )
     def post(self, request, tracking_code, *args, **kwargs):
         code = request.data.get("discount_code")
-
         if not code:
-            return Response({"error": "discount_code الزامی است."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "discount_code الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
@@ -2687,17 +2665,16 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی فعال‌سازی قبلی
-        activation_record = DiscountActivationRecord.objects.filter(
+        # بررسی فعال‌سازی قبلی یا ایجاد رکورد جدید
+        activation_record, created = DiscountActivationRecord.objects.get_or_create(
             user=request.user,
-            room_discount_code=discount_obj
-        ).first()
-        if not activation_record:
-            return Response({"error": "این کد تخفیف هنوز توسط شما فعال نشده است. لطفاً ابتدا آن را از بخش جوایز فعال کنید."},
-                            status=status.HTTP_400_BAD_REQUEST)
-        elif activation_record.reward_claimed:
-            return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
-                            status=status.HTTP_403_FORBIDDEN)
+            room_discount_code=discount_obj,
+            discount_type='room'
+        )
+
+        # اگر جایزه قبلاً دریافت شده باشد، اجازه استفاده بده
+        if activation_record.reward_claimed and not created:
+            return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."}, status=status.HTTP_403_FORBIDDEN)
 
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2710,13 +2687,12 @@ class ApplyDiscountCodeAPIView(APIView):
 
         user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
         if discount_obj.user_level and discount_obj.user_level != user_level:
-            return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # اعمال کد تخفیف و کاهش remaining_uses
             discount_obj.apply_discount(request.user)
-            # به‌روزرسانی reward_claimed به True
+            # علامت‌گذاری جایزه به عنوان دریافت شده
             activation_record.reward_claimed = True
             activation_record.save()
         except ValueError as e:
@@ -2726,11 +2702,9 @@ class ApplyDiscountCodeAPIView(APIView):
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
         total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
 
-        # اضافه کردن تخفیف جدید به تخفیف‌های موجود
         new_total_discount = existing_discount + discount_value
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
 
-        # ذخیره مقادیر جدید در رزرو
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
         reservation.total_price = total
