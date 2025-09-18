@@ -5,6 +5,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 import jdatetime
+from pydantic import ValidationError
 from authentication import forms
 from nested_admin import NestedModelAdmin, NestedTabularInline
 from authentication.models import BaseUser
@@ -608,6 +609,26 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
+class ReservationhotelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Reservationhotel
+        fields = '__all__'
+
+    def clean_check_in_date(self):
+        check_in = self.cleaned_data['check_in_date']
+        today_j = jdate.today()
+        if check_in < today_j:
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        return check_in
+
+    def clean_check_out_date(self):
+        check_in = self.cleaned_data.get('check_in_date')
+        check_out = self.cleaned_data['check_out_date']
+        if check_in and check_out <= check_in:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+        return check_out
+
+
 
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
@@ -670,6 +691,7 @@ class ReservationRoomInline(NestedTabularInline):
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
+    form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',

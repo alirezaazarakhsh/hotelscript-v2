@@ -2520,7 +2520,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 import logging
 import random
 from decimal import Decimal
-from datetime import date as gdate, datetime as gdt, timedelta
+from datetime import timedelta, date as gdate
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -2528,7 +2528,7 @@ from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from drf_yasg.utils import swagger_auto_schema
 
-from jdatetime import date as jdate, datetime as jdt
+from jdatetime import date as jdate
 
 from .models import Reservationhotel, ReservationRoom, Room, RoomDatePrice
 from .serializers import ReservationCreateSerializer, ReservationCreateResponseSerializer
@@ -2557,20 +2557,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         # تابع امن برای تبدیل تاریخ
         def parse_jdate(value):
-            logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
-
             if isinstance(value, str):
-                # تلاش برای جلالی
                 try:
                     return jdate.fromisoformat(value)
                 except ValueError:
-                    # تلاش برای میلادی
                     try:
                         g_d = gdate.fromisoformat(value)
                         return jdate.fromgregorian(date=g_d)
                     except ValueError as e:
-                        raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
-
+                        raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, dict):
                 try:
                     year = int(value["year"])
@@ -2582,7 +2577,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     return jdate(year, month, day)
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
-
             elif isinstance(value, jdate):
                 return value
             elif isinstance(value, gdate):
@@ -2597,8 +2591,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         except KeyError as e:
             raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
+        # بررسی تاریخ گذشته
+        today_j = jdate.today()
+        if check_in_date < today_j:
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+
         # اعتبارسنجی: خروج باید بعد از ورود باشد
-        if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
+        if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
         # ایجاد رزرو اصلی
@@ -2644,7 +2643,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 # اعمال تخفیف
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
                     daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
-                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
                     daily_price = daily_price - Decimal(price_obj.discount_value)
 
                 room_total_price += daily_price
