@@ -653,7 +653,6 @@ class ReservationRoomInline(NestedTabularInline):
     max_num = 3
     fields = (
         'room',
-        'quantity',
         'price_per_night',
         'extra_passenger_price',
         'subtotal',

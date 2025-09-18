@@ -1427,6 +1427,7 @@ class ReservationRoom(models.Model):
         verbose_name='اتاق',
         related_name='reservation_rooms'
     )
+    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
     price_per_night = models.DecimalField(
         'قیمت هر شب',
         max_digits=12,
