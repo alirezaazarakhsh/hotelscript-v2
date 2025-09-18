@@ -9,51 +9,140 @@ import sys
 import json
 import traceback
 import copy
+import jdatetime 
 from itertools import combinations
 from bashgah_moshtarian.models import DiscountActivationRecord, RoomDiscountCode
-from reservation.models import Hotel, Reservationhotel, ReservationRoom
-from datetime import timedelta
+from reservation.models import Hotel 
+from reservation.models import Reservationhotel, ReservationRoom
 from rest_framework.views import APIView
-from rest_framework.generics import RetrieveUpdateDestroyAPIView, CreateAPIView, ListCreateAPIView
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import RetrieveUpdateDestroyAPIView
+from rest_framework.exceptions import PermissionDenied
 from django.utils.dateparse import parse_date
+from jdatetime import date as jdate
+from jdatetime import datetime as jdt
+from datetime import date as gdate, datetime, timedelta
 from django.utils.translation import gettext_lazy as _
 from authentication import serializers
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
+from jdatetime import datetime as jdt
 from .utils import Round
-from rest_framework import generics, serializers as drf_serializers  # Explicit import to avoid conflict
-from django.db.models import Prefetch, Q, F, Sum, Count, Avg, Min, Case, When, PositiveBigIntegerField
+from rest_framework.generics import CreateAPIView
+from rest_framework.generics import ListCreateAPIView
+from rest_framework import generics
+from rest_framework import serializers  # Explicit import from rest_framework
+from django.db.models import Prefetch
+
+
+
 from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import (
+    status,
+)
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly, IsAuthenticated
-from rest_framework.generics import ListAPIView, RetrieveAPIView, ListCreateAPIView
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticatedOrReadOnly,
+    IsAuthenticated,
+)
+from rest_framework.generics import (
+    ListAPIView,
+    RetrieveAPIView,
+    ListCreateAPIView,
+)
 from django.utils import timezone
-from django.db import transaction
+from rest_framework.exceptions import ValidationError
+from django.db import (
+    transaction,
+)
+from django.db.models import (
+    Q,
+    F,
+    Sum,
+    Count,
+    Avg,
+    Min,
+    Prefetch,
+    Case,
+    When,
+    PositiveBigIntegerField,
+)
 from django.db.models.functions import Round
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import (
-    BestHotels, ClosedDate, CommentPoint, CommentPointItem, Hotel, HotelTag, HotelTagPublic,
-    ReservationRoom, Room, RoomDate, City, HotelType, Facilities, RoomDatePrice, RoomFacilities,
-    RoomService, HotelFAQ, NearbyPlace, Passenger, Comment, SuggestedCommentItem,
+    BestHotels,
+    ClosedDate,
+    CommentPoint,
+    CommentPointItem,
+    Hotel,
+    HotelTag,
+    HotelTagPublic,
+    ReservationRoom,
+    Room,
+    RoomDate,
+    City,
+    HotelType,
+    Facilities,
+    RoomDatePrice,
+    RoomFacilities,
+    RoomService,
+    HotelFAQ,
+    NearbyPlace,
+    Passenger,
+    Comment,
+    SuggestedCommentItem,
 )
 from .serializers import (
-    CitySerializer, BestHotelsSerializer, ClosedDateSerializer, CommentSerializer,
-    FacilitySerializer, HotelDescriptionSerializer, HotelFacilitiesSerializer,
-    HotelFurtherDescriptionSerializer, HotelGallerySerializer, HotelImagesSerializer,
-    HotelIntroductionSerializer, HotelListSerializer, HotelRulesSerializer,
-    HotelSearchSerializer, HotelTagPublicSerializer, HotelTagSerializer, HotelTypeSerializer,
-    ReservationCreateResponseSerializer, ReservationCreateSerializer, RoomFacilitiesSerializer,
-    RoomFacilitiesSimpleSerializer, RoomSerializer, RoomServiceSerializer,
-    HotelFAQListSerializer, NearbyPlaceListSerializer, PassengerSerializer,
-    FacilitiesSerializer, HotelCommentListSerializer,
+    CitySerializer,
+    BestHotelsSerializer,
+    ClosedDateSerializer,
+    CommentSerializer,
+    FacilitySerializer,
+    HotelDescriptionSerializer,
+    HotelFacilitiesSerializer,
+    HotelFurtherDescriptionSerializer,
+    HotelGallerySerializer,
+    HotelImagesSerializer,
+    HotelIntroductionSerializer,
+    HotelListSerializer,
+    CitySerializer,
+    HotelRulesSerializer,
+    HotelSearchSerializer,
+    HotelTagPublicSerializer,
+    HotelTagSerializer,
+    HotelTypeSerializer,
+    ReservationCreateResponseSerializer,
+    ReservationCreateSerializer,
+    RoomFacilitiesSerializer,
+    RoomFacilitiesSimpleSerializer,
+    RoomSerializer,
+    RoomServiceSerializer,
+    HotelFAQListSerializer,
+    NearbyPlaceListSerializer,
+    PassengerSerializer,
+    FacilitiesSerializer,
+    HotelCommentListSerializer,  
+    
+    
 )
 
-# Import jdatetime only once
-import jdatetime
-from jdatetime import date as jdate  # Single import for jdate
+
+# ای پی ای لیست هتل ها 
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Q, Avg, F, Sum, Count
+from collections import defaultdict
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from .models import Hotel, RoomDate
+from .serializers import HotelListSerializer
+from .utils import Round 
+
+
 
 
 # ای پی ای لیست شهر های مربوط یه صفحه اصلی 
@@ -2430,62 +2519,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
-logger.debug(f"jdatetime version: {jdatetime.__version__}")  # Log version for debug
 
-# ای پی آئی لیست هتل‌ها (مثال بر اساس ایمپورت‌ها)
-class HotelListAPIView(ListAPIView):
-    serializer_class = HotelListSerializer
-    permission_classes = [AllowAny]
-    pagination_class = PageNumberPagination
-
-    @swagger_auto_schema(
-        operation_summary="لیست هتل‌ها",
-        operation_description="دریافت لیست هتل‌ها با فیلترهای جستجو",
-        tags=["hotel-api"],
-        manual_parameters=[
-            openapi.Parameter('city_id', openapi.IN_QUERY, description="شناسه شهر", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('check_in', openapi.IN_QUERY, description="تاریخ ورود (جلالی)", type=openapi.TYPE_STRING),
-            openapi.Parameter('check_out', openapi.IN_QUERY, description="تاریخ خروج (جلالی)", type=openapi.TYPE_STRING),
-        ]
-    )
-    def get(self, request, *args, **kwargs):
-        city_id = request.query_params.get('city_id')
-        check_in_str = request.query_params.get('check_in')
-        check_out_str = request.query_params.get('check_out')
-
-        queryset = Hotel.objects.all()
-
-        if city_id:
-            queryset = queryset.filter(city_id=city_id)
-
-        # Parse dates if provided
-        if check_in_str and check_out_str:
-            try:
-                check_in = jdate.fromisoformat(check_in_str)
-                check_out = jdate.fromisoformat(check_out_str)
-                # Filter rooms with availability (example logic)
-                queryset = queryset.annotate(
-                    available_rooms=Count('rooms', filter=Q(rooms__roomdate__date__range=(check_in, check_out)))
-                ).filter(available_rooms__gt=0)
-            except ValueError as e:
-                raise ValidationError(f"فرمت تاریخ نامعتبر: {str(e)}")
-
-        # Add averages and counts
-        queryset = queryset.annotate(
-            avg_rating=Avg('comments__rating'),
-            total_rooms=Count('rooms'),
-        )
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-# ای پی آئی ایجاد رزرو (اصلاح‌شده برای رفع ارور)
-class ReservationCreateAPIView(CreateAPIView):
+class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
 
@@ -2505,124 +2540,100 @@ class ReservationCreateAPIView(CreateAPIView):
         # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تابع امن برای تبدیل تاریخ (اصلاح‌شده با لاگ و مدیریت خطا)
+        # تابع امن برای تبدیل تاریخ
         def parse_jdate(value):
             logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
-            try:
-                if isinstance(value, str):
-                    # Test if jdate class is correct
-                    if not hasattr(jdate, 'fromisoformat'):
-                        raise AttributeError("jdate class missing fromisoformat method - check import")
-                    parsed = jdate.fromisoformat(value)
-                    logger.debug(f"Parsed string to jdate: {parsed}")
-                    return parsed
-                elif isinstance(value, dict):
-                    if not hasattr(jdate, '__call__'):  # Check if callable (constructor)
-                        raise AttributeError("jdate class not callable - check import")
-                    parsed = jdate(value['year'], value['month'], value['day'])
-                    logger.debug(f"Parsed dict to jdate: {parsed}")
-                    return parsed
-                elif isinstance(value, jdate):
-                    logger.debug(f"Input is already jdate: {value}")
-                    return value
-                else:
-                    raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
-            except AttributeError as e:
-                logger.error(f"AttributeError in parse_jdate: {str(e)} - Possible import issue with jdate")
-                raise ValidationError(f"مشکل در کلاس jdate: {str(e)} - بررسی ایمپورت‌ها")
-            except (ValueError, KeyError) as e:
-                raise ValidationError(f"خطا در پردازش تاریخ: {str(e)}")
+            if isinstance(value, str):
+                try:
+                    return jdate.fromisoformat(value)  # استفاده مستقیم از jdate
+                except ValueError as e:
+                    raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
+            elif isinstance(value, dict):
+                try:
+                    return jdate(value['year'], value['month'], value['day'])  # استفاده مستقیم از jdate
+                except (KeyError, ValueError) as e:
+                    raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
+            elif isinstance(value, jdate):
+                return value  # اگر ورودی خودش یک شیء jdatetime.date است
+            else:
+                raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
-        # تبدیل تاریخ‌های ورودی
         try:
-            enter_key = data['date']['enter']
-            exit_key = data['date']['exit']
-            check_in_date = parse_jdate(enter_key)
-            check_out_date = parse_jdate(exit_key)
-            logger.debug(f"check_in_date: {check_in_date}, type: {type(check_in_date)}")
-            logger.debug(f"check_out_date: {check_out_date}, type: {type(check_out_date)}")
+            check_in_date = parse_jdate(data['date']['enter'])
+            check_out_date = parse_jdate(data['date']['exit'])
         except KeyError as e:
             raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
-        # اعتبارسنجی تاریخ (با مدیریت AttributeError)
-        try:
-            greg_in = check_in_date.togregorian()
-            greg_out = check_out_date.togregorian()
-            delta = greg_out - greg_in
-            logger.debug(f"Date delta: {delta.days} days")
-            if delta.days <= 0:
-                raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-        except AttributeError as e:
-            logger.error(f"AttributeError in date validation: {str(e)} - Check if dates are valid jdate objects")
-            raise ValidationError(f"خطا در اعتبارسنجی تاریخ: {str(e)}")
+        if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # ایجاد رزرو اصلی (با transaction برای ایمنی)
-        with transaction.atomic():
-            reservation = Reservationhotel.objects.create(
-                tracking_code=reservation_id,
-                reserver_first_name=request.user.first_name,
-                reserver_last_name=request.user.last_name,
-                reserver_phone_number=getattr(request.user, 'phone_number', ''),
-                check_in_date=check_in_date,
-                check_out_date=check_out_date,
-                buyer=request.user
+        # ایجاد رزرو اصلی
+        reservation = Reservationhotel.objects.create(
+            tracking_code=reservation_id,
+            reserver_first_name=request.user.first_name,
+            reserver_last_name=request.user.last_name,
+            reserver_phone_number=getattr(request.user, 'phone_number', ''),
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
+            buyer=request.user
+        )
+
+        total_price = Decimal('0')
+        hotel_id = data.get('hotel_id')
+        room_ids = data.get('room_id', [])
+        nights = reservation.nights_count
+
+        for room_id in room_ids:
+            room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
+
+            # محاسبه قیمت هر شب
+            room_total_price = Decimal('0')
+            for night in range(nights):
+                current_date = check_in_date.togregorian() + timedelta(days=night)
+
+                price_obj = RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    user_level=getattr(request.user, 'user_level', None)
+                ).first() or RoomDatePrice.objects.filter(
+                    room=room,
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    user_level__isnull=True
+                ).first()
+
+                if not price_obj:
+                    raise ValidationError(f"قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.")
+
+                daily_price = Decimal(price_obj.price)
+
+                # اعمال تخفیف
+                if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
+                    daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
+                elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                    daily_price = daily_price - Decimal(price_obj.discount_value)
+
+                room_total_price += daily_price
+
+            subtotal = room_total_price
+            total_price += subtotal
+
+            # ایجاد ReservationRoom
+            ReservationRoom.objects.create(
+                reservation=reservation,
+                room=room,
+                quantity=1,
+                price_per_night=subtotal / nights if nights > 0 else subtotal,
+                subtotal=subtotal,
+                primary_passengers_count=room.room_capacity,
+                extra_passengers_count=room.extra_capacity
             )
 
-            total_price = Decimal('0')
-            hotel_id = data.get('hotel_id')
-            room_ids = data.get('room_id', [])
-            nights = (check_out_date.togregorian() - check_in_date.togregorian()).days  # Use calculated nights
-
-            for room_id in room_ids:
-                room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
-
-                room_total_price = Decimal('0')
-                for night in range(nights):
-                    current_date = check_in_date.togregorian() + timedelta(days=night)
-
-                    price_obj = RoomDatePrice.objects.filter(
-                        room=room,
-                        start_date__lte=current_date,
-                        end_date__gte=current_date,
-                        user_level=getattr(request.user, 'user_level', None)
-                    ).first() or RoomDatePrice.objects.filter(
-                        room=room,
-                        start_date__lte=current_date,
-                        end_date__gte=current_date,
-                        user_level__isnull=True
-                    ).first()
-
-                    if not price_obj:
-                        raise ValidationError(f"قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.")
-
-                    daily_price = Decimal(price_obj.price)
-
-                    # اعمال تخفیف
-                    if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                        daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
-                    elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                        daily_price = daily_price - Decimal(price_obj.discount_value)
-
-                    room_total_price += daily_price
-
-                subtotal = room_total_price
-                total_price += subtotal
-
-                # ایجاد ReservationRoom
-                ReservationRoom.objects.create(
-                    reservation=reservation,
-                    room=room,
-                    quantity=1,
-                    price_per_night=subtotal / Decimal(nights) if nights > 0 else subtotal,
-                    subtotal=subtotal,
-                    primary_passengers_count=room.room_capacity,
-                    extra_passengers_count=room.extra_capacity
-                )
-
-            # آپدیت قیمت کل رزرو
-            reservation.total_price = total_price
-            reservation.final_price = total_price
-            reservation.save(update_fields=['total_price', 'final_price'])
+        # آپدیت قیمت کل رزرو
+        reservation.total_price = total_price
+        reservation.final_price = total_price
+        reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
     
