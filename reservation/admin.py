@@ -1,13 +1,12 @@
 import logging
-from django import forms
-from time import localtime
-from django.contrib import admin
-from django.utils.html import format_html, format_html_join
-from django.utils.safestring import mark_safe
-from django.utils.translation import gettext_lazy as _
+import re
 import jdatetime
-from pydantic import ValidationError
-from authentication import forms
+from django import forms
+from django.contrib import admin
+from django.forms import ModelForm
+from django.db.models import Q
+from django.utils.html import format_html, format_html_join, mark_safe
+from django.utils.translation import gettext_lazy as _
 from nested_admin import NestedModelAdmin, NestedTabularInline
 from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
@@ -36,8 +35,10 @@ from .models import (
     Room,
     Passenger,
     SuggestedCommentItem,
-    Reservationhotel, ReservationRoom, ReservationRoomPassenger
+    ReservationRoom,
+    ReservationRoomPassenger
 )
+
 
 
 @admin.register(Province)
@@ -610,25 +611,24 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
-class ReservationhotelAdminForm(forms.ModelForm):
+class ReservationhotelAdminForm(ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
 
     def clean_check_in_date(self):
         check_in = self.cleaned_data['check_in_date']
-        today_j = jdate.today()
+        today_j = jdatetime.date.today()
         if check_in < today_j:
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+            raise forms.ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         return check_in
 
     def clean_check_out_date(self):
         check_in = self.cleaned_data.get('check_in_date')
         check_out = self.cleaned_data['check_out_date']
         if check_in and check_out <= check_in:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+            raise forms.ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
-
 
 
 # ---------------- Passenger Inline ----------------
