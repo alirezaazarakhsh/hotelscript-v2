@@ -2517,22 +2517,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import logging
-import random
-from decimal import Decimal
-from datetime import timedelta, date as gdate
-from rest_framework import generics, status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
-from django.shortcuts import get_object_or_404
-from drf_yasg.utils import swagger_auto_schema
-
-from jdatetime import date as jdate
-
-from .models import Reservationhotel, ReservationRoom, Room, RoomDatePrice
-from .serializers import ReservationCreateSerializer, ReservationCreateResponseSerializer
-
 logger = logging.getLogger(__name__)
 
 class ReservationCreateAPIView(generics.CreateAPIView):
@@ -2636,15 +2620,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 ).first()
 
                 if not price_obj:
-                    raise ValidationError(f"قیمت برای تاریخ {current_date} در اتاق {room.title} موجود نیست.")
+                    logger.warning(f"قیمت برای تاریخ {current_date} در اتاق {room.title} یافت نشد. قیمت پیش‌فرض (0) اعمال شد.")
+                    daily_price = Decimal('0')  # مقدار پیش‌فرض
+                else:
+                    daily_price = Decimal(price_obj.price)
 
-                daily_price = Decimal(price_obj.price)
-
-                # اعمال تخفیف
-                if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                    daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
-                elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
-                    daily_price = daily_price - Decimal(price_obj.discount_value)
+                    # اعمال تخفیف
+                    if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
+                        daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
+                    elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
+                        daily_price = daily_price - Decimal(price_obj.discount_value)
 
                 room_total_price += daily_price
 
@@ -2667,6 +2652,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
+    
     
     
 # ای پی ای کد تخفیف برای رزرو 
