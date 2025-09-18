@@ -1415,6 +1415,9 @@ class Reservationhotel(models.Model):
             
 
 # ---------------- ReservationRoom ----------------
+from decimal import Decimal, ROUND_UP
+
+# ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
         Reservationhotel,
@@ -1428,7 +1431,7 @@ class ReservationRoom(models.Model):
         verbose_name='اتاق',
         related_name='reservation_rooms'
     )
-    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
+    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')  # اضافه شده
     price_per_night = models.DecimalField(
         'قیمت هر شب',
         max_digits=12,
@@ -1487,7 +1490,7 @@ class ReservationRoom(models.Model):
     def __str__(self):
         room_title = self.room.title if self.room_id else "اتاق نامشخص"
         reservation_code = self.reservation.tracking_code if self.reservation_id else "رزرو نامشخص"
-        return f'{room_title} در رزرو {reservation_code}'
+        return f'{room_title} (تعداد: {self.quantity}) در رزرو {reservation_code}'
 
     def calculate_half_day_prices(self):
         """محاسبه قیمت نیم شارژ ورود و خروج برای این اتاق (در صورت فعال بودن)"""
@@ -1501,10 +1504,10 @@ class ReservationRoom(models.Model):
         half_out = Decimal('0')
 
         if self.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
-            half_in = self.price_per_night / Decimal('2')
+            half_in = (self.price_per_night / Decimal('2')) * self.quantity
 
         if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
-            half_out = self.price_per_night / Decimal('2')
+            half_out = (self.price_per_night / Decimal('2')) * self.quantity
 
         self.half_day_in_price = half_in
         self.half_day_out_price = half_out
@@ -1538,8 +1541,8 @@ class ReservationRoom(models.Model):
         if price_obj:
             self.price_per_night = Decimal(price_obj.price)
 
-        # محاسبه subtotal: قیمت شب * شب‌ها + قیمت اضافه * تعداد اضافه * شب‌ها + نیم‌شارژها
-        room_total = self.price_per_night * nights
+        # محاسبه subtotal: قیمت شب * تعداد * شب‌ها + قیمت اضافه * تعداد اضافه * شب‌ها + نیم‌شارژها
+        room_total = (self.price_per_night * self.quantity) * nights
         extra_total = (self.extra_passenger_price or Decimal('0')) * self.extra_passengers_count * nights
         half_total = self.half_day_in_price + self.half_day_out_price
         self.subtotal = int((room_total + extra_total + half_total).quantize(Decimal('1'), rounding=ROUND_UP))
@@ -1601,7 +1604,13 @@ class ReservationRoom(models.Model):
         if self.passengers.exists():
             self.assign_passenger_types()
 
-# ---------------- ReservationRoomPassenger ----------------
+
+
+
+from django.db import models
+from django.core.exceptions import ValidationError
+import re
+
 def validate_national_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
@@ -1611,7 +1620,6 @@ def validate_national_code(value):
 
     if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
         raise ValidationError('کد ملی معتبر نیست')
-
 
 class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
@@ -1629,7 +1637,6 @@ class ReservationRoomPassenger(models.Model):
     passenger_type = models.CharField(
         max_length=20,
         choices=PASSENGER_TYPE_CHOICES,
-        default='secondary',
         verbose_name='نوع مسافر'
     )
     is_primary = models.BooleanField(default=False, verbose_name='مسافر اصلی است؟')
@@ -1671,13 +1678,12 @@ class ReservationRoomPassenger(models.Model):
 
     def save(self, *args, **kwargs):
         self.is_primary = self.passenger_type == 'primary'
-        # حذف منطق قدیمی برای primary (حالا در assign_passenger_types مدیریت می‌شود)
-        # فقط clean و save
         self.full_clean()  # اجرای تمام اعتبارسنجی‌ها قبل از ذخیره
         super().save(*args, **kwargs)
 
-        # بعد از save، نوع را بر اساس منطق اتاق آپدیت کن
+        # فراخوانی assign_passenger_types فقط اگر این آخرین مسافر باشه (اختیاری، بهتره در ویو مدیریت بشه)
         if self.reservation_room:
+            # این خط می‌تونه به ویو منتقل بشه
             self.reservation_room.assign_passenger_types()
 
     def __str__(self):
