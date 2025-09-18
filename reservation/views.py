@@ -2540,30 +2540,50 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تابع امن برای تبدیل تاریخ
+        # تابع امن برای تبدیل تاریخ به jdate
         def parse_jdate(value):
             logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
+
+            # اگر رشته ISO باشه (مثلاً "1404-06-26" یا "2025-09-18")
             if isinstance(value, str):
                 try:
-                    return jdate.fromisoformat(value)  # استفاده مستقیم از jdate
-                except ValueError as e:
-                    raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
+                    return jdate.fromisoformat(value)  # تلاش برای جلالی
+                except ValueError:
+                    try:
+                        g_d = gdate.fromisoformat(value)  # تلاش برای میلادی
+                        return jdate.fromgregorian(date=g_d)
+                    except ValueError as e:
+                        raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
+
+            # اگر دیکشنری باشه
             elif isinstance(value, dict):
                 try:
-                    return jdate(value['year'], value['month'], value['day'])  # استفاده مستقیم از jdate
+                    if value.get("calendar") == "gregorian":
+                        g_d = gdate(value["year"], value["month"], value["day"])
+                        return jdate.fromgregorian(date=g_d)
+                    return jdate(value["year"], value["month"], value["day"])
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
+
+            # اگر خودش jdate باشه
             elif isinstance(value, jdate):
-                return value  # اگر ورودی خودش یک شیء jdatetime.date است
+                return value
+
+            # اگر خودش gdate باشه (میلادی)
+            elif isinstance(value, gdate):
+                return jdate.fromgregorian(date=value)
+
             else:
                 raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
+        # گرفتن تاریخ ورود و خروج
         try:
             check_in_date = parse_jdate(data['date']['enter'])
             check_out_date = parse_jdate(data['date']['exit'])
         except KeyError as e:
             raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
+        # اعتبارسنجی: خروج باید بعد از ورود باشد
         if (check_out_date.togregorian() - check_in_date.togregorian()).days <= 0:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
