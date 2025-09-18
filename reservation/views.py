@@ -2639,7 +2639,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=1,
                 price_per_night=subtotal / nights if nights > 0 else subtotal,
                 subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
@@ -2652,7 +2651,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
-    
     
     
 # ای پی ای کد تخفیف برای رزرو 
