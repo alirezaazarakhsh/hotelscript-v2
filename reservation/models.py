@@ -1413,6 +1413,7 @@ class Reservationhotel(models.Model):
             super().save(*args, **kwargs)
                 
             
+
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
@@ -1505,8 +1506,8 @@ class ReservationRoom(models.Model):
         if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
             half_out = self.price_per_night / Decimal('2')
 
-        self.half_day_in_price = half_in * self.quantity
-        self.half_day_out_price = half_out * self.quantity
+        self.half_day_in_price = half_in
+        self.half_day_out_price = half_out
 
     def calculate_room_prices(self):
         """محاسبه price_per_night و subtotal برای این اتاق"""
@@ -1537,14 +1538,14 @@ class ReservationRoom(models.Model):
         if price_obj:
             self.price_per_night = Decimal(price_obj.price)
 
-        # محاسبه subtotal: قیمت شب * تعداد * شب‌ها + قیمت اضافه * تعداد اضافه * شب‌ها + نیم‌شارژها
-        room_total = self.price_per_night * self.quantity * nights
+        # محاسبه subtotal: قیمت شب * شب‌ها + قیمت اضافه * تعداد اضافه * شب‌ها + نیم‌شارژها
+        room_total = self.price_per_night * nights
         extra_total = (self.extra_passenger_price or Decimal('0')) * self.extra_passengers_count * nights
         half_total = self.half_day_in_price + self.half_day_out_price
         self.subtotal = int((room_total + extra_total + half_total).quantize(Decimal('1'), rounding=ROUND_UP))
 
     def assign_passenger_types(self):
-        """تخصیص خودکار نوع مسافران: مسافر اول primary، بقیه secondary، آخرین‌ها extra (اگر extra_passengers_count > 0)"""
+        """تخصیص خودکار نوع مسافران: مسافر اول primary، دوم secondary، آخرین extra (اگر نفر اضافه وجود داشته باشه)"""
         if not self.pk:
             return
 
@@ -1554,23 +1555,26 @@ class ReservationRoom(models.Model):
         if total_passengers == 0:
             return
 
-        # مسافر اول: primary
+        # مسافر اول: همیشه primary
         if total_passengers >= 1:
             passengers_list[0].passenger_type = 'primary'
             passengers_list[0].save(update_fields=['passenger_type'])
 
-        # آخرین num_extra: extra
-        num_extra = self.extra_passengers_count
-        if num_extra > 0 and total_passengers >= num_extra:
-            for i in range(total_passengers - num_extra, total_passengers):
-                passengers_list[i].passenger_type = 'extra'
-                passengers_list[i].save(update_fields=['passenger_type'])
+        # مسافر دوم: همیشه secondary (اگر وجود داشته باشه)
+        if total_passengers >= 2:
+            passengers_list[1].passenger_type = 'secondary'
+            passengers_list[1].save(update_fields=['passenger_type'])
 
-        # بقیه: secondary
-        for p in passengers_list:
-            if p.passenger_type not in ['primary', 'extra']:
-                p.passenger_type = 'secondary'
-                p.save(update_fields=['passenger_type'])
+        # آخرین مسافر: extra (اگر تعداد مسافران بیشتر از 2 باشه)
+        if total_passengers > 2:
+            passengers_list[-1].passenger_type = 'extra'
+            passengers_list[-1].save(update_fields=['passenger_type'])
+
+        # بقیه (اگر بیشتر از 3 نفر باشن): secondary
+        for i in range(2, total_passengers - 1):
+            if i < total_passengers and passengers_list[i].passenger_type not in ['primary', 'extra']:
+                passengers_list[i].passenger_type = 'secondary'
+                passengers_list[i].save(update_fields=['passenger_type'])
 
     def save(self, *args, **kwargs):
         # اگر قیمت نفر اضافه مشخص نشده باشه، از RoomDatePrice بگیر
