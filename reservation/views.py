@@ -2736,18 +2736,20 @@ class ApplyDiscountCodeAPIView(APIView):
 
         # محاسبه تخفیف و قیمت نهایی رزرو
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
-        total, existing_discount, half_in, half_out, final_without_promo = reservation.calculate_total_price()
-        new_total_discount = existing_discount + discount_value
+        total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_without_promo = reservation.calculate_total_price()
+        new_total_discount = total_discount + discount_value
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
 
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
         reservation.total_price = total
-        reservation.half_day_in_charge = half_in
-        reservation.half_day_out_charge = half_out
+        reservation.half_day_in_charge = half_day_in_charge
+        reservation.half_day_out_charge = half_day_out_charge
+        reservation.total_half_day_charge = total_half_day_charge
+        reservation.total_extra_passenger_charge = total_extra
 
         reservation._skip_price_calculation = True
-        reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge'])
+        reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
         delattr(reservation, '_skip_price_calculation')
 
         return Response({
@@ -2760,7 +2762,3 @@ class ApplyDiscountCodeAPIView(APIView):
             "remaining_uses": discount_obj.remaining_uses,
             "usage_limit": discount_obj.usage_limit
         }, status=status.HTTP_200_OK)
-        
-        
-        
-        
