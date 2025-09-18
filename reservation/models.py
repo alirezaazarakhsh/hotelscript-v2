@@ -1529,6 +1529,17 @@ class ReservationRoom(models.Model):
         super().save(*args, **kwargs)
 
 # ---------------- ReservationRoomPassenger ----------------
+def validate_national_code(value):
+    if not re.match(r'^\d{10}$', value):
+        raise ValidationError('کد ملی باید 10 رقمی باشد')
+
+    check_digits = int(value[9])
+    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+
+    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+        raise ValidationError('کد ملی معتبر نیست')
+
+
 class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
         ('primary', 'مسافر اصلی'),
@@ -1536,26 +1547,64 @@ class ReservationRoomPassenger(models.Model):
         ('secondary', 'سایر مسافران'),
     ]
 
-    reservation_room = models.ForeignKey(ReservationRoom, on_delete=models.CASCADE, related_name='passengers', verbose_name='اتاق رزرو شده')
-    passenger_type = models.CharField(max_length=20, choices=PASSENGER_TYPE_CHOICES, default='secondary', verbose_name='نوع مسافر')
-    is_primary = models.BooleanField(default=False, verbose_name='مسافر اصلی است؟')  # اضافه کردن فیلد is_primary
+    reservation_room = models.ForeignKey(
+        ReservationRoom,
+        on_delete=models.CASCADE,
+        related_name='passengers',
+        verbose_name='اتاق رزرو شده'
+    )
+    passenger_type = models.CharField(
+        max_length=20,
+        choices=PASSENGER_TYPE_CHOICES,
+        default='secondary',
+        verbose_name='نوع مسافر'
+    )
+    is_primary = models.BooleanField(default=False, verbose_name='مسافر اصلی است؟')
     first_name = models.CharField('نام', max_length=100)
     last_name = models.CharField('نام خانوادگی', max_length=100)
     mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
-    national_code = models.CharField('کد ملی', max_length=10, blank=True, null=True)
+    national_code = models.CharField('کد ملی', max_length=10, blank=True, null=True, validators=[validate_national_code])
 
     class Meta:
         verbose_name = 'مسافر'
         verbose_name_plural = 'مسافرها'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['reservation_room', 'national_code'],
+                name='unique_national_code_per_room'
+            )
+        ]
+
+    def clean(self):
+        # الزامی بودن فیلدها برای مسافر اصلی
+        if self.passenger_type == 'primary':
+            missing_fields = []
+            for field_name in ['first_name', 'last_name', 'mobile_number', 'national_code']:
+                if not getattr(self, field_name):
+                    missing_fields.append(field_name)
+            if missing_fields:
+                raise ValidationError(f'برای مسافر اصلی، فیلدهای {missing_fields} الزامی هستند.')
+
+        # یکتایی کد ملی در همان اتاق
+        if self.national_code:
+            qs = ReservationRoomPassenger.objects.filter(
+                reservation_room=self.reservation_room,
+                national_code=self.national_code
+            )
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError('کد ملی باید برای هر مسافر در همان اتاق یکتا باشد.')
 
     def save(self, *args, **kwargs):
-        # تنظیم is_primary بر اساس passenger_type
         self.is_primary = self.passenger_type == 'primary'
         if not self.pk and not self.reservation_room.passengers.exists():
             self.passenger_type = 'primary'
             self.is_primary = True
         if self.passenger_type != 'primary':
             self.mobile_number = None
+
+        self.full_clean()  # اجرای تمام اعتبارسنجی‌ها قبل از ذخیره
         super().save(*args, **kwargs)
 
     def __str__(self):
