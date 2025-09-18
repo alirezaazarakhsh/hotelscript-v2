@@ -18,9 +18,8 @@ from rest_framework.views import APIView
 from rest_framework.generics import RetrieveUpdateDestroyAPIView
 from rest_framework.exceptions import PermissionDenied
 from django.utils.dateparse import parse_date
-from jdatetime import date as jdate
-from jdatetime import datetime as jdt
-from datetime import date as gdate, datetime, timedelta
+from jdatetime import date as jdate, datetime as jdt
+from datetime import date as gdate, datetime as gdt, timedelta
 from django.utils.translation import gettext_lazy as _
 from authentication import serializers
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
@@ -2518,7 +2517,24 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+import logging
+import random
+from decimal import Decimal
+from datetime import date as gdate, datetime as gdt, timedelta
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+from drf_yasg.utils import swagger_auto_schema
+
+from jdatetime import date as jdate, datetime as jdt
+
+from .models import Reservationhotel, ReservationRoom, Room, RoomDatePrice
+from .serializers import ReservationCreateSerializer, ReservationCreateResponseSerializer
+
 logger = logging.getLogger(__name__)
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2543,31 +2559,34 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         def parse_jdate(value):
             logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
 
-            if isinstance(value, str):  # رشته
+            if isinstance(value, str):
+                # تلاش برای جلالی
                 try:
-                    return jdate.fromisoformat(value)  # تلاش جلالی
+                    return jdate.fromisoformat(value)
                 except ValueError:
+                    # تلاش برای میلادی
                     try:
-                        g_d = gdate.fromisoformat(value)  # تلاش میلادی
+                        g_d = gdate.fromisoformat(value)
                         return jdate.fromgregorian(date=g_d)
                     except ValueError as e:
                         raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
 
-            elif isinstance(value, dict):  # دیکشنری
+            elif isinstance(value, dict):
                 try:
+                    year = int(value["year"])
+                    month = int(value["month"])
+                    day = int(value["day"])
                     if value.get("calendar") == "gregorian":
-                        g_d = gdate(value["year"], value["month"], value["day"])
+                        g_d = gdate(year, month, day)
                         return jdate.fromgregorian(date=g_d)
-                    return jdate(value["year"], value["month"], value["day"])
+                    return jdate(year, month, day)
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
 
-            elif isinstance(value, jdate):  # خودش جلالی
+            elif isinstance(value, jdate):
                 return value
-
-            elif isinstance(value, gdate):  # خودش میلادی
+            elif isinstance(value, gdate):
                 return jdate.fromgregorian(date=value)
-
             else:
                 raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
@@ -2601,7 +2620,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
 
-            # محاسبه قیمت هر شب
             room_total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2634,7 +2652,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             subtotal = room_total_price
             total_price += subtotal
 
-            # ایجاد ReservationRoom
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
@@ -2651,7 +2668,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
-    
     
     
 # ای پی ای کد تخفیف برای رزرو 
