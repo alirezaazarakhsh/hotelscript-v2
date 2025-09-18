@@ -1246,11 +1246,6 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
-from django.db import models
-from django.core.exceptions import ValidationError
-from django.utils.functional import cached_property
-from decimal import Decimal, ROUND_UP
-
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
         ('paid', _('پرداخت شده')),
@@ -1420,6 +1415,7 @@ class Reservationhotel(models.Model):
         
         
 
+
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
@@ -1434,7 +1430,7 @@ class ReservationRoom(models.Model):
         verbose_name='اتاق',
         related_name='reservation_rooms'
     )
-    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')  # اضافه شده
+    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
     price_per_night = models.DecimalField(
         'قیمت هر شب',
         max_digits=12,
@@ -1603,17 +1599,14 @@ class ReservationRoom(models.Model):
         self.calculate_room_prices()  # اضافه شده: محاسبه قیمت شب و subtotal
         super().save(*args, **kwargs)
 
-        # بعد از save، نوع مسافران را تخصیص بده (اگر مسافری وجود داشته باشد)
-        if self.passengers.exists():
+        # فقط اگر به صراحت از ادمین یا API درخواست شده، نوع مسافران رو تنظیم کن
+        if getattr(self, '_assign_passenger_types', False) and self.passengers.exists():
             self.assign_passenger_types()
 
 
 
 
-from django.db import models
-from django.core.exceptions import ValidationError
-import re
-
+# ---------------- ReservationRoomPassenger ----------------
 def validate_national_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
@@ -1623,9 +1616,6 @@ def validate_national_code(value):
 
     if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
         raise ValidationError('کد ملی معتبر نیست')
-
-
-
 
 
 class ReservationRoomPassenger(models.Model):
@@ -1688,9 +1678,8 @@ class ReservationRoomPassenger(models.Model):
         self.full_clean()  # اجرای تمام اعتبارسنجی‌ها قبل از ذخیره
         super().save(*args, **kwargs)
 
-        # فراخوانی assign_passenger_types فقط اگر این آخرین مسافر باشه (اختیاری، بهتره در ویو مدیریت بشه)
-        if self.reservation_room:
-            # این خط می‌تونه به ویو منتقل بشه
+        # فراخوانی assign_passenger_types فقط اگر به صراحت درخواست شده (از ادمین یا API)
+        if getattr(self.reservation_room, '_assign_passenger_types', False) and self.reservation_room:
             self.reservation_room.assign_passenger_types()
 
     def __str__(self):

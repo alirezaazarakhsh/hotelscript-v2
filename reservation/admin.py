@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.translation import gettext_lazy as _
 from nested_admin import NestedModelAdmin, NestedTabularInline
+from pydantic import ValidationError
 from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
@@ -611,6 +612,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
+# ---------------- Reservationhotel Admin Form ----------------
 class ReservationhotelAdminForm(ModelForm):
     class Meta:
         model = Reservationhotel
@@ -620,36 +622,34 @@ class ReservationhotelAdminForm(ModelForm):
         check_in = self.cleaned_data['check_in_date']
         today_j = jdatetime.date.today()
         if check_in < today_j:
-            raise forms.ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         return check_in
 
     def clean_check_out_date(self):
         check_in = self.cleaned_data.get('check_in_date')
         check_out = self.cleaned_data['check_out_date']
         if check_in and check_out <= check_in:
-            raise forms.ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
-
 
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 8  # بدون فرم خالی برای مسافران
+    extra = 8
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = False
     autocomplete_fields = ()
 
     def get_max_num(self, request, obj=None, **kwargs):
-        """حداکثر تعداد مسافران برابر با ظرفیت کل اتاق (ظرفیت اصلی + ظرفیت اضافه)"""
-        if obj and hasattr(obj, 'room') and obj.room:  # بررسی وجود room
+        if obj and hasattr(obj, 'room') and obj.room:
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
-        return self.max_num  # بازگشت به مقدار پیش‌فرض
+        return self.max_num
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 3  # بدون فرم خالی برای اتاق‌ها
+    extra = 3
     max_num = 3
     fields = (
         'room',
@@ -684,7 +684,6 @@ class ReservationRoomInline(NestedTabularInline):
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
-        # اختیاری کردن فیلد room در فرم ادمین
         formset.form.base_fields['room'].required = False
         return formset
 
@@ -740,7 +739,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
-    # ---------------- Jalali Dates ----------------
     @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
         if obj.created_at:
@@ -755,7 +753,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
-    # ---------------- Counts ----------------
     @admin.display(description=_('تعداد شب‌ها'))
     def nights_count_fa(self, obj):
         return obj.nights_count if obj.pk else 0
@@ -768,27 +765,28 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
 
-    # ---------------- Save Model ----------------
     def save_model(self, request, obj, form, change):
         """فقط ذخیره رزرو، بدون محاسبه قیمت (چون inlines هنوز ذخیره نشدن)"""
         super().save_model(request, obj, form, change)
 
-    # ---------------- Save Related ----------------
     def save_related(self, request, form, formsets, change):
         """بعد از ذخیره شدن inlines، قیمت‌ها محاسبه و آپدیت میشن"""
         super().save_related(request, form, formsets, change)
         obj = form.instance
-        if obj.reservation_rooms.exists():  # فقط اگر اتاقی وجود داشته باشد
-            total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_price = obj.calculate_total_price()
-            obj.total_price = total_price
-            obj.total_extra_passenger_charge = total_extra
-            obj.discount = total_discount
-            obj.half_day_in_charge = half_day_in_charge
-            obj.half_day_out_charge = half_day_out_charge
-            obj.total_half_day_charge = total_half_day_charge
-            obj.final_price = final_price
-            obj.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount', 
-                'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 
-                'final_price'
-            ])
+        if obj.reservation_rooms.exists():
+            # از recursion جلوگیری کن
+            if not getattr(obj, '_price_calculation_done', False):
+                setattr(obj, '_price_calculation_done', True)
+                total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_price = obj.calculate_total_price()
+                obj.total_price = total_price
+                obj.total_extra_passenger_charge = total_extra
+                obj.discount = total_discount
+                obj.half_day_in_charge = half_day_in_charge
+                obj.half_day_out_charge = half_day_out_charge
+                obj.total_half_day_charge = total_half_day_charge
+                obj.final_price = final_price
+                obj.save(update_fields=[
+                    'total_price', 'total_extra_passenger_charge', 'discount',
+                    'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge',
+                    'final_price'
+                ])
