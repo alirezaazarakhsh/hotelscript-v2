@@ -2519,7 +2519,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2540,23 +2539,21 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # ساخت کد رزرو یکتا
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تابع امن برای تبدیل تاریخ به jdate
+        # تابع امن برای تبدیل تاریخ
         def parse_jdate(value):
             logger.debug(f"parse_jdate input type: {type(value)}, value: {value}")
 
-            # اگر رشته ISO باشه (مثلاً "1404-06-26" یا "2025-09-18")
-            if isinstance(value, str):
+            if isinstance(value, str):  # رشته
                 try:
-                    return jdate.fromisoformat(value)  # تلاش برای جلالی
+                    return jdate.fromisoformat(value)  # تلاش جلالی
                 except ValueError:
                     try:
-                        g_d = gdate.fromisoformat(value)  # تلاش برای میلادی
+                        g_d = gdate.fromisoformat(value)  # تلاش میلادی
                         return jdate.fromgregorian(date=g_d)
                     except ValueError as e:
                         raise ValidationError(f"فرمت رشته تاریخ نامعتبر است: {value}, خطا: {str(e)}")
 
-            # اگر دیکشنری باشه
-            elif isinstance(value, dict):
+            elif isinstance(value, dict):  # دیکشنری
                 try:
                     if value.get("calendar") == "gregorian":
                         g_d = gdate(value["year"], value["month"], value["day"])
@@ -2565,12 +2562,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
 
-            # اگر خودش jdate باشه
-            elif isinstance(value, jdate):
+            elif isinstance(value, jdate):  # خودش جلالی
                 return value
 
-            # اگر خودش gdate باشه (میلادی)
-            elif isinstance(value, gdate):
+            elif isinstance(value, gdate):  # خودش میلادی
                 return jdate.fromgregorian(date=value)
 
             else:
@@ -2630,7 +2625,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
                 # اعمال تخفیف
                 if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                    daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value)/Decimal('100'))
+                    daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
                 elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     daily_price = daily_price - Decimal(price_obj.discount_value)
 
@@ -2656,6 +2651,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.save(update_fields=['total_price', 'final_price'])
 
         return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
+    
     
     
 # ای پی ای کد تخفیف برای رزرو 
