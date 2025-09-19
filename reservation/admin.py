@@ -632,6 +632,7 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
+
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -646,6 +647,7 @@ class ReservationRoomPassengerInline(NestedTabularInline):
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
 
+
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
@@ -655,7 +657,7 @@ class ReservationRoomInline(NestedTabularInline):
         'room',
         'price_per_night',
         'extra_passenger_price',
-        'fixed_discount',  
+        'fixed_discount',
         'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
@@ -687,22 +689,19 @@ class ReservationRoomInline(NestedTabularInline):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
         return formset
-    
 
-def get_fields(self, request, obj=None):
-    """فیلدهای نیم‌شارژ فقط وقتی نمایش داده بشن که هتل پشتیبانی کنه"""
-    fields = list(super().get_fields(request, obj))
-
-    if obj and obj.reservation_rooms.exists():
-        # گرفتن اولین اتاق رزرو شده برای پیدا کردن هتل
-        hotel = obj.reservation_rooms.first().room.hotel
-        if not getattr(hotel, 'has_check_in_half_day_charge', False):
-            fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_in_price')]
-        if not getattr(hotel, 'has_check_out_half_day_charge', False):
-            fields = [f for f in fields if f not in ('half_day_out_selected', 'half_day_out_price')]
-
-    return fields
-
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj and obj.reservation_rooms.exists():
+            try:
+                hotel = obj.reservation_rooms.first().room.hotel
+                if not getattr(hotel, 'has_check_in_half_day_charge', False):
+                    fields = [f for f in fields if f != 'half_day_in_selected']
+                if not getattr(hotel, 'has_check_out_half_day_charge', False):
+                    fields = [f for f in fields if f != 'half_day_out_selected']
+            except AttributeError:
+                fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_out_selected')]
+        return fields
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -713,8 +712,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price',
-        'status', 'created_jalali', 'updated_jalali'
+        'half_day_out_charge', 'total_half_day_charge', 'discount', 'hotel_fixed_discount',
+        'final_price', 'status', 'created_jalali', 'updated_jalali'
     )
 
     search_fields = (
@@ -730,7 +729,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
         'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price'
+        'half_day_out_charge', 'total_half_day_charge', 'final_price'
     )
 
     fieldsets = (
@@ -746,8 +745,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         (_('قیمت و وضعیت'), {
             'fields': (
                 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-                'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price',
-                'status'
+                'half_day_out_charge', 'total_half_day_charge', 'discount', 'hotel_fixed_discount',
+                'final_price', 'status'
             )
         }),
         (_('اطلاعات سیستم'), {
@@ -783,27 +782,26 @@ class ReservationhotelAdmin(NestedModelAdmin):
         return obj.total_guests if obj.pk else 0
 
     def save_model(self, request, obj, form, change):
-        """فقط ذخیره رزرو، بدون محاسبه قیمت (چون inlines هنوز ذخیره نشدن)"""
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
-        """بعد از ذخیره شدن inlines، قیمت‌ها محاسبه و آپدیت میشن"""
         super().save_related(request, form, formsets, change)
         obj = form.instance
         if obj.reservation_rooms.exists():
-            # از recursion جلوگیری کن
             if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
-                total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_price = obj.calculate_total_price()
+                total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price = obj.calculate_total_price()
                 obj.total_price = total_price
                 obj.total_extra_passenger_charge = total_extra
-                obj.discount = total_discount
+                obj.discount = code_discount
+                obj.hotel_fixed_discount = obj.hotel_fixed_discount or Decimal('0')
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
                 obj.total_half_day_charge = total_half_day_charge
                 obj.final_price = final_price
+                obj._skip_price_calculation = True
                 obj.save(update_fields=[
                     'total_price', 'total_extra_passenger_charge', 'discount',
-                    'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge',
-                    'final_price'
+                    'hotel_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
+                    'total_half_day_charge', 'final_price'
                 ])
