@@ -613,7 +613,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
 
 
 # ---------------- Reservationhotel Admin Form ----------------
-class ReservationhotelAdminForm(ModelForm):
+class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
@@ -655,6 +655,7 @@ class ReservationRoomInline(NestedTabularInline):
         'room',
         'price_per_night',
         'extra_passenger_price',
+        'fixed_discount',  # اضافه کردن فیلد تخفیف ثابت
         'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
@@ -664,6 +665,9 @@ class ReservationRoomInline(NestedTabularInline):
         'half_day_out_selected',
     )
     readonly_fields = (
+        'price_per_night',
+        'fixed_discount',  # تخفیف ثابت فقط خواندنی است
+        'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
         'half_day_in_price',
@@ -695,16 +699,16 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
-        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price', 
+        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
+        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price',
         'status', 'created_jalali', 'updated_jalali'
     )
-    
+
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
-    
+
     list_filter = ('status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
@@ -712,8 +716,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
-        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
-        'half_day_out_charge', 'total_half_day_charge', 'final_price'
+        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
+        'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price'
     )
 
     fieldsets = (
@@ -728,8 +732,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
         (_('قیمت و وضعیت'), {
             'fields': (
-                'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 
-                'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price', 
+                'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
+                'half_day_out_charge', 'total_half_day_charge', 'discount', 'final_price',
                 'status'
             )
         }),
