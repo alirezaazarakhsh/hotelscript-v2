@@ -655,7 +655,7 @@ class ReservationRoomInline(NestedTabularInline):
         'room',
         'price_per_night',
         'extra_passenger_price',
-        'fixed_discount',  # اضافه کردن فیلد تخفیف ثابت
+        'fixed_discount',  
         'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
@@ -687,6 +687,20 @@ class ReservationRoomInline(NestedTabularInline):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
         return formset
+
+    def get_fields(self, request, obj=None):
+        """فیلدهای نیم‌شارژ فقط وقتی نمایش داده بشن که هتل پشتیبانی کنه"""
+        fields = list(super().get_fields(request, obj))
+
+        if obj:  # obj اینجا Reservationhotel هست
+            hotel = obj.hotel
+            if not getattr(hotel, 'has_check_in_half_day_charge', False):
+                fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_in_price')]
+            if not getattr(hotel, 'has_check_out_half_day_charge', False):
+                fields = [f for f in fields if f not in ('half_day_out_selected', 'half_day_out_price')]
+
+        return fields
+
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
