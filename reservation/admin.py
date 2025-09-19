@@ -665,9 +665,6 @@ class ReservationRoomInline(NestedTabularInline):
         'half_day_out_selected',
     )
     readonly_fields = (
-        'price_per_night',
-        'fixed_discount',  # تخفیف ثابت فقط خواندنی است
-        'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
         'half_day_in_price',
