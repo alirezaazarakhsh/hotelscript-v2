@@ -1,3 +1,4 @@
+from decimal import Decimal
 import logging
 import re
 import jdatetime
