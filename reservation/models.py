@@ -1326,7 +1326,8 @@ class Reservationhotel(models.Model):
 
         total = Decimal('0')  # فقط قیمت پایه (بدون نیم‌شارژ و نفر اضافه)
         total_extra = Decimal('0')  # مجموع قیمت نفرات اضافه
-        total_discount = Decimal('0')  # تخفیف کل (درصدی + ثابت اتاق + ثابت هتل + کد تخفیف)
+        total_discount = Decimal('0')  # تخفیف کل (درصدی + ثابت اتاق + کد تخفیف)
+        room_fixed_discount = Decimal('0')  # تخفیف ثابت اتاق‌ها
         half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود
         half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج
 
@@ -1390,9 +1391,12 @@ class Reservationhotel(models.Model):
 
             # اضافه کردن تخفیف ثابت از ReservationRoom
             if res_room.fixed_discount:
-                discount += Decimal(res_room.fixed_discount)
+                room_fixed_discount += Decimal(res_room.fixed_discount) * nights  # تخفیف ثابت اتاق برای تعداد شب‌ها
 
             total_discount += discount
+
+        # اضافه کردن تخفیف ثابت اتاق‌ها به کل تخفیف
+        total_discount += room_fixed_discount
 
         # اعمال تخفیف‌های کد تخفیف و تخفیف ثابت هتل
         total_discount += self.discount  # تخفیف کد تخفیف
@@ -1417,7 +1421,7 @@ class Reservationhotel(models.Model):
                 total, total_extra, total_discount, half_in, half_out, total_half, code_discount, final = self.calculate_total_price()
                 self.total_price = total
                 self.discount = code_discount
-                self.hotel_fixed_discount = self.hotel_fixed_discount or Decimal('0')
+                self.hotel_fixed_discount = self.hotel_fixed_discount or Decimal('0')  # اطمینان از مقدار ثابت هتل
                 self.half_day_in_charge = half_in
                 self.half_day_out_charge = half_out
                 self.total_half_day_charge = total_half
