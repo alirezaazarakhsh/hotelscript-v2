@@ -703,6 +703,7 @@ class ReservationRoomInline(NestedTabularInline):
         return fields
 
 # ---------------- Reservationhotel Admin ----------------
+# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -710,9 +711,9 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'discount',
-        'room_fixed_discount', 'final_price', 'status', 'created_jalali', 'updated_jalali'
+        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+        'room_fixed_discount_fa', 'final_price_fa', 'status', 'created_jalali', 'updated_jalali'
     )
 
     search_fields = (
@@ -727,9 +728,9 @@ class ReservationhotelAdmin(NestedModelAdmin):
     readonly_fields = (
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
-        'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'discount',
-        'room_fixed_discount', 'final_price'
+        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+        'room_fixed_discount_fa', 'final_price_fa'
     )
 
     fieldsets = (
@@ -744,9 +745,9 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
         (_('قیمت و وضعیت'), {
             'fields': (
-                'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-                'half_day_out_charge', 'total_half_day_charge', 'discount',
-                'room_fixed_discount', 'final_price', 'status'
+                'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+                'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+                'room_fixed_discount_fa', 'final_price_fa', 'status'
             )
         }),
         (_('اطلاعات سیستم'), {
@@ -755,6 +756,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # ----------------- نمایش تاریخ‌ها -----------------
     @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
         if obj.created_at:
@@ -781,6 +783,40 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def total_guests_fa(self, obj):
         return obj.total_guests if obj.pk else 0
 
+    # ----------------- فرمت هزارگان برای قیمت -----------------
+    @admin.display(description=_('مجموع قیمت'))
+    def total_price_fa(self, obj):
+        return "{:,}".format(obj.total_price) if obj.total_price else "-"
+
+    @admin.display(description=_('هزینه نفر اضافه'))
+    def total_extra_passenger_charge_fa(self, obj):
+        return "{:,}".format(obj.total_extra_passenger_charge) if obj.total_extra_passenger_charge else "-"
+
+    @admin.display(description=_('هزینه نیم روز ورود'))
+    def half_day_in_charge_fa(self, obj):
+        return "{:,}".format(obj.half_day_in_charge) if obj.half_day_in_charge else "-"
+
+    @admin.display(description=_('هزینه نیم روز خروج'))
+    def half_day_out_charge_fa(self, obj):
+        return "{:,}".format(obj.half_day_out_charge) if obj.half_day_out_charge else "-"
+
+    @admin.display(description=_('کل هزینه نیم روز'))
+    def total_half_day_charge_fa(self, obj):
+        return "{:,}".format(obj.total_half_day_charge) if obj.total_half_day_charge else "-"
+
+    @admin.display(description=_('تخفیف کد'))
+    def discount_fa(self, obj):
+        return "{:,}".format(obj.discount) if obj.discount else "-"
+
+    @admin.display(description=_('تخفیف ثابت اتاق'))
+    def room_fixed_discount_fa(self, obj):
+        return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
+
+    @admin.display(description=_('قیمت نهایی'))
+    def final_price_fa(self, obj):
+        return "{:,}".format(obj.final_price) if obj.final_price else "-"
+
+    # ----------------- save_model و save_related -----------------
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
