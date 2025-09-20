@@ -9,6 +9,7 @@ from .views import (
     HotelCommentsBySlugView,
     CreateCommentView,
     BestSellersListView,
+    HotelImageAPIView,
     ReservationCreateAPIView,
     ReservationDetailAPIView,
     SuggesteHotelListView,
@@ -72,6 +73,8 @@ urlpatterns = [
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
     path('/reservation/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),    
     path('/reservation/reservation-detail/<str:tracking_code>/', ReservationDetailAPIView.as_view(), name='reservation-detail'),
+    path('/reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
+
     # ==== discount code reservation ===
     path('reservations/apply-discount/<str:tracking_code>', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
 ]
