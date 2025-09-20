@@ -3043,9 +3043,11 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
+
 class ReservationRoomDetailAPIView(APIView):
     """
     API برای مشاهده و بروزرسانی اطلاعات اتاق‌های رزرو شده.
+    
     متد GET:
         - نمایش اطلاعات اتاق شامل نام، ظرفیت، ظرفیت نفر اضافه، قیمت نفر اضافه، تخفیف ثابت، نیم‌شارژ ورود و خروج، و مسافران.
     متد PUT:
@@ -3053,13 +3055,16 @@ class ReservationRoomDetailAPIView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def get_object(self, pk):
-        return get_object_or_404(ReservationRoom, pk=pk)
+    def get_object(self, tracking_code):
+        # دریافت رزرو با tracking_code
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        # فقط اولین اتاق به عنوان نمونه (می‌توان لیست هم داد)
+        return reservation.reservation_rooms.first()
 
     @swagger_auto_schema(
         operation_summary="نمایش اطلاعات اتاق رزرو شده",
         operation_description="""
-        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس شناسه (ID) آن برمی‌گرداند.
+        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس کد پیگیری رزرو برمی‌گرداند.
 
         ### خروجی JSON نمونه
         ```json
@@ -3089,10 +3094,9 @@ class ReservationRoomDetailAPIView(APIView):
         """,
         responses={200: ReservationRoomDetailSerializer()},
         tags=["reservation-api"]
-        
     )
-    def get(self, request, pk):
-        room = self.get_object(pk)
+    def get(self, request, tracking_code):
+        room = self.get_object(tracking_code)
         serializer = ReservationRoomDetailSerializer(room)
         return Response(serializer.data)
 
@@ -3158,8 +3162,8 @@ class ReservationRoomDetailAPIView(APIView):
         responses={200: ReservationRoomDetailSerializer()},
         tags=["reservation-api"]
     )
-    def put(self, request, pk):
-        room = self.get_object(pk)
+    def put(self, request, tracking_code):
+        room = self.get_object(tracking_code)
         data = request.data
 
         # بروزرسانی نیم شارژ
@@ -3187,7 +3191,6 @@ class ReservationRoomDetailAPIView(APIView):
                     setattr(main, k, v)
                 main.save()
             else:
-                # اگر موجود نبود، بساز
                 ReservationRoomPassenger.objects.create(
                     reservation_room=room,
                     passenger_type='primary',
@@ -3195,7 +3198,6 @@ class ReservationRoomDetailAPIView(APIView):
                 )
 
         # سایر مسافران
-        # پاک کردن موجود و دوباره اضافه کردن (راه ساده)
         room.passengers.filter(passenger_type='secondary').delete()
         for person_data in other_passengers:
             ReservationRoomPassenger.objects.create(
@@ -3214,7 +3216,6 @@ class ReservationRoomDetailAPIView(APIView):
             )
 
         return Response(ReservationRoomDetailSerializer(room).data)
-    
     
 
     
