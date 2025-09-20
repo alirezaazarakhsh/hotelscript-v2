@@ -78,6 +78,7 @@ urlpatterns = [
     path('reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
     path("reservation/invoice/<str:tracking_code>", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
     path('reservation/description/<str:tracking_code>/', ReservationDescriptionAPIView.as_view(), name='reservation-description'),
+    path('reservation/form/<str:tracking_code>/', views.ReservationRoomDetailAPIView.as_view(),name='reservation-room-detail'),
 
 
 

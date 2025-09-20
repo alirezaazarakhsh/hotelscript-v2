@@ -739,3 +739,47 @@ class ReservationCreateSerializer(serializers.Serializer):
 
 class ReservationCreateResponseSerializer(serializers.Serializer):
     reservation_id = serializers.CharField(read_only=True, help_text="کد رزرو با فرمت sfaXXXXXXXXXX")
+    
+    
+    
+    
+# ---------------- Person Serializer ----------------
+class PersonSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100)
+    last_name = serializers.CharField(max_length=100)
+    phone_number = serializers.CharField(max_length=11, allow_blank=True, allow_null=True)
+    national_code = serializers.CharField(max_length=10, allow_blank=True, allow_null=True)
+
+# ---------------- ReservationRoom Serializer ----------------
+class ReservationRoomDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(source='room.title')
+    capacity = serializers.IntegerField(source='room.room_capacity')
+    extra_capacity = serializers.IntegerField(source='room.extra_capacity')
+    extra_capacity_price = serializers.DecimalField(max_digits=12, decimal_places=0, source='extra_passenger_price')
+    discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source='fixed_discount')
+    
+    passengers = serializers.SerializerMethodField()
+    half_charges = serializers.SerializerMethodField()
+
+    def get_passengers(self, obj):
+        main = obj.passengers.filter(passenger_type='primary').first()
+        other = obj.passengers.filter(passenger_type='secondary')
+        extra = obj.passengers.filter(passenger_type='extra')
+        return {
+            "main_passenger": PersonSerializer(main).data if main else None,
+            "other_passengers": PersonSerializer(other, many=True).data,
+            "extra_capacity_passengers": PersonSerializer(extra, many=True).data
+        }
+
+    def get_half_charges(self, obj):
+        return {
+            "enter": {
+                "enabled": obj.half_day_in_selected,
+                "price": str(obj.half_day_in_price)
+            },
+            "exit": {
+                "enabled": obj.half_day_out_selected,
+                "price": str(obj.half_day_out_price)
+            }
+        }

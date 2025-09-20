@@ -80,6 +80,7 @@ from .models import (
     HotelTag,
     HotelTagPublic,
     ReservationRoom,
+    ReservationRoomPassenger,
     Room,
     RoomDate,
     City,
@@ -115,6 +116,7 @@ from .serializers import (
     HotelTypeSerializer,
     ReservationCreateResponseSerializer,
     ReservationCreateSerializer,
+    ReservationRoomDetailSerializer,
     RoomFacilitiesSerializer,
     RoomFacilitiesSimpleSerializer,
     RoomSerializer,
@@ -3038,6 +3040,184 @@ class ReservationDescriptionAPIView(APIView):
             'description': reservation.additional_notes
         }, status=status.HTTP_200_OK)
 
+
+
+#ای پی ای نمایش جزئیات اتاق ها با ویرایش 
+class ReservationRoomDetailAPIView(APIView):
+    """
+    API برای مشاهده و بروزرسانی اطلاعات اتاق‌های رزرو شده.
+    متد GET:
+        - نمایش اطلاعات اتاق شامل نام، ظرفیت، ظرفیت نفر اضافه، قیمت نفر اضافه، تخفیف ثابت، نیم‌شارژ ورود و خروج، و مسافران.
+    متد PUT:
+        - بروزرسانی اطلاعات نیم‌شارژ و مسافران اتاق رزرو شده.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        return get_object_or_404(ReservationRoom, pk=pk)
+
+    @swagger_auto_schema(
+        operation_summary="نمایش اطلاعات اتاق رزرو شده",
+        operation_description="""
+        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس شناسه (ID) آن برمی‌گرداند.
+
+        ### خروجی JSON نمونه
+        ```json
+        {
+          "id": 1,
+          "name": "اتاق دو تخته",
+          "capacity": 2,
+          "extra_capacity": 1,
+          "extra_capacity_price": 200000,
+          "discount_on_purchase": 50000,
+          "passengers": {
+            "main_passenger": {
+              "first_name": "علی",
+              "last_name": "رضایی",
+              "phone_number": "09120000000",
+              "national_code": "1234567890"
+            },
+            "other_passengers": [],
+            "extra_capacity_passengers": []
+          },
+          "half_charges": {
+            "enter": {"enabled": true, "price": "50000"},
+            "exit": {"enabled": false, "price": "0"}
+          }
+        }
+        ```
+        """,
+        responses={200: ReservationRoomDetailSerializer()},
+        tags=["reservation-api"]
+        
+    )
+    def get(self, request, pk):
+        room = self.get_object(pk)
+        serializer = ReservationRoomDetailSerializer(room)
+        return Response(serializer.data)
+
+    @swagger_auto_schema(
+        operation_summary="بروزرسانی اطلاعات اتاق رزرو شده",
+        operation_description="""
+        این API اجازه می‌دهد اطلاعات نیم‌شارژ و مسافران اتاق رزرو شده بروزرسانی شود.
+
+        ### نمونه JSON برای PUT
+        ```json
+        {
+          "half_charges": {
+            "enter": {"enabled": true, "price": "60000"},
+            "exit": {"enabled": true, "price": "40000"}
+          },
+          "passengers": {
+            "main_passenger": {
+              "first_name": "علی",
+              "last_name": "رضایی",
+              "phone_number": "09120000000",
+              "national_code": "1234567890"
+            },
+            "other_passengers": [
+              {"first_name": "زهرا", "last_name": "کاظمی", "phone_number": "", "national_code": ""}
+            ],
+            "extra_capacity_passengers": []
+          }
+        }
+        ```
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'half_charges': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'enter': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'price': openapi.Schema(type=openapi.TYPE_STRING)
+                            }
+                        ),
+                        'exit': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'price': openapi.Schema(type=openapi.TYPE_STRING)
+                            }
+                        )
+                    }
+                ),
+                'passengers': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'main_passenger': openapi.Schema(type=openapi.TYPE_OBJECT),
+                        'other_passengers': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+                        'extra_capacity_passengers': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+                    }
+                )
+            }
+        ),
+        responses={200: ReservationRoomDetailSerializer()},
+        tags=["reservation-api"]
+    )
+    def put(self, request, pk):
+        room = self.get_object(pk)
+        data = request.data
+
+        # بروزرسانی نیم شارژ
+        half_charges = data.get("half_charges", {})
+        enter = half_charges.get("enter", {})
+        exit = half_charges.get("exit", {})
+
+        room.half_day_in_selected = enter.get("enabled", room.half_day_in_selected)
+        room.half_day_in_price = enter.get("price", room.half_day_in_price)
+        room.half_day_out_selected = exit.get("enabled", room.half_day_out_selected)
+        room.half_day_out_price = exit.get("price", room.half_day_out_price)
+        room.save()
+
+        # بروزرسانی مسافران
+        passengers = data.get("passengers", {})
+        main_passenger = passengers.get("main_passenger")
+        other_passengers = passengers.get("other_passengers", [])
+        extra_passengers = passengers.get("extra_capacity_passengers", [])
+
+        # مسافر اصلی
+        if main_passenger:
+            main = room.passengers.filter(passenger_type='primary').first()
+            if main:
+                for k, v in main_passenger.items():
+                    setattr(main, k, v)
+                main.save()
+            else:
+                # اگر موجود نبود، بساز
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=room,
+                    passenger_type='primary',
+                    **main_passenger
+                )
+
+        # سایر مسافران
+        # پاک کردن موجود و دوباره اضافه کردن (راه ساده)
+        room.passengers.filter(passenger_type='secondary').delete()
+        for person_data in other_passengers:
+            ReservationRoomPassenger.objects.create(
+                reservation_room=room,
+                passenger_type='secondary',
+                **person_data
+            )
+
+        # نفر اضافه
+        room.passengers.filter(passenger_type='extra').delete()
+        for person_data in extra_passengers:
+            ReservationRoomPassenger.objects.create(
+                reservation_room=room,
+                passenger_type='extra',
+                **person_data
+            )
+
+        return Response(ReservationRoomDetailSerializer(room).data)
+    
+    
+
+    
     
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
