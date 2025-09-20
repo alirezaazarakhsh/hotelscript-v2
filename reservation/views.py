@@ -2687,6 +2687,124 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
     
+    
+    
+    
+# ای پی ای جزئيات یک رزرو با tracking_code
+logger = logging.getLogger(__name__)
+
+class ReservationDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="نمایش جزئیات رزرو",
+        operation_description="""
+        این API جزئیات یک رزرو خاص را بر اساس کد پیگیری (tracking_code) نمایش می‌دهد.
+        
+        ### نحوه استفاده
+        - **tracking_code**: کد پیگیری رزرو که در URL به صورت `${tracking-code}` وارد می‌شود (مثلاً `sfa1234567890`).
+        - **مثال درخواست**:
+          ```
+          GET /hotel/reservation/reservation-detail/sfa1234567890/
+          ```
+        - **پاسخ**:
+          - `date.enter`: تاریخ ورود به هتل (فرمت ISO، مثلاً `1404-06-30`).
+          - `date.exit`: تاریخ خروج از هتل (فرمت ISO، مثلاً `1404-07-02`).
+          - `time.enter`: ساعت ورود به هتل (فرمت `HH:MM:SS`، مثلاً `14:00:00`).
+          - `time.exit`: ساعت خروج از هتل (فرمت `HH:MM:SS`، مثلاً `12:00:00`).
+          - `number_of_nights`: تعداد شب‌های اقامت (یک عدد صحیح).
+          - `hotel_name`: نام هتل (رشته).
+          - `hotel_star`: تعداد ستاره‌های هتل (یک عدد صحیح).
+          - `city_name`: نام شهر هتل (رشته).
+          - `province_name`: نام استان هتل (رشته).
+          - `number_of_rooms`: تعداد اتاق‌های رزرو شده (یک عدد صحیح).
+          - `half_charges.enter`: وضعیت نیم‌شارژ ورود (true اگر فعال باشد، false اگر غیرفعال باشد).
+          - `half_charges.exit`: وضعیت نیم‌شارژ خروج (true اگر فعال باشد، false اگر غیرفعال باشد).
+        - **اعتبارسنجی**: کاربر باید احراز هویت شده باشد و کد پیگیری باید متعلق به رزروهای او باشد.
+        """,
+        responses={
+            200: openapi.Response(
+                description="جزئیات رزرو با موفقیت برگردانده شد.",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'date': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enter': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ ورود', example='1404-06-30'),
+                                'exit': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ خروج', example='1404-07-02')
+                            }
+                        ),
+                        'time': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enter': openapi.Schema(type=openapi.TYPE_STRING, description='ساعت ورود', example='14:00:00'),
+                                'exit': openapi.Schema(type=openapi.TYPE_STRING, description='ساعت خروج', example='12:00:00')
+                            }
+                        ),
+                        'number_of_nights': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد شب‌های اقامت', example=2),
+                        'hotel_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام هتل', example='هتل آزادی'),
+                        'hotel_star': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد ستاره‌ها', example=5),
+                        'city_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام شهر', example='تهران'),
+                        'province_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام استان', example='تهران'),
+                        'number_of_rooms': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد اتاق‌ها', example=1),
+                        'half_charges': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enter': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ ورود', example=True),
+                                'exit': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ خروج', example=False)
+                            }
+                        )
+                    }
+                )
+            ),
+            404: openapi.Response(description="رزرو با کد پیگیری داده‌شده یافت نشد."),
+            403: openapi.Response(description="دسترسی غیرمجاز.")
+        }
+    )
+    def get(self, request, tracking_code, *args, **kwargs):
+        # دریافت رزرو
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        if reservation.buyer != request.user:
+            raise ValidationError("شما به این رزرو دسترسی ندارید.")
+
+        # اطلاعات هتل از اولین اتاق رزرو شده
+        reservation_room = reservation.reservation_rooms.first()
+        if not reservation_room or not reservation_room.room or not reservation_room.room.hotel:
+            raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
+
+        hotel = reservation_room.room.hotel
+        city = hotel.city
+        province = city.province if hasattr(city, 'province') else None  # فرض بر این است که City مدل province دارد
+
+        # آماده‌سازی پاسخ
+        response_data = {
+            'date': {
+                'enter': reservation.check_in_date.isoformat() if reservation.check_in_date else None,
+                'exit': reservation.check_out_date.isoformat() if reservation.check_out_date else None
+            },
+            'time': {
+                'enter': hotel.check_in_time.strftime('%H:%M:%S') if hotel.check_in_time else None,
+                'exit': hotel.check_out_time.strftime('%H:%M:%S') if hotel.check_out_time else None
+            },
+            'number_of_nights': reservation.nights_count,
+            'hotel_name': hotel.name,
+            'hotel_star': hotel.stars,
+            'city_name': city.name if city else None,
+            'province_name': province.name if province else None,
+            'number_of_rooms': reservation.total_rooms,
+            'half_charges': {
+                'enter': reservation_room.half_day_in_selected and hotel.has_check_in_half_day_charge,
+                'exit': reservation_room.half_day_out_selected and hotel.has_check_out_half_day_charge
+            }
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+    
+    
+    
+    
+    
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
