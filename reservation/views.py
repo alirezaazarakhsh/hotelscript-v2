@@ -3005,6 +3005,7 @@ class ReservationDescriptionAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="دریافت توضیحات رزرو",
         operation_description="دریافت توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
+        tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
@@ -3022,7 +3023,8 @@ class ReservationDescriptionAPIView(APIView):
             properties={
                 'additional_notes': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو')
             }
-        )
+        ),
+        tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
