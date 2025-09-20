@@ -2722,6 +2722,7 @@ class ReservationDetailAPIView(APIView):
           - `half_charges.exit`: وضعیت نیم‌شارژ خروج (true اگر فعال باشد، false اگر غیرفعال باشد).
         - **اعتبارسنجی**: کاربر باید احراز هویت شده باشد و کد پیگیری باید متعلق به رزروهای او باشد.
         """,
+        tags=["reservation-api"],
         responses={
             200: openapi.Response(
                 description="جزئیات رزرو با موفقیت برگردانده شد.",
