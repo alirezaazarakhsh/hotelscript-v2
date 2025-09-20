@@ -69,7 +69,7 @@ urlpatterns = [
 
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
-    path('hotel/reservation/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),    
+    path('/reservation/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),    
     # ==== discount code reservation ===
     path('reservations/apply-discount/<str:tracking_code>', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
 ]
