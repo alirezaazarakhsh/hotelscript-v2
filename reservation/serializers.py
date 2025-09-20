@@ -745,10 +745,10 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
 # ---------------- Person Serializer ----------------
 class PersonSerializer(serializers.Serializer):
-    first_name = serializers.CharField(max_length=100)
-    last_name = serializers.CharField(max_length=100)
-    phone_number = serializers.CharField(max_length=11, allow_blank=True, allow_null=True)
-    national_code = serializers.CharField(max_length=10, allow_blank=True, allow_null=True)
+    first_name = serializers.CharField(max_length=100, default="")
+    last_name = serializers.CharField(max_length=100, default="")
+    phone_number = serializers.CharField(max_length=11, allow_blank=True, default="")
+    national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
 # ---------------- ReservationRoom Serializer ----------------
 class ReservationRoomDetailSerializer(serializers.Serializer):
