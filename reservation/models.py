@@ -1383,11 +1383,13 @@ class Reservationhotel(models.Model):
 
         # قیمت قبل از اعمال تخفیف‌ها
         base_price = total + total_extra + total_half_day_charge
+        print(f"base_price: {base_price}")  # دیباگ
 
         # قیمت نهایی با اعمال جداگانه تخفیف‌ها
         final_price = base_price - discount_amount - room_fixed_discount
         if final_price < 0:
             final_price = Decimal('0')
+        print(f"discount_amount: {discount_amount}, room_fixed_discount: {room_fixed_discount}, final_price: {final_price}")  # دیباگ
 
         return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, self.discount, final_price, room_fixed_discount
 
