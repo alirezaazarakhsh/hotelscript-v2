@@ -1358,7 +1358,7 @@ class Reservationhotel(models.Model):
             if not price_obj:
                 raise ValidationError(f'قیمت برای تاریخ {check_in_date_std} در اتاق {room.title} موجود نیست.')
 
-            # استفاده از subtotal اتاق که پس از تخفیف درصدی محاسبه شده
+            # جمع قیمت پایه اتاق‌ها از subtotal
             total += Decimal(res_room.subtotal)
 
             # قیمت نفرات اضافه
@@ -1550,7 +1550,7 @@ class ReservationRoom(models.Model):
             return
 
         self.price_per_night = Decimal(price_obj.price)
-        self.fixed_discount = Decimal('0')
+        self.fixed_discount = Decimal('0')  # تخفیف ثابت فقط در Reservationhotel اعمال شود
 
         if price_obj.discount_type != 'none':
             if price_obj.discount_type == 'percentage' and price_obj.discount_date:
@@ -1563,10 +1563,10 @@ class ReservationRoom(models.Model):
                     discount_percentage = Decimal(price_obj.discount_value) / Decimal('100')
                     self.price_per_night = self.price_per_night * (1 - discount_percentage)
             elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                self.fixed_discount = Decimal(price_obj.discount_value) * self.quantity
+                self.fixed_discount = Decimal(price_obj.discount_value) * self.quantity  # فقط برای اطلاع، در subtotal اعمال نشود
 
-        room_total = (self.price_per_night * self.quantity * nights) + self.half_day_in_price + self.half_day_out_price
-        room_total -= self.fixed_discount
+        # محاسبه subtotal بدون نیم‌شارژ و تخفیف ثابت
+        room_total = self.price_per_night * self.quantity * nights
         self.subtotal = int(room_total.quantize(Decimal('1'), rounding=ROUND_UP))
 
     def assign_passenger_types(self):
@@ -1625,7 +1625,6 @@ class ReservationRoom(models.Model):
 
         if getattr(self, '_assign_passenger_types', False) and self.passengers.exists():
             self.assign_passenger_types()
-            
             
 
 # ---------------- ReservationRoomPassenger ----------------
