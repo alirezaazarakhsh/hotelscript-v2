@@ -2999,6 +2999,7 @@ class ReservationInvoiceAPIView(APIView):
     
 
 # ای پی ای توضیحات تکمیلی رزرو 
+
 class ReservationDescriptionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3010,8 +3011,7 @@ class ReservationDescriptionAPIView(APIView):
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         return Response({
-            'tracking_code': reservation.tracking_code,
-            'additional_notes': reservation.additional_notes
+            'description': reservation.additional_notes
         })
 
     @swagger_auto_schema(
@@ -3019,24 +3019,23 @@ class ReservationDescriptionAPIView(APIView):
         operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['additional_notes'],
+            required=['description'],
             properties={
-                'additional_notes': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو')
+                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو')
             }
         ),
         tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        notes = request.data.get('additional_notes', None)
+        notes = request.data.get('description', None)
         if notes is None:
-            return Response({'detail': 'فیلد additional_notes الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'فیلد description الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
         reservation.additional_notes = notes
         reservation.save(update_fields=['additional_notes'])
         return Response({
-            'tracking_code': reservation.tracking_code,
-            'additional_notes': reservation.additional_notes
+            'description': reservation.additional_notes
         }, status=status.HTTP_200_OK)
 
     
