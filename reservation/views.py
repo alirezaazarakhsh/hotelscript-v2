@@ -2879,188 +2879,121 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-
 logger = logging.getLogger(__name__)
+
+def format_number(value):
+    """عدد را با ویرگول سه‌تایی فرمت می‌کند"""
+    return f"{int(value):,}" if value is not None else "0"
+
+def parse_number(value):
+    """عدد ورودی با یا بدون ویرگول را به Decimal تبدیل می‌کند"""
+    if value is None:
+        return Decimal('0')
+    return Decimal(str(value).replace(',', '').strip())
+
 class ReservationInvoiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="نمایش صورت‌حساب رزرو",
+        operation_summary="دریافت صورت‌حساب رزرو",
         operation_description="""
-        این API صورت‌حساب یک رزرو را بر اساس کد پیگیری (`tracking_code`) نمایش می‌دهد.
+        این API صورت‌حساب رزرو را بر اساس کد پیگیری نشان می‌دهد.
         
-        ### جزئیات
-        - کاربر باید احراز هویت شده باشد.
-        - کاربر فقط به رزروهای خودش دسترسی دارد.
-        - مقادیر به صورت سه‌رقمی جدا شده برگردانده می‌شوند (مثلاً `5,000,000`).
-
-        ### فیلدهای پاسخ
-        - **total_price**: مجموع قیمت اتاق‌ها × تعداد شب‌ها
-        - **extra_passengers**: مجموع مبلغ نفرات اضافه
-        - **half_charges**: مجموع مبلغ نیم‌شارژها
-        - **discount_on_purchase**: تخفیف ثابت (روی خرید اتاق‌ها)
-        - **discount_code**: تخفیف با کد تخفیف
-        - **final_total_price**: مبلغ نهایی بعد از اعمال همه تخفیف‌ها
-
-        ### مثال درخواست
-        ```
-        GET /reservation/invoice/sfa1234567890/
-        ```
-
-        ### مثال پاسخ
-        ```json
-        {
-          "total_price": "5,000,000",
-          "extra_passengers": "200,000",
-          "half_charges": "500,000",
-          "discount_on_purchase": "300,000",
-          "discount_code": "400,000",
-          "final_total_price": "5,000,000"
-        }
-        ```
+        ### GET
+        - **tracking_code**: کد پیگیری رزرو در URL وارد می‌شود.
+        - **مثال درخواست**:
+          ```
+          GET /hotel/reservation/invoice/sfa1234567890/
+          ```
+        - **پاسخ**:
+          ```json
+          {
+            "total_price": "50,000,000",
+            "extra_passengers": "4,400,000",
+            "half_charges": "12,500,000",
+            "discount_on_purchase": "1,000,000",
+            "discount_code": "2,000,000",
+            "final_total_price": "63,900,000"
+          }
+          ```
+        
+        ### PUT
+        - ویرایش صورت‌حساب و بروزرسانی مقادیر
+        - فرمت عددها می‌تواند بدون ویرگول یا با ویرگول باشد
         """,
-        tags=["reservation-api"],
-        responses={
-            200: openapi.Response(
-                description="صورت‌حساب رزرو با موفقیت برگردانده شد.",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'total_price': openapi.Schema(type=openapi.TYPE_STRING, description='مجموع قیمت اتاق‌ها × شب‌ها'),
-                        'extra_passengers': openapi.Schema(type=openapi.TYPE_STRING, description='مجموع مبلغ نفرات اضافه'),
-                        'half_charges': openapi.Schema(type=openapi.TYPE_STRING, description='مجموع مبلغ نیم‌شارژها'),
-                        'discount_on_purchase': openapi.Schema(type=openapi.TYPE_STRING, description='تخفیف ثابت اتاق‌ها'),
-                        'discount_code': openapi.Schema(type=openapi.TYPE_STRING, description='تخفیف کد تخفیف'),
-                        'final_total_price': openapi.Schema(type=openapi.TYPE_STRING, description='مبلغ نهایی بعد از تخفیف‌ها'),
-                    }
-                )
-            ),
-            404: openapi.Response(description="رزرو یافت نشد."),
-            403: openapi.Response(description="دسترسی غیرمجاز."),
-        }
+        tags=["reservation-api"]
     )
-    def get(self, request, tracking_code, *args, **kwargs):
+    def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        def format_price(value):
-            return f"{int(value):,}"
+        total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed_discount = reservation.calculate_total_price()
 
         response_data = {
-            "total_price": format_price(reservation.total_price or 0),
-            "extra_passengers": format_price(reservation.total_extra_passenger_charge or 0),
-            "half_charges": format_price(reservation.total_half_day_charge or 0),
-            "discount_on_purchase": format_price(reservation.room_fixed_discount or 0),
-            "discount_code": format_price(reservation.discount or 0),
-            "final_total_price": format_price(reservation.final_price or 0),
+            "total_price": format_number(total),
+            "extra_passengers": format_number(total_extra),
+            "half_charges": format_number(total_half),
+            "discount_on_purchase": format_number(room_fixed_discount),
+            "discount_code": format_number(code_discount),
+            "final_total_price": format_number(final)
         }
-
         return Response(response_data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="ویرایش صورت‌حساب رزرو",
-        operation_description="""
-        این API امکان ویرایش برخی مقادیر صورت‌حساب یک رزرو را فراهم می‌کند.  
-        پس از ویرایش، مبلغ نهایی (`final_total_price`) مجدداً محاسبه و ذخیره می‌شود.
-
-        ### جزئیات
-        - کاربر باید احراز هویت شده باشد.
-        - کاربر فقط می‌تواند رزروهای خودش را ویرایش کند.
-        - فقط برخی فیلدها قابل ویرایش هستند.
-
-        ### فیلدهای قابل ویرایش
-        - **extra_passengers**: مبلغ نفرات اضافه
-        - **half_charges**: مبلغ نیم‌شارژها
-        - **discount_on_purchase**: تخفیف ثابت
-        - **discount_code**: تخفیف کد
-
-        ### مثال درخواست
-        ```
-        PUT /reservation/invoice/sfa1234567890/
-        {
-          "extra_passengers": 300000,
-          "discount_code": 200000
-        }
-        ```
-
-        ### مثال پاسخ
-        ```json
-        {
-          "message": "صورت‌حساب با موفقیت ویرایش شد.",
-          "invoice": {
-            "total_price": "5,000,000",
-            "extra_passengers": "300,000",
-            "half_charges": "500,000",
-            "discount_on_purchase": "300,000",
-            "discount_code": "200,000",
-            "final_total_price": "4,800,000"
-          }
-        }
-        ```
-        """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'extra_passengers': openapi.Schema(type=openapi.TYPE_INTEGER, description="مبلغ جدید نفرات اضافه"),
-                'half_charges': openapi.Schema(type=openapi.TYPE_INTEGER, description="مبلغ جدید نیم‌شارژ"),
-                'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description="تخفیف ثابت جدید"),
-                'discount_code': openapi.Schema(type=openapi.TYPE_INTEGER, description="تخفیف کد جدید"),
-            }
+                "total_price": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع قیمت اتاق‌ها"),
+                "extra_passengers": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع قیمت نفرات اضافه"),
+                "half_charges": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع نیم شارژها"),
+                "discount_on_purchase": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف ثابت اتاق‌ها"),
+                "discount_code": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف کد تخفیف"),
+                "final_total_price": openapi.Schema(type=openapi.TYPE_STRING, description="قیمت نهایی"),
+            },
+            required=["total_price","extra_passengers","half_charges","discount_on_purchase","discount_code","final_total_price"]
         ),
-        responses={
-            200: openapi.Response(description="صورت‌حساب با موفقیت ویرایش شد."),
-            404: openapi.Response(description="رزرو یافت نشد."),
-            403: openapi.Response(description="دسترسی غیرمجاز."),
-        },
-        tags=["reservation-api"],
+        responses={200: "صورت‌حساب با موفقیت ویرایش شد."},
+        tags=["reservation-api"]
     )
-    def put(self, request, tracking_code, *args, **kwargs):
+    def put(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
         data = request.data
+        try:
+            reservation.total_price = parse_number(data.get("total_price"))
+            reservation.total_extra_passenger_charge = parse_number(data.get("extra_passengers"))
+            reservation.total_half_day_charge = parse_number(data.get("half_charges"))
+            reservation.room_fixed_discount = parse_number(data.get("discount_on_purchase"))
+            reservation.discount = parse_number(data.get("discount_code"))
+            reservation.final_price = parse_number(data.get("final_total_price"))
+            reservation.save(update_fields=[
+                "total_price",
+                "total_extra_passenger_charge",
+                "total_half_day_charge",
+                "room_fixed_discount",
+                "discount",
+                "final_price"
+            ])
+        except Exception as e:
+            logger.error(f"Invoice update error: {e}")
+            return Response({"error": "خطا در بروزرسانی صورت‌حساب"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if "extra_passengers" in data:
-            reservation.total_extra_passenger_charge = int(data["extra_passengers"])
-        if "half_charges" in data:
-            reservation.total_half_day_charge = int(data["half_charges"])
-        if "discount_on_purchase" in data:
-            reservation.room_fixed_discount = int(data["discount_on_purchase"])
-        if "discount_code" in data:
-            reservation.discount = int(data["discount_code"])
-
-        # محاسبه مجدد مبلغ نهایی
-        reservation.final_price = (
-            (reservation.total_price or 0)
-            + (reservation.total_extra_passenger_charge or 0)
-            + (reservation.total_half_day_charge or 0)
-            - (reservation.room_fixed_discount or 0)
-            - (reservation.discount or 0)
-        )
-
-        reservation.save()
-
-        def format_price(value):
-            return f"{int(value):,}"
-
-        invoice_data = {
-            "total_price": format_price(reservation.total_price or 0),
-            "extra_passengers": format_price(reservation.total_extra_passenger_charge or 0),
-            "half_charges": format_price(reservation.total_half_day_charge or 0),
-            "discount_on_purchase": format_price(reservation.room_fixed_discount or 0),
-            "discount_code": format_price(reservation.discount or 0),
-            "final_total_price": format_price(reservation.final_price or 0),
-        }
-
-        return Response({
+        response_data = {
             "message": "صورت‌حساب با موفقیت ویرایش شد.",
-            "invoice": invoice_data
-        }, status=status.HTTP_200_OK)
-
+            "invoice": {
+                "total_price": format_number(reservation.total_price),
+                "extra_passengers": format_number(reservation.total_extra_passenger_charge),
+                "half_charges": format_number(reservation.total_half_day_charge),
+                "discount_on_purchase": format_number(reservation.room_fixed_discount),
+                "discount_code": format_number(reservation.discount),
+                "final_total_price": format_number(reservation.final_price)
+            }
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
 
     
 # ای پی ای کد تخفیف برای رزرو 
