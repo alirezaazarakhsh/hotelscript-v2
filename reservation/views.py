@@ -2736,9 +2736,9 @@ class ApplyDiscountCodeAPIView(APIView):
 
         # محاسبه تخفیف و قیمت نهایی رزرو
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
-        total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, final_without_promo = reservation.calculate_total_price()
-        new_total_discount = total_discount + discount_value
-        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount)
+        total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        new_total_discount = discount_amount + discount_value
+        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
 
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
