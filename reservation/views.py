@@ -2994,6 +2994,48 @@ class ReservationInvoiceAPIView(APIView):
             }
         }
         return Response(response_data, status=status.HTTP_200_OK)
+    
+    
+    
+
+# ای پی ای توضیحات تکمیلی رزرو 
+class ReservationDescriptionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت توضیحات رزرو",
+        operation_description="دریافت توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
+    )
+    def get(self, request, tracking_code):
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        return Response({
+            'tracking_code': reservation.tracking_code,
+            'additional_notes': reservation.additional_notes
+        })
+
+    @swagger_auto_schema(
+        operation_summary="بروزرسانی توضیحات رزرو",
+        operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['additional_notes'],
+            properties={
+                'additional_notes': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو')
+            }
+        )
+    )
+    def put(self, request, tracking_code):
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        notes = request.data.get('additional_notes', None)
+        if notes is None:
+            return Response({'detail': 'فیلد additional_notes الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reservation.additional_notes = notes
+        reservation.save(update_fields=['additional_notes'])
+        return Response({
+            'tracking_code': reservation.tracking_code,
+            'additional_notes': reservation.additional_notes
+        }, status=status.HTTP_200_OK)
 
     
 # ای پی ای کد تخفیف برای رزرو 

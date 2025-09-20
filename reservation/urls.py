@@ -11,6 +11,7 @@ from .views import (
     BestSellersListView,
     HotelImageAPIView,
     ReservationCreateAPIView,
+    ReservationDescriptionAPIView,
     ReservationDetailAPIView,
     ReservationInvoiceAPIView,
     SuggesteHotelListView,
@@ -76,6 +77,8 @@ urlpatterns = [
     path('/reservation/reservation-detail/<str:tracking_code>/', ReservationDetailAPIView.as_view(), name='reservation-detail'),
     path('/reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
     path("/reservation/invoice/<str:tracking_code>", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
+    path('/reservation/description/<str:tracking_code>/', ReservationDescriptionAPIView.as_view(), name='reservation-description'),
+
 
 
     # ==== discount code reservation ===
