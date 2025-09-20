@@ -2525,10 +2525,44 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
-        operation_description="ایجاد یک رزرو جدید و بازگرداندن reservation_id",
+        operation_description="""
+        ایجاد یک رزرو جدید و بازگرداندن reservation_id.
+        
+        ### نحوه استفاده
+        - **hotel_id**: شناسه هتل برای فیلتر رزروها (یک عدد صحیح).
+        - **room_id**: شناسه اتاق برای فیلتر رزروها (یک عدد صحیح یا لیست اعداد).
+        - **date**: فیلتر بر اساس بازه زمانی (شامل `enter` و `exit` به فرمت‌های پشتیبانی‌شده).
+          - **فرمت رشته (String)**: باید به فرمت ISO باشد (مثلاً `1404-06-30` برای تاریخ جلالی یا `2025-09-20` برای تاریخ میلادی).
+          - **فرمت دیکشنری (Dictionary)**: شامل `year`, `month`, و `day` (مثلاً `{"year": 1404, "month": 6, "day": 30}`). اگر `calendar: "gregorian"` باشد، به جلالی تبدیل می‌شود.
+          - **مثال درخواست**:
+            ```json
+            {
+              "date": {
+                "enter": "1404-06-30",
+                "exit": "1404-07-02"
+              },
+              "hotel_id": 1,
+              "room_id": [1, 2]
+            }
+            ```
+          - **اعتبارسنجی**: تاریخ ورود نمی‌تواند قبل از امروز (20 سپتامبر 2025، معادل 30 شهریور 1404) باشد و تاریخ خروج باید بعد از ورود باشد.
+        """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
-        responses={200: ReservationCreateResponseSerializer}
+        responses={
+            200: openapi.Response(
+                description="رزرو با موفقیت ایجاد شد.",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری یکتا برای رزرو', example='sfa1234567890')
+                    }
+                )
+            ),
+            400: openapi.Response(description="درخواست نامعتبر (مثلاً تاریخ نامعتبر یا فرمت نادرست)."),
+            404: openapi.Response(description="هتل یا اتاق یافت نشد."),
+            403: openapi.Response(description="دسترسی غیرمجاز.")
+        }
     )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -2651,9 +2685,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.final_price = total_price
         reservation.save(update_fields=['total_price', 'final_price'])
 
-        return Response({"reservation_id": reservation_id}, status=status.HTTP_200_OK)
-    
-    
+        return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
     
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
