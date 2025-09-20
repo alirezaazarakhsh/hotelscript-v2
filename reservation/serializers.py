@@ -747,18 +747,18 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="")
     last_name = serializers.CharField(max_length=100, default="")
-    phone_number = serializers.CharField(max_length=11, allow_blank=True, default="")
+    phone_number = serializers.CharField(source='mobile_number', max_length=11, allow_blank=True, default="")
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
 # ---------------- ReservationRoom Serializer ----------------
 class ReservationRoomDetailSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
+    id = serializers.IntegerField(source='pk')  # id واقعی اتاق رزرو شده
     name = serializers.CharField(source='room.title')
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
     extra_capacity_price = serializers.DecimalField(max_digits=12, decimal_places=0, source='extra_passenger_price')
     discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source='fixed_discount')
-    
+
     passengers = serializers.SerializerMethodField()
     half_charges = serializers.SerializerMethodField()
 
@@ -767,7 +767,12 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         other = obj.passengers.filter(passenger_type='secondary')
         extra = obj.passengers.filter(passenger_type='extra')
         return {
-            "main_passenger": PersonSerializer(main).data if main else None,
+            "main_passenger": PersonSerializer(main).data if main else {
+                "first_name": "",
+                "last_name": "",
+                "phone_number": "",
+                "national_code": ""
+            },
             "other_passengers": PersonSerializer(other, many=True).data,
             "extra_capacity_passengers": PersonSerializer(extra, many=True).data
         }
