@@ -2829,7 +2829,7 @@ class HotelImageAPIView(APIView):
         - **پاسخ**:
           ```json
           {
-            "hotel_image": "http://example.com/media/images/hotels/hotel-azadi/main_image.jpg",
+            "hotel_image": "https://safarnameh24.com/media/images/hotels/hotel-azadi/main_image.jpg",
             "hotel_slug": "hotel-azadi"
           }
           ```
@@ -2851,23 +2851,22 @@ class HotelImageAPIView(APIView):
         }
     )
     def get(self, request, tracking_code, *args, **kwargs):
-        # دریافت رزرو
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # اطلاعات هتل از اولین اتاق رزرو شده
         reservation_room = reservation.reservation_rooms.first()
         if not reservation_room or not reservation_room.room or not reservation_room.room.hotel:
             raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
 
         hotel = reservation_room.room.hotel
 
-        # ساخت لینک عکس
-        if hotel.main_image:
-            image_url = f"{settings.MEDIA_URL}{hotel.main_image.url}"
-        else:
+        if not hotel.main_image:
             raise NotFound("عکس اصلی هتل موجود نیست.")
+
+        # ساخت لینک کامل
+        site_url = getattr(settings, "SITE_URL", "https://safarnameh24.com")
+        image_url = f"{site_url}{hotel.main_image.url}"
 
         response_data = {
             'hotel_image': image_url,
@@ -2875,7 +2874,6 @@ class HotelImageAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-
 
 
     
