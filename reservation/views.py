@@ -3186,10 +3186,14 @@ class ReservationRoomDetailAPIView(APIView):
         if main_passenger:
             main = room.passengers.filter(passenger_type='primary').first()
             if main:
+                if 'phone_number' in main_passenger:
+                    main_passenger['mobile_number'] = main_passenger.pop('phone_number')
                 for k, v in main_passenger.items():
                     setattr(main, k, v)
                 main.save()
             else:
+                if 'phone_number' in main_passenger:
+                    main_passenger['mobile_number'] = main_passenger.pop('phone_number')
                 ReservationRoomPassenger.objects.create(
                     reservation_room=room,
                     passenger_type='primary',
@@ -3199,6 +3203,8 @@ class ReservationRoomDetailAPIView(APIView):
         # سایر مسافران
         room.passengers.filter(passenger_type='secondary').delete()
         for person_data in other_passengers:
+            if 'phone_number' in person_data:
+                person_data['mobile_number'] = person_data.pop('phone_number')
             ReservationRoomPassenger.objects.create(
                 reservation_room=room,
                 passenger_type='secondary',
@@ -3208,6 +3214,8 @@ class ReservationRoomDetailAPIView(APIView):
         # نفر اضافه
         room.passengers.filter(passenger_type='extra').delete()
         for person_data in extra_passengers:
+            if 'phone_number' in person_data:
+                person_data['mobile_number'] = person_data.pop('phone_number')
             ReservationRoomPassenger.objects.create(
                 reservation_room=room,
                 passenger_type='extra',
