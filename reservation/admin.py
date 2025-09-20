@@ -633,7 +633,6 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
-
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -647,7 +646,6 @@ class ReservationRoomPassengerInline(NestedTabularInline):
         if obj and hasattr(obj, 'room') and obj.room:
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
-
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
@@ -713,8 +711,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'discount', 'hotel_fixed_discount',
-        'final_price', 'status', 'created_jalali', 'updated_jalali'
+        'half_day_out_charge', 'total_half_day_charge', 'discount',
+        'room_fixed_discount', 'final_price', 'status', 'created_jalali', 'updated_jalali'
     )
 
     search_fields = (
@@ -730,7 +728,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
         'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-        'half_day_out_charge', 'total_half_day_charge', 'final_price'
+        'half_day_out_charge', 'total_half_day_charge', 'discount',
+        'room_fixed_discount', 'final_price'
     )
 
     fieldsets = (
@@ -746,8 +745,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         (_('قیمت و وضعیت'), {
             'fields': (
                 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge',
-                'half_day_out_charge', 'total_half_day_charge', 'discount', 'hotel_fixed_discount',
-                'final_price', 'status'
+                'half_day_out_charge', 'total_half_day_charge', 'discount',
+                'room_fixed_discount', 'final_price', 'status'
             )
         }),
         (_('اطلاعات سیستم'), {
@@ -791,11 +790,11 @@ class ReservationhotelAdmin(NestedModelAdmin):
         if obj.reservation_rooms.exists():
             if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
-                total_price, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price = obj.calculate_total_price()
+                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
                 obj.total_price = total_price
                 obj.total_extra_passenger_charge = total_extra
-                obj.discount = code_discount
-                obj.hotel_fixed_discount = obj.hotel_fixed_discount or Decimal('0')
+                obj.discount = code_discount  # مقدار کد تخفیف را حفظ می‌کنیم
+                obj.room_fixed_discount = room_fixed_discount  # تخفیف ثابت اتاق‌ها
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
                 obj.total_half_day_charge = total_half_day_charge
@@ -803,6 +802,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 obj._skip_price_calculation = True
                 obj.save(update_fields=[
                     'total_price', 'total_extra_passenger_charge', 'discount',
-                    'hotel_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
-                    'total_half_day_charge', 'final_price'
+                    'room_fixed_discount', 'half_day_in_charge',
+                    'half_day_out_charge', 'total_half_day_charge', 'final_price'
                 ])

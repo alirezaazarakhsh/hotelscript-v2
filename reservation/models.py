@@ -1272,7 +1272,6 @@ class Reservationhotel(models.Model):
 
     total_price = models.DecimalField(_('مجموع قیمت'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     discount = models.DecimalField(_('تخفیف کد تخفیف'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
-    hotel_fixed_discount = models.DecimalField(_('تخفیف ثابت هتل'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     room_fixed_discount = models.DecimalField(_('تخفیف ثابت اتاق‌ها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     final_price = models.DecimalField(_('قیمت نهایی'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     half_day_in_charge = models.DecimalField(_('نیم‌شارژ ورود'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
@@ -1327,14 +1326,14 @@ class Reservationhotel(models.Model):
 
         total = Decimal('0')  # مجموع قیمت پایه اتاق‌ها پس از تخفیف درصدی
         total_extra = Decimal('0')  # مجموع قیمت نفرات اضافه
-        total_discount = Decimal('0')  # تخفیف کل (کد تخفیف + ثابت هتل + ثابت اتاق‌ها)
+        discount_amount = Decimal('0')  # مقدار تخفیف کد تخفیف
         room_fixed_discount = Decimal('0')  # مجموع تخفیف ثابت اتاق‌ها
         half_day_in_charge = Decimal('0')  # نیم‌شارژ ورود
         half_day_out_charge = Decimal('0')  # نیم‌شارژ خروج
 
         nights = self.nights_count
         if nights <= 0:
-            return total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total, total, total, total
+            return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total, total, total, total
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
         check_in_date_std = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
@@ -1377,38 +1376,39 @@ class Reservationhotel(models.Model):
             if res_room.fixed_discount:
                 room_fixed_discount += Decimal(res_room.fixed_discount)
 
-        # محاسبه تخفیف کل
-        total_discount = self.discount + self.hotel_fixed_discount + room_fixed_discount
+        # مقدار تخفیف کد تخفیف را مستقیماً از فیلد discount استفاده می‌کنیم
+        discount_amount = self.discount
 
         total_half_day_charge = half_day_in_charge + half_day_out_charge
 
-        # قیمت نهایی
-        final_price = total + total_extra + total_half_day_charge - total_discount
+        # قیمت قبل از اعمال تخفیف‌ها
+        base_price = total + total_extra + total_half_day_charge
+
+        # قیمت نهایی با اعمال جداگانه تخفیف‌ها
+        final_price = base_price - discount_amount - room_fixed_discount
         if final_price < 0:
             final_price = Decimal('0')
 
-        return total, total_extra, total_discount, half_day_in_charge, half_day_out_charge, total_half_day_charge, self.discount, final_price, room_fixed_discount
+        return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, self.discount, final_price, room_fixed_discount
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation', False):
             if not self.pk or any(getattr(self, field) is None for field in [
-                'total_price', 'discount', 'hotel_fixed_discount', 'room_fixed_discount', 'final_price',
+                'total_price', 'discount', 'room_fixed_discount', 'final_price',
                 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge',
                 'total_extra_passenger_charge'
             ]):
-                total, total_extra, total_discount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
+                total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
                 self.total_price = total
-                self.discount = code_discount
-                self.hotel_fixed_discount = self.hotel_fixed_discount or Decimal('0')
-                self.room_fixed_discount = room_fixed
+                self.discount = code_discount  # مقدار کد تخفیف را حفظ می‌کنیم
+                self.room_fixed_discount = room_fixed  # تخفیف ثابت اتاق‌ها
                 self.half_day_in_charge = half_in
                 self.half_day_out_charge = half_out
                 self.total_half_day_charge = total_half
                 self.total_extra_passenger_charge = total_extra
                 self.final_price = final
         super().save(*args, **kwargs)
-
-
+        
 # ---------------- ReservationRoom ----------------
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
