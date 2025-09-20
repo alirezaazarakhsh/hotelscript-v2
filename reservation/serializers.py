@@ -752,7 +752,7 @@ class PersonSerializer(serializers.Serializer):
 
 # ---------------- ReservationRoom Serializer ----------------
 class ReservationRoomDetailSerializer(serializers.Serializer):
-    id = serializers.IntegerField(source='pk')  # id واقعی اتاق رزرو شده
+    id = serializers.IntegerField(source='room.pk')  # id واقعی اتاق هتل
     name = serializers.CharField(source='room.title')
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
