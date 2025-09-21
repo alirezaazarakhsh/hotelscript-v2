@@ -114,6 +114,7 @@ from .serializers import (
     HotelTagPublicSerializer,
     HotelTagSerializer,
     HotelTypeSerializer,
+    PersonSerializer,
     ReservationCreateResponseSerializer,
     ReservationCreateSerializer,
     ReservationRoomDetailSerializer,
@@ -3043,199 +3044,96 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-class ReservationRoomDetailAPIView(APIView):
-    """
-    API برای مشاهده و بروزرسانی اطلاعات اتاق‌های رزرو شده.
-    
-    متد GET:
-        - نمایش اطلاعات اتاق شامل نام، ظرفیت، ظرفیت نفر اضافه، قیمت نفر اضافه، تخفیف ثابت، نیم‌شارژ ورود و خروج، مسافران و رزروکننده.
-    متد PUT:
-        - بروزرسانی اطلاعات نیم‌شارژ و مسافران اتاق رزرو شده.
-    """
-    permission_classes = [IsAuthenticated]
+# ---------------- Person Serializer ----------------
+class PersonSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
+    last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
+    phone_number = serializers.CharField(source='mobile_number', max_length=11, allow_blank=True, default="")
+    national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
-    def get_object(self, tracking_code):
-        # دریافت رزرو با tracking_code
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        # فقط اولین اتاق به عنوان نمونه
-        return reservation.reservation_rooms.first()
+    def validate_phone_number(self, value):
+        if value and not value.isdigit():
+            raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
+        if value and len(value) not in [0, 11]:
+            raise serializers.ValidationError("شماره تلفن باید 11 رقمی باشد یا خالی.")
+        return value
 
-    @swagger_auto_schema(
-        operation_summary="نمایش اطلاعات اتاق رزرو شده",
-        operation_description="""
-        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس کد پیگیری رزرو برمی‌گرداند، شامل اطلاعات رزروکننده.
+    def validate_national_code(self, value):
+        if value and not value.isdigit():
+            raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
+        if value and len(value) != 10:
+            raise serializers.ValidationError("کدملی باید 10 رقمی باشد.")
+        return value
 
-        ### خروجی JSON نمونه
-        ```json
-        {
-          "id": 1,
-          "name": "اتاق دو تخته",
-          "capacity": 2,
-          "extra_capacity": 1,
-          "extra_capacity_price": 200000,
-          "discount_on_purchase": 50000,
-          "passengers": {
-            "main_passenger": {
-              "first_name": "علی",
-              "last_name": "رضایی",
-              "phone_number": "09120000000",
-              "national_code": "1234567890"
-            },
-            "other_passengers": [],
-            "extra_capacity_passengers": []
-          },
-          "half_charges": {
-            "enter": {"enabled": true, "price": "50000"},
-            "exit": {"enabled": false, "price": "0"}
-          },
-          "reserver": {
-            "first_name": "محمد",
-            "last_name": "محمدی",
-            "phone_number": "09130000000",
-            "national_code": "0987654321"
-          }
+# ---------------- ReservationRoom Serializer ----------------
+class ReservationRoomDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='room.pk')  # id واقعی اتاق هتل
+    name = serializers.CharField(source='room.title')
+    capacity = serializers.IntegerField(source='room.room_capacity')
+    extra_capacity = serializers.IntegerField(source='room.extra_capacity')
+    extra_capacity_price = serializers.DecimalField(max_digits=12, decimal_places=0, source='extra_passenger_price')
+    discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source='fixed_discount')
+    passengers = serializers.SerializerMethodField()
+    half_charges = serializers.SerializerMethodField()
+
+    def get_passengers(self, obj):
+        main = obj.passengers.filter(passenger_type='primary').first()
+        other = obj.passengers.filter(passenger_type='secondary')
+        extra = obj.passengers.filter(passenger_type='extra')
+        
+        main_data = PersonSerializer(main).data if main else {
+            "first_name": "",
+            "last_name": "",
+            "phone_number": "",
+            "national_code": ""
         }
-        ```
-        """,
-        responses={200: ReservationRoomDetailSerializer()},
-        tags=["reservation-api"]
-    )
-    def get(self, request, tracking_code):
-        room = self.get_object(tracking_code)
-        serializer = ReservationRoomDetailSerializer(room)
-        return Response(serializer.data)
-
-    @swagger_auto_schema(
-        operation_summary="بروزرسانی اطلاعات اتاق رزرو شده",
-        operation_description="""
-        این API اجازه می‌دهد اطلاعات نیم‌شارژ و مسافران اتاق رزرو شده بروزرسانی شود.
-
-        ### نمونه JSON برای PUT
-        ```json
-        {
-          "half_charges": {
-            "enter": {"enabled": true, "price": "60000"},
-            "exit": {"enabled": true, "price": "40000"}
-          },
-          "passengers": {
-            "main_passenger": {
-              "first_name": "علی",
-              "last_name": "رضایی",
-              "phone_number": "09120000000",
-              "national_code": "1234567890"
-            },
-            "other_passengers": [
-              {"first_name": "زهرا", "last_name": "کاظمی", "phone_number": "", "national_code": ""}
-            ],
-            "extra_capacity_passengers": []
-          }
+        other_data = PersonSerializer(other, many=True).data if other.exists() else []
+        extra_data = PersonSerializer(extra, many=True).data if extra.exists() else []
+        
+        return {
+            "main_passenger": main_data,
+            "other_passengers": other_data,
+            "extra_capacity_passengers": extra_data
         }
-        ```
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'half_charges': openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'enter': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                'price': openapi.Schema(type=openapi.TYPE_STRING)
-                            }
-                        ),
-                        'exit': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                'price': openapi.Schema(type=openapi.TYPE_STRING)
-                            }
-                        )
-                    }
-                ),
-                'passengers': openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'main_passenger': openapi.Schema(type=openapi.TYPE_OBJECT),
-                        'other_passengers': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'extra_capacity_passengers': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                    }
-                )
+
+    def get_half_charges(self, obj):
+        return {
+            "enter": {
+                "enabled": obj.half_day_in_selected,
+                "price": str(obj.half_day_in_price if obj.half_day_in_price is not None else "0")
+            },
+            "exit": {
+                "enabled": obj.half_day_out_selected,
+                "price": str(obj.half_day_out_price if obj.half_day_out_price is not None else "0")
             }
-        ),
-        responses={200: ReservationRoomDetailSerializer()},
-        tags=["reservation-api"]
-    )
-    def put(self, request, tracking_code):
-        room = self.get_object(tracking_code)
-        data = request.data
+        }
 
-        # بروزرسانی نیم شارژ
-        half_charges = data.get("half_charges", {})
-        enter = half_charges.get("enter", {})
-        exit = half_charges.get("exit", {})
+# ---------------- Reservation Detail Serializer ----------------
+class ReservationDetailSerializer(serializers.Serializer):
+    reserver = serializers.SerializerMethodField()
+    rooms = serializers.SerializerMethodField()
 
-        room.half_day_in_selected = enter.get("enabled", room.half_day_in_selected)
-        room.half_day_in_price = enter.get("price", room.half_day_in_price)
-        room.half_day_out_selected = exit.get("enabled", room.half_day_out_selected)
-        room.half_day_out_price = exit.get("price", room.half_day_out_price)
-        room.save()
+    def get_reserver(self, obj):
+        reserver_data = {
+            "first_name": obj.reserver_first_name or "",
+            "last_name": obj.reserver_last_name or "",
+            "mobile_number": obj.reserver_phone_number or "",
+            "national_code": obj.reserver_national_code or ""
+        }
+        serializer = PersonSerializer(reserver_data)
+        if not serializer.is_valid():
+            return {
+                "first_name": "",
+                "last_name": "",
+                "phone_number": "",
+                "national_code": ""
+            }
+        return serializer.data
 
-        # بروزرسانی مسافران
-        passengers = data.get("passengers", {})
-        main_passenger = passengers.get("main_passenger")
-        other_passengers = passengers.get("other_passengers", [])
-        extra_passengers = passengers.get("extra_capacity_passengers", [])
-
-        # مسافر اصلی
-        if main_passenger:
-            main = room.passengers.filter(passenger_type='primary').first()
-            if 'phone_number' in main_passenger:
-                main_passenger['mobile_number'] = main_passenger.pop('phone_number')
-            main_serializer = PersonSerializer(data=main_passenger)
-            if not main_serializer.is_valid():
-                return Response(main_serializer.errors, status=400)
-            if main:
-                for k, v in main_serializer.validated_data.items():
-                    setattr(main, k, v)
-                main.save()
-            else:
-                ReservationRoomPassenger.objects.create(
-                    reservation_room=room,
-                    passenger_type='primary',
-                    **main_serializer.validated_data
-                )
-
-        # سایر مسافران
-        room.passengers.filter(passenger_type='secondary').delete()
-        for person_data in other_passengers:
-            if 'phone_number' in person_data:
-                person_data['mobile_number'] = person_data.pop('phone_number')
-            person_serializer = PersonSerializer(data=person_data)
-            if not person_serializer.is_valid():
-                return Response(person_serializer.errors, status=400)
-            ReservationRoomPassenger.objects.create(
-                reservation_room=room,
-                passenger_type='secondary',
-                **person_serializer.validated_data
-            )
-
-        # نفر اضافه
-        room.passengers.filter(passenger_type='extra').delete()
-        for person_data in extra_passengers:
-            if 'phone_number' in person_data:
-                person_data['mobile_number'] = person_data.pop('phone_number')
-            person_serializer = PersonSerializer(data=person_data)
-            if not person_serializer.is_valid():
-                return Response(person_serializer.errors, status=400)
-            ReservationRoomPassenger.objects.create(
-                reservation_room=room,
-                passenger_type='extra',
-                **person_serializer.validated_data
-            )
-
-        return Response(ReservationRoomDetailSerializer(room).data)
+    def get_rooms(self, obj):
+        rooms = obj.reservation_rooms.all()
+        return ReservationRoomDetailSerializer(rooms, many=True).data
+    
     
     
 # ای پی ای کد تخفیف برای رزرو 

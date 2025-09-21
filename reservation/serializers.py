@@ -774,7 +774,6 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
     discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source='fixed_discount')
     passengers = serializers.SerializerMethodField()
     half_charges = serializers.SerializerMethodField()
-    reserver = serializers.SerializerMethodField()  # فیلد جدید برای رزروکننده
 
     def get_passengers(self, obj):
         main = obj.passengers.filter(passenger_type='primary').first()
@@ -808,17 +807,20 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
             }
         }
 
+# ---------------- Reservation Detail Serializer ----------------
+class ReservationDetailSerializer(serializers.Serializer):
+    reserver = serializers.SerializerMethodField()
+    rooms = serializers.SerializerMethodField()
+
     def get_reserver(self, obj):
-        reservation = obj.reservation
         reserver_data = {
-            "first_name": reservation.reserver_first_name or "",
-            "last_name": reservation.reserver_last_name or "",
-            "mobile_number": reservation.reserver_phone_number or "",
-            "national_code": reservation.reserver_national_code or ""
+            "first_name": obj.reserver_first_name or "",
+            "last_name": obj.reserver_last_name or "",
+            "mobile_number": obj.reserver_phone_number or "",
+            "national_code": obj.reserver_national_code or ""
         }
         serializer = PersonSerializer(reserver_data)
         if not serializer.is_valid():
-            # اگر داده‌های رزروکننده نامعتبر باشند، مقدار پیش‌فرض برگردانده می‌شود
             return {
                 "first_name": "",
                 "last_name": "",
@@ -826,3 +828,7 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
                 "national_code": ""
             }
         return serializer.data
+
+    def get_rooms(self, obj):
+        rooms = obj.reservation_rooms.all()
+        return ReservationRoomDetailSerializer(rooms, many=True).data
