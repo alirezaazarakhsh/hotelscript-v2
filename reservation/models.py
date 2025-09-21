@@ -1341,9 +1341,7 @@ class Reservationhotel(models.Model):
         for res_room in self.reservation_rooms.all():
             room = res_room.room
             quantity = res_room.quantity
-            total_guests = res_room.passengers.count()
-            base_capacity = room.room_capacity * quantity
-            extra_guests = max(0, total_guests - base_capacity)
+            extra_guests = res_room.passengers.filter(passenger_type='extra').count()  # بر اساس نوع 'extra'
 
             price_obj = room.date_prices.filter(
                 start_date__lte=check_in_date_std,
@@ -1383,13 +1381,11 @@ class Reservationhotel(models.Model):
 
         # قیمت قبل از اعمال تخفیف‌ها
         base_price = total + total_extra + total_half_day_charge
-        print(f"base_price: {base_price}")  # دیباگ
 
         # قیمت نهایی با اعمال جداگانه تخفیف‌ها
         final_price = base_price - discount_amount - room_fixed_discount
         if final_price < 0:
             final_price = Decimal('0')
-        print(f"discount_amount: {discount_amount}, room_fixed_discount: {room_fixed_discount}, final_price: {final_price}")  # دیباگ
 
         return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, self.discount, final_price, room_fixed_discount
 
@@ -1460,7 +1456,7 @@ class ReservationRoom(models.Model):
         default=0
     )
     primary_passengers_count = models.PositiveIntegerField(
-        default=1,
+        default=0,
         verbose_name='تعداد نفر اصلی'
     )
     extra_passengers_count = models.PositiveIntegerField(
@@ -1571,32 +1567,10 @@ class ReservationRoom(models.Model):
         room_total = self.price_per_night * self.quantity * nights
         self.subtotal = int(room_total.quantize(Decimal('1'), rounding=ROUND_UP))
 
-    def assign_passenger_types(self):
-        if not self.pk:
-            return
-
-        passengers_list = list(self.passengers.all().order_by('pk'))
-        total_passengers = len(passengers_list)
-
-        if total_passengers == 0:
-            return
-
-        if total_passengers >= 1:
-            passengers_list[0].passenger_type = 'primary'
-            passengers_list[0].save(update_fields=['passenger_type'])
-
-        if total_passengers >= 2:
-            passengers_list[1].passenger_type = 'secondary'
-            passengers_list[1].save(update_fields=['passenger_type'])
-
-        if total_passengers > 2:
-            passengers_list[-1].passenger_type = 'extra'
-            passengers_list[-1].save(update_fields=['passenger_type'])
-
-        for i in range(2, total_passengers - 1):
-            if i < total_passengers and passengers_list[i].passenger_type not in ['primary', 'extra']:
-                passengers_list[i].passenger_type = 'secondary'
-                passengers_list[i].save(update_fields=['passenger_type'])
+    def update_passenger_counts(self):
+        self.primary_passengers_count = self.passengers.filter(passenger_type='primary').count()
+        self.extra_passengers_count = self.passengers.filter(passenger_type='extra').count()
+        self.save(update_fields=['primary_passengers_count', 'extra_passengers_count'])
 
     def save(self, *args, **kwargs):
         if not self.extra_passenger_price and self.room:
@@ -1624,10 +1598,6 @@ class ReservationRoom(models.Model):
         self.calculate_half_day_prices()
         self.calculate_room_prices()
         super().save(*args, **kwargs)
-
-        if getattr(self, '_assign_passenger_types', False) and self.passengers.exists():
-            self.assign_passenger_types()
-            
 
 # ---------------- ReservationRoomPassenger ----------------
 def validate_national_code(value):
@@ -1699,10 +1669,10 @@ class ReservationRoomPassenger(models.Model):
         self.is_primary = self.passenger_type == 'primary'
         self.full_clean()  # اجرای تمام اعتبارسنجی‌ها قبل از ذخیره
         super().save(*args, **kwargs)
-
-        # فراخوانی assign_passenger_types فقط اگر به صراحت درخواست شده (از ادمین یا API)
-        if getattr(self.reservation_room, '_assign_passenger_types', False) and self.reservation_room:
-            self.reservation_room.assign_passenger_types()
+        if self.reservation_room:
+            self.reservation_room.update_passenger_counts()
+            if self.reservation_room.reservation:
+                self.reservation_room.reservation.save()  # بازمحاسبه قیمت رزرو
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'
