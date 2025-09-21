@@ -745,10 +745,24 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
 # ---------------- Person Serializer ----------------
 class PersonSerializer(serializers.Serializer):
-    first_name = serializers.CharField(max_length=100, default="")
-    last_name = serializers.CharField(max_length=100, default="")
+    first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
+    last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     phone_number = serializers.CharField(source='mobile_number', max_length=11, allow_blank=True, default="")
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
+
+    def validate_phone_number(self, value):
+        if value and not value.isdigit():
+            raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
+        if value and len(value) not in [0, 11]:
+            raise serializers.ValidationError("شماره تلفن باید 11 رقمی باشد یا خالی.")
+        return value
+
+    def validate_national_code(self, value):
+        if value and not value.isdigit():
+            raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
+        if value and len(value) != 10:
+            raise serializers.ValidationError("کدملی باید 10 رقمی باشد.")
+        return value
 
 # ---------------- ReservationRoom Serializer ----------------
 class ReservationRoomDetailSerializer(serializers.Serializer):
@@ -758,33 +772,57 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
     extra_capacity_price = serializers.DecimalField(max_digits=12, decimal_places=0, source='extra_passenger_price')
     discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source='fixed_discount')
-
     passengers = serializers.SerializerMethodField()
     half_charges = serializers.SerializerMethodField()
+    reserver = serializers.SerializerMethodField()  # فیلد جدید برای رزروکننده
 
     def get_passengers(self, obj):
         main = obj.passengers.filter(passenger_type='primary').first()
         other = obj.passengers.filter(passenger_type='secondary')
         extra = obj.passengers.filter(passenger_type='extra')
+        
+        main_data = PersonSerializer(main).data if main else {
+            "first_name": "",
+            "last_name": "",
+            "phone_number": "",
+            "national_code": ""
+        }
+        other_data = PersonSerializer(other, many=True).data if other.exists() else []
+        extra_data = PersonSerializer(extra, many=True).data if extra.exists() else []
+        
         return {
-            "main_passenger": PersonSerializer(main).data if main else {
-                "first_name": "",
-                "last_name": "",
-                "phone_number": "",
-                "national_code": ""
-            },
-            "other_passengers": PersonSerializer(other, many=True).data,
-            "extra_capacity_passengers": PersonSerializer(extra, many=True).data
+            "main_passenger": main_data,
+            "other_passengers": other_data,
+            "extra_capacity_passengers": extra_data
         }
 
     def get_half_charges(self, obj):
         return {
             "enter": {
                 "enabled": obj.half_day_in_selected,
-                "price": str(obj.half_day_in_price)
+                "price": str(obj.half_day_in_price if obj.half_day_in_price is not None else "0")
             },
             "exit": {
                 "enabled": obj.half_day_out_selected,
-                "price": str(obj.half_day_out_price)
+                "price": str(obj.half_day_out_price if obj.half_day_out_price is not None else "0")
             }
         }
+
+    def get_reserver(self, obj):
+        reservation = obj.reservation
+        reserver_data = {
+            "first_name": reservation.reserver_first_name or "",
+            "last_name": reservation.reserver_last_name or "",
+            "mobile_number": reservation.reserver_phone_number or "",
+            "national_code": reservation.reserver_national_code or ""
+        }
+        serializer = PersonSerializer(reserver_data)
+        if not serializer.is_valid():
+            # اگر داده‌های رزروکننده نامعتبر باشند، مقدار پیش‌فرض برگردانده می‌شود
+            return {
+                "first_name": "",
+                "last_name": "",
+                "phone_number": "",
+                "national_code": ""
+            }
+        return serializer.data

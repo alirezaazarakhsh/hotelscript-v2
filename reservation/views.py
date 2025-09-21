@@ -3048,7 +3048,7 @@ class ReservationRoomDetailAPIView(APIView):
     API برای مشاهده و بروزرسانی اطلاعات اتاق‌های رزرو شده.
     
     متد GET:
-        - نمایش اطلاعات اتاق شامل نام، ظرفیت، ظرفیت نفر اضافه، قیمت نفر اضافه، تخفیف ثابت، نیم‌شارژ ورود و خروج، و مسافران.
+        - نمایش اطلاعات اتاق شامل نام، ظرفیت، ظرفیت نفر اضافه، قیمت نفر اضافه، تخفیف ثابت، نیم‌شارژ ورود و خروج، مسافران و رزروکننده.
     متد PUT:
         - بروزرسانی اطلاعات نیم‌شارژ و مسافران اتاق رزرو شده.
     """
@@ -3057,13 +3057,13 @@ class ReservationRoomDetailAPIView(APIView):
     def get_object(self, tracking_code):
         # دریافت رزرو با tracking_code
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        # فقط اولین اتاق به عنوان نمونه (می‌توان لیست هم داد)
+        # فقط اولین اتاق به عنوان نمونه
         return reservation.reservation_rooms.first()
 
     @swagger_auto_schema(
         operation_summary="نمایش اطلاعات اتاق رزرو شده",
         operation_description="""
-        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس کد پیگیری رزرو برمی‌گرداند.
+        این API اطلاعات کامل یک اتاق رزرو شده را بر اساس کد پیگیری رزرو برمی‌گرداند، شامل اطلاعات رزروکننده.
 
         ### خروجی JSON نمونه
         ```json
@@ -3087,6 +3087,12 @@ class ReservationRoomDetailAPIView(APIView):
           "half_charges": {
             "enter": {"enabled": true, "price": "50000"},
             "exit": {"enabled": false, "price": "0"}
+          },
+          "reserver": {
+            "first_name": "محمد",
+            "last_name": "محمدی",
+            "phone_number": "09130000000",
+            "national_code": "0987654321"
           }
         }
         ```
@@ -3185,19 +3191,20 @@ class ReservationRoomDetailAPIView(APIView):
         # مسافر اصلی
         if main_passenger:
             main = room.passengers.filter(passenger_type='primary').first()
+            if 'phone_number' in main_passenger:
+                main_passenger['mobile_number'] = main_passenger.pop('phone_number')
+            main_serializer = PersonSerializer(data=main_passenger)
+            if not main_serializer.is_valid():
+                return Response(main_serializer.errors, status=400)
             if main:
-                if 'phone_number' in main_passenger:
-                    main_passenger['mobile_number'] = main_passenger.pop('phone_number')
-                for k, v in main_passenger.items():
+                for k, v in main_serializer.validated_data.items():
                     setattr(main, k, v)
                 main.save()
             else:
-                if 'phone_number' in main_passenger:
-                    main_passenger['mobile_number'] = main_passenger.pop('phone_number')
                 ReservationRoomPassenger.objects.create(
                     reservation_room=room,
                     passenger_type='primary',
-                    **main_passenger
+                    **main_serializer.validated_data
                 )
 
         # سایر مسافران
@@ -3205,10 +3212,13 @@ class ReservationRoomDetailAPIView(APIView):
         for person_data in other_passengers:
             if 'phone_number' in person_data:
                 person_data['mobile_number'] = person_data.pop('phone_number')
+            person_serializer = PersonSerializer(data=person_data)
+            if not person_serializer.is_valid():
+                return Response(person_serializer.errors, status=400)
             ReservationRoomPassenger.objects.create(
                 reservation_room=room,
                 passenger_type='secondary',
-                **person_data
+                **person_serializer.validated_data
             )
 
         # نفر اضافه
@@ -3216,15 +3226,16 @@ class ReservationRoomDetailAPIView(APIView):
         for person_data in extra_passengers:
             if 'phone_number' in person_data:
                 person_data['mobile_number'] = person_data.pop('phone_number')
+            person_serializer = PersonSerializer(data=person_data)
+            if not person_serializer.is_valid():
+                return Response(person_serializer.errors, status=400)
             ReservationRoomPassenger.objects.create(
                 reservation_room=room,
                 passenger_type='extra',
-                **person_data
+                **person_serializer.validated_data
             )
 
         return Response(ReservationRoomDetailSerializer(room).data)
-    
-
     
     
 # ای پی ای کد تخفیف برای رزرو 
