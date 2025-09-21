@@ -3094,50 +3094,7 @@ class ReservationRoomDetailAPIView(APIView):
         operation_summary="نمایش اطلاعات رزرو و اتاق‌ها",
         operation_description="""
         این API اطلاعات کامل رزرو شامل رزروکننده و لیست تمام اتاق‌های رزرو شده را بر اساس کد پیگیری رزرو برمی‌گرداند.
-
-        ### خروجی JSON نمونه
-        ```json
-        {
-          "reserver": {
-            "first_name": "محمد",
-            "last_name": "محمدی",
-            "phone_number": "09130000000",
-            "national_code": "0987654321"
-          },
-          "rooms": [
-            {
-              "id": 1,
-              "name": "اتاق دو تخته",
-              "capacity": 2,
-              "extra_capacity": 1,
-              "extra_capacity_price": 200000,
-              "discount_on_purchase": 50000,
-              "passengers": {
-                "main_passenger": {
-                  "first_name": "علی",
-                  "last_name": "رضایی",
-                  "phone_number": "09120000000",
-                  "national_code": "1234567890"
-                },
-                "other_passengers": [
-                  {
-                    "first_name": "زهرا",
-                    "last_name": "کاظمی",
-                    "phone_number": "",
-                    "national_code": ""
-                  }
-                ],
-                "extra_capacity_passengers": []
-              },
-              "half_charges": {
-                "enter": {"enabled": true, "price": 50000},
-                "exit": {"enabled": false, "price": 0}
-              }
-            }
-          ]
-        }
-        """
-        ,
+        """,
         responses={200: ReservationDetailSerializer()},
         tags=["reservation-api"]
     )
@@ -3151,49 +3108,6 @@ class ReservationRoomDetailAPIView(APIView):
         operation_description="""
         این API اجازه می‌دهد اطلاعات رزروکننده و نیم‌شارژ و مسافران اتاق‌های رزرو شده بروزرسانی شود.
         توجه: `id` باید شناسه اتاق (Room.pk) باشد، نه شناسه ReservationRoom.
-
-        ### نحوه استفاده
-        - **URL**: `/api/reservation/{tracking_code}/`
-        - **متد**: `PUT`
-        - **بدنه درخواست (JSON)**: باید شامل بخش‌های `reserver` و `rooms` باشد.
-          - **reserver**: شامل فیلدهای `first_name`، `last_name`، `phone_number` (اختیاری، ۱۱ رقمی و فقط عدد) و `national_code` است. اگر `phone_number` خالی باشد، مقدار دیتابیس حفظ می‌شود.
-          - **rooms**: آرایه‌ای از اشیاء که هر کدام شامل `id` (شناسه اتاق)، `half_charges` (نیم‌شارژ ورود/خروج) و `passengers` (مسافران اصلی، دیگر و نفرات اضافه) است.
-        - **مثال درخواست JSON**:
-        ```json
-        {
-          "reserver": {
-            "first_name": "Alireza",
-            "last_name": "Azarakhsh",
-            "phone_number": "09120759419",
-            "national_code": "0023467444"
-          },
-          "rooms": [
-            {
-              "id": 1,
-              "half_charges": {
-                "enter": {"enabled": true, "price": 60000},
-                "exit": {"enabled": true, "price": 40000}
-              },
-              "passengers": {
-                "main_passenger": {
-                  "first_name": "علی",
-                  "last_name": "رضایی",
-                  "phone_number": "09120000000",
-                  "national_code": "1234567890"
-                },
-                "other_passengers": [
-                  {"first_name": "زهرا", "last_name": "کاظمی", "phone_number": "", "national_code": ""}
-                ],
-                "extra_capacity_passengers": []
-              }
-            }
-          ]
-        }
-        ```
-        - **پاسخ موفقیت‌آمیز**: کد وضعیت 200 با داده‌های به‌روزرسانی‌شده.
-        - **خطاها**:
-          - 400: اگر `id` اتاق وجود نداشته باشد یا داده‌ها معتبر نباشند.
-          - 404: اگر رزرو با کد پیگیری یافت نشود.
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -3295,9 +3209,9 @@ class ReservationRoomDetailAPIView(APIView):
             main_passenger = passengers.get("main_passenger", {})
             logger.debug(f"Raw main passenger data: {main_passenger}")
             if main_passenger:
-                main_passenger_copy = main_passenger.copy()  # کپی برای جلوگیری از تغییر اصلی
-                phone_number = main_passenger_copy.pop('phone_number', None)
-                if phone_number:
+                main_passenger_copy = main_passenger.copy()
+                phone_number = main_passenger_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
                     main_passenger_copy['mobile_number'] = phone_number
                 else:
                     main_passenger_copy['mobile_number'] = ''
@@ -3322,8 +3236,8 @@ class ReservationRoomDetailAPIView(APIView):
             other_passengers = passengers.get("other_passengers", [])
             for person_data in other_passengers:
                 person_data_copy = person_data.copy()
-                phone_number = person_data_copy.pop('phone_number', None)
-                if phone_number:
+                phone_number = person_data_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
                     person_data_copy['mobile_number'] = phone_number
                 else:
                     person_data_copy['mobile_number'] = ''
@@ -3342,8 +3256,8 @@ class ReservationRoomDetailAPIView(APIView):
             extra_passengers = passengers.get("extra_capacity_passengers", [])
             for person_data in extra_passengers:
                 person_data_copy = person_data.copy()
-                phone_number = person_data_copy.pop('phone_number', None)
-                if phone_number:
+                phone_number = person_data_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
                     person_data_copy['mobile_number'] = phone_number
                 else:
                     person_data_copy['mobile_number'] = ''
@@ -3360,7 +3274,6 @@ class ReservationRoomDetailAPIView(APIView):
         # بازمحاسبه قیمت‌های رزرو
         reservation.save()
         return Response(ReservationDetailSerializer(reservation).data)
-
 
     
 # ای پی ای کد تخفیف برای رزرو 

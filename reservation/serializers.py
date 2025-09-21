@@ -856,7 +856,7 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "phone_number": obj.reserver_phone_number or "",  # اولویت با دیتابیس
+            "phone_number": obj.reserver_phone_number or "",
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data (from model): {reserver_data}")
@@ -879,7 +879,7 @@ class ReservationDetailSerializer(serializers.Serializer):
             return serializer.data
         else:
             logger.error(f"reserver_error: {serializer.errors}")
-            return reserver_data  # داده با مقدار دیتابیس
+            return reserver_data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
