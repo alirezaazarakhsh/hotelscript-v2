@@ -743,12 +743,10 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
-
-# ---------------- Person Serializer ----------------
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
-    phone_number = serializers.CharField(source='mobile_number', max_length=11, allow_blank=True, default="")
+    phone_number = serializers.CharField(max_length=11, allow_blank=True, default="")
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def validate_phone_number(self, value):
@@ -763,11 +761,16 @@ class PersonSerializer(serializers.Serializer):
             raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
         if value and len(value) != 10:
             raise serializers.ValidationError("کدملی باید 10 رقمی باشد.")
+        # اعتبارسنجی کد ملی
+        if value:
+            check_digits = int(value[9])
+            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+            if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+                raise serializers.ValidationError("کد ملی معتبر نیست.")
         return value
 
-# ---------------- ReservationRoom Serializer ----------------
 class ReservationRoomDetailSerializer(serializers.Serializer):
-    id = serializers.IntegerField(source='room.pk')  # id واقعی اتاق هتل
+    id = serializers.IntegerField(source='room.pk')  # شناسه واقعی اتاق هتل
     name = serializers.CharField(source='room.title')
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
@@ -808,7 +811,6 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
             }
         }
 
-# ---------------- Reservation Detail Serializer ----------------
 class ReservationDetailSerializer(serializers.Serializer):
     reserver = serializers.SerializerMethodField()
     rooms = serializers.SerializerMethodField()
@@ -817,21 +819,14 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "mobile_number": obj.reserver_phone_number or "",
+            "phone_number": obj.reserver_phone_number or "",  # استفاده مستقیم از reserver_phone_number
             "national_code": obj.reserver_national_code or ""
         }
         serializer = PersonSerializer(data=reserver_data)
-        try:
-            serializer.is_valid(raise_exception=False)
+        if serializer.is_valid():
             return serializer.data
-        except Exception as e:
-            print(f"reserver_error: {str(e)}")  # لاگ برای دیباگ
-            return {
-                "first_name": "",
-                "last_name": "",
-                "phone_number": "",
-                "national_code": ""
-            }
+        print(f"reserver_error: {serializer.errors}")  # لاگ برای دیباگ
+        return reserver_data  # در صورت خطا، داده خام را برگردانید
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()

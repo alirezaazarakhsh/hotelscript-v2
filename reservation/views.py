@@ -2885,10 +2885,6 @@ class HotelImageAPIView(APIView):
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
 logger = logging.getLogger(__name__)
 
-def format_number(value):
-    """عدد را با ویرگول سه‌تایی فرمت می‌کند"""
-    return f"{int(value):,}" if value is not None else "0"
-
 def parse_number(value):
     """عدد ورودی با یا بدون ویرگول را به Decimal تبدیل می‌کند"""
     if value is None:
@@ -2912,12 +2908,13 @@ class ReservationInvoiceAPIView(APIView):
         - **پاسخ**:
           ```json
           {
-            "total_price": "50,000,000",
-            "extra_passengers": "4,400,000",
-            "half_charges": "12,500,000",
-            "discount_on_purchase": "1,000,000",
-            "discount_code": "2,000,000",
-            "final_total_price": "63,900,000"
+            "nights_count": 3,
+            "total_price": 50000000,
+            "extra_passengers": 4400000,
+            "half_charges": 12500000,
+            "discount_on_purchase": 1000000,
+            "discount_code": 2000000,
+            "final_total_price": 63900000
           }
           ```
         
@@ -2925,7 +2922,21 @@ class ReservationInvoiceAPIView(APIView):
         - ویرایش صورت‌حساب و بروزرسانی مقادیر
         - فرمت عددها می‌تواند بدون ویرگول یا با ویرگول باشد
         """,
-        tags=["reservation-api"]
+        tags=["reservation-api"],
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'nights_count': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد شب‌های اقامت"),
+                    'total_price': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت اتاق‌ها"),
+                    'extra_passengers': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت نفرات اضافه"),
+                    'half_charges': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع نیم شارژها"),
+                    'discount_on_purchase': openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف ثابت اتاق‌ها"),
+                    'discount_code': openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف کد تخفیف"),
+                    'final_total_price': openapi.Schema(type=openapi.TYPE_NUMBER, description="قیمت نهایی"),
+                }
+            )
+        }
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
@@ -2935,12 +2946,13 @@ class ReservationInvoiceAPIView(APIView):
         total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed_discount = reservation.calculate_total_price()
 
         response_data = {
-            "total_price": format_number(total),
-            "extra_passengers": format_number(total_extra),
-            "half_charges": format_number(total_half),
-            "discount_on_purchase": format_number(room_fixed_discount),
-            "discount_code": format_number(code_discount),
-            "final_total_price": format_number(final)
+            "nights_count": reservation.nights_count,  # اضافه کردن تعداد شب‌ها
+            "total_price": int(total),  # تبدیل به عدد صحیح
+            "extra_passengers": int(total_extra),
+            "half_charges": int(total_half),
+            "discount_on_purchase": int(room_fixed_discount),
+            "discount_code": int(code_discount),
+            "final_total_price": int(final)
         }
         return Response(response_data, status=status.HTTP_200_OK)
 
@@ -2956,9 +2968,27 @@ class ReservationInvoiceAPIView(APIView):
                 "discount_code": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف کد تخفیف"),
                 "final_total_price": openapi.Schema(type=openapi.TYPE_STRING, description="قیمت نهایی"),
             },
-            required=["total_price","extra_passengers","half_charges","discount_on_purchase","discount_code","final_total_price"]
+            required=["total_price", "extra_passengers", "half_charges", "discount_on_purchase", "discount_code", "final_total_price"]
         ),
-        responses={200: "صورت‌حساب با موفقیت ویرایش شد."},
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'message': openapi.Schema(type=openapi.TYPE_STRING, description="پیام موفقیت"),
+                    'invoice': openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'total_price': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت اتاق‌ها"),
+                            'extra_passengers': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت نفرات اضافه"),
+                            'half_charges': openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع نیم شارژها"),
+                            'discount_on_purchase': openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف ثابت اتاق‌ها"),
+                            'discount_code': openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف کد تخفیف"),
+                            'final_total_price': openapi.Schema(type=openapi.TYPE_NUMBER, description="قیمت نهایی"),
+                        }
+                    )
+                }
+            )
+        },
         tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
@@ -2989,16 +3019,15 @@ class ReservationInvoiceAPIView(APIView):
         response_data = {
             "message": "صورت‌حساب با موفقیت ویرایش شد.",
             "invoice": {
-                "total_price": format_number(reservation.total_price),
-                "extra_passengers": format_number(reservation.total_extra_passenger_charge),
-                "half_charges": format_number(reservation.total_half_day_charge),
-                "discount_on_purchase": format_number(reservation.room_fixed_discount),
-                "discount_code": format_number(reservation.discount),
-                "final_total_price": format_number(reservation.final_price)
+                "total_price": int(reservation.total_price),
+                "extra_passengers": int(reservation.total_extra_passenger_charge),
+                "half_charges": int(reservation.total_half_day_charge),
+                "discount_on_purchase": int(reservation.room_fixed_discount),
+                "discount_code": int(reservation.discount),
+                "final_total_price": int(reservation.final_price)
             }
         }
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
     
 
