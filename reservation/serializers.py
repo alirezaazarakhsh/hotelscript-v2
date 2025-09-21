@@ -756,7 +756,9 @@ class PersonSerializer(serializers.Serializer):
             return obj.mobile_number
         elif isinstance(obj, dict):
             phone = obj.get('phone_number', '')
-            return phone
+            return phone if phone and phone.isdigit() and len(phone) == 11 else ""
+        elif hasattr(obj, 'reserver_phone_number'):  # برای reserver
+            return obj.reserver_phone_number
         return ""
 
     def validate(self, data):
@@ -834,11 +836,11 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         return {
             "enter": {
                 "enabled": obj.half_day_in_selected,
-                "price": obj.half_day_in_price if obj.half_day_in_price is not None else 0
+                "price": int(obj.half_day_in_price) if obj.half_day_in_price is not None else 0
             },
             "exit": {
                 "enabled": obj.half_day_out_selected,
-                "price": obj.half_day_out_price if obj.half_day_out_price is not None else 0
+                "price": int(obj.half_day_out_price) if obj.half_day_out_price is not None else 0
             }
         }
 
@@ -851,7 +853,7 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "phone_number": obj.reserver_phone_number or "",
+            "phone_number": obj.reserver_phone_number or "",  # مستقیماً از مدل می‌گیریم
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data: {reserver_data}")
@@ -861,7 +863,7 @@ class ReservationDetailSerializer(serializers.Serializer):
             return serializer.data
         else:
             logger.error(f"reserver_error: {serializer.errors}")
-            return reserver_data
+            return reserver_data  # داده خام با phone_number اصلی
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()

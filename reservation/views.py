@@ -3074,7 +3074,7 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-llogger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 class ReservationRoomDetailAPIView(APIView):
     """
@@ -3177,8 +3177,8 @@ class ReservationRoomDetailAPIView(APIView):
             }
           ]
         }
-        ```
-        """,
+        """
+        ,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
