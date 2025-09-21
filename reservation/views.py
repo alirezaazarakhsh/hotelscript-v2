@@ -3293,16 +3293,13 @@ class ReservationRoomDetailAPIView(APIView):
             # بروزرسانی مسافران
             passengers = room_data.get("passengers", {})
             main_passenger = passengers.get("main_passenger", {})
-            other_passengers = passengers.get("other_passengers", [])
-            extra_passengers = passengers.get("extra_capacity_passengers", [])
-
-            # مسافر اصلی
+            logger.debug(f"Raw main passenger data: {main_passenger}")
             if main_passenger:
                 if 'phone_number' in main_passenger:
-                    main_passenger['mobile_number'] = main_passenger.pop('phone_number', '')
+                    main_passenger['mobile_number'] = main_passenger.pop('phone_number')
                 else:
-                    main_passenger['mobile_number'] = ''
-                logger.debug(f"Main passenger data before serialization: {main_passenger}")
+                    main_passenger['mobile_number'] = main_passenger.get('phone_number', '')
+                logger.debug(f"Processed main passenger data: {main_passenger}")
                 main_serializer = PersonSerializer(data=main_passenger, context={'passenger_type': 'primary'})
                 if not main_serializer.is_valid():
                     logger.error(f"main_passenger_error: {main_serializer.errors}")
@@ -3320,11 +3317,12 @@ class ReservationRoomDetailAPIView(APIView):
 
             # سایر مسافران
             room.passengers.filter(passenger_type='secondary').delete()
+            other_passengers = passengers.get("other_passengers", [])
             for person_data in other_passengers:
                 if 'phone_number' in person_data:
-                    person_data['mobile_number'] = person_data.pop('phone_number', '')
+                    person_data['mobile_number'] = person_data.pop('phone_number')
                 else:
-                    person_data['mobile_number'] = ''
+                    person_data['mobile_number'] = person_data.get('phone_number', '')
                 person_serializer = PersonSerializer(data=person_data, context={'passenger_type': 'secondary'})
                 if not person_serializer.is_valid():
                     logger.error(f"other_passenger_error: {person_serializer.errors}")
@@ -3337,11 +3335,12 @@ class ReservationRoomDetailAPIView(APIView):
 
             # نفر اضافه
             room.passengers.filter(passenger_type='extra').delete()
+            extra_passengers = passengers.get("extra_capacity_passengers", [])
             for person_data in extra_passengers:
                 if 'phone_number' in person_data:
-                    person_data['mobile_number'] = person_data.pop('phone_number', '')
+                    person_data['mobile_number'] = person_data.pop('phone_number')
                 else:
-                    person_data['mobile_number'] = ''
+                    person_data['mobile_number'] = person_data.get('phone_number', '')
                 person_serializer = PersonSerializer(data=person_data, context={'passenger_type': 'extra'})
                 if not person_serializer.is_valid():
                     logger.error(f"extra_passenger_error: {person_serializer.errors}")
