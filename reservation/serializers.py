@@ -751,10 +751,13 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def get_phone_number(self, obj):
-        if hasattr(obj, 'reserver_phone_number'):  # اولویت با reserver_phone_number
-            return obj.reserver_phone_number
+        # اگر obj یک نمونه از Reservationhotel باشد، از reserver_phone_number استفاده کن
+        if hasattr(obj, 'reserver_phone_number'):
+            return obj.reserver_phone_number or ""
+        # اگر obj یک نمونه از ReservationRoomPassenger باشد، از mobile_number استفاده کن
         elif hasattr(obj, 'mobile_number') and obj.mobile_number:
             return obj.mobile_number
+        # اگر obj یک دیکشنری باشد، فقط اگر معتبر باشد مقدار را قبول کن
         elif isinstance(obj, dict):
             phone = obj.get('phone_number', '')
             return phone if phone and phone.isdigit() and len(phone) == 11 else ""

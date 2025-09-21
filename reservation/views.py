@@ -3083,7 +3083,7 @@ class ReservationRoomDetailAPIView(APIView):
     متد GET:
         - نمایش اطلاعات رزرو شامل رزروکننده و لیست تمام اتاق‌های رزرو شده (نام، ظرفیت، مسافران، نیم‌شارژ).
     متد PUT:
-        - بروزرسانی اطلاعات نیم‌شارژ و مسافران اتاق‌های رزرو شده.
+        - بروزرسانی اطلاعات رزروکننده و نیم‌شارژ و مسافران اتاق‌های رزرو شده.
     """
     permission_classes = [IsAuthenticated]
 
@@ -3147,18 +3147,24 @@ class ReservationRoomDetailAPIView(APIView):
         return Response(serializer.data)
 
     @swagger_auto_schema(
-        operation_summary="بروزرسانی اطلاعات اتاق‌های رزرو شده",
+        operation_summary="بروزرسانی اطلاعات رزروکننده و اتاق‌های رزرو شده",
         operation_description="""
-        این API اجازه می‌دهد اطلاعات نیم‌شارژ و مسافران اتاق‌های رزرو شده بروزرسانی شود.
+        این API اجازه می‌دهد اطلاعات رزروکننده و نیم‌شارژ و مسافران اتاق‌های رزرو شده بروزرسانی شود.
         توجه: `id` باید شناسه اتاق (Room.pk) باشد، نه شناسه ReservationRoom.
 
-        ### نمونه JSON برای PUT
+        ### نحوه استفاده
+        - **URL**: `/api/reservation/{tracking_code}/`
+        - **متد**: `PUT`
+        - **بدنه درخواست (JSON)**: باید شامل بخش‌های `reserver` و `rooms` باشد.
+          - **reserver**: شامل فیلدهای `first_name`، `last_name`، `phone_number` (اختیاری، ۱۱ رقمی و فقط عدد) و `national_code` است. اگر `phone_number` خالی باشد، مقدار دیتابیس حفظ می‌شود.
+          - **rooms**: آرایه‌ای از اشیاء که هر کدام شامل `id` (شناسه اتاق)، `half_charges` (نیم‌شارژ ورود/خروج) و `passengers` (مسافران اصلی، دیگر و نفرات اضافه) است.
+        - **مثال درخواست JSON**:
         ```json
         {
           "reserver": {
             "first_name": "Alireza",
             "last_name": "Azarakhsh",
-            "phone_number": "",
+            "phone_number": "09120759419",
             "national_code": "0023467444"
           },
           "rooms": [
@@ -3183,18 +3189,22 @@ class ReservationRoomDetailAPIView(APIView):
             }
           ]
         }
-        """
-        ,
+        ```
+        - **پاسخ موفقیت‌آمیز**: کد وضعیت 200 با داده‌های به‌روزرسانی‌شده.
+        - **خطاها**:
+          - 400: اگر `id` اتاق وجود نداشته باشد یا داده‌ها معتبر نباشند.
+          - 404: اگر رزرو با کد پیگیری یافت نشود.
+        """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'reserver': openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'first_name': openapi.Schema(type=openapi.TYPE_STRING),
-                        'last_name': openapi.Schema(type=openapi.TYPE_STRING),
-                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
-                        'national_code': openapi.Schema(type=openapi.TYPE_STRING)
+                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام رزروکننده'),
+                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی رزروکننده'),
+                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره تلفن (اختیاری، ۱۱ رقمی و فقط عدد)'),
+                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی')
                     }
                 ),
                 'rooms': openapi.Schema(
@@ -3244,13 +3254,18 @@ class ReservationRoomDetailAPIView(APIView):
         # به‌روزرسانی اطلاعات رزروکننده
         reserver_data = data.get('reserver', {})
         if reserver_data:
-            reservation.reserver_first_name = reserver_data.get('first_name', reservation.reserver_first_name)
-            reservation.reserver_last_name = reserver_data.get('last_name', reservation.reserver_last_name)
-            phone_input = reserver_data.get('phone_number', '')
-            if phone_input and phone_input.isdigit() and len(phone_input) == 11:
-                reservation.reserver_phone_number = phone_input
-            reservation.reserver_national_code = reserver_data.get('national_code', reservation.reserver_national_code)
-            reservation.save()
+            reserver_serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
+            if reserver_serializer.is_valid():
+                reservation.reserver_first_name = reserver_serializer.validated_data.get('first_name', reservation.reserver_first_name)
+                reservation.reserver_last_name = reserver_serializer.validated_data.get('last_name', reservation.reserver_last_name)
+                phone_input = reserver_serializer.validated_data.get('phone_number', '')
+                if phone_input and phone_input.isdigit() and len(phone_input) == 11:
+                    reservation.reserver_phone_number = phone_input
+                reservation.reserver_national_code = reserver_serializer.validated_data.get('national_code', reservation.reserver_national_code)
+                reservation.save()
+            else:
+                logger.error(f"reserver_validation_error: {reserver_serializer.errors}")
+                return Response(reserver_serializer.errors, status=400)
 
         rooms_data = data.get("rooms", [])
 
@@ -3339,6 +3354,7 @@ class ReservationRoomDetailAPIView(APIView):
         # بازمحاسبه قیمت‌های رزرو
         reservation.save()
         return Response(ReservationDetailSerializer(reservation).data)
+
 
 
     
