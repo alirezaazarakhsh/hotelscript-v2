@@ -746,10 +746,21 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
-    phone_number = serializers.CharField(max_length=11, allow_blank=True, default="")
+    phone_number = serializers.SerializerMethodField()
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
+    def get_phone_number(self, obj):
+        # اگر obj وجود داشته باشد (برای مسافران ذخیره‌شده در دیتابیس)
+        if obj and obj.mobile_number:
+            return obj.mobile_number
+        # دسترسی به reservation از طریق reservation_room برای استفاده از reserver_phone_number
+        reservation = obj.reservation_room.reservation if obj else None
+        return reservation.reserver_phone_number if reservation else ""
+
     def validate_phone_number(self, value):
+        # برای مسافر اصلی، شماره تلفن الزامی است
+        if self.context.get('passenger_type') == 'primary' and not value:
+            raise serializers.ValidationError("شماره تلفن برای مسافر اصلی الزامی است.")
         if value and not value.isdigit():
             raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
         if value and len(value) not in [0, 11]:
@@ -757,11 +768,13 @@ class PersonSerializer(serializers.Serializer):
         return value
 
     def validate_national_code(self, value):
+        # برای مسافر اصلی، کد ملی الزامی است
+        if self.context.get('passenger_type') == 'primary' and not value:
+            raise serializers.ValidationError("کد ملی برای مسافر اصلی الزامی است.")
         if value and not value.isdigit():
             raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
         if value and len(value) != 10:
             raise serializers.ValidationError("کدملی باید 10 رقمی باشد.")
-        # اعتبارسنجی کد ملی
         if value:
             check_digits = int(value[9])
             total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
@@ -770,7 +783,7 @@ class PersonSerializer(serializers.Serializer):
         return value
 
 class ReservationRoomDetailSerializer(serializers.Serializer):
-    id = serializers.IntegerField(source='room.pk')  # شناسه واقعی اتاق هتل
+    id = serializers.IntegerField(source='room.pk')
     name = serializers.CharField(source='room.title')
     capacity = serializers.IntegerField(source='room.room_capacity')
     extra_capacity = serializers.IntegerField(source='room.extra_capacity')
@@ -783,16 +796,17 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         main = obj.passengers.filter(passenger_type='primary').first()
         other = obj.passengers.filter(passenger_type='secondary')
         extra = obj.passengers.filter(passenger_type='extra')
-        
-        main_data = PersonSerializer(main).data if main else {
+
+        # اضافه کردن passenger_type به context برای اعتبارسنجی
+        main_data = PersonSerializer(main, context={'passenger_type': 'primary'}).data if main else {
             "first_name": "",
             "last_name": "",
-            "phone_number": "",
+            "phone_number": obj.reservation.reserver_phone_number,
             "national_code": ""
         }
-        other_data = PersonSerializer(other, many=True).data if other.exists() else []
-        extra_data = PersonSerializer(extra, many=True).data if extra.exists() else []
-        
+        other_data = PersonSerializer(other, many=True, context={'passenger_type': 'secondary'}).data if other.exists() else []
+        extra_data = PersonSerializer(extra, many=True, context={'passenger_type': 'extra'}).data if extra.exists() else []
+
         return {
             "main_passenger": main_data,
             "other_passengers": other_data,
@@ -819,14 +833,14 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "phone_number": obj.reserver_phone_number or "",  # استفاده مستقیم از reserver_phone_number
+            "phone_number": obj.reserver_phone_number or "",
             "national_code": obj.reserver_national_code or ""
         }
-        serializer = PersonSerializer(data=reserver_data)
+        serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
         if serializer.is_valid():
             return serializer.data
         print(f"reserver_error: {serializer.errors}")  # لاگ برای دیباگ
-        return reserver_data  # در صورت خطا، داده خام را برگردانید
+        return reserver_data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
