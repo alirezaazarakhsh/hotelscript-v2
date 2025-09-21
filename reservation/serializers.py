@@ -856,7 +856,7 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "phone_number": obj.reserver_phone_number or "",  # اولویت با دیتابیس
+            "phone_number": obj.reserver_phone_number or "",  # استفاده مستقیم از reserver_phone_number
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data (from model): {reserver_data}")
