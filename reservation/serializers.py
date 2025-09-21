@@ -1,5 +1,4 @@
 import re
-from venv import logger
 from rest_framework import serializers
 import jdatetime
 from django.utils import timezone
@@ -744,6 +743,8 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
+logger = logging.getLogger(__name__)
+
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
@@ -753,7 +754,7 @@ class PersonSerializer(serializers.Serializer):
     def get_phone_number(self, obj):
         # اگر obj یه نمونه مدل باشه
         if hasattr(obj, 'mobile_number'):
-            return obj.mobile_number or obj.reservation_room.reservation.reserver_phone_number
+            return obj.mobile_number or ""
         # اگر obj یه دیکشنری باشه
         elif isinstance(obj, dict):
             return obj.get('phone_number', '')
@@ -782,6 +783,8 @@ class PersonSerializer(serializers.Serializer):
         return value
 
     def validate_national_code(self, value):
+        if self.context.get('passenger_type') == 'primary' and not value:
+            raise serializers.ValidationError("کد ملی برای مسافر اصلی الزامی است.")
         if value and not value.isdigit():
             raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
         if value and len(value) != 10:
@@ -811,7 +814,7 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         main_data = PersonSerializer(main, context={'passenger_type': 'primary'}).data if main else {
             "first_name": "",
             "last_name": "",
-            "phone_number": obj.reservation.reserver_phone_number,
+            "phone_number": "",
             "national_code": ""
         }
         other_data = PersonSerializer(other, many=True, context={'passenger_type': 'secondary'}).data if other.exists() else []
