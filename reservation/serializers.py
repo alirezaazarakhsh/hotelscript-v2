@@ -753,14 +753,17 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def get_phone_number(self, obj):
-        # اگر obj یه نمونه مدل باشه
-        if hasattr(obj, 'mobile_number'):
-            return obj.mobile_number or ""
-        # اگر obj یه دیکشنری باشه
+        """
+        دریافت شماره تلفن از شیء یا دیکشنری با اعتبارسنجی
+        """
+        if hasattr(obj, 'mobile_number') and obj.mobile_number:
+            return obj.mobile_number
         elif isinstance(obj, dict):
-            return obj.get('phone_number', '')
-        # اگر obj None باشه
-        return ''
+            phone = obj.get('phone_number', '')
+            # بررسی اعتبار شماره تلفن
+            if phone and phone.isdigit() and len(phone) == 11:
+                return phone
+        return ""
 
     def validate(self, data):
         passenger_type = self.context.get('passenger_type')
@@ -779,8 +782,8 @@ class PersonSerializer(serializers.Serializer):
     def validate_phone_number(self, value):
         if value and not value.isdigit():
             raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
-        if value and len(value) not in [0, 11]:
-            raise serializers.ValidationError("شماره تلفن باید 11 رقمی باشد یا خالی.")
+        if value and len(value) != 11:
+            raise serializers.ValidationError("شماره تلفن باید 11 رقمی باشد.")
         return value
 
     def validate_national_code(self, value):
@@ -844,17 +847,28 @@ class ReservationDetailSerializer(serializers.Serializer):
     rooms = serializers.SerializerMethodField()
 
     def get_reserver(self, obj):
+        """
+        سریالایز کردن اطلاعات رزروکننده با مدیریت خطاها
+        """
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
             "phone_number": obj.reserver_phone_number or "",
             "national_code": obj.reserver_national_code or ""
         }
+        logger.debug(f"reserver_data: {reserver_data}")
         serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
         if serializer.is_valid():
+            logger.debug(f"reserver_serialized: {serializer.data}")
             return serializer.data
-        logger.error(f"reserver_error: {serializer.errors}")
-        return reserver_data
+        else:
+            logger.error(f"reserver_error: {serializer.errors}")
+            # بازگشت داده با اعتبارسنجی دستی برای phone_number
+            validated_data = reserver_data.copy()
+            phone = reserver_data["phone_number"]
+            validated_data["phone_number"] = phone if phone and phone.isdigit() and len(phone) == 11 else ""
+            logger.debug(f"reserver_fallback: {validated_data}")
+            return validated_data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
