@@ -3136,8 +3136,8 @@ class ReservationRoomDetailAPIView(APIView):
             }
           ]
         }
-        ```
-        """,
+        """
+        ,
         responses={200: ReservationDetailSerializer()},
         tags=["reservation-api"]
     )
@@ -3246,7 +3246,9 @@ class ReservationRoomDetailAPIView(APIView):
         if reserver_data:
             reservation.reserver_first_name = reserver_data.get('first_name', reservation.reserver_first_name)
             reservation.reserver_last_name = reserver_data.get('last_name', reservation.reserver_last_name)
-            reservation.reserver_phone_number = reserver_data.get('phone_number', reservation.reserver_phone_number)
+            phone_input = reserver_data.get('phone_number', '')
+            if phone_input and phone_input.isdigit() and len(phone_input) == 11:
+                reservation.reserver_phone_number = phone_input
             reservation.reserver_national_code = reserver_data.get('national_code', reservation.reserver_national_code)
             reservation.save()
 

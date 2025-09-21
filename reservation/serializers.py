@@ -858,13 +858,15 @@ class ReservationDetailSerializer(serializers.Serializer):
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data (from model): {reserver_data}")
-        # اگر داده ورودی وجود دارد، آن را با داده مدل ادغام می‌کنیم
+        # اگر داده ورودی وجود دارد و معتبر است، آن را با داده مدل ادغام می‌کنیم
         if self.context.get('request') and self.context['request'].method == 'PUT':
             input_data = self.context['request'].data.get('reserver', {})
+            phone_input = input_data.get('phone_number', '')
+            if phone_input and phone_input.isdigit() and len(phone_input) == 11:
+                reserver_data['phone_number'] = phone_input
             reserver_data.update({
                 "first_name": input_data.get('first_name', reserver_data['first_name']),
                 "last_name": input_data.get('last_name', reserver_data['last_name']),
-                "phone_number": input_data.get('phone_number', reserver_data['phone_number']),
                 "national_code": input_data.get('national_code', reserver_data['national_code'])
             })
         logger.debug(f"reserver_data (after update): {reserver_data}")
