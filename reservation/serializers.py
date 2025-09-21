@@ -743,6 +743,7 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
+
 # ---------------- Person Serializer ----------------
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
@@ -816,20 +817,25 @@ class ReservationDetailSerializer(serializers.Serializer):
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
-            "mobile_number": obj.reserver_phone_number or "",  # کلید برای source='mobile_number'
+            "mobile_number": obj.reserver_phone_number or "",
             "national_code": obj.reserver_national_code or ""
         }
-        # instantiate با data= برای سریال‌سازی خروجی (بدون نیاز به is_valid برای خروجی)
         serializer = PersonSerializer(data=reserver_data)
-        # برای خروجی، is_valid اختیاری است؛ اگر می‌خواهید اعتبارسنجی کنید، raise_exception=False بگذارید
         try:
             serializer.is_valid(raise_exception=False)
-            return serializer.data  # خروجی شامل phone_number به جای mobile_number
-        except Exception:
-            # در صورت خطا، دیکشنری پیش‌فرض برگردانید
+            return serializer.data
+        except Exception as e:
+            print(f"reserver_error: {str(e)}")  # لاگ برای دیباگ
             return {
                 "first_name": "",
                 "last_name": "",
                 "phone_number": "",
                 "national_code": ""
             }
+
+    def get_rooms(self, obj):
+        rooms = obj.reservation_rooms.all()
+        print(f"rooms_count: {rooms.count()}")  # لاگ برای دیباگ
+        serialized_rooms = ReservationRoomDetailSerializer(rooms, many=True).data
+        print(f"serialized_rooms: {serialized_rooms}")  # لاگ برای دیباگ
+        return serialized_rooms
