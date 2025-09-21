@@ -3339,7 +3339,8 @@ class ReservationRoomDetailAPIView(APIView):
         # بازمحاسبه قیمت‌های رزرو
         reservation.save()
         return Response(ReservationDetailSerializer(reservation).data)
-    
+
+
     
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):

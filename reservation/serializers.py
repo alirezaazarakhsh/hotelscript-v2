@@ -744,7 +744,6 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
-    
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
@@ -752,13 +751,13 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def get_phone_number(self, obj):
-        if hasattr(obj, 'mobile_number') and obj.mobile_number:
+        if hasattr(obj, 'reserver_phone_number'):  # اولویت با reserver_phone_number
+            return obj.reserver_phone_number
+        elif hasattr(obj, 'mobile_number') and obj.mobile_number:
             return obj.mobile_number
         elif isinstance(obj, dict):
             phone = obj.get('phone_number', '')
             return phone if phone and phone.isdigit() and len(phone) == 11 else ""
-        elif hasattr(obj, 'reserver_phone_number'):  # برای reserver
-            return obj.reserver_phone_number
         return ""
 
     def validate(self, data):
