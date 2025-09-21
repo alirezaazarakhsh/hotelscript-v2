@@ -750,17 +750,30 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def get_phone_number(self, obj):
-        # اگر obj وجود داشته باشد (برای مسافران ذخیره‌شده در دیتابیس)
-        if obj and obj.mobile_number:
-            return obj.mobile_number
-        # دسترسی به reservation از طریق reservation_room برای استفاده از reserver_phone_number
-        reservation = obj.reservation_room.reservation if obj else None
-        return reservation.reserver_phone_number if reservation else ""
+        # اگر obj یه نمونه مدل باشه
+        if hasattr(obj, 'mobile_number'):
+            return obj.mobile_number or obj.reservation_room.reservation.reserver_phone_number
+        # اگر obj یه دیکشنری باشه
+        elif isinstance(obj, dict):
+            return obj.get('phone_number', '')
+        # اگر obj None باشه
+        return ''
+
+    def validate(self, data):
+        passenger_type = self.context.get('passenger_type')
+        # اعتبارسنجی برای مسافر اصلی
+        if passenger_type == 'primary':
+            if not data.get('first_name'):
+                raise serializers.ValidationError({"first_name": "نام برای مسافر اصلی الزامی است."})
+            if not data.get('last_name'):
+                raise serializers.ValidationError({"last_name": "نام خانوادگی برای مسافر اصلی الزامی است."})
+            if not data.get('phone_number'):
+                raise serializers.ValidationError({"phone_number": "شماره تلفن برای مسافر اصلی الزامی است."})
+            if not data.get('national_code'):
+                raise serializers.ValidationError({"national_code": "کد ملی برای مسافر اصلی الزامی است."})
+        return data
 
     def validate_phone_number(self, value):
-        # برای مسافر اصلی، شماره تلفن الزامی است
-        if self.context.get('passenger_type') == 'primary' and not value:
-            raise serializers.ValidationError("شماره تلفن برای مسافر اصلی الزامی است.")
         if value and not value.isdigit():
             raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
         if value and len(value) not in [0, 11]:
@@ -768,9 +781,6 @@ class PersonSerializer(serializers.Serializer):
         return value
 
     def validate_national_code(self, value):
-        # برای مسافر اصلی، کد ملی الزامی است
-        if self.context.get('passenger_type') == 'primary' and not value:
-            raise serializers.ValidationError("کد ملی برای مسافر اصلی الزامی است.")
         if value and not value.isdigit():
             raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
         if value and len(value) != 10:
@@ -797,7 +807,6 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         other = obj.passengers.filter(passenger_type='secondary')
         extra = obj.passengers.filter(passenger_type='extra')
 
-        # اضافه کردن passenger_type به context برای اعتبارسنجی
         main_data = PersonSerializer(main, context={'passenger_type': 'primary'}).data if main else {
             "first_name": "",
             "last_name": "",
@@ -839,12 +848,12 @@ class ReservationDetailSerializer(serializers.Serializer):
         serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
         if serializer.is_valid():
             return serializer.data
-        print(f"reserver_error: {serializer.errors}")  # لاگ برای دیباگ
+        logger.error(f"reserver_error: {serializer.errors}")
         return reserver_data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
-        print(f"rooms_count: {rooms.count()}")  # لاگ برای دیباگ
+        logger.debug(f"rooms_count: {rooms.count()}")
         serialized_rooms = ReservationRoomDetailSerializer(rooms, many=True).data
-        print(f"serialized_rooms: {serialized_rooms}")  # لاگ برای دیباگ
+        logger.debug(f"serialized_rooms: {serialized_rooms}")
         return serialized_rooms

@@ -3075,7 +3075,6 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 logger = logging.getLogger(__name__)
-
 class ReservationRoomDetailAPIView(APIView):
     """
     API برای مشاهده و بروزرسانی اطلاعات رزرو و اتاق‌های رزرو شده.
@@ -3304,9 +3303,10 @@ class ReservationRoomDetailAPIView(APIView):
                     **person_serializer.validated_data
                 )
 
+        # بازمحاسبه قیمت‌های رزرو
         reservation.save()
         return Response(ReservationDetailSerializer(reservation).data)
-    
+        
     
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
