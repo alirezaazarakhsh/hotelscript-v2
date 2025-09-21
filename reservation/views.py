@@ -3074,7 +3074,7 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-logger = logging.getLogger(__name__)
+llogger = logging.getLogger(__name__)
 
 class ReservationRoomDetailAPIView(APIView):
     """
@@ -3130,8 +3130,8 @@ class ReservationRoomDetailAPIView(APIView):
                 "extra_capacity_passengers": []
               },
               "half_charges": {
-                "enter": {"enabled": true, "price": "50000"},
-                "exit": {"enabled": false, "price": "0"}
+                "enter": {"enabled": true, "price": 50000},
+                "exit": {"enabled": false, "price": 0}
               }
             }
           ]
@@ -3150,6 +3150,7 @@ class ReservationRoomDetailAPIView(APIView):
         operation_summary="بروزرسانی اطلاعات اتاق‌های رزرو شده",
         operation_description="""
         این API اجازه می‌دهد اطلاعات نیم‌شارژ و مسافران اتاق‌های رزرو شده بروزرسانی شود.
+        توجه: `id` باید شناسه اتاق (Room.pk) باشد، نه شناسه ReservationRoom.
 
         ### نمونه JSON برای PUT
         ```json
@@ -3158,8 +3159,8 @@ class ReservationRoomDetailAPIView(APIView):
             {
               "id": 1,
               "half_charges": {
-                "enter": {"enabled": true, "price": "60000"},
-                "exit": {"enabled": true, "price": "40000"}
+                "enter": {"enabled": true, "price": 60000},
+                "exit": {"enabled": true, "price": 40000}
               },
               "passengers": {
                 "main_passenger": {
@@ -3186,7 +3187,7 @@ class ReservationRoomDetailAPIView(APIView):
                     items=openapi.Schema(
                         type=openapi.TYPE_OBJECT,
                         properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق رزرو شده'),
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق (Room.pk)'),
                             'half_charges': openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
@@ -3194,14 +3195,14 @@ class ReservationRoomDetailAPIView(APIView):
                                         type=openapi.TYPE_OBJECT,
                                         properties={
                                             'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                            'price': openapi.Schema(type=openapi.TYPE_STRING)
+                                            'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت به صورت عدد')
                                         }
                                     ),
                                     'exit': openapi.Schema(
                                         type=openapi.TYPE_OBJECT,
                                         properties={
                                             'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                                            'price': openapi.Schema(type=openapi.TYPE_STRING)
+                                            'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت به صورت عدد')
                                         }
                                     )
                                 }
@@ -3232,7 +3233,8 @@ class ReservationRoomDetailAPIView(APIView):
             if not room_id:
                 return Response({"error": "شناسه اتاق الزامی است."}, status=400)
             
-            room = reservation.reservation_rooms.filter(id=room_id).first()
+            # استفاده از room__pk به جای id
+            room = reservation.reservation_rooms.filter(room__pk=room_id).first()
             if not room:
                 return Response({"error": f"اتاق با شناسه {room_id} یافت نشد."}, status=404)
 
@@ -3311,7 +3313,6 @@ class ReservationRoomDetailAPIView(APIView):
         # بازمحاسبه قیمت‌های رزرو
         reservation.save()
         return Response(ReservationDetailSerializer(reservation).data)
-    
     
     
 # ای پی ای کد تخفیف برای رزرو 

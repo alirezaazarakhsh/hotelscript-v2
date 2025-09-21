@@ -1,5 +1,6 @@
 import logging
 import re
+from venv import logger
 from rest_framework import serializers
 import jdatetime
 from django.utils import timezone
@@ -744,8 +745,6 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
-logger = logging.getLogger(__name__)
-
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
@@ -753,16 +752,11 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def get_phone_number(self, obj):
-        """
-        دریافت شماره تلفن از شیء یا دیکشنری با اعتبارسنجی
-        """
         if hasattr(obj, 'mobile_number') and obj.mobile_number:
             return obj.mobile_number
         elif isinstance(obj, dict):
             phone = obj.get('phone_number', '')
-            # بررسی اعتبار شماره تلفن
-            if phone and phone.isdigit() and len(phone) == 11:
-                return phone
+            return phone
         return ""
 
     def validate(self, data):
@@ -777,6 +771,11 @@ class PersonSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"phone_number": "شماره تلفن برای مسافر اصلی الزامی است."})
             if not data.get('national_code'):
                 raise serializers.ValidationError({"national_code": "کد ملی برای مسافر اصلی الزامی است."})
+        # برای رزروکننده فقط phone_number را بررسی می‌کنیم
+        elif passenger_type == 'reserver':
+            phone = data.get('phone_number', '')
+            if phone and (not phone.isdigit() or len(phone) != 11):
+                raise serializers.ValidationError({"phone_number": "شماره تلفن باید ۱۱ رقمی و فقط شامل اعداد باشد."})
         return data
 
     def validate_phone_number(self, value):
@@ -799,6 +798,7 @@ class PersonSerializer(serializers.Serializer):
             if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
                 raise serializers.ValidationError("کد ملی معتبر نیست.")
         return value
+
 
 class ReservationRoomDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='room.pk')
@@ -834,22 +834,20 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         return {
             "enter": {
                 "enabled": obj.half_day_in_selected,
-                "price": str(obj.half_day_in_price if obj.half_day_in_price is not None else "0")
+                "price": obj.half_day_in_price if obj.half_day_in_price is not None else 0
             },
             "exit": {
                 "enabled": obj.half_day_out_selected,
-                "price": str(obj.half_day_out_price if obj.half_day_out_price is not None else "0")
+                "price": obj.half_day_out_price if obj.half_day_out_price is not None else 0
             }
         }
+
 
 class ReservationDetailSerializer(serializers.Serializer):
     reserver = serializers.SerializerMethodField()
     rooms = serializers.SerializerMethodField()
 
     def get_reserver(self, obj):
-        """
-        سریالایز کردن اطلاعات رزروکننده با مدیریت خطاها
-        """
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
@@ -863,12 +861,7 @@ class ReservationDetailSerializer(serializers.Serializer):
             return serializer.data
         else:
             logger.error(f"reserver_error: {serializer.errors}")
-            # بازگشت داده با اعتبارسنجی دستی برای phone_number
-            validated_data = reserver_data.copy()
-            phone = reserver_data["phone_number"]
-            validated_data["phone_number"] = phone if phone and phone.isdigit() and len(phone) == 11 else ""
-            logger.debug(f"reserver_fallback: {validated_data}")
-            return validated_data
+            return reserver_data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
