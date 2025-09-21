@@ -3155,6 +3155,12 @@ class ReservationRoomDetailAPIView(APIView):
         ### نمونه JSON برای PUT
         ```json
         {
+          "reserver": {
+            "first_name": "Alireza",
+            "last_name": "Azarakhsh",
+            "phone_number": "",
+            "national_code": "0023467444"
+          },
           "rooms": [
             {
               "id": 1,
@@ -3182,6 +3188,15 @@ class ReservationRoomDetailAPIView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
+                'reserver': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                        'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING),
+                        'national_code': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                ),
                 'rooms': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Schema(
@@ -3226,6 +3241,15 @@ class ReservationRoomDetailAPIView(APIView):
     def put(self, request, tracking_code):
         reservation = self.get_object(tracking_code)
         data = request.data
+        # به‌روزرسانی اطلاعات رزروکننده
+        reserver_data = data.get('reserver', {})
+        if reserver_data:
+            reservation.reserver_first_name = reserver_data.get('first_name', reservation.reserver_first_name)
+            reservation.reserver_last_name = reserver_data.get('last_name', reservation.reserver_last_name)
+            reservation.reserver_phone_number = reserver_data.get('phone_number', reservation.reserver_phone_number)
+            reservation.reserver_national_code = reserver_data.get('national_code', reservation.reserver_national_code)
+            reservation.save()
+
         rooms_data = data.get("rooms", [])
 
         for room_data in rooms_data:
