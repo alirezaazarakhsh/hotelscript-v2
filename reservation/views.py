@@ -3100,7 +3100,7 @@ class ReservationRoomDetailAPIView(APIView):
     )
     def get(self, request, tracking_code):
         reservation = self.get_object(tracking_code)
-        serializer = ReservationDetailSerializer(reservation, context={'request': request})
+        serializer = ReservationDetailSerializer(reservation)
         return Response(serializer.data)
 
     @swagger_auto_schema(
@@ -3165,38 +3165,35 @@ class ReservationRoomDetailAPIView(APIView):
     def put(self, request, tracking_code):
         reservation = self.get_object(tracking_code)
         data = request.data
-
-        # بروزرسانی اطلاعات رزروکننده
+        # به‌روزرسانی اطلاعات رزروکننده
         reserver_data = data.get('reserver', {})
         if reserver_data:
-            reserver_serializer = PersonSerializer(
-                data=reserver_data, context={'passenger_type': 'reserver'}
-            )
+            reserver_serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
             if reserver_serializer.is_valid():
-                vd = reserver_serializer.validated_data
-                reservation.reserver_first_name = vd.get('first_name', reservation.reserver_first_name)
-                reservation.reserver_last_name = vd.get('last_name', reservation.reserver_last_name)
-                phone_input = vd.get('phone_number', '')
+                reservation.reserver_first_name = reserver_serializer.validated_data.get('first_name', reservation.reserver_first_name)
+                reservation.reserver_last_name = reserver_serializer.validated_data.get('last_name', reservation.reserver_last_name)
+                phone_input = reserver_serializer.validated_data.get('phone_number', '')
                 if phone_input and phone_input.isdigit() and len(phone_input) == 11:
                     reservation.reserver_phone_number = phone_input
-                reservation.reserver_national_code = vd.get('national_code', reservation.reserver_national_code)
+                reservation.reserver_national_code = reserver_serializer.validated_data.get('national_code', reservation.reserver_national_code)
                 reservation.save()
             else:
                 logger.error(f"reserver_validation_error: {reserver_serializer.errors}")
                 return Response(reserver_serializer.errors, status=400)
 
-        # بروزرسانی اتاق‌ها و مسافران
         rooms_data = data.get("rooms", [])
+
         for room_data in rooms_data:
             room_id = room_data.get("id")
             if not room_id:
                 return Response({"error": "شناسه اتاق الزامی است."}, status=400)
-
+            
+            # استفاده از room__pk به جای id
             room = reservation.reservation_rooms.filter(room__pk=room_id).first()
             if not room:
                 return Response({"error": f"اتاق با شناسه {room_id} یافت نشد."}, status=404)
 
-            # نیم‌شارژ
+            # بروزرسانی نیم شارژ
             half_charges = room_data.get("half_charges", {})
             enter = half_charges.get("enter", {})
             exit = half_charges.get("exit", {})
@@ -3207,19 +3204,22 @@ class ReservationRoomDetailAPIView(APIView):
             room.half_day_out_price = Decimal(exit.get("price", room.half_day_out_price or 0))
             room.save()
 
-            # مسافران
+            # بروزرسانی مسافران
             passengers = room_data.get("passengers", {})
-
-            # مسافر اصلی
             main_passenger = passengers.get("main_passenger", {})
+            logger.debug(f"Raw main passenger data: {main_passenger}")
             if main_passenger:
-                main_serializer = PersonSerializer(
-                    data=main_passenger, context={'passenger_type': 'primary'}
-                )
+                main_passenger_copy = main_passenger.copy()
+                phone_number = main_passenger_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
+                    main_passenger_copy['mobile_number'] = phone_number
+                else:
+                    main_passenger_copy['mobile_number'] = ''
+                logger.debug(f"Processed main passenger data: {main_passenger_copy}")
+                main_serializer = PersonSerializer(data=main_passenger_copy, context={'passenger_type': 'primary'})
                 if not main_serializer.is_valid():
                     logger.error(f"main_passenger_error: {main_serializer.errors}")
                     return Response(main_serializer.errors, status=400)
-
                 if main := room.passengers.filter(passenger_type='primary').first():
                     for k, v in main_serializer.validated_data.items():
                         setattr(main, k, v)
@@ -3231,12 +3231,17 @@ class ReservationRoomDetailAPIView(APIView):
                         **main_serializer.validated_data
                     )
 
-            # مسافران دیگر
+            # سایر مسافران
             room.passengers.filter(passenger_type='secondary').delete()
-            for person_data in passengers.get("other_passengers", []):
-                person_serializer = PersonSerializer(
-                    data=person_data, context={'passenger_type': 'secondary'}
-                )
+            other_passengers = passengers.get("other_passengers", [])
+            for person_data in other_passengers:
+                person_data_copy = person_data.copy()
+                phone_number = person_data_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
+                    person_data_copy['mobile_number'] = phone_number
+                else:
+                    person_data_copy['mobile_number'] = ''
+                person_serializer = PersonSerializer(data=person_data_copy, context={'passenger_type': 'secondary'})
                 if not person_serializer.is_valid():
                     logger.error(f"other_passenger_error: {person_serializer.errors}")
                     return Response(person_serializer.errors, status=400)
@@ -3246,12 +3251,17 @@ class ReservationRoomDetailAPIView(APIView):
                     **person_serializer.validated_data
                 )
 
-            # مسافران ظرفیت اضافه
+            # نفر اضافه
             room.passengers.filter(passenger_type='extra').delete()
-            for person_data in passengers.get("extra_capacity_passengers", []):
-                person_serializer = PersonSerializer(
-                    data=person_data, context={'passenger_type': 'extra'}
-                )
+            extra_passengers = passengers.get("extra_capacity_passengers", [])
+            for person_data in extra_passengers:
+                person_data_copy = person_data.copy()
+                phone_number = person_data_copy.get('phone_number', '')
+                if phone_number and phone_number.isdigit() and len(phone_number) == 11:
+                    person_data_copy['mobile_number'] = phone_number
+                else:
+                    person_data_copy['mobile_number'] = ''
+                person_serializer = PersonSerializer(data=person_data_copy, context={'passenger_type': 'extra'})
                 if not person_serializer.is_valid():
                     logger.error(f"extra_passenger_error: {person_serializer.errors}")
                     return Response(person_serializer.errors, status=400)
@@ -3261,10 +3271,9 @@ class ReservationRoomDetailAPIView(APIView):
                     **person_serializer.validated_data
                 )
 
-        # ذخیره نهایی
+        # بازمحاسبه قیمت‌های رزرو
         reservation.save()
-        return Response(ReservationDetailSerializer(reservation, context={'request': request}).data)
-
+        return Response(ReservationDetailSerializer(reservation).data)
 
     
 # ای پی ای کد تخفیف برای رزرو 
