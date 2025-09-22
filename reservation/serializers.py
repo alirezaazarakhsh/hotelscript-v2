@@ -757,10 +757,9 @@ class PersonSerializer(serializers.Serializer):
         # اگر obj یک نمونه از ReservationRoomPassenger باشد، از mobile_number استفاده کن
         elif hasattr(obj, 'mobile_number') and obj.mobile_number:
             return obj.mobile_number
-        # اگر obj یک دیکشنری باشد، فقط اگر معتبر باشد مقدار را قبول کن
+        # اگر obj یک دیکشنری باشد، مقدار phone_number رو بدون اعتبارسنجی اضافی برگردون (اعتبارسنجی در validate انجام می‌شه)
         elif isinstance(obj, dict):
-            phone = obj.get('phone_number', '')
-            return phone if phone and phone.isdigit() and len(phone) == 11 else ""
+            return obj.get('phone_number', '')
         return ""
 
     def validate(self, data):
@@ -852,7 +851,6 @@ class ReservationDetailSerializer(serializers.Serializer):
     rooms = serializers.SerializerMethodField()
 
     def get_reserver(self, obj):
-        # ابتدا از دیتابیس مقدار می‌گیریم
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
@@ -860,7 +858,6 @@ class ReservationDetailSerializer(serializers.Serializer):
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data (from model): {reserver_data}")
-        # فقط اگر داده ورودی معتبر باشد، آن را اعمال می‌کنیم
         if self.context.get('request') and self.context['request'].method == 'PUT':
             input_data = self.context['request'].data.get('reserver', {})
             if input_data:
