@@ -610,6 +610,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
+    
 
 
 # ---------------- Reservationhotel Admin Form ----------------
@@ -635,23 +636,24 @@ class ReservationhotelAdminForm(forms.ModelForm):
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 0
+    extra = 8
+    max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    can_delete = True
+    can_delete = False
+    autocomplete_fields = ()
 
     def get_max_num(self, request, obj=None, **kwargs):
-        if obj and getattr(obj, 'room', None):
-            total_capacity = (obj.room.room_capacity or 0) + (obj.room.extra_capacity or 0)
-            return total_capacity * (obj.quantity or 1)
-        return super().get_max_num(request, obj, **kwargs)
+        if obj and hasattr(obj, 'room') and obj.room:
+            return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
+        return self.max_num
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 1
+    extra = 3
+    max_num = 3
     fields = (
         'room',
-        'quantity',
         'price_per_night',
         'extra_passenger_price',
         'fixed_discount',
@@ -669,27 +671,43 @@ class ReservationRoomInline(NestedTabularInline):
         'half_day_in_price',
         'half_day_out_price',
     )
-    inlines = [ReservationRoomPassengerInline]
+    show_change_link = False
+    can_delete = False
     autocomplete_fields = ('room',)
+    inlines = [ReservationRoomPassengerInline]
 
-    @admin.display(description=_('تعداد نفر اصلی'))
     def primary_passengers_count(self, obj):
-        if obj and getattr(obj, 'room', None):
-            return (obj.room.room_capacity or 0) * (obj.quantity or 1)
-        return "-"
+        return obj.primary_passengers_count
+    primary_passengers_count.short_description = _('تعداد نفر اصلی')
 
-    @admin.display(description=_('تعداد نفر اضافه'))
     def extra_passengers_count(self, obj):
-        if obj and getattr(obj, 'room', None):
-            return (obj.room.extra_capacity or 0) * (obj.quantity or 1)
-        return "-"
+        return obj.extra_passengers_count
+    extra_passengers_count.short_description = _('تعداد نفر اضافه')
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['room'].required = False
+        return formset
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if obj and obj.reservation_rooms.exists():
+            try:
+                hotel = obj.reservation_rooms.first().room.hotel
+                if not getattr(hotel, 'has_check_in_half_day_charge', False):
+                    fields = [f for f in fields if f != 'half_day_in_selected']
+                if not getattr(hotel, 'has_check_out_half_day_charge', False):
+                    fields = [f for f in fields if f != 'half_day_out_selected']
+            except AttributeError:
+                fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_out_selected')]
+        return fields
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
-        'tracking_code', 'buyer', 'reserver_first_name', 'reserver_last_name',
+        'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
         'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
@@ -707,7 +725,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     inlines = [ReservationRoomInline]
 
     readonly_fields = (
-        'tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+        'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
@@ -737,6 +755,13 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # ------------------ شماره موبایل buyer ------------------
+    @admin.display(description=_('موبایل خریدار'))
+    def buyer_phone_number(self, obj):
+        if obj.buyer:
+            return getattr(obj.buyer, 'phone_number', '-')
+        return "-"
+
     # ----------------- نمایش تاریخ‌ها -----------------
     @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
@@ -762,6 +787,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     @admin.display(description=_('کل مهمان‌ها'))
     def total_guests_fa(self, obj):
+        # اگر اتاقی مسافر ندارد، نفرات باز باشد
         return obj.total_guests if obj.pk else 0
 
     # ----------------- فرمت هزارگان برای قیمت -----------------
