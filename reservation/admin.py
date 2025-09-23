@@ -613,34 +613,11 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
 
 
-import re
-import jdatetime
-import logging
-from django import forms
-from django.contrib import admin
-from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
-from nested_admin import NestedModelAdmin, NestedTabularInline
-from .models import Reservationhotel, ReservationRoom, ReservationRoomPassenger
-
-logger = logging.getLogger(__name__)
-
-
 # ---------------- Reservationhotel Admin Form ----------------
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
-
-    def clean_reserver_phone_number(self):
-        phone = self.cleaned_data.get("reserver_phone_number")
-        if phone:
-            # فرمت موبایل: 09xxxxxxxxx
-            if not re.match(r"^09\d{9}$", phone):
-                raise ValidationError("شماره موبایل رزروکننده معتبر نیست. باید با 09 شروع شود و 11 رقم باشد.")
-        else:
-            raise ValidationError("شماره موبایل رزروکننده الزامی است.")
-        return phone
 
     def clean_check_in_date(self):
         check_in = self.cleaned_data['check_in_date']
@@ -656,41 +633,29 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
-
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 8
-    max_num = 8
+    extra = 0
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    can_delete = False
-    autocomplete_fields = ()
+    can_delete = True
 
-    def clean(self):
-        super().clean()
-        seen_mobiles = set()
-        for form in self.forms:
-            if not form.cleaned_data or form.cleaned_data.get("DELETE", False):
-                continue
-            mobile = form.cleaned_data.get("mobile_number")
-            if mobile:
-                # ولیدیشن فرمت
-                if not re.match(r"^09\d{9}$", mobile):
-                    raise ValidationError("شماره موبایل مسافر معتبر نیست (باید با 09 شروع شود و 11 رقم باشد).")
-
-                # یکتا بودن بین مسافرها
-                if mobile in seen_mobiles:
-                    raise ValidationError(f"شماره موبایل {mobile} تکراری است. هر مسافر باید شماره منحصربه‌فرد داشته باشد.")
-                seen_mobiles.add(mobile)
-
+    def get_max_num(self, request, obj=None, **kwargs):
+        """
+        تعداد مسافرها بر اساس ظرفیت اتاق و تعداد رزرو شده محاسبه می‌شود.
+        """
+        if obj and obj.room:
+            total_capacity = (obj.room.room_capacity + obj.room.extra_capacity) * (obj.quantity or 1)
+            return total_capacity
+        return super().get_max_num(request, obj, **kwargs)
 
 # ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 3
-    max_num = 3
+    extra = 1
     fields = (
         'room',
+        'quantity',
         'price_per_night',
         'extra_passenger_price',
         'fixed_discount',
@@ -708,37 +673,20 @@ class ReservationRoomInline(NestedTabularInline):
         'half_day_in_price',
         'half_day_out_price',
     )
-    show_change_link = False
-    can_delete = False
-    autocomplete_fields = ('room',)
     inlines = [ReservationRoomPassengerInline]
+    autocomplete_fields = ('room',)
 
+    @admin.display(description=_('تعداد نفر اصلی'))
     def primary_passengers_count(self, obj):
-        return obj.primary_passengers_count
-    primary_passengers_count.short_description = _('تعداد نفر اصلی')
+        if obj and obj.room:
+            return obj.room.room_capacity * (obj.quantity or 1)
+        return "-"
 
+    @admin.display(description=_('تعداد نفر اضافه'))
     def extra_passengers_count(self, obj):
-        return obj.extra_passengers_count
-    extra_passengers_count.short_description = _('تعداد نفر اضافه')
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['room'].required = False
-        return formset
-
-    def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        if obj and obj.reservation_rooms.exists():
-            try:
-                hotel = obj.reservation_rooms.first().room.hotel
-                if not getattr(hotel, 'has_check_in_half_day_charge', False):
-                    fields = [f for f in fields if f != 'half_day_in_selected']
-                if not getattr(hotel, 'has_check_out_half_day_charge', False):
-                    fields = [f for f in fields if f != 'half_day_out_selected']
-            except AttributeError:
-                fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_out_selected')]
-        return fields
-
+        if obj and obj.room:
+            return obj.room.extra_capacity * (obj.quantity or 1)
+        return "-"
 
 # ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
@@ -853,7 +801,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def final_price_fa(self, obj):
         return "{:,}".format(obj.final_price) if obj.final_price else "-"
 
-    # ----------------- ذخیره -----------------
+    # ----------------- save_model و save_related -----------------
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
