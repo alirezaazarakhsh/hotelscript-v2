@@ -677,11 +677,15 @@ class ReservationRoomInline(NestedTabularInline):
     inlines = [ReservationRoomPassengerInline]
 
     def primary_passengers_count(self, obj):
-        return obj.primary_passengers_count
+        if obj.room:
+            return obj.room.room_capacity
+        return 0
     primary_passengers_count.short_description = _('تعداد نفر اصلی')
 
     def extra_passengers_count(self, obj):
-        return obj.extra_passengers_count
+        if obj.room:
+            return obj.room.extra_capacity
+        return 0
     extra_passengers_count.short_description = _('تعداد نفر اضافه')
 
     def get_formset(self, request, obj=None, **kwargs):
