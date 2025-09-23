@@ -851,6 +851,7 @@ class ReservationDetailSerializer(serializers.Serializer):
     rooms = serializers.SerializerMethodField()
 
     def get_reserver(self, obj):
+        # داده‌های اولیه از مدل
         reserver_data = {
             "first_name": obj.reserver_first_name or "",
             "last_name": obj.reserver_last_name or "",
@@ -858,25 +859,25 @@ class ReservationDetailSerializer(serializers.Serializer):
             "national_code": obj.reserver_national_code or ""
         }
         logger.debug(f"reserver_data (from model): {reserver_data}")
-        if self.context.get('request') and self.context['request'].method == 'PUT':
-            input_data = self.context['request'].data.get('reserver', {})
+
+        # اگر متد PUT بود، داده‌های ورودی رو روی داده‌های مدل override کن
+        request = self.context.get('request')
+        if request and request.method == 'PUT':
+            input_data = request.data.get('reserver', {})
             if input_data:
-                phone_input = input_data.get('phone_number', '')
-                if phone_input and phone_input.isdigit() and len(phone_input) == 11:
-                    reserver_data['phone_number'] = phone_input
                 reserver_data.update({
                     "first_name": input_data.get('first_name', reserver_data['first_name']),
                     "last_name": input_data.get('last_name', reserver_data['last_name']),
+                    "phone_number": input_data.get('phone_number', reserver_data['phone_number']),
                     "national_code": input_data.get('national_code', reserver_data['national_code'])
                 })
         logger.debug(f"reserver_data (after update): {reserver_data}")
-        serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
-        if serializer.is_valid():
-            logger.debug(f"reserver_serialized: {serializer.data}")
-            return serializer.data
-        else:
-            logger.error(f"reserver_error: {serializer.errors}")
-            return reserver_data
+
+        # سریالایز خروجی
+        serializer = PersonSerializer(
+            reserver_data, context={'passenger_type': 'reserver'}
+        )
+        return serializer.data
 
     def get_rooms(self, obj):
         rooms = obj.reservation_rooms.all()
