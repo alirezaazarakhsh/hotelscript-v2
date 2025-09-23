@@ -610,7 +610,6 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    
 
 
 # ---------------- Reservationhotel Admin Form ----------------
@@ -641,12 +640,9 @@ class ReservationRoomPassengerInline(NestedTabularInline):
     can_delete = True
 
     def get_max_num(self, request, obj=None, **kwargs):
-        """
-        تعداد مسافرها بر اساس ظرفیت اتاق و تعداد رزرو شده محاسبه می‌شود.
-        """
-        if obj and obj.room:
-            total_capacity = (obj.room.room_capacity + obj.room.extra_capacity) * (obj.quantity or 1)
-            return total_capacity
+        if obj and getattr(obj, 'room', None):
+            total_capacity = (obj.room.room_capacity or 0) + (obj.room.extra_capacity or 0)
+            return total_capacity * (obj.quantity or 1)
         return super().get_max_num(request, obj, **kwargs)
 
 # ---------------- Room Inline ----------------
@@ -678,14 +674,14 @@ class ReservationRoomInline(NestedTabularInline):
 
     @admin.display(description=_('تعداد نفر اصلی'))
     def primary_passengers_count(self, obj):
-        if obj and obj.room:
-            return obj.room.room_capacity * (obj.quantity or 1)
+        if obj and getattr(obj, 'room', None):
+            return (obj.room.room_capacity or 0) * (obj.quantity or 1)
         return "-"
 
     @admin.display(description=_('تعداد نفر اضافه'))
     def extra_passengers_count(self, obj):
-        if obj and obj.room:
-            return obj.room.extra_capacity * (obj.quantity or 1)
+        if obj and getattr(obj, 'room', None):
+            return (obj.room.extra_capacity or 0) * (obj.quantity or 1)
         return "-"
 
 # ---------------- Reservationhotel Admin ----------------
