@@ -3071,7 +3071,6 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # اعتبارسنجی‌ها
-# اعتبارسنجی‌ها
 def validate_phone_number(value):
     if not re.match(r'^09\d{9}$', value):
         raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
@@ -3129,7 +3128,7 @@ class ReservationRoomDetailAPIView(APIView):
 
         for res_room in reservation.reservation_rooms.all():
             room_data = {
-                "id": str(res_room.room.id),  # به صورت رشته خروجی می‌ده
+                "id": str(res_room.room.id),  # استفاده از Room.id به صورت رشته
                 "name": res_room.room.title if res_room.room else "",
                 "capacity": str(res_room.room.room_capacity if res_room.room else 0),
                 "extra_capacity": str(res_room.room.extra_capacity if res_room.room else 0),
@@ -3381,10 +3380,8 @@ class ReservationRoomDetailAPIView(APIView):
             # اعتبارسنجی تعداد مسافران
             total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
             room = Room.objects.get(id=int(room_data['id']))  # تبدیل id به int
-            capacity = int(room_data.get('capacity', '0'))
-            extra_capacity = int(room_data.get('extra_capacity', '0'))
-            if total_passengers > (capacity + extra_capacity):
-                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز ({capacity + extra_capacity}) بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
+            if total_passengers > (int(room_data.get('capacity', '0')) + int(room_data.get('extra_capacity', '0'))):
+                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز ({int(room_data["capacity"]) + int(room_data["extra_capacity"])}) بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
             # اعتبارسنجی نیم‌شارژها
             half_charges = room_data.get('half_charges', {})
@@ -3418,8 +3415,8 @@ class ReservationRoomDetailAPIView(APIView):
             extra_capacity = int(room_data.get('extra_capacity', '0'))
             extra_capacity_price = Decimal(room_data.get('extra_capacity_price', '0'))
             discount_on_purchase = Decimal(room_data.get('discount_on_purchase', '0'))
-            half_day_in_price = Decimal(half_charges.get('enter', {}).get('price', '0') if half_charges.get('enter', {}).get('enabled', False) else '0')
-            half_day_out_price = Decimal(half_charges.get('exit', {}).get('price', '0') if half_charges.get('exit', {}).get('enabled', False) else '0')
+            half_day_in_price = Decimal(half_charges.get('enter', {}).get('price', '0'))
+            half_day_out_price = Decimal(half_charges.get('exit', {}).get('price', '0'))
 
             # بروزرسانی اطلاعات نیم‌شارژ و قیمت‌ها
             res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
