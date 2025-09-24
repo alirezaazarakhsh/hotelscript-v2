@@ -765,17 +765,17 @@ class PassengerInputSerializer(serializers.Serializer):
 
     def validate_mobile_number(self, value):
         if value and not re.match(r'^09\d{9}$', value):
-            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
+            raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')  # Changed to plain string
         return value
 
     def validate_national_code(self, value):
         if value:
             if not re.match(r'^\d{10}$', value):
-                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
+                raise ValidationError('کد ملی باید 10 رقمی باشد')  # Changed to plain string
             check_digit = int(value[9])
             total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
             if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
-                raise ValidationError(_('کد ملی معتبر نیست'))
+                raise ValidationError('کد ملی معتبر نیست')  # Changed to plain string
         return value
 
 # Serializer for Passengers structure in PUT request
@@ -908,15 +908,15 @@ class UpdateReservationSerializer(serializers.Serializer):
 
     def validate_reserver_phone_number(self, value):
         if value and not re.match(r'^09\d{9}$', value):
-            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
+            raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')  # Changed to plain string
         return value
 
     def validate_reserver_national_code(self, value):
         if value:
             if not re.match(r'^\d{10}$', value):
-                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
+                raise ValidationError('کد ملی باید 10 رقمی باشد')  # Changed to plain string
             check_digit = int(value[9])
             total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
             if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
-                raise ValidationError(_('کد ملی معتبر نیست'))
+                raise ValidationError('کد ملی معتبر نیست')  # Changed to plain string
         return value
