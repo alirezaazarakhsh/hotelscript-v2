@@ -18,6 +18,7 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
+    ReservationRoomPassenger,
     Room,
     RoomDatePrice,
     RoomFacilities,
@@ -749,6 +750,7 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
 
 logger = logging.getLogger(__name__)
 
+
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
@@ -756,11 +758,10 @@ class PersonSerializer(serializers.Serializer):
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
     def to_representation(self, instance):
+        """phone_number رو از مدل یا dict بخونه"""
         data = super().to_representation(instance)
         if not data.get("phone_number"):
-            if hasattr(instance, "reserver_phone_number"):
-                data["phone_number"] = instance.reserver_phone_number or ""
-            elif hasattr(instance, "mobile_number"):
+            if hasattr(instance, "mobile_number"):
                 data["phone_number"] = instance.mobile_number or ""
             elif isinstance(instance, dict):
                 data["phone_number"] = instance.get("phone_number", "")
@@ -787,24 +788,15 @@ class PersonSerializer(serializers.Serializer):
         return data
 
     def validate_phone_number(self, value):
-        if value and not value.isdigit():
-            raise serializers.ValidationError("شماره تلفن باید فقط شامل اعداد باشد.")
-        if value and len(value) != 11:
-            raise serializers.ValidationError("شماره تلفن باید 11 رقمی باشد.")
+        if value and (not value.isdigit() or len(value) != 11):
+            raise serializers.ValidationError("شماره تلفن باید 11 رقمی و فقط شامل اعداد باشد.")
         return value
 
     def validate_national_code(self, value):
         if self.context.get("passenger_type") == "primary" and not value:
             raise serializers.ValidationError("کد ملی برای مسافر اصلی الزامی است.")
-        if value and not value.isdigit():
-            raise serializers.ValidationError("کدملی باید فقط شامل اعداد باشد.")
-        if value and len(value) != 10:
-            raise serializers.ValidationError("کدملی باید 10 رقمی باشد.")
-        if value:
-            check_digits = int(value[9])
-            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
-            if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == 11 - total)):
-                raise serializers.ValidationError("کد ملی معتبر نیست.")
+        if value and (not value.isdigit() or len(value) != 10):
+            raise serializers.ValidationError("کدملی باید 10 رقمی و فقط شامل اعداد باشد.")
         return value
 
 
@@ -823,11 +815,21 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
         other = obj.passengers.filter(passenger_type="secondary")
         extra = obj.passengers.filter(passenger_type="extra")
 
-        main_data = PersonSerializer(main, context={"passenger_type": "primary"}).data if main else {
-            "first_name": "", "last_name": "", "phone_number": "", "national_code": ""
-        }
-        other_data = PersonSerializer(other, many=True, context={"passenger_type": "secondary"}).data if other.exists() else []
-        extra_data = PersonSerializer(extra, many=True, context={"passenger_type": "extra"}).data if extra.exists() else []
+        main_data = (
+            PersonSerializer(main, context={"passenger_type": "primary"}).data
+            if main
+            else {"first_name": "", "last_name": "", "phone_number": "", "national_code": ""}
+        )
+        other_data = (
+            PersonSerializer(other, many=True, context={"passenger_type": "secondary"}).data
+            if other.exists()
+            else []
+        )
+        extra_data = (
+            PersonSerializer(extra, many=True, context={"passenger_type": "extra"}).data
+            if extra.exists()
+            else []
+        )
 
         return {
             "main_passenger": main_data,
@@ -837,46 +839,9 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
 
     def get_half_charges(self, obj):
         return {
-            "enter": {"enabled": obj.half_day_in_selected, "price": int(obj.half_day_in_price) if obj.half_day_in_price else 0},
-            "exit": {"enabled": obj.half_day_out_selected, "price": int(obj.half_day_out_price) if obj.half_day_out_price else 0},
+            "enter": {"enabled": obj.half_day_in_selected, "price": int(obj.half_day_in_price or 0)},
+            "exit": {"enabled": obj.half_day_out_selected, "price": int(obj.half_day_out_price or 0)},
         }
-
-    def update_passengers(self, room_instance, passengers_data):
-        """
-        آپدیت امن passenger ها بدون بهم ریختن ترتیب و تعداد.
-        """
-        # آپدیت مسافر اصلی
-        main_data = passengers_data.get("main_passenger")
-        if main_data:
-            main_passenger = room_instance.passengers.filter(passenger_type="primary").first()
-            if main_passenger:
-                main_passenger.first_name = main_data.get("first_name", main_passenger.first_name)
-                main_passenger.last_name = main_data.get("last_name", main_passenger.last_name)
-                main_passenger.mobile_number = main_data.get("phone_number", main_passenger.mobile_number)
-                main_passenger.national_code = main_data.get("national_code", main_passenger.national_code)
-                main_passenger.save()
-
-        # سایر مسافران
-        for p_type, key in [("secondary", "other_passengers"), ("extra", "extra_capacity_passengers")]:
-            passenger_list = passengers_data.get(key, [])
-            existing_passengers = list(room_instance.passengers.filter(passenger_type=p_type).order_by("id"))
-            for i, pdata in enumerate(passenger_list):
-                if i < len(existing_passengers):
-                    ep = existing_passengers[i]
-                    ep.first_name = pdata.get("first_name", ep.first_name)
-                    ep.last_name = pdata.get("last_name", ep.last_name)
-                    ep.mobile_number = pdata.get("phone_number", ep.mobile_number)
-                    ep.national_code = pdata.get("national_code", ep.national_code)
-                    ep.save()
-                else:
-                    ReservationRoomPassenger.objects.create(
-                        room=room_instance,
-                        passenger_type=p_type,
-                        first_name=pdata.get("first_name", ""),
-                        last_name=pdata.get("last_name", ""),
-                        mobile_number=pdata.get("phone_number", ""),
-                        national_code=pdata.get("national_code", ""),
-                    )
 
 
 class ReservationDetailSerializer(serializers.Serializer):
@@ -912,29 +877,58 @@ class ReservationDetailSerializer(serializers.Serializer):
 
     def update(self, instance, validated_data):
         """
-        آپدیت کامل reservation با PUT:
-        شامل reserver و تمام passenger ها.
+        بروزرسانی اطلاعات مسافر اصلی و سایر مسافران در PUT
         """
         request = self.context.get("request")
-        if not request:
-            return instance
+        if request and request.method == "PUT":
+            rooms_data = request.data.get("rooms", [])
 
-        # آپدیت reserver
-        reserver_data = request.data.get("reserver", {})
-        if reserver_data:
-            instance.reserver_first_name = reserver_data.get("first_name", instance.reserver_first_name)
-            instance.reserver_last_name = reserver_data.get("last_name", instance.reserver_last_name)
-            instance.reserver_phone_number = reserver_data.get("phone_number", instance.reserver_phone_number)
-            instance.reserver_national_code = reserver_data.get("national_code", instance.reserver_national_code)
-            instance.save()
+            for room_data in rooms_data:
+                room_id = room_data.get("id")
+                passengers_data = room_data.get("passengers", {})
 
-        # آپدیت passenger ها برای هر اتاق
-        rooms_data = request.data.get("rooms", [])
-        for room_data in rooms_data:
-            room_id = room_data.get("id")
-            passengers_data = room_data.get("passengers", {})
-            room_instance = instance.reservation_rooms.filter(room__pk=room_id).first()
-            if room_instance and passengers_data:
-                ReservationRoomDetailSerializer().update_passengers(room_instance, passengers_data)
+                if not passengers_data:
+                    continue
 
+                try:
+                    res_room = instance.reservation_rooms.get(room_id=room_id)
+                except ReservationRoom.DoesNotExist:
+                    continue
+
+                # بروزرسانی مسافر اصلی
+                main_data = passengers_data.get("main_passenger", {})
+                if main_data:
+                    main_passenger = res_room.passengers.filter(passenger_type="primary").first()
+                    if main_passenger:
+                        main_passenger.first_name = main_data.get("first_name", main_passenger.first_name)
+                        main_passenger.last_name = main_data.get("last_name", main_passenger.last_name)
+                        main_passenger.mobile_number = main_data.get("phone_number", main_passenger.mobile_number)
+                        main_passenger.national_code = main_data.get("national_code", main_passenger.national_code)
+                        main_passenger.save()
+                    else:
+                        # ایجاد مسافر اصلی اگر وجود ندارد
+                        ReservationRoomPassenger.objects.create(
+                            reservation_room=res_room,
+                            passenger_type="primary",
+                            first_name=main_data.get("first_name", ""),
+                            last_name=main_data.get("last_name", ""),
+                            mobile_number=main_data.get("phone_number", ""),
+                            national_code=main_data.get("national_code", ""),
+                        )
+
+                # بروزرسانی نفرات اضافه
+                extra_data_list = passengers_data.get("extra_capacity_passengers", [])
+                for pdata in extra_data_list:
+                    if not pdata.get("first_name") and not pdata.get("last_name"):
+                        continue
+                    ReservationRoomPassenger.objects.create(
+                        reservation_room=res_room,
+                        passenger_type="extra",
+                        first_name=pdata.get("first_name", ""),
+                        last_name=pdata.get("last_name", ""),
+                        mobile_number=pdata.get("phone_number", ""),
+                        national_code=pdata.get("national_code", ""),
+                    )
+
+        instance.save()
         return instance
