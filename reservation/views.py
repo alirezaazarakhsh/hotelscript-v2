@@ -2880,17 +2880,6 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-import logging
-from decimal import Decimal
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-from django.core.exceptions import ValidationError
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-from .models import Reservationhotel
-
 logger = logging.getLogger(__name__)
 
 def parse_number(value):
@@ -2941,18 +2930,16 @@ class ReservationInvoiceAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="ویرایش صورت‌حساب رزرو",
         operation_description="""
-        بروزرسانی مقادیر صورت‌حساب رزرو. مقادیر عددی می‌توانند با و بدون ویرگول باشند.
+        بروزرسانی مقادیر صورت‌حساب رزرو. فقط فیلدهای `total_price` و `discount_on_purchase` قابل ویرایش هستند.
+        مقادیر عددی می‌توانند با و بدون ویرگول باشند.
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 "total_price": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع قیمت اتاق‌ها"),
-                "extra_passengers": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع قیمت نفرات اضافه"),
-                "half_charges": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع نیم شارژها"),
-                "discount_on_purchase": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف ثابت اتاق‌ها"),
-                "discount_code": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف کد تخفیف")
+                "discount_on_purchase": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف ثابت اتاق‌ها")
             },
-            required=["total_price", "extra_passengers", "half_charges", "discount_on_purchase", "discount_code"]
+            required=["total_price", "discount_on_purchase"]
         ),
         responses={
             200: openapi.Schema(
@@ -2963,10 +2950,7 @@ class ReservationInvoiceAPIView(APIView):
                         type=openapi.TYPE_OBJECT,
                         properties={
                             "total_price": openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت اتاق‌ها"),
-                            "extra_passengers": openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت نفرات اضافه"),
-                            "half_charges": openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع نیم شارژها"),
-                            "discount_on_purchase": openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف ثابت اتاق‌ها"),
-                            "discount_code": openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف کد تخفیف")
+                            "discount_on_purchase": openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف ثابت اتاق‌ها")
                         }
                     )
                 }
@@ -2982,17 +2966,8 @@ class ReservationInvoiceAPIView(APIView):
         data = request.data
         try:
             reservation.total_price = parse_number(data.get("total_price"))
-            reservation.total_extra_passenger_charge = parse_number(data.get("extra_passengers"))
-            reservation.total_half_day_charge = parse_number(data.get("half_charges"))
             reservation.room_fixed_discount = parse_number(data.get("discount_on_purchase"))
-            reservation.discount = parse_number(data.get("discount_code"))
-            reservation.save(update_fields=[
-                "total_price",
-                "total_extra_passenger_charge",
-                "total_half_day_charge",
-                "room_fixed_discount",
-                "discount"
-            ])
+            reservation.save(update_fields=["total_price", "room_fixed_discount"])
         except Exception as e:
             logger.error(f"Invoice update error: {e}")
             return Response({"error": "خطا در بروزرسانی صورت‌حساب"}, status=400)
@@ -3001,14 +2976,11 @@ class ReservationInvoiceAPIView(APIView):
             "message": "صورت‌حساب با موفقیت ویرایش شد.",
             "invoice": {
                 "total_price": int(reservation.total_price),
-                "extra_passengers": int(reservation.total_extra_passenger_charge),
-                "half_charges": int(reservation.total_half_day_charge),
-                "discount_on_purchase": int(reservation.room_fixed_discount),
-                "discount_code": int(reservation.discount)
+                "discount_on_purchase": int(reservation.room_fixed_discount)
             }
         }
         return Response(response_data, status=200)
-    
+
 
 # ای پی ای توضیحات تکمیلی رزرو 
 class ReservationDescriptionAPIView(APIView):
