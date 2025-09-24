@@ -12,7 +12,9 @@ import copy
 from amqp import NotFound
 import jdatetime 
 from itertools import combinations
+from authentication.models import NaturalProfile
 from bashgah_moshtarian.models import DiscountActivationRecord, RoomDiscountCode
+from config.models import UserLevel
 from reservation.models import Hotel 
 from reservation.models import Reservationhotel, ReservationRoom
 from rest_framework.views import APIView
