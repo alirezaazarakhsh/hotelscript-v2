@@ -3071,6 +3071,7 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # اعتبارسنجی‌ها
+# اعتبارسنجی‌ها
 def validate_phone_number(value):
     if not re.match(r'^09\d{9}$', value):
         raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
@@ -3391,7 +3392,7 @@ class ReservationRoomDetailAPIView(APIView):
                     return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید مشخص باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
                 try:
                     if charge.get('price'):
-                        Decimal(charge['price'])
+                        Decimal(charge['price'])  # اعتبارسنجی عددی بودن
                 except (ValueError, TypeError):
                     return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید عدد معتبر باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3410,13 +3411,19 @@ class ReservationRoomDetailAPIView(APIView):
             passengers_data = room_data.get('passengers', {})
             half_charges = room_data.get('half_charges', {})
 
-            # بروزرسانی اطلاعات نیم‌شارژ
+            # تبدیل مقادیر رشته‌ای به Decimal
+            extra_capacity_price = Decimal(room_data.get('extra_capacity_price', '0'))
+            discount_on_purchase = Decimal(room_data.get('discount_on_purchase', '0'))
+            half_day_in_price = Decimal(half_charges.get('enter', {}).get('price', '0'))
+            half_day_out_price = Decimal(half_charges.get('exit', {}).get('price', '0'))
+
+            # بروزرسانی اطلاعات نیم‌شارژ و قیمت‌ها
             res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
             res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
-            res_room.half_day_in_price = Decimal(half_charges.get('enter', {}).get('price', 0))
-            res_room.half_day_out_price = Decimal(half_charges.get('exit', {}).get('price', 0))
-            res_room.extra_passenger_price = Decimal(room_data.get('extra_capacity_price', 0))
-            res_room.fixed_discount = Decimal(room_data.get('discount_on_purchase', 0))
+            res_room.half_day_in_price = half_day_in_price
+            res_room.half_day_out_price = half_day_out_price
+            res_room.extra_passenger_price = extra_capacity_price
+            res_room.fixed_discount = discount_on_purchase
             
             # بازمحاسبه قیمت‌های نیم‌شارژ
             res_room.calculate_half_day_prices()
