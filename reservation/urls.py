@@ -10,6 +10,7 @@ from .views import (
     CreateCommentView,
     BestSellersListView,
     HotelImageAPIView,
+    PassengerListForReservationView,
     ReservationCreateAPIView,
     ReservationDescriptionAPIView,
     ReservationDetailAPIView,
@@ -80,6 +81,8 @@ urlpatterns = [
     path("reservation/invoice/<str:tracking_code>/", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
     path('reservation/description/<str:tracking_code>/', ReservationDescriptionAPIView.as_view(), name='reservation-description'),
     path('reservation/form/<str:tracking_code>/', ReservationRoomDetailAPIView.as_view(),name='reservation-room-detail'),
+    path('reservation/passengers/', PassengerListForReservationView.as_view(), name='reservation-passenger-list'),
+
 
 
 
