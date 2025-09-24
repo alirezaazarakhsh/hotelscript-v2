@@ -3052,6 +3052,7 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
+#ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # ==========================
 # --- اعتبارسنجی‌ها ---
 # ==========================
@@ -3370,6 +3371,7 @@ class ReservationRoomDetailAPIView(APIView):
         reservation.save()
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
+    
     
 
 # ای پی ای کد تخفیف برای رزرو 
