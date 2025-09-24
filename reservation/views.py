@@ -3033,7 +3033,6 @@ class ReservationInvoiceAPIView(APIView):
     
 
 # ای پی ای توضیحات تکمیلی رزرو 
-
 class ReservationDescriptionAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3075,376 +3074,415 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-# API View for GET and PUT
-# API View for GET and PUT
+pythonfrom rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from decimal import Decimal
+import re
+from .models import Reservationhotel, ReservationRoom, ReservationRoomPassenger
+
+# اعتبارسنجی‌ها
+def validate_phone_number(value):
+    if not re.match(r'^09\d{9}$', value):
+        raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
+
+def validate_national_code(value):
+    if not re.match(r'^\d{10}$', value):
+        raise ValidationError('کد ملی باید 10 رقمی باشد')
+
+    check_digits = int(value[9])
+    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+
+    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+        raise ValidationError('کد ملی معتبر نیست')
+
 class ReservationRoomDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="دریافت جزئیات رزرو",
+        operation_summary="دریافت اطلاعات رزرو برای ویرایش",
         operation_description="""
-        این API جزئیات یک رزرو خاص را بر اساس کد پیگیری (tracking_code) نمایش می‌دهد. اطلاعات شامل مشخصات رزروکننده، اتاق‌های رزرو شده، تاریخ و ساعت ورود و خروج، تعداد شب‌های اقامت، نام هتل، تعداد ستاره‌های هتل، نام شهر و استان، تعداد اتاق‌ها و وضعیت نیم‌شارژهای ورود و خروج است. کاربر باید احراز هویت شده باشد و کد پیگیری باید متعلق به رزروهای او باشد.
-
-        **نحوه استفاده:**
-        - **tracking_code**: کد پیگیری رزرو که در URL به صورت `${tracking_code}` وارد می‌شود (مثلاً `sfa1234567890`).
-
-        **مثال درخواست:**
-        ```
-        GET /api/v1/hotel/reservation/form/sfa1234567890/
-        ```
-
-        **پاسخ:**
-        ```json
-        {
-            "reserver_first_name": "علی",
-            "reserver_last_name": "محمدی",
-            "reserver_phone_number": "09123456789",
-            "reserver_national_code": "1234567890",
-            "date": {
-                "enter": "1404-06-30",
-                "exit": "1404-07-02"
-            },
-            "time": {
-                "enter": "14:00:00",
-                "exit": "12:00:00"
-            },
-            "number_of_nights": 2,
-            "hotel_name": "هتل پارسیان",
-            "hotel_star": 5,
-            "city_name": "تهران",
-            "province_name": "تهران",
-            "number_of_rooms": 2,
-            "half_charges": {
-                "enter": true,
-                "exit": false
-            },
-            "rooms": [
-                {
-                    "id": 1,
-                    "name": "اتاق دو تخته",
-                    "capacity": 2,
-                    "extra_capacity": 1,
-                    "extra_capacity_price": "500000",
-                    "discount_on_purchase": "0",
-                    "passengers": {
-                        "main_passenger": {
-                            "first_name": "علی",
-                            "last_name": "محمدی",
-                            "mobile_number": "09123456789",
-                            "national_code": "1234567890"
-                        },
-                        "other_passengers": [
-                            {
-                                "first_name": "مریم",
-                                "last_name": "رضایی",
-                                "mobile_number": null,
-                                "national_code": null
-                            }
-                        ],
-                        "extra_capacity_passengers": []
-                    },
-                    "half_charges": {
-                        "enter": {
-                            "enabled": true,
-                            "price": "250000"
-                        },
-                        "exit": {
-                            "enabled": false,
-                            "price": "0"
-                        }
-                    }
-                }
-            ]
-        }
-        ```
+        این API اطلاعات کامل یک رزرو را بر اساس کد پیگیری برای ویرایش بازمی‌گرداند.
+        ساختار خروجی شامل اطلاعات رزروکننده و اتاق‌ها با مسافران و نیم‌شارژها است.
+        **فیلدهای خروجی:**
+        - `reserver`: اطلاعات رزروکننده شامل نام، نام خانوادگی، شماره موبایل، و کد ملی.
+        - `rooms`: لیستی از اتاق‌های رزرو شده شامل:
+            - `id`: شناسه اتاق رزرو شده.
+            - `name`: نام اتاق (فقط برای نمایش).
+            - `capacity`: ظرفیت اصلی اتاق.
+            - `extra_capacity`: ظرفیت اضافه اتاق.
+            - `extra_capacity_price`: قیمت هر نفر اضافه.
+            - `discount_on_purchase`: تخفیف ثابت اتاق.
+            - `passengers`: شامل:
+                - `main_passenger`: اطلاعات مسافر اصلی (نام، نام خانوادگی، شماره موبایل، کد ملی).
+                - `other_passengers`: لیست سایر مسافران (فیلدهای اختیاری: شماره موبایل، کد ملی).
+                - `extra_capacity_passengers`: لیست مسافران اضافه (فیلدهای اختیاری: شماره موبایل، کد ملی).
+            - `half_charges`: شامل:
+                - `enter`: وضعیت و قیمت نیم‌شارژ ورود.
+                - `exit`: وضعیت و قیمت نیم‌شارژ خروج.
+        **توجه**: کد ملی‌ها در کل رزرو (رزروکننده و تمام مسافران) باید یکتا باشند.
         """,
-        tags=["reservation-api"],
-        manual_parameters=[
-            openapi.Parameter(
-                'tracking_code',
-                openapi.IN_PATH,
-                description="کد پیگیری رزرو (مثلاً sfa1234567890)",
-                type=openapi.TYPE_STRING,
-                required=True
-            )
-        ],
-        responses={
-            200: ReservationDetailSerializer,
-            403: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='پیام خطا (دسترسی غیرمجاز)')
-                }
-            ),
-            404: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='پیام خطا (رزرو یافت نشد)')
-                }
-            )
-        }
+        tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
-        try:
-            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
-        except Reservationhotel.DoesNotExist:
-            return Response({'error': 'رزرو با کد پیگیری داده‌شده یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
+        # دریافت رزرو با کد پیگیری
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        
+        # آماده‌سازی داده‌های خروجی
+        response_data = {
+            "reserver": {
+                "first_name": reservation.reserver_first_name,
+                "last_name": reservation.reserver_last_name,
+                "phone_number": reservation.reserver_phone_number,
+                "national_code": reservation.reserver_national_code or ""
+            },
+            "rooms": []
+        }
 
-        serializer = ReservationDetailSerializer(reservation)
-        return Response(serializer.data)
+        # پر کردن اطلاعات اتاق‌ها
+        for res_room in reservation.reservation_rooms.all():
+            room_data = {
+                "id": res_room.id,
+                "name": res_room.room.title if res_room.room else "",
+                "capacity": res_room.room.room_capacity if res_room.room else 0,
+                "extra_capacity": res_room.room.extra_capacity if res_room.room else 0,
+                "extra_capacity_price": str(res_room.extra_passenger_price or 0),
+                "discount_on_purchase": str(res_room.fixed_discount or 0),
+                "passengers": {
+                    "main_passenger": {},
+                    "other_passengers": [],
+                    "extra_capacity_passengers": []
+                },
+                "half_charges": {
+                    "enter": {
+                        "enabled": res_room.half_day_in_selected,
+                        "price": str(res_room.half_day_in_price)
+                    },
+                    "exit": {
+                        "enabled": res_room.half_day_out_selected,
+                        "price": str(res_room.half_day_out_price)
+                    }
+                }
+            }
+
+            # پر کردن اطلاعات مسافران
+            for passenger in res_room.passengers.all():
+                passenger_data = {
+                    "first_name": passenger.first_name,
+                    "last_name": passenger.last_name,
+                    "phone_number": passenger.mobile_number or "",
+                    "national_code": passenger.national_code or ""
+                }
+                if passenger.passenger_type == "primary":
+                    room_data["passengers"]["main_passenger"] = passenger_data
+                elif passenger.passenger_type == "secondary":
+                    room_data["passengers"]["other_passengers"].append(passenger_data)
+                elif passenger.passenger_type == "extra":
+                    room_data["passengers"]["extra_capacity_passengers"].append(passenger_data)
+
+            response_data["rooms"].append(room_data)
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_summary="بروزرسانی جزئیات رزرو",
+        operation_summary="بروزرسانی اطلاعات رزرو",
         operation_description="""
-        این API امکان بروزرسانی اطلاعات رزرو (نام، نام خانوادگی، شماره موبایل و کد ملی رزروکننده) و جزئیات اتاق‌ها (شامل تعداد، نیم‌شارژها و مسافران) را فراهم می‌کند. تعداد مسافران باید با ظرفیت اتاق (مسافر اصلی + سایر مسافران = ظرفیت پایه اتاق، و مسافران اضافه تا حداکثر ظرفیت اضافی) مطابقت داشته باشد. کد ملی مسافران در هر اتاق باید یکتا باشد و اعتبارسنجی کد ملی انجام می‌شود. در صورت عدم ارائه اطلاعات رزروکننده، اطلاعات قبلی حفظ می‌شود. کاربر باید احراز هویت شده باشد و کد پیگیری باید متعلق به رزروهای او باشد.
-
-        **نحوه استفاده:**
-        - **tracking_code**: کد پیگیری رزرو که در URL به صورت `${tracking_code}` وارد می‌شود (مثلاً `sfa1234567890`).
-        - بدنه درخواست شامل اطلاعات رزروکننده (اختیاری) و لیست اتاق‌ها با مسافران است.
-
-        **مثال درخواست:**
-        ```
-        PUT /api/v1/hotel/reservation/form/sfa1234567890/
-        Content-Type: application/json
-        {
-            "reserver_first_name": "Alireza",
-            "reserver_last_name": "Azarakhsh",
-            "reserver_phone_number": "09356617635",
-            "reserver_national_code": "0023467444",
-            "rooms": [
-                {
-                    "id": 2,
-                    "quantity": 1,
-                    "half_charges": {
-                        "enter": { "enabled": true, "price": 1700000 },
-                        "exit": { "enabled": true, "price": 1700000 }
-                    },
-                    "passengers": {
-                        "main_passenger": {
-                            "first_name": "Alireza",
-                            "last_name": "Azarakhsh",
-                            "mobile_number": "09120759410",
-                            "national_code": "0023273291"
-                        },
-                        "other_passengers": [],
-                        "extra_capacity_passengers": []
-                    }
-                },
-                {
-                    "id": 1,
-                    "quantity": 1,
-                    "half_charges": {
-                        "enter": { "enabled": true, "price": 2700000 },
-                        "exit": { "enabled": true, "price": 2700000 }
-                    },
-                    "passengers": {
-                        "main_passenger": {
-                            "first_name": "Alireza",
-                            "last_name": "Azarakhsh",
-                            "mobile_number": "09120759418",
-                            "national_code": "0023467444"
-                        },
-                        "other_passengers": [
-                            {
-                                "first_name": "Alireza",
-                                "last_name": "Azarakhsh",
-                                "mobile_number": "09120759418",
-                                "national_code": "1461337879"
-                            }
-                        ],
-                        "extra_capacity_passengers": [
-                            {
-                                "first_name": "Alireza",
-                                "last_name": "Azarakhsh",
-                                "mobile_number": "09120759417",
-                                "national_code": "0023273293"
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-        ```
-
-        **پاسخ:**
-        - در صورت موفقیت، همان ساختار پاسخ `GET` برگردانده می‌شود.
+        این API امکان ویرایش اطلاعات رزرو را فراهم می‌کند. شامل:
+        - **رزروکننده**: نام، نام خانوادگی، شماره موبایل، و کد ملی (همه الزامی).
+        - **اتاق‌ها**: شامل اطلاعات اتاق‌های رزرو شده، مسافران، و نیم‌شارژها.
+        **اعتبارسنجی‌ها:**
+        - رزروکننده باید تمام فیلدهای الزامی را داشته باشد.
+        - هر اتاق باید حداقل یک مسافر اصلی با تمام فیلدهای الزامی داشته باشد.
+        - کد ملی‌ها در کل رزرو (رزروکننده و تمام مسافران) باید یکتا باشند.
+        - شماره موبایل باید به فرمت `09xxxxxxxxx` باشد.
+        - کد ملی باید 10 رقمی و معتبر باشد.
+        - تعداد مسافران هر اتاق نباید از مجموع ظرفیت اصلی و اضافه بیشتر باشد.
+        - قیمت‌های نیم‌شارژ و تخفیف‌ها باید مقادیر عددی معتبر باشند.
+        - تمام اتاق‌ها باید متعلق به رزرو موردنظر باشند.
+        **ساختار ورودی:**
+        - `reserver`: اطلاعات رزروکننده.
+        - `rooms`: لیستی از اتاق‌ها با اطلاعات مسافران و نیم‌شارژها.
+        **توجه**: پس از بروزرسانی، قیمت‌های رزرو (مانند قیمت نهایی، نیم‌شارژها، و تخفیف‌ها) به‌صورت خودکار بازمحاسبه می‌شوند.
         """,
-        request_body=UpdateReservationSerializer,
-        tags=["reservation-api"],
-        manual_parameters=[
-            openapi.Parameter(
-                'tracking_code',
-                openapi.IN_PATH,
-                description="کد پیگیری رزرو (مثلاً sfa1234567890)",
-                type=openapi.TYPE_STRING,
-                required=True
-            )
-        ],
-        responses={
-            200: ReservationDetailSerializer,
-            400: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='پیام خطا (ورودی نامعتبر یا نقض محدودیت‌ها)')
-                }
-            ),
-            403: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='پیام خطا (دسترسی غیرمجاز)')
-                }
-            ),
-            404: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'error': openapi.Schema(type=openapi.TYPE_STRING, description='پیام خطا (رزرو یا اتاق یافت نشد)')
-                }
-            )
-        }
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['reserver', 'rooms'],
+            properties={
+                'reserver': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    required=['first_name', 'last_name', 'phone_number', 'national_code'],
+                    properties={
+                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام رزروکننده'),
+                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی رزروکننده'),
+                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل رزروکننده (09xxxxxxxxx)'),
+                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی رزروکننده (10 رقمی)')
+                    }
+                ),
+                'rooms': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        required=['id', 'passengers'],
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق رزرو شده'),
+                            'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق (فقط برای نمایش، نادیده گرفته می‌شود)'),
+                            'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق'),
+                            'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق'),
+                            'extra_capacity_price': openapi.Schema(type=openapi.TYPE_STRING, description='قیمت هر نفر اضافه'),
+                            'discount_on_purchase': openapi.Schema(type=openapi.TYPE_STRING, description='تخفیف ثابت اتاق'),
+                            'passengers': openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                required=['main_passenger'],
+                                properties={
+                                    'main_passenger': openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        required=['first_name', 'last_name', 'phone_number', 'national_code'],
+                                        properties={
+                                            'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام مسافر اصلی'),
+                                            'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی مسافر اصلی'),
+                                            'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل مسافر اصلی (09xxxxxxxxx)'),
+                                            'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی مسافر اصلی (10 رقمی)')
+                                        }
+                                    ),
+                                    'other_passengers': openapi.Schema(
+                                        type=openapi.TYPE_ARRAY,
+                                        items=openapi.Schema(
+                                            type=openapi.TYPE_OBJECT,
+                                            properties={
+                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام سایر مسافران'),
+                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی سایر مسافران'),
+                                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل (اختیاری)'),
+                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی (اختیاری)')
+                                            }
+                                        )
+                                    ),
+                                    'extra_capacity_passengers': openapi.Schema(
+                                        type=openapi.TYPE_ARRAY,
+                                        items=openapi.Schema(
+                                            type=openapi.TYPE_OBJECT,
+                                            properties={
+                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام مسافر اضافه'),
+                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی مسافر اضافه'),
+                                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل (اختیاری)'),
+                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی (اختیاری)')
+                                            }
+                                        )
+                                    )
+                                }
+                            ),
+                            'half_charges': openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'enter': openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='فعال بودن نیم‌شارژ ورود'),
+                                            'price': openapi.Schema(type=openapi.TYPE_STRING, description='قیمت نیم‌شارژ ورود (در صورت فعال بودن الزامی)')
+                                        }
+                                    ),
+                                    'exit': openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='فعال بودن نیم‌شارژ خروج'),
+                                            'price': openapi.Schema(type=openapi.TYPE_STRING, description='قیمت نیم‌شارژ خروج (در صورت فعال بودن الزامی)')
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    )
+                )
+            }
+        ),
+        tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
+        # دریافت رزرو
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        
+        # اعتبارسنجی داده‌های ورودی
+        data = request.data
+        if not isinstance(data, dict) or 'reserver' not in data or 'rooms' not in data:
+            return Response({'detail': 'فیلدهای reserver و rooms الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # اعتبارسنجی رزروکننده
+        reserver_data = data.get('reserver', {})
+        for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
+            if field not in reserver_data or not reserver_data[field]:
+                return Response({'detail': f'فیلد {field} برای رزروکننده الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
-        except Reservationhotel.DoesNotExist:
-            return Response({'error': 'رزرو با کد پیگیری داده‌شده یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
+            validate_phone_number(reserver_data['phone_number'])
+            validate_national_code(reserver_data['national_code'])
+        except ValidationError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = UpdateReservationSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # بررسی یکتایی کد ملی در کل رزرو
+        all_national_codes = [reserver_data['national_code']] if reserver_data['national_code'] else []
+        
+        # اعتبارسنجی اتاق‌ها
+        rooms_data = data.get('rooms', [])
+        if not rooms_data:
+            return Response({'detail': 'حداقل یک اتاق باید مشخص شود.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = serializer.validated_data
+        room_ids = [room_data.get('id') for room_data in rooms_data]
+        existing_rooms = reservation.reservation_rooms.filter(id__in=room_ids)
+        if existing_rooms.count() != len(room_ids) or any(room_data['id'] not in [r.id for r in existing_rooms] for room_data in rooms_data):
+            return Response({'detail': 'شناسه‌های اتاق نامعتبر هستند یا به این رزرو تعلق ندارند.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update reserver info if provided
-        if 'reserver_first_name' in data:
-            reservation.reserver_first_name = data['reserver_first_name']
-        if 'reserver_last_name' in data:
-            reservation.reserver_last_name = data['reserver_last_name']
-        if 'reserver_phone_number' in data:
-            reservation.reserver_phone_number = data['reserver_phone_number']
-        if 'reserver_national_code' in data:
-            reservation.reserver_national_code = data['reserver_national_code']
-
-        # Handle rooms
-        existing_rooms = {rr.room.id: rr for rr in reservation.reservation_rooms.all()}
-        provided_room_ids = [room_data['id'] for room_data in data.get('rooms', [])]
-
-        # Delete rooms not in the update
-        for room_id, res_room in list(existing_rooms.items()):
-            if room_id not in provided_room_ids:
-                res_room.delete()
-
-        for room_data in data.get('rooms', []):
-            room_id = room_data['id']
+        # اعتبارسنجی مسافران و جمع‌آوری کدهای ملی
+        for room_data in rooms_data:
+            passengers = room_data.get('passengers', {})
+            if 'main_passenger' not in passengers:
+                return Response({'detail': f'هر اتاق باید یک مسافر اصلی داشته باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            main_passenger = passengers.get('main_passenger', {})
+            for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
+                if field not in main_passenger or not main_passenger[field]:
+                    return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+            
             try:
-                room = Room.objects.get(pk=room_id)
-            except Room.DoesNotExist:
-                return Response({'error': f'اتاق با شناسه {room_id} یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
+                validate_phone_number(main_passenger['phone_number'])
+                validate_national_code(main_passenger['national_code'])
+            except ValidationError as e:
+                return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-            if reservation.reservation_rooms.exists() and room.hotel != reservation.reservation_rooms.first().room.hotel:
-                return Response({'error': 'تمام اتاق‌ها باید متعلق به یک هتل باشند'}, status=status.HTTP_400_BAD_REQUEST)
+            if main_passenger['national_code'] in all_national_codes:
+                return Response({'detail': f'کد ملی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+            all_national_codes.append(main_passenger['national_code'])
 
-            # Extract half_charges
+            # اعتبارسنجی سایر مسافران
+            for passenger in passengers.get('other_passengers', []):
+                if not passenger.get('first_name') or not passenger.get('last_name'):
+                    return Response({'detail': f'نام و نام خانوادگی برای سایر مسافران الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                if passenger.get('phone_number'):
+                    try:
+                        validate_phone_number(passenger['phone_number'])
+                    except ValidationError as e:
+                        return Response({'detail': f'خطا در شماره موبایل سایر مسافران (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                if passenger.get('national_code'):
+                    try:
+                        validate_national_code(passenger['national_code'])
+                    except ValidationError as e:
+                        return Response({'detail': f'خطا در کد ملی سایر مسافران (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                    if passenger['national_code'] in all_national_codes:
+                        return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+                    all_national_codes.append(passenger['national_code'])
+
+            # اعتبارسنجی مسافران اضافه
+            for passenger in passengers.get('extra_capacity_passengers', []):
+                if not passenger.get('first_name') or not passenger.get('last_name'):
+                    return Response({'detail': f'نام و نام خانوادگی برای مسافران اضافه الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                if passenger.get('phone_number'):
+                    try:
+                        validate_phone_number(passenger['phone_number'])
+                    except ValidationError as e:
+                        return Response({'detail': f'خطا در شماره موبایل مسافران اضافه (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                if passenger.get('national_code'):
+                    try:
+                        validate_national_code(passenger['national_code'])
+                    except ValidationError as e:
+                        return Response({'detail': f'خطا در کد ملی مسافران اضافه (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                    if passenger['national_code'] in all_national_codes:
+                        return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+                    all_national_codes.append(passenger['national_code'])
+
+            # اعتبارسنجی تعداد مسافران
+            total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
+            if total_passengers > (room_data.get('capacity', 0) + room_data.get('extra_capacity', 0)):
+                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # اعتبارسنجی نیم‌شارژها
             half_charges = room_data.get('half_charges', {})
-            half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
-            half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+            for charge_type in ['enter', 'exit']:
+                charge = half_charges.get(charge_type, {})
+                if charge.get('enabled') and not charge.get('price'):
+                    return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید مشخص باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    if charge.get('price'):
+                        Decimal(charge['price'])
+                except (ValueError, TypeError):
+                    return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید عدد معتبر باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
 
-            res_room, created = ReservationRoom.objects.get_or_create(
-                reservation=reservation,
-                room=room,
-                defaults={
-                    'quantity': room_data.get('quantity', 1),
-                    'half_day_in_selected': half_day_in_selected,
-                    'half_day_out_selected': half_day_out_selected,
-                }
-            )
-            if not created:
-                res_room.quantity = room_data.get('quantity', 1)
-                res_room.half_day_in_selected = half_day_in_selected
-                res_room.half_day_out_selected = half_day_out_selected
-                res_room.save()
+        # بروزرسانی رزروکننده
+        reservation.reserver_first_name = reserver_data['first_name']
+        reservation.reserver_last_name = reserver_data['last_name']
+        reservation.reserver_phone_number = reserver_data['phone_number']
+        reservation.reserver_national_code = reserver_data['national_code']
+        reservation._skip_price_calculation = True  # جلوگیری از محاسبه قیمت در این مرحله
+        reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
-            # Handle passengers
-            passengers_data = room_data['passengers']
-            national_codes = set()
-            primary_count = 0
-            secondary_count = 0
-            extra_count = 0
+        # بروزرسانی اتاق‌ها
+        for room_data in rooms_data:
+            res_room = existing_rooms.get(id=room_data['id'])
+            passengers_data = room_data.get('passengers', {})
+            half_charges = room_data.get('half_charges', {})
 
-            # Clear existing passengers
+            # بروزرسانی اطلاعات نیم‌شارژ
+            res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
+            res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+            res_room.half_day_in_price = Decimal(half_charges.get('enter', {}).get('price', 0))
+            res_room.half_day_out_price = Decimal(half_charges.get('exit', {}).get('price', 0))
+            res_room.extra_passenger_price = Decimal(room_data.get('extra_capacity_price', 0))
+            res_room.fixed_discount = Decimal(room_data.get('discount_on_purchase', 0))
+            
+            # بازمحاسبه قیمت‌های نیم‌شارژ
+            res_room.calculate_half_day_prices()
+            res_room.save(update_fields=[
+                'half_day_in_selected', 'half_day_out_selected', 
+                'half_day_in_price', 'half_day_out_price',
+                'extra_passenger_price', 'fixed_discount'
+            ])
+
+            # حذف مسافران قبلی
             res_room.passengers.all().delete()
 
-            # Process main_passenger
-            if passengers_data.get('main_passenger'):
-                passenger = passengers_data['main_passenger']
-                national_code = passenger.get('national_code')
-                if national_code:
-                    if national_code in national_codes:
-                        return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
-                    national_codes.add(national_code)
-                primary_count += 1
-                ReservationRoomPassenger.objects.create(
-                    reservation_room=res_room,
-                    passenger_type='primary',
-                    first_name=passenger['first_name'],
-                    last_name=passenger['last_name'],
-                    mobile_number=passenger.get('mobile_number'),
-                    national_code=national_code,
-                )
+            # افزودن مسافر اصلی
+            main_passenger = passengers_data.get('main_passenger', {})
+            ReservationRoomPassenger.objects.create(
+                reservation_room=res_room,
+                passenger_type='primary',
+                first_name=main_passenger['first_name'],
+                last_name=main_passenger['last_name'],
+                mobile_number=main_passenger['phone_number'],
+                national_code=main_passenger['national_code'],
+                is_primary=True
+            )
 
-            # Process other_passengers
+            # افزودن سایر مسافران
             for passenger in passengers_data.get('other_passengers', []):
-                national_code = passenger.get('national_code')
-                if national_code:
-                    if national_code in national_codes:
-                        return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
-                    national_codes.add(national_code)
-                secondary_count += 1
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
                     passenger_type='secondary',
                     first_name=passenger['first_name'],
                     last_name=passenger['last_name'],
-                    mobile_number=passenger.get('mobile_number'),
-                    national_code=national_code,
+                    mobile_number=passenger.get('phone_number', None),
+                    national_code=passenger.get('national_code', None),
+                    is_primary=False
                 )
 
-            # Process extra_capacity_passengers
+            # افزودن مسافران اضافه
             for passenger in passengers_data.get('extra_capacity_passengers', []):
-                national_code = passenger.get('national_code')
-                if national_code:
-                    if national_code in national_codes:
-                        return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
-                    national_codes.add(national_code)
-                extra_count += 1
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
                     passenger_type='extra',
                     first_name=passenger['first_name'],
                     last_name=passenger['last_name'],
-                    mobile_number=passenger.get('mobile_number'),
-                    national_code=national_code,
+                    mobile_number=passenger.get('phone_number', None),
+                    national_code=passenger.get('national_code', None),
+                    is_primary=False
                 )
 
-            # Validate passenger counts against capacity
-            required_primary = room.room_capacity
-            max_extra = room.extra_capacity
-
-            total_standard = primary_count + secondary_count
-            if total_standard != required_primary:
-                return Response({'error': f'اتاق {room_id} باید دقیقاً {required_primary} مسافر استاندارد (اصلی + سایر) داشته باشد، اما {total_standard} دریافت شد'}, status=status.HTTP_400_BAD_REQUEST)
-
-            if primary_count != 1:
-                return Response({'error': f'اتاق {room_id} باید دقیقاً 1 مسافر اصلی داشته باشد، اما {primary_count} دریافت شد'}, status=status.HTTP_400_BAD_REQUEST)
-
-            if extra_count > max_extra:
-                return Response({'error': f'اتاق {room_id} حداکثر {max_extra} مسافر اضافه مجاز است، اما {extra_count} دریافت شد'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Recalculate prices and save reservation
+        # بازمحاسبه قیمت‌های رزرو
         reservation._skip_price_calculation = False
         reservation.save()
 
-        return Response(ReservationDetailSerializer(reservation).data, status=status.HTTP_200_OK)
-
+        return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
 
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
