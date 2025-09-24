@@ -3096,7 +3096,7 @@ class ReservationRoomDetailAPIView(APIView):
         **فیلدهای خروجی:**
         - `reserver`: اطلاعات رزروکننده شامل نام، نام خانوادگی، شماره موبایل، و کد ملی.
         - `rooms`: لیستی از اتاق‌های رزرو شده شامل:
-            - `id`: شناسه اتاق رزرو شده.
+            - `id`: شناسه اتاق رزرو شده (از دیتابیس).
             - `name`: نام اتاق (فقط برای نمایش).
             - `capacity`: ظرفیت اصلی اتاق.
             - `extra_capacity`: ظرفیت اضافه اتاق.
@@ -3114,10 +3114,8 @@ class ReservationRoomDetailAPIView(APIView):
         tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
-        # دریافت رزرو با کد پیگیری
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         
-        # آماده‌سازی داده‌های خروجی
         response_data = {
             "reserver": {
                 "first_name": reservation.reserver_first_name,
@@ -3128,15 +3126,14 @@ class ReservationRoomDetailAPIView(APIView):
             "rooms": []
         }
 
-        # پر کردن اطلاعات اتاق‌ها
         for res_room in reservation.reservation_rooms.all():
             room_data = {
-                "id": res_room.id,
+                "id": res_room.room.id,  # استفاده از id واقعی اتاق از دیتابیس
                 "name": res_room.room.title if res_room.room else "",
                 "capacity": res_room.room.room_capacity if res_room.room else 0,
                 "extra_capacity": res_room.room.extra_capacity if res_room.room else 0,
-                "extra_capacity_price": str(res_room.extra_passenger_price or 0),
-                "discount_on_purchase": str(res_room.fixed_discount or 0),
+                "extra_capacity_price": str(res_room.extra_passenger_price or Decimal('0')),
+                "discount_on_purchase": str(res_room.fixed_discount or Decimal('0')),
                 "passengers": {
                     "main_passenger": {},
                     "other_passengers": [],
@@ -3145,16 +3142,15 @@ class ReservationRoomDetailAPIView(APIView):
                 "half_charges": {
                     "enter": {
                         "enabled": res_room.half_day_in_selected,
-                        "price": str(res_room.half_day_in_price)
+                        "price": str(res_room.half_day_in_price or Decimal('0'))
                     },
                     "exit": {
                         "enabled": res_room.half_day_out_selected,
-                        "price": str(res_room.half_day_out_price)
+                        "price": str(res_room.half_day_out_price or Decimal('0'))
                     }
                 }
             }
 
-            # پر کردن اطلاعات مسافران
             for passenger in res_room.passengers.all():
                 passenger_data = {
                     "first_name": passenger.first_name,
@@ -3191,7 +3187,7 @@ class ReservationRoomDetailAPIView(APIView):
         **ساختار ورودی:**
         - `reserver`: اطلاعات رزروکننده.
         - `rooms`: لیستی از اتاق‌ها با اطلاعات مسافران و نیم‌شارژها.
-        **توجه**: پس از بروزرسانی، قیمت‌های رزرو (مانند قیمت نهایی، نیم‌شارژها، و تخفیف‌ها) به‌صورت خودکار بازمحاسبه می‌شوند.
+        **توجه**: `id` اتاق باید با شناسه‌های موجود در دیتابیس مطابقت داشته باشد. پس از بروزرسانی، قیمت‌ها و تعداد نفرات به‌صورت خودکار بازمحاسبه می‌شوند.
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -3213,10 +3209,10 @@ class ReservationRoomDetailAPIView(APIView):
                         type=openapi.TYPE_OBJECT,
                         required=['id', 'passengers'],
                         properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق رزرو شده'),
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق رزرو شده (باید با دیتابیس مطابقت داشته باشد)'),
                             'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق (فقط برای نمایش، نادیده گرفته می‌شود)'),
-                            'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق'),
-                            'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق'),
+                            'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق (فقط برای نمایش)'),
+                            'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق (فقط برای نمایش)'),
                             'extra_capacity_price': openapi.Schema(type=openapi.TYPE_STRING, description='قیمت هر نفر اضافه'),
                             'discount_on_purchase': openapi.Schema(type=openapi.TYPE_STRING, description='تخفیف ثابت اتاق'),
                             'passengers': openapi.Schema(
@@ -3378,8 +3374,9 @@ class ReservationRoomDetailAPIView(APIView):
 
             # اعتبارسنجی تعداد مسافران
             total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
-            if total_passengers > (room_data.get('capacity', 0) + room_data.get('extra_capacity', 0)):
-                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
+            room = existing_rooms.get(id=room_data['id']).room
+            if total_passengers > (room.room_capacity + room.extra_capacity):
+                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز ({room.room_capacity + room.extra_capacity}) بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
             # اعتبارسنجی نیم‌شارژها
             half_charges = room_data.get('half_charges', {})
@@ -3398,7 +3395,7 @@ class ReservationRoomDetailAPIView(APIView):
         reservation.reserver_last_name = reserver_data['last_name']
         reservation.reserver_phone_number = reserver_data['phone_number']
         reservation.reserver_national_code = reserver_data['national_code']
-        reservation._skip_price_calculation = True  # جلوگیری از محاسبه قیمت در این مرحله
+        reservation._skip_price_calculation = True
         reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
         # بروزرسانی اتاق‌ها
@@ -3461,6 +3458,9 @@ class ReservationRoomDetailAPIView(APIView):
                     national_code=passenger.get('national_code', None),
                     is_primary=False
                 )
+
+            # به‌روزرسانی تعداد نفرات
+            res_room.update_passenger_counts()
 
         # بازمحاسبه قیمت‌های رزرو
         reservation._skip_price_calculation = False
