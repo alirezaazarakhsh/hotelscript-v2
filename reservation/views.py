@@ -282,16 +282,25 @@ class HotelRoomsView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'slug'
 
     def get_user_level(self, user):
-        """دریافت سطح کاربری کاربر از پروفایل حقیقی"""
+        """دریافت سطح کاربری کاربر از پروفایل حقیقی یا بازگشت سطح 'میهمان' به‌صورت پیش‌فرض"""
+        default_user_level = None  # برای قیمت‌های عمومی (user_level__isnull=True)
+        guest_level = UserLevel.objects.filter(title="میهمان").first()
+
+        if not user.is_authenticated:
+            logger.info("User is not authenticated, using 'میهمان' level or public prices")
+            return guest_level if guest_level else default_user_level
+
         try:
             profile = NaturalProfile.objects.get(base_user=user)
-            return profile.level
+            user_level = profile.level
+            logger.info(f"User {user.id} has level: {user_level.title if user_level else 'None'}")
+            return user_level if user_level else (guest_level if guest_level else default_user_level)
         except NaturalProfile.DoesNotExist:
-            logger.warning(f"No NaturalProfile found for user {user.id}")
-            return None
+            logger.warning(f"No NaturalProfile found for user {user.id}, using 'میهمان' level or public prices")
+            return guest_level if guest_level else default_user_level
         except AttributeError:
-            logger.warning(f"No user level defined for user {user.id}")
-            return None
+            logger.warning(f"No user level defined for user {user.id}, using 'میهمان' level or public prices")
+            return guest_level if guest_level else default_user_level
 
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
@@ -343,11 +352,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         passengers = request.query_params.get('passengers')
 
         # دریافت سطح کاربری کاربر
-        user_level = None
-        default_user_level = "میهمان"
-        if request.user.is_authenticated:
-            user_level = self.get_user_level(request.user)
-            logger.info(f"User level for user {request.user.id}: {user_level.title if user_level else 'None'}")
+        user_level = self.get_user_level(request.user)
+        default_user_level_title = "میهمان"
 
         # Parse passengers parameter
         passengers_list = []
@@ -383,15 +389,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 
-        # Filter rooms to ensure they are available for the entire date range
-        rooms_qs = hotel.rooms.filter(
-            date_prices__start_date__lte=start_date_obj,
-            date_prices__end_date__gte=end_date_obj,
-            inventory__gt=0
-        ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+        # Filter rooms to ensure they are available
+        rooms_qs = hotel.rooms.filter(inventory__gt=0).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+        logger.info(f"Found {rooms_qs.count()} rooms for hotel {hotel.slug}")
 
         # اگر هیچ اتاقی نبود، پاسخ مناسب با status 200 برگردان
         if not rooms_qs.exists():
+            logger.warning(f"No rooms available for hotel {hotel.slug}")
             return Response({
                 'detail': 'هیچ اتاقی برای این هتل موجود نیست.',
                 'rooms': [],
@@ -430,6 +434,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 try:
                     discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
                 except ValueError as e:
+                    logger.error(f"Error calculating discount for room {room.id} on {date}: {str(e)}")
                     return Response({'detail': str(e)}, status=400)
 
                 price_calendar.append({
@@ -444,11 +449,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
-                        "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level,
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else default_user_level_title,
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
 
+            # بررسی وجود حداقل یک قیمت برای بازه زمانی
             first_price_data = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj,
@@ -462,12 +468,41 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     user_level__isnull=True
                 ).order_by('-id').select_related('user_level').first()
 
+            # اگر هیچ قیمتی برای اتاق وجود نداشت، اتاق را با اطلاعات پایه اضافه کن
             if not first_price_data:
+                logger.warning(f"No price data found for room {room.id} in date range {start_date_obj} to {end_date_obj}")
+                room_dict[room.id] = {
+                    "id": room.id,
+                    "name": room.title or "",
+                    "descriptions": room.description or "",
+                    "room_number": room.inventory or 0,
+                    "customer_club_points": room.customer_club_points or 0,
+                    "room_services": room_services,
+                    "accept_need": room.count or 0,
+                    "dont_accept_need": room.auto_approved_count or 0,
+                    "hotel": room.hotel.id,
+                    "hotel_name": str(room.hotel) or "",
+                    "capacity": room.room_capacity,
+                    "extra_capacity": room.extra_capacity,
+                    "price": {
+                        "total_price": 0,
+                        "total_price_discount": 0,
+                        "discount_percentage": None,
+                        "discount_amount": 0,
+                        "discount_date": None,
+                        "is_fixed_discount_one_time": False,
+                        "user_level": default_user_level_title,
+                        "extra_capacity_price": 0
+                    },
+                    "night_count": night_count,
+                    "price_calendar": price_calendar
+                }
                 continue
 
             try:
                 discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False)
             except ValueError as e:
+                logger.error(f"Error calculating discount for first price of room {room.id}: {str(e)}")
                 return Response({'detail': str(e)}, status=400)
 
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
@@ -496,7 +531,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_amount": discount_amount,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
-                    "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level,
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else default_user_level_title,
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "night_count": night_count,
@@ -504,6 +539,15 @@ class HotelRoomsView(generics.RetrieveAPIView):
             }
 
         room_data = list(room_dict.values())
+        logger.info(f"Returning {len(room_data)} rooms for hotel {hotel.slug}")
+
+        if not room_data:
+            logger.warning(f"No rooms with valid price data for hotel {hotel.slug} in date range {start_date_obj} to {end_date_obj}")
+            return Response({
+                'detail': 'هیچ اتاقی با قیمت معتبر برای این بازه زمانی یافت نشد.',
+                'rooms': [],
+                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
+            }, status=200)
 
         if not passengers_list:
             room_data.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
@@ -514,6 +558,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             required_capacity = passengers_list[0]
             filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
             if not filtered_rooms:
+                logger.warning(f"No rooms found with capacity {required_capacity} for hotel {hotel.slug}")
                 return Response({
                     'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.',
                     'rooms': [],
@@ -587,6 +632,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         generate_packs([], passengers_list, {})
 
         if not packs:
+            logger.warning(f"No packs found for passengers {passengers_list} for hotel {hotel.slug}")
             return Response({
                 'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.',
                 'packs': [],
