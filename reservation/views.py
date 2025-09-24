@@ -3076,6 +3076,7 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # API View for GET and PUT
+# API View for GET and PUT
 class ReservationRoomDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3089,7 +3090,7 @@ class ReservationRoomDetailAPIView(APIView):
 
         **مثال درخواست:**
         ```
-        GET /hotel/reservation/reservation-detail/sfa1234567890/
+        GET /api/v1/hotel/reservation/form/sfa1234567890/
         ```
 
         **پاسخ:**
@@ -3203,7 +3204,7 @@ class ReservationRoomDetailAPIView(APIView):
 
         **مثال درخواست:**
         ```
-        PUT /hotel/reservation/reservation-detail/sfa1234567890/
+        PUT /api/v1/hotel/reservation/form/sfa1234567890/
         Content-Type: application/json
         {
             "reserver_first_name": "علی",
@@ -3311,7 +3312,7 @@ class ReservationRoomDetailAPIView(APIView):
             except Room.DoesNotExist:
                 return Response({'error': f'اتاق با شناسه {room_id} یافت نشد'}, status=status.HTTP_404_NOT_FOUND)
 
-            if room.hotel != reservation.reservation_rooms.first().room.hotel:
+            if reservation.reservation_rooms.exists() and room.hotel != reservation.reservation_rooms.first().room.hotel:
                 return Response({'error': 'تمام اتاق‌ها باید متعلق به یک هتل باشند'}, status=status.HTTP_400_BAD_REQUEST)
 
             res_room, created = ReservationRoom.objects.get_or_create(
@@ -3383,8 +3384,6 @@ class ReservationRoomDetailAPIView(APIView):
         reservation.save()
 
         return Response(ReservationDetailSerializer(reservation).data, status=status.HTTP_200_OK)
-    
-    
 
 
 # ای پی ای کد تخفیف برای رزرو 

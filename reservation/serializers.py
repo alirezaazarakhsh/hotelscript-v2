@@ -827,20 +827,25 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
         }
 
     def get_time(self, obj):
-        # Assuming check-in and check-out times are fixed or stored elsewhere
+        if obj.reservation_rooms.exists():
+            hotel = obj.reservation_rooms.first().room.hotel
+            return {
+                'enter': hotel.check_in_time.strftime('%H:%M:%S') if hotel.check_in_time else '14:00:00',
+                'exit': hotel.check_out_time.strftime('%H:%M:%S') if hotel.check_out_time else '12:00:00',
+            }
         return {
-            'enter': '14:00:00',  # Replace with actual logic if available
-            'exit': '12:00:00',   # Replace with actual logic if available
+            'enter': '14:00:00',
+            'exit': '12:00:00',
         }
 
     def get_number_of_nights(self, obj):
         return obj.nights_count
 
     def get_hotel_name(self, obj):
-        return obj.reservation_rooms.first().room.hotel.title if obj.reservation_rooms.exists() else ''
+        return obj.reservation_rooms.first().room.hotel.name if obj.reservation_rooms.exists() else ''
 
     def get_hotel_star(self, obj):
-        return obj.reservation_rooms.first().room.hotel.star_rating if obj.reservation_rooms.exists() else 0
+        return obj.reservation_rooms.first().room.hotel.stars if obj.reservation_rooms.exists() else 0
 
     def get_city_name(self, obj):
         return obj.reservation_rooms.first().room.hotel.city.name if obj.reservation_rooms.exists() else ''
@@ -852,7 +857,6 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
         return obj.total_rooms
 
     def get_half_charges(self, obj):
-        # Aggregate half charges from all rooms
         return {
             'enter': any(room.half_day_in_selected for room in obj.reservation_rooms.all()),
             'exit': any(room.half_day_out_selected for room in obj.reservation_rooms.all()),
@@ -910,4 +914,4 @@ class UpdateReservationSerializer(serializers.Serializer):
             total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
             if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
                 raise ValidationError(_('کد ملی معتبر نیست'))
-        return  value
+        return value
