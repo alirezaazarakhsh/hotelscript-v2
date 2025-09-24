@@ -267,6 +267,21 @@ class RoomServiceListView(ListAPIView):
 
 # ای پی ای اتاق ها بر اساس اسلاگ 
 # تنظیم لاگ برای دیباگ (با fallback برای جلوگیری از خطا)
+pythonimport logging
+import sys
+import copy
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework import generics
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+import jdatetime
+from .models import Hotel, Room, RoomDatePrice, NaturalProfile, ClosedDate
+from .serializers import RoomSerializer
+
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -280,6 +295,18 @@ class HotelRoomsView(generics.RetrieveAPIView):
     queryset = Hotel.objects.all()
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
+
+    def get_user_level(self, user):
+        """دریافت سطح کاربری کاربر از پروفایل حقیقی"""
+        try:
+            profile = NaturalProfile.objects.get(base_user=user)
+            return profile.level
+        except NaturalProfile.DoesNotExist:
+            logger.warning(f"No NaturalProfile found for user {user.id}")
+            return None
+        except AttributeError:
+            logger.warning(f"No user level defined for user {user.id}")
+            return None
 
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
@@ -330,6 +357,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
         end_date = request.query_params.get('end-date')
         passengers = request.query_params.get('passengers')
 
+        # دریافت سطح کاربری کاربر
+        user_level = None
+        default_user_level = "میهمان"
+        if request.user.is_authenticated:
+            user_level = self.get_user_level(request.user)
+            logger.info(f"User level for user {request.user.id}: {user_level.title if user_level else 'None'}")
+
         # Parse passengers parameter
         passengers_list = []
         if passengers:
@@ -363,7 +397,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
-        default_user_level = "میهمان"
 
         # Filter rooms to ensure they are available for the entire date range
         rooms_qs = hotel.rooms.filter(
@@ -391,7 +424,21 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).order_by('-id').select_related('user_level').first()
+                # فیلتر قیمت‌ها بر اساس سطح کاربری
+                price_data = room.date_prices.filter(
+                    start_date__lte=date,
+                    end_date__gte=date,
+                    user_level=user_level
+                ).order_by('-id').select_related('user_level').first()
+
+                # اگر قیمتی برای سطح کاربری خاص نبود، قیمت عمومی را بررسی کن
+                if not price_data:
+                    price_data = room.date_prices.filter(
+                        start_date__lte=date,
+                        end_date__gte=date,
+                        user_level__isnull=True
+                    ).order_by('-id').select_related('user_level').first()
+
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
 
@@ -417,7 +464,19 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     } if status == "open" else None
                 })
 
-            first_price_data = room.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).order_by('-id').select_related('user_level').first()
+            first_price_data = room.date_prices.filter(
+                start_date__lte=start_date_obj,
+                end_date__gte=start_date_obj,
+                user_level=user_level
+            ).order_by('-id').select_related('user_level').first()
+
+            if not first_price_data:
+                first_price_data = room.date_prices.filter(
+                    start_date__lte=start_date_obj,
+                    end_date__gte=start_date_obj,
+                    user_level__isnull=True
+                ).order_by('-id').select_related('user_level').first()
+
             if not first_price_data:
                 continue
 
@@ -559,8 +618,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
-    
     
     
     
