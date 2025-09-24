@@ -755,6 +755,34 @@ class PersonSerializer(serializers.Serializer):
     mobile_number = serializers.CharField(max_length=11, required=False, allow_null=True, help_text="شماره موبایل مسافر (فرمت: 09xxxxxxxxx)")
     national_code = serializers.CharField(max_length=10, required=False, allow_null=True, help_text="کد ملی مسافر (10 رقمی)")
 
+# Serializer for Passenger in PUT request
+class PassengerInputSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=100, help_text="نام مسافر")
+    last_name = serializers.CharField(max_length=100, help_text="نام خانوادگی مسافر")
+    mobile_number = serializers.CharField(max_length=11, required=False, allow_blank=True, help_text="شماره موبایل مسافر (فرمت: 09xxxxxxxxx)")
+    national_code = serializers.CharField(max_length=10, required=False, allow_blank=True, help_text="کد ملی مسافر (10 رقمی)")
+
+    def validate_mobile_number(self, value):
+        if value and not re.match(r'^09\d{9}$', value):
+            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
+        return value
+
+    def validate_national_code(self, value):
+        if value:
+            if not re.match(r'^\d{10}$', value):
+                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
+            check_digit = int(value[9])
+            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+            if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
+                raise ValidationError(_('کد ملی معتبر نیست'))
+        return value
+
+# Serializer for Passengers structure in PUT request
+class PassengersInputSerializer(serializers.Serializer):
+    main_passenger = PassengerInputSerializer(required=False, allow_null=True, help_text="مسافر اصلی")
+    other_passengers = PassengerInputSerializer(many=True, help_text="سایر مسافران")
+    extra_capacity_passengers = PassengerInputSerializer(many=True, help_text="مسافران اضافه")
+
 # Serializer for Room in GET response
 class ReservationRoomDetailSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='room.id', help_text="شناسه اتاق")
@@ -795,7 +823,14 @@ class ReservationRoomDetailSerializer(serializers.Serializer):
             },
         }
 
-# Serializer for Reservation GET response
+# Serializer for Room in PUT request
+class UpdateReservationRoomSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="شناسه اتاق")
+    quantity = serializers.IntegerField(min_value=1, required=False, default=1, help_text="تعداد اتاق‌های رزرو شده")
+    half_charges = serializers.DictField(child=serializers.DictField(), required=False, help_text="اطلاعات نیم‌شارژهای ورود و خروج")
+    passengers = PassengersInputSerializer(help_text="اطلاعات مسافران اتاق")
+
+# Serializer for Reservation GET and PUT response
 class ReservationDetailSerializer(serializers.ModelSerializer):
     reserver_first_name = serializers.CharField(help_text="نام رزروکننده")
     reserver_last_name = serializers.CharField(help_text="نام خانوادگی رزروکننده")
@@ -861,37 +896,6 @@ class ReservationDetailSerializer(serializers.ModelSerializer):
             'enter': any(room.half_day_in_selected for room in obj.reservation_rooms.all()),
             'exit': any(room.half_day_out_selected for room in obj.reservation_rooms.all()),
         }
-
-# Serializer for Passenger in PUT request
-class PassengerSerializer(serializers.Serializer):
-    passenger_type = serializers.ChoiceField(choices=ReservationRoomPassenger.PASSENGER_TYPE_CHOICES, help_text="نوع مسافر (اصلی، سایر، اضافه)")
-    first_name = serializers.CharField(max_length=100, help_text="نام مسافر")
-    last_name = serializers.CharField(max_length=100, help_text="نام خانوادگی مسافر")
-    mobile_number = serializers.CharField(max_length=11, required=False, allow_blank=True, help_text="شماره موبایل مسافر (فرمت: 09xxxxxxxxx)")
-    national_code = serializers.CharField(max_length=10, required=False, allow_blank=True, help_text="کد ملی مسافر (10 رقمی)")
-
-    def validate_mobile_number(self, value):
-        if value and not re.match(r'^09\d{9}$', value):
-            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
-        return value
-
-    def validate_national_code(self, value):
-        if value:
-            if not re.match(r'^\d{10}$', value):
-                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
-            check_digit = int(value[9])
-            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
-            if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
-                raise ValidationError(_('کد ملی معتبر نیست'))
-        return value
-
-# Serializer for Room in PUT request
-class UpdateReservationRoomSerializer(serializers.Serializer):
-    room_id = serializers.IntegerField(help_text="شناسه اتاق")
-    quantity = serializers.IntegerField(min_value=1, help_text="تعداد اتاق‌های رزرو شده")
-    half_day_in_selected = serializers.BooleanField(default=False, help_text="فعال بودن نیم‌شارژ ورود")
-    half_day_out_selected = serializers.BooleanField(default=False, help_text="فعال بودن نیم‌شارژ خروج")
-    passengers = PassengerSerializer(many=True, help_text="لیست مسافران اتاق")
 
 # Serializer for PUT request (update reservation)
 class UpdateReservationSerializer(serializers.Serializer):

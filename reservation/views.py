@@ -3076,6 +3076,7 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # API View for GET and PUT
+
 # API View for GET and PUT
 class ReservationRoomDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -3207,32 +3208,60 @@ class ReservationRoomDetailAPIView(APIView):
         PUT /api/v1/hotel/reservation/form/sfa1234567890/
         Content-Type: application/json
         {
-            "reserver_first_name": "علی",
-            "reserver_last_name": "محمدی",
-            "reserver_phone_number": "09123456789",
-            "reserver_national_code": "1234567890",
+            "reserver_first_name": "Alireza",
+            "reserver_last_name": "Azarakhsh",
+            "reserver_phone_number": "09356617635",
+            "reserver_national_code": "0023467444",
             "rooms": [
                 {
-                    "room_id": 1,
+                    "id": 2,
                     "quantity": 1,
-                    "half_day_in_selected": true,
-                    "half_day_out_selected": false,
-                    "passengers": [
-                        {
-                            "passenger_type": "primary",
-                            "first_name": "علی",
-                            "last_name": "محمدی",
-                            "mobile_number": "09123456789",
-                            "national_code": "1234567890"
+                    "half_charges": {
+                        "enter": { "enabled": true, "price": 1700000 },
+                        "exit": { "enabled": true, "price": 1700000 }
+                    },
+                    "passengers": {
+                        "main_passenger": {
+                            "first_name": "Alireza",
+                            "last_name": "Azarakhsh",
+                            "mobile_number": "09120759410",
+                            "national_code": "0023273291"
                         },
-                        {
-                            "passenger_type": "secondary",
-                            "first_name": "مریم",
-                            "last_name": "رضایی",
-                            "mobile_number": null,
-                            "national_code": null
-                        }
-                    ]
+                        "other_passengers": [],
+                        "extra_capacity_passengers": []
+                    }
+                },
+                {
+                    "id": 1,
+                    "quantity": 1,
+                    "half_charges": {
+                        "enter": { "enabled": true, "price": 2700000 },
+                        "exit": { "enabled": true, "price": 2700000 }
+                    },
+                    "passengers": {
+                        "main_passenger": {
+                            "first_name": "Alireza",
+                            "last_name": "Azarakhsh",
+                            "mobile_number": "09120759418",
+                            "national_code": "0023467444"
+                        },
+                        "other_passengers": [
+                            {
+                                "first_name": "Alireza",
+                                "last_name": "Azarakhsh",
+                                "mobile_number": "09120759418",
+                                "national_code": "1461337879"
+                            }
+                        ],
+                        "extra_capacity_passengers": [
+                            {
+                                "first_name": "Alireza",
+                                "last_name": "Azarakhsh",
+                                "mobile_number": "09120759417",
+                                "national_code": "0023273293"
+                            }
+                        ]
+                    }
                 }
             ]
         }
@@ -3298,7 +3327,7 @@ class ReservationRoomDetailAPIView(APIView):
 
         # Handle rooms
         existing_rooms = {rr.room.id: rr for rr in reservation.reservation_rooms.all()}
-        provided_room_ids = [room_data['room_id'] for room_data in data.get('rooms', [])]
+        provided_room_ids = [room_data['id'] for room_data in data.get('rooms', [])]
 
         # Delete rooms not in the update
         for room_id, res_room in list(existing_rooms.items()):
@@ -3306,7 +3335,7 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.delete()
 
         for room_data in data.get('rooms', []):
-            room_id = room_data['room_id']
+            room_id = room_data['id']
             try:
                 room = Room.objects.get(pk=room_id)
             except Room.DoesNotExist:
@@ -3315,19 +3344,24 @@ class ReservationRoomDetailAPIView(APIView):
             if reservation.reservation_rooms.exists() and room.hotel != reservation.reservation_rooms.first().room.hotel:
                 return Response({'error': 'تمام اتاق‌ها باید متعلق به یک هتل باشند'}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Extract half_charges
+            half_charges = room_data.get('half_charges', {})
+            half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
+            half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+
             res_room, created = ReservationRoom.objects.get_or_create(
                 reservation=reservation,
                 room=room,
                 defaults={
-                    'quantity': room_data['quantity'],
-                    'half_day_in_selected': room_data['half_day_in_selected'],
-                    'half_day_out_selected': room_data['half_day_out_selected'],
+                    'quantity': room_data.get('quantity', 1),
+                    'half_day_in_selected': half_day_in_selected,
+                    'half_day_out_selected': half_day_out_selected,
                 }
             )
             if not created:
-                res_room.quantity = room_data['quantity']
-                res_room.half_day_in_selected = room_data['half_day_in_selected']
-                res_room.half_day_out_selected = room_data['half_day_out_selected']
+                res_room.quantity = room_data.get('quantity', 1)
+                res_room.half_day_in_selected = half_day_in_selected
+                res_room.half_day_out_selected = half_day_out_selected
                 res_room.save()
 
             # Handle passengers
@@ -3340,28 +3374,55 @@ class ReservationRoomDetailAPIView(APIView):
             # Clear existing passengers
             res_room.passengers.all().delete()
 
-            for pass_data in passengers_data:
-                passenger_type = pass_data['passenger_type']
-                national_code = pass_data.get('national_code')
-
+            # Process main_passenger
+            if passengers_data.get('main_passenger'):
+                passenger = passengers_data['main_passenger']
+                national_code = passenger.get('national_code')
                 if national_code:
                     if national_code in national_codes:
                         return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
                     national_codes.add(national_code)
-
-                if passenger_type == 'primary':
-                    primary_count += 1
-                elif passenger_type == 'secondary':
-                    secondary_count += 1
-                elif passenger_type == 'extra':
-                    extra_count += 1
-
+                primary_count += 1
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
-                    passenger_type=passenger_type,
-                    first_name=pass_data['first_name'],
-                    last_name=pass_data['last_name'],
-                    mobile_number=pass_data.get('mobile_number'),
+                    passenger_type='primary',
+                    first_name=passenger['first_name'],
+                    last_name=passenger['last_name'],
+                    mobile_number=passenger.get('mobile_number'),
+                    national_code=national_code,
+                )
+
+            # Process other_passengers
+            for passenger in passengers_data.get('other_passengers', []):
+                national_code = passenger.get('national_code')
+                if national_code:
+                    if national_code in national_codes:
+                        return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
+                    national_codes.add(national_code)
+                secondary_count += 1
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=res_room,
+                    passenger_type='secondary',
+                    first_name=passenger['first_name'],
+                    last_name=passenger['last_name'],
+                    mobile_number=passenger.get('mobile_number'),
+                    national_code=national_code,
+                )
+
+            # Process extra_capacity_passengers
+            for passenger in passengers_data.get('extra_capacity_passengers', []):
+                national_code = passenger.get('national_code')
+                if national_code:
+                    if national_code in national_codes:
+                        return Response({'error': f'کد ملی تکراری {national_code} در اتاق {room_id}'}, status=status.HTTP_400_BAD_REQUEST)
+                    national_codes.add(national_code)
+                extra_count += 1
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=res_room,
+                    passenger_type='extra',
+                    first_name=passenger['first_name'],
+                    last_name=passenger['last_name'],
+                    mobile_number=passenger.get('mobile_number'),
                     national_code=national_code,
                 )
 
