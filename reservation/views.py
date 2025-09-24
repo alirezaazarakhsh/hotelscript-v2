@@ -3468,9 +3468,9 @@ class ReservationRoomDetailAPIView(APIView):
             # به‌روزرسانی تعداد نفرات
             res_room.update_passenger_counts()
 
-        # بازمحاسبه قیمت‌های رزرو
+        # بازمحاسبه قیمت‌های رزرو بعد از به‌روزرسانی همه چیز
         reservation._skip_price_calculation = False
-        reservation.save()
+        reservation.save()  # این خط قیمت‌ها رو بازمحاسبه و ذخیره می‌کنه
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
     
