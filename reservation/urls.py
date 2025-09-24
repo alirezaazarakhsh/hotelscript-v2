@@ -77,12 +77,12 @@ urlpatterns = [
     path('reservation/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),    
     path('reservation/reservation-detail/<str:tracking_code>/', ReservationDetailAPIView.as_view(), name='reservation-detail'),
     path('reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
-    path("reservation/invoice/<str:tracking_code>", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
+    path("reservation/invoice/<str:tracking_code>/", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
     path('reservation/description/<str:tracking_code>/', ReservationDescriptionAPIView.as_view(), name='reservation-description'),
     path('reservation/form/<str:tracking_code>/', ReservationRoomDetailAPIView.as_view(),name='reservation-room-detail'),
 
 
 
     # ==== discount code reservation ===
-    path('reservations/apply-discount/<str:tracking_code>', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
+    path('reservations/apply-discount/<str:tracking_code>/', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
 ]
