@@ -125,7 +125,6 @@ from .serializers import (
     PassengerSerializer,
     FacilitiesSerializer,
     HotelCommentListSerializer,
-    UpdateReservationSerializer,  
     
     
 )
