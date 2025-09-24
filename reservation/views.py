@@ -3052,7 +3052,6 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-#ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # ==========================
 # --- اعتبارسنجی‌ها ---
 # ==========================
@@ -3319,61 +3318,64 @@ class ReservationRoomDetailAPIView(APIView):
         reservation._skip_price_calculation = True
         reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
-        # ذخیره اطلاعات اتاق‌ها و مسافران
+        # ذخیره اطلاعات اتاق‌ها و مسافران با پشتیبانی از اتاق‌های تکراری
         for room_data in rooms_data:
-            res_room = reservation.reservation_rooms.filter(room__id=int(room_data['id'])).first()
-            passengers_data = room_data.get('passengers', {})
-            half_charges = room_data.get('half_charges', {})
+            # همه رزروهای مربوط به این اتاق (ممکن است چندبار تکراری باشد)
+            res_rooms = reservation.reservation_rooms.filter(room__id=int(room_data['id']))
 
-            # ذخیره نیم‌شارژها و قیمت‌ها
-            res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
-            res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
-            res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', 0))
-            res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
-            res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
-            res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
-            res_room.calculate_half_day_prices()
-            res_room.save(update_fields=[
-                'half_day_in_selected', 'half_day_out_selected',
-                'half_day_in_price', 'half_day_out_price',
-                'extra_passenger_price', 'fixed_discount'
-            ])
+            for res_room in res_rooms:
+                passengers_data = room_data.get('passengers', {})
+                half_charges = room_data.get('half_charges', {})
 
-            # حذف مسافران قبلی و ایجاد جدید
-            res_room.passengers.all().delete()
-            main_passenger = passengers_data['main_passenger']
-            ReservationRoomPassenger.objects.create(
-                reservation_room=res_room,
-                passenger_type='primary',
-                first_name=main_passenger['first_name'],
-                last_name=main_passenger['last_name'],
-                mobile_number=main_passenger['phone_number'],
-                national_code=main_passenger['national_code'],
-                is_primary=True
-            )
+                # ذخیره نیم‌شارژها و قیمت‌ها
+                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
+                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+                res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', 0))
+                res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
+                res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
+                res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
+                res_room.calculate_half_day_prices()
+                res_room.save(update_fields=[
+                    'half_day_in_selected', 'half_day_out_selected',
+                    'half_day_in_price', 'half_day_out_price',
+                    'extra_passenger_price', 'fixed_discount'
+                ])
 
-            for p_type in ['other_passengers', 'extra_capacity_passengers']:
-                passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
-                for passenger in passengers_data.get(p_type, []):
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=res_room,
-                        passenger_type=passenger_type_db,
-                        first_name=passenger['first_name'],
-                        last_name=passenger['last_name'],
-                        mobile_number=passenger.get('phone_number', None),
-                        national_code=passenger.get('national_code', None),
-                        is_primary=False
-                    )
+                # حذف مسافران قبلی و ایجاد جدید برای هر نمونه
+                res_room.passengers.all().delete()
+                main_passenger = passengers_data['main_passenger']
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=res_room,
+                    passenger_type='primary',
+                    first_name=main_passenger['first_name'],
+                    last_name=main_passenger['last_name'],
+                    mobile_number=main_passenger['phone_number'],
+                    national_code=main_passenger['national_code'],
+                    is_primary=True
+                )
 
-            res_room.update_passenger_counts()
+                for p_type in ['other_passengers', 'extra_capacity_passengers']:
+                    passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
+                    for passenger in passengers_data.get(p_type, []):
+                        ReservationRoomPassenger.objects.create(
+                            reservation_room=res_room,
+                            passenger_type=passenger_type_db,
+                            first_name=passenger['first_name'],
+                            last_name=passenger['last_name'],
+                            mobile_number=passenger.get('phone_number', None),
+                            national_code=passenger.get('national_code', None),
+                            is_primary=False
+                        )
+
+                res_room.update_passenger_counts()
 
         reservation._skip_price_calculation = False
         reservation.save()
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
-    
-    
 
+    
+    
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
