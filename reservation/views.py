@@ -3096,7 +3096,7 @@ class ReservationRoomDetailAPIView(APIView):
         **فیلدهای خروجی:**
         - `reserver`: اطلاعات رزروکننده شامل نام، نام خانوادگی، شماره موبایل، و کد ملی.
         - `rooms`: لیستی از اتاق‌های رزرو شده شامل:
-            - `id`: شناسه اتاق رزرو شده (از دیتابیس).
+            - `id`: شناسه اتاق (Room ID از دیتابیس).
             - `name`: نام اتاق (فقط برای نمایش).
             - `capacity`: ظرفیت اصلی اتاق.
             - `extra_capacity`: ظرفیت اضافه اتاق.
@@ -3128,7 +3128,7 @@ class ReservationRoomDetailAPIView(APIView):
 
         for res_room in reservation.reservation_rooms.all():
             room_data = {
-                "id": res_room.room.id,  # استفاده از id واقعی اتاق از دیتابیس
+                "id": res_room.room.id,  # استفاده از Room.id
                 "name": res_room.room.title if res_room.room else "",
                 "capacity": res_room.room.room_capacity if res_room.room else 0,
                 "extra_capacity": res_room.room.extra_capacity if res_room.room else 0,
@@ -3187,7 +3187,7 @@ class ReservationRoomDetailAPIView(APIView):
         **ساختار ورودی:**
         - `reserver`: اطلاعات رزروکننده.
         - `rooms`: لیستی از اتاق‌ها با اطلاعات مسافران و نیم‌شارژها.
-        **توجه**: `id` اتاق باید با شناسه‌های موجود در دیتابیس مطابقت داشته باشد. پس از بروزرسانی، قیمت‌ها و تعداد نفرات به‌صورت خودکار بازمحاسبه می‌شوند.
+        **توجه**: `id` اتاق باید با شناسه‌های موجود در جدول Room مطابقت داشته باشد. پس از بروزرسانی، قیمت‌ها و تعداد نفرات به‌صورت خودکار بازمحاسبه می‌شوند.
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -3209,7 +3209,7 @@ class ReservationRoomDetailAPIView(APIView):
                         type=openapi.TYPE_OBJECT,
                         required=['id', 'passengers'],
                         properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق رزرو شده (باید با دیتابیس مطابقت داشته باشد)'),
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق (Room ID از دیتابیس)'),
                             'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق (فقط برای نمایش، نادیده گرفته می‌شود)'),
                             'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق (فقط برای نمایش)'),
                             'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق (فقط برای نمایش)'),
@@ -3310,10 +3310,15 @@ class ReservationRoomDetailAPIView(APIView):
         if not rooms_data:
             return Response({'detail': 'حداقل یک اتاق باید مشخص شود.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        room_ids = [room_data.get('id') for room_data in rooms_data]
-        existing_rooms = reservation.reservation_rooms.filter(id__in=room_ids)
-        if existing_rooms.count() != len(room_ids) or any(room_data['id'] not in [r.id for r in existing_rooms] for room_data in rooms_data):
-            return Response({'detail': 'شناسه‌های اتاق نامعتبر هستند یا به این رزرو تعلق ندارند.'}, status=status.HTTP_400_BAD_REQUEST)
+        room_ids = [room_data.get('id') for room_data in rooms_data]  # Room IDs
+        existing_room_objects = Room.objects.filter(id__in=room_ids)  # گرفتن اتاق‌ها از مدل Room
+        if existing_room_objects.count() != len(room_ids):
+            return Response({'detail': 'شناسه‌های اتاق نامعتبر هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # پیدا کردن ReservationRoomها که به این رزرو و اتاق‌ها ربط دارن
+        existing_res_rooms = reservation.reservation_rooms.filter(room__id__in=room_ids)
+        if existing_res_rooms.count() != len(room_ids):
+            return Response({'detail': 'یکی یا همه اتاق‌ها به این رزرو تعلق ندارند.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # اعتبارسنجی مسافران و جمع‌آوری کدهای ملی
         for room_data in rooms_data:
@@ -3374,7 +3379,7 @@ class ReservationRoomDetailAPIView(APIView):
 
             # اعتبارسنجی تعداد مسافران
             total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
-            room = existing_rooms.get(id=room_data['id']).room
+            room = Room.objects.get(id=room_data['id'])
             if total_passengers > (room.room_capacity + room.extra_capacity):
                 return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز ({room.room_capacity + room.extra_capacity}) بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3400,7 +3405,8 @@ class ReservationRoomDetailAPIView(APIView):
 
         # بروزرسانی اتاق‌ها
         for room_data in rooms_data:
-            res_room = existing_rooms.get(id=room_data['id'])
+            # پیدا کردن ReservationRoom مرتبط با Room.id
+            res_room = reservation.reservation_rooms.get(room__id=room_data['id'])
             passengers_data = room_data.get('passengers', {})
             half_charges = room_data.get('half_charges', {})
 
