@@ -1,6 +1,7 @@
 import logging
 import re
 from venv import logger
+from pydantic import ValidationError
 from rest_framework import serializers
 import jdatetime
 from django.utils import timezone
@@ -19,6 +20,7 @@ from .models import (
     Hotel,
     Facilities,
     ReservationRoomPassenger,
+    Reservationhotel,
     Room,
     RoomDatePrice,
     RoomFacilities,
@@ -746,189 +748,166 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
-
-
-logger = logging.getLogger(__name__)
-
-
+# Serializer for Person (Passenger)
 class PersonSerializer(serializers.Serializer):
-    first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
-    last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
-    phone_number = serializers.CharField(max_length=11, allow_blank=True, required=False, default="")
-    national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
+    first_name = serializers.CharField(max_length=100, help_text="نام مسافر")
+    last_name = serializers.CharField(max_length=100, help_text="نام خانوادگی مسافر")
+    mobile_number = serializers.CharField(max_length=11, required=False, allow_null=True, help_text="شماره موبایل مسافر (فرمت: 09xxxxxxxxx)")
+    national_code = serializers.CharField(max_length=10, required=False, allow_null=True, help_text="کد ملی مسافر (10 رقمی)")
 
-    def to_representation(self, instance):
-        """phone_number رو از مدل یا dict بخونه"""
-        data = super().to_representation(instance)
-        if not data.get("phone_number"):
-            if hasattr(instance, "mobile_number"):
-                data["phone_number"] = instance.mobile_number or ""
-            elif isinstance(instance, dict):
-                data["phone_number"] = instance.get("phone_number", "")
-        return data
-
-    def validate(self, data):
-        passenger_type = self.context.get("passenger_type")
-        phone = data.get("phone_number", "")
-
-        if passenger_type == "primary":
-            if not data.get("first_name"):
-                raise serializers.ValidationError({"first_name": "نام برای مسافر اصلی الزامی است."})
-            if not data.get("last_name"):
-                raise serializers.ValidationError({"last_name": "نام خانوادگی برای مسافر اصلی الزامی است."})
-            if not phone:
-                raise serializers.ValidationError({"phone_number": "شماره تلفن برای مسافر اصلی الزامی است."})
-            if not data.get("national_code"):
-                raise serializers.ValidationError({"national_code": "کد ملی برای مسافر اصلی الزامی است."})
-
-        elif passenger_type == "reserver":
-            if phone and (not phone.isdigit() or len(phone) != 11):
-                raise serializers.ValidationError({"phone_number": "شماره تلفن باید ۱۱ رقمی و فقط شامل اعداد باشد."})
-
-        return data
-
-    def validate_phone_number(self, value):
-        if value and (not value.isdigit() or len(value) != 11):
-            raise serializers.ValidationError("شماره تلفن باید 11 رقمی و فقط شامل اعداد باشد.")
-        return value
-
-    def validate_national_code(self, value):
-        if self.context.get("passenger_type") == "primary" and not value:
-            raise serializers.ValidationError("کد ملی برای مسافر اصلی الزامی است.")
-        if value and (not value.isdigit() or len(value) != 10):
-            raise serializers.ValidationError("کدملی باید 10 رقمی و فقط شامل اعداد باشد.")
-        return value
-
-
+# Serializer for Room in GET response
 class ReservationRoomDetailSerializer(serializers.Serializer):
-    id = serializers.IntegerField(source="room.pk")
-    name = serializers.CharField(source="room.title")
-    capacity = serializers.IntegerField(source="room.room_capacity")
-    extra_capacity = serializers.IntegerField(source="room.extra_capacity")
-    extra_capacity_price = serializers.DecimalField(max_digits=12, decimal_places=0, source="extra_passenger_price")
-    discount_on_purchase = serializers.DecimalField(max_digits=12, decimal_places=0, source="fixed_discount")
-    passengers = serializers.SerializerMethodField()
-    half_charges = serializers.SerializerMethodField()
+    id = serializers.IntegerField(source='room.id', help_text="شناسه اتاق")
+    name = serializers.CharField(source='room.title', help_text="نام اتاق")
+    capacity = serializers.IntegerField(source='room.room_capacity', help_text="ظرفیت پایه اتاق")
+    extra_capacity = serializers.IntegerField(source='room.extra_capacity', help_text="ظرفیت نفرات اضافه")
+    extra_capacity_price = serializers.DecimalField(source='extra_passenger_price', max_digits=12, decimal_places=0, help_text="قیمت هر نفر اضافه (تومان)")
+    discount_on_purchase = serializers.SerializerMethodField(help_text="مقدار تخفیف ثابت هنگام خرید (تومان)")
+    passengers = serializers.SerializerMethodField(help_text="اطلاعات مسافران اتاق")
+    half_charges = serializers.SerializerMethodField(help_text="اطلاعات نیم‌شارژهای ورود و خروج")
+
+    def get_discount_on_purchase(self, obj):
+        if obj.fixed_discount:
+            return str(obj.fixed_discount)
+        return '0'
 
     def get_passengers(self, obj):
-        main = obj.passengers.filter(passenger_type="primary").first()
-        other = obj.passengers.filter(passenger_type="secondary")
-        extra = obj.passengers.filter(passenger_type="extra")
-
-        main_data = (
-            PersonSerializer(main, context={"passenger_type": "primary"}).data
-            if main
-            else {"first_name": "", "last_name": "", "phone_number": "", "national_code": ""}
-        )
-        other_data = (
-            PersonSerializer(other, many=True, context={"passenger_type": "secondary"}).data
-            if other.exists()
-            else []
-        )
-        extra_data = (
-            PersonSerializer(extra, many=True, context={"passenger_type": "extra"}).data
-            if extra.exists()
-            else []
-        )
+        passengers = obj.passengers.all()
+        main_passenger = passengers.filter(passenger_type='primary').first()
+        other_passengers = passengers.filter(passenger_type='secondary')
+        extra_passengers = passengers.filter(passenger_type='extra')
 
         return {
-            "main_passenger": main_data,
-            "other_passengers": other_data,
-            "extra_capacity_passengers": extra_data,
+            'main_passenger': PersonSerializer(main_passenger).data if main_passenger else None,
+            'other_passengers': PersonSerializer(other_passengers, many=True).data,
+            'extra_capacity_passengers': PersonSerializer(extra_passengers, many=True).data,
         }
 
     def get_half_charges(self, obj):
         return {
-            "enter": {"enabled": obj.half_day_in_selected, "price": int(obj.half_day_in_price or 0)},
-            "exit": {"enabled": obj.half_day_out_selected, "price": int(obj.half_day_out_price or 0)},
+            'enter': {
+                'enabled': obj.half_day_in_selected,
+                'price': str(obj.half_day_in_price)
+            },
+            'exit': {
+                'enabled': obj.half_day_out_selected,
+                'price': str(obj.half_day_out_price)
+            },
         }
 
+# Serializer for Reservation GET response
+class ReservationDetailSerializer(serializers.ModelSerializer):
+    reserver_first_name = serializers.CharField(help_text="نام رزروکننده")
+    reserver_last_name = serializers.CharField(help_text="نام خانوادگی رزروکننده")
+    reserver_phone_number = serializers.CharField(help_text="شماره موبایل رزروکننده (فرمت: 09xxxxxxxxx)")
+    reserver_national_code = serializers.CharField(allow_null=True, help_text="کد ملی رزروکننده (10 رقمی)")
+    rooms = ReservationRoomDetailSerializer(source='reservation_rooms', many=True, help_text="لیست اتاق‌های رزرو شده")
+    date = serializers.SerializerMethodField(help_text="تاریخ ورود و خروج")
+    time = serializers.SerializerMethodField(help_text="ساعت ورود و خروج")
+    number_of_nights = serializers.SerializerMethodField(help_text="تعداد شب‌های اقامت")
+    hotel_name = serializers.SerializerMethodField(help_text="نام هتل")
+    hotel_star = serializers.SerializerMethodField(help_text="تعداد ستاره‌های هتل")
+    city_name = serializers.SerializerMethodField(help_text="نام شهر هتل")
+    province_name = serializers.SerializerMethodField(help_text="نام استان هتل")
+    number_of_rooms = serializers.SerializerMethodField(help_text="تعداد اتاق‌های رزرو شده")
+    half_charges = serializers.SerializerMethodField(help_text="وضعیت نیم‌شارژهای ورود و خروج")
 
-class ReservationDetailSerializer(serializers.Serializer):
-    reserver = serializers.SerializerMethodField()
-    rooms = serializers.SerializerMethodField()
+    class Meta:
+        model = Reservationhotel
+        fields = [
+            'reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
+            'rooms', 'date', 'time', 'number_of_nights', 'hotel_name', 'hotel_star',
+            'city_name', 'province_name', 'number_of_rooms', 'half_charges'
+        ]
 
-    def get_reserver(self, obj):
-        reserver_data = {
-            "first_name": obj.reserver_first_name or "",
-            "last_name": obj.reserver_last_name or "",
-            "phone_number": obj.reserver_phone_number or "",
-            "national_code": obj.reserver_national_code or "",
+    def get_date(self, obj):
+        return {
+            'enter': obj.check_in_date.isoformat() if obj.check_in_date else None,
+            'exit': obj.check_out_date.isoformat() if obj.check_out_date else None,
         }
 
-        request = self.context.get("request")
-        if request and request.method == "PUT":
-            input_data = request.data.get("reserver", {})
-            if input_data:
-                reserver_data.update({
-                    "first_name": input_data.get("first_name", reserver_data["first_name"]),
-                    "last_name": input_data.get("last_name", reserver_data["last_name"]),
-                    "phone_number": input_data.get("phone_number", reserver_data["phone_number"]),
-                    "national_code": input_data.get("national_code", reserver_data["national_code"]),
-                })
+    def get_time(self, obj):
+        # Assuming check-in and check-out times are fixed or stored elsewhere
+        return {
+            'enter': '14:00:00',  # Replace with actual logic if available
+            'exit': '12:00:00',   # Replace with actual logic if available
+        }
 
-        serializer = PersonSerializer(reserver_data, context={"passenger_type": "reserver"})
-        return serializer.data
+    def get_number_of_nights(self, obj):
+        return obj.nights_count
 
-    def get_rooms(self, obj):
-        rooms = obj.reservation_rooms.all()
-        serialized_rooms = ReservationRoomDetailSerializer(rooms, many=True).data
-        return serialized_rooms
+    def get_hotel_name(self, obj):
+        return obj.reservation_rooms.first().room.hotel.title if obj.reservation_rooms.exists() else ''
 
-    def update(self, instance, validated_data):
-        """
-        بروزرسانی اطلاعات مسافر اصلی و سایر مسافران در PUT
-        """
-        request = self.context.get("request")
-        if request and request.method == "PUT":
-            rooms_data = request.data.get("rooms", [])
+    def get_hotel_star(self, obj):
+        return obj.reservation_rooms.first().room.hotel.star_rating if obj.reservation_rooms.exists() else 0
 
-            for room_data in rooms_data:
-                room_id = room_data.get("id")
-                passengers_data = room_data.get("passengers", {})
+    def get_city_name(self, obj):
+        return obj.reservation_rooms.first().room.hotel.city.name if obj.reservation_rooms.exists() else ''
 
-                if not passengers_data:
-                    continue
+    def get_province_name(self, obj):
+        return obj.reservation_rooms.first().room.hotel.city.province.name if obj.reservation_rooms.exists() else ''
 
-                try:
-                    res_room = instance.reservation_rooms.get(room_id=room_id)
-                except ReservationRoom.DoesNotExist:
-                    continue
+    def get_number_of_rooms(self, obj):
+        return obj.total_rooms
 
-                # بروزرسانی مسافر اصلی
-                main_data = passengers_data.get("main_passenger", {})
-                if main_data:
-                    main_passenger = res_room.passengers.filter(passenger_type="primary").first()
-                    if main_passenger:
-                        main_passenger.first_name = main_data.get("first_name", main_passenger.first_name)
-                        main_passenger.last_name = main_data.get("last_name", main_passenger.last_name)
-                        main_passenger.mobile_number = main_data.get("phone_number", main_passenger.mobile_number)
-                        main_passenger.national_code = main_data.get("national_code", main_passenger.national_code)
-                        main_passenger.save()
-                    else:
-                        # ایجاد مسافر اصلی اگر وجود ندارد
-                        ReservationRoomPassenger.objects.create(
-                            reservation_room=res_room,
-                            passenger_type="primary",
-                            first_name=main_data.get("first_name", ""),
-                            last_name=main_data.get("last_name", ""),
-                            mobile_number=main_data.get("phone_number", ""),
-                            national_code=main_data.get("national_code", ""),
-                        )
+    def get_half_charges(self, obj):
+        # Aggregate half charges from all rooms
+        return {
+            'enter': any(room.half_day_in_selected for room in obj.reservation_rooms.all()),
+            'exit': any(room.half_day_out_selected for room in obj.reservation_rooms.all()),
+        }
 
-                # بروزرسانی نفرات اضافه
-                extra_data_list = passengers_data.get("extra_capacity_passengers", [])
-                for pdata in extra_data_list:
-                    if not pdata.get("first_name") and not pdata.get("last_name"):
-                        continue
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=res_room,
-                        passenger_type="extra",
-                        first_name=pdata.get("first_name", ""),
-                        last_name=pdata.get("last_name", ""),
-                        mobile_number=pdata.get("phone_number", ""),
-                        national_code=pdata.get("national_code", ""),
-                    )
+# Serializer for Passenger in PUT request
+class PassengerSerializer(serializers.Serializer):
+    passenger_type = serializers.ChoiceField(choices=ReservationRoomPassenger.PASSENGER_TYPE_CHOICES, help_text="نوع مسافر (اصلی، سایر، اضافه)")
+    first_name = serializers.CharField(max_length=100, help_text="نام مسافر")
+    last_name = serializers.CharField(max_length=100, help_text="نام خانوادگی مسافر")
+    mobile_number = serializers.CharField(max_length=11, required=False, allow_blank=True, help_text="شماره موبایل مسافر (فرمت: 09xxxxxxxxx)")
+    national_code = serializers.CharField(max_length=10, required=False, allow_blank=True, help_text="کد ملی مسافر (10 رقمی)")
 
-        instance.save()
-        return instance
+    def validate_mobile_number(self, value):
+        if value and not re.match(r'^09\d{9}$', value):
+            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
+        return value
+
+    def validate_national_code(self, value):
+        if value:
+            if not re.match(r'^\d{10}$', value):
+                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
+            check_digit = int(value[9])
+            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+            if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
+                raise ValidationError(_('کد ملی معتبر نیست'))
+        return value
+
+# Serializer for Room in PUT request
+class UpdateReservationRoomSerializer(serializers.Serializer):
+    room_id = serializers.IntegerField(help_text="شناسه اتاق")
+    quantity = serializers.IntegerField(min_value=1, help_text="تعداد اتاق‌های رزرو شده")
+    half_day_in_selected = serializers.BooleanField(default=False, help_text="فعال بودن نیم‌شارژ ورود")
+    half_day_out_selected = serializers.BooleanField(default=False, help_text="فعال بودن نیم‌شارژ خروج")
+    passengers = PassengerSerializer(many=True, help_text="لیست مسافران اتاق")
+
+# Serializer for PUT request (update reservation)
+class UpdateReservationSerializer(serializers.Serializer):
+    reserver_first_name = serializers.CharField(max_length=256, required=False, help_text="نام رزروکننده")
+    reserver_last_name = serializers.CharField(max_length=256, required=False, help_text="نام خانوادگی رزروکننده")
+    reserver_phone_number = serializers.CharField(max_length=11, required=False, help_text="شماره موبایل رزروکننده (فرمت: 09xxxxxxxxx)")
+    reserver_national_code = serializers.CharField(max_length=10, required=False, allow_blank=True, help_text="کد ملی رزروکننده (10 رقمی)")
+    rooms = UpdateReservationRoomSerializer(many=True, help_text="لیست اتاق‌های رزرو شده")
+
+    def validate_reserver_phone_number(self, value):
+        if value and not re.match(r'^09\d{9}$', value):
+            raise ValidationError(_('شماره موبایل باید به فرمت 09xxxxxxxxx باشد'))
+        return value
+
+    def validate_reserver_national_code(self, value):
+        if value:
+            if not re.match(r'^\d{10}$', value):
+                raise ValidationError(_('کد ملی باید 10 رقمی باشد'))
+            check_digit = int(value[9])
+            total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+            if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
+                raise ValidationError(_('کد ملی معتبر نیست'))
+        return valu
