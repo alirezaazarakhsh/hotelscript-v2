@@ -9,6 +9,7 @@ from datetime import timedelta
 import jdatetime
 from functools import cached_property
 from jdatetime import date as jdate
+from jalali_date import date2jalali
 
 # 🌐 Django
 from django.db import models
@@ -417,7 +418,13 @@ class Hotel(models.Model):
         return self.name
 
 
-
+    def has_active_date_prices(self):
+        """بررسی می‌کند که آیا هتل بازه زمانی فعالی برای اتاق‌هایش دارد یا خیر."""
+        today = date2jalali(timezone.now().date())
+        return self.rooms.filter(
+            date_prices__start_date__lte=today,
+            date_prices__end_date__gte=today
+        ).exists()
 
 
 #مدل گالری های هتل 

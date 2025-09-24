@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from django.db.models import Sum, F
 from pydantic import ValidationError
 
-from reservation.models import Passenger, ReservationRoom, ReservationRoomPassenger
+from reservation.models import Passenger, ReservationRoom, ReservationRoomPassenger, RoomDatePrice
 
 # وقتی رزرو اتاق ساخته یا ویرایش شد
 @receiver(post_save, sender=ReservationRoom)
@@ -107,3 +107,20 @@ def add_to_passenger_book(sender, instance, created, **kwargs):
         logger.error(f"Validation error creating Passenger for {instance.first_name} {instance.last_name}: {e}")
     except Exception as e:
         logger.error(f"Unexpected error creating Passenger for {instance.first_name} {instance.last_name}: {e}")
+        
+        
+        
+        
+        
+        
+        
+@receiver([post_save, post_delete], sender=RoomDatePrice)
+def update_hotel_status(sender, instance, **kwargs):
+    """پس از ذخیره یا حذف بازه زمانی، وضعیت تیک‌های هتل را به‌روزرسانی می‌کند."""
+    hotel = instance.room.hotel
+    if hotel:
+        if not hotel.has_active_date_prices():
+            hotel.is_special_offer = False
+            hotel.is_flash_sale = False
+            hotel.is_best_seller = False
+            hotel.save()
