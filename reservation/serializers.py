@@ -751,17 +751,25 @@ logger = logging.getLogger(__name__)
 class PersonSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, default="", allow_blank=True)
     last_name = serializers.CharField(max_length=100, default="", allow_blank=True)
-    phone_number = serializers.SerializerMethodField()
+    phone_number = serializers.CharField(
+        max_length=11,
+        allow_blank=True,
+        required=False,
+        default=""
+    )
     national_code = serializers.CharField(max_length=10, allow_blank=True, default="")
 
-    def get_phone_number(self, obj):
-        if hasattr(obj, 'reserver_phone_number'):
-            return obj.reserver_phone_number or ""
-        elif hasattr(obj, 'mobile_number'):
-            return obj.mobile_number or ""
-        elif isinstance(obj, dict):
-            return obj.get('phone_number', "")
-        return ""
+    def to_representation(self, instance):
+        """برای نمایش مقدار phone_number رو هم از مدل و هم از dict پشتیبانی کنیم."""
+        data = super().to_representation(instance)
+        if not data.get("phone_number"):
+            if hasattr(instance, 'reserver_phone_number'):
+                data["phone_number"] = instance.reserver_phone_number or ""
+            elif hasattr(instance, 'mobile_number'):
+                data["phone_number"] = instance.mobile_number or ""
+            elif isinstance(instance, dict):
+                data["phone_number"] = instance.get("phone_number", "")
+        return data
 
     def validate(self, data):
         passenger_type = self.context.get('passenger_type')
