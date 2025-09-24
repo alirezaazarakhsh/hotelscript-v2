@@ -3100,7 +3100,7 @@ class ReservationRoomDetailAPIView(APIView):
     )
     def get(self, request, tracking_code):
         reservation = self.get_object(tracking_code)
-        serializer = ReservationDetailSerializer(reservation)
+        serializer = ReservationDetailSerializer(reservation, context={'request': request})
         return Response(serializer.data)
 
     @swagger_auto_schema(
@@ -3166,10 +3166,29 @@ class ReservationRoomDetailAPIView(APIView):
         reservation = self.get_object(tracking_code)
         data = request.data
 
-        # بروزرسانی اطلاعات رزروکننده
+        # بررسی یکتایی کدهای ملی در تمام اتاق‌ها
+        national_codes = set()
+        rooms_data = data.get("rooms", [])
+        for room_data in rooms_data:
+            passengers = room_data.get("passengers", {})
+            main_passenger = passengers.get("main_passenger", {})
+            if main_passenger.get("national_code"):
+                if main_passenger["national_code"] in national_codes:
+                    return Response({"error": f"کد ملی {main_passenger['national_code']} تکراری است."}, status=400)
+                national_codes.add(main_passenger["national_code"])
+            for p in passengers.get("other_passengers", []) + passengers.get("extra_capacity_passengers", []):
+                if p.get("national_code"):
+                    if p["national_code"] in national_codes:
+                        return Response({"error": f"کد ملی {p['national_code']} تکراری است."}, status=400)
+                    national_codes.add(p["national_code"])
+
+        # بررسی اجباری بودن اطلاعات رزروکننده
         reserver_data = data.get('reserver', {})
+        if not reserver_data.get("first_name") or not reserver_data.get("last_name") or not reserver_data.get("national_code"):
+            return Response({"error": "نام، نام خانوادگی و کد ملی برای رزروکننده الزامی است."}, status=400)
+
+        # بروزرسانی اطلاعات رزروکننده
         if reserver_data:
-            # تبدیل phone_number به mobile_number
             if 'phone_number' in reserver_data:
                 reserver_data['mobile_number'] = reserver_data.pop('phone_number')
             reserver_serializer = PersonSerializer(data=reserver_data, context={'passenger_type': 'reserver'})
@@ -3185,7 +3204,6 @@ class ReservationRoomDetailAPIView(APIView):
                 return Response(reserver_serializer.errors, status=400)
 
         # بروزرسانی اتاق‌ها
-        rooms_data = data.get("rooms", [])
         for room_data in rooms_data:
             room_id = room_data.get("id")
             if not room_id:
@@ -3206,11 +3224,13 @@ class ReservationRoomDetailAPIView(APIView):
             room.half_day_out_price = Decimal(exit.get("price", room.half_day_out_price or 0))
             room.save()
 
-            # بروزرسانی مسافران
+            # بررسی اجباری بودن اطلاعات مسافر اصلی
             passengers = room_data.get("passengers", {})
-
-            # مسافر اصلی
             main_passenger_data = passengers.get("main_passenger", {})
+            if not main_passenger_data.get("first_name") or not main_passenger_data.get("last_name") or not main_passenger_data.get("phone_number") or not main_passenger_data.get("national_code"):
+                return Response({"error": f"نام، نام خانوادگی، شماره تلفن و کد ملی برای مسافر اصلی اتاق {room_id} الزامی است."}, status=400)
+
+            # بروزرسانی مسافر اصلی
             if main_passenger_data:
                 if 'phone_number' in main_passenger_data:
                     main_passenger_data['mobile_number'] = main_passenger_data.pop('phone_number')
@@ -3230,9 +3250,11 @@ class ReservationRoomDetailAPIView(APIView):
                         **main_serializer.validated_data
                     )
 
-            # سایر مسافران
+            # بروزرسانی سایر مسافران
             room.passengers.filter(passenger_type='secondary').delete()
             for p in passengers.get("other_passengers", []):
+                if not p.get("first_name") and not p.get("last_name") and not p.get("phone_number") and not p.get("national_code"):
+                    continue  # نادیده گرفتن داده‌های خالی
                 if 'phone_number' in p:
                     p['mobile_number'] = p.pop('phone_number')
                 serializer = PersonSerializer(data=p, context={'passenger_type': 'secondary'})
@@ -3246,9 +3268,11 @@ class ReservationRoomDetailAPIView(APIView):
                     logger.error(f"other_passenger_error: {serializer.errors}")
                     return Response(serializer.errors, status=400)
 
-            # نفر اضافه
+            # بروزرسانی نفرات اضافه
             room.passengers.filter(passenger_type='extra').delete()
             for p in passengers.get("extra_capacity_passengers", []):
+                if not p.get("first_name") and not p.get("last_name") and not p.get("phone_number") and not p.get("national_code"):
+                    continue  # نادیده گرفتن داده‌های خالی
                 if 'phone_number' in p:
                     p['mobile_number'] = p.pop('phone_number')
                 serializer = PersonSerializer(data=p, context={'passenger_type': 'extra'})
@@ -3262,10 +3286,12 @@ class ReservationRoomDetailAPIView(APIView):
                     logger.error(f"extra_passenger_error: {serializer.errors}")
                     return Response(serializer.errors, status=400)
 
+            # به‌روزرسانی تعداد مسافران
+            room.update_passenger_counts()
+
         # بازمحاسبه قیمت رزرو
         reservation.save()
-        return Response(ReservationDetailSerializer(reservation).data)
-
+        return Response(ReservationDetailSerializer(reservation, context={'request': request}).data, status=200)
     
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
