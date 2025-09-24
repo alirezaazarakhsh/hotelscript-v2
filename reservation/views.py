@@ -267,21 +267,6 @@ class RoomServiceListView(ListAPIView):
 
 # ای پی ای اتاق ها بر اساس اسلاگ 
 # تنظیم لاگ برای دیباگ (با fallback برای جلوگیری از خطا)
-pythonimport logging
-import sys
-import copy
-from django.utils import timezone
-from datetime import timedelta
-from rest_framework import generics
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-import jdatetime
-from .models import Hotel, Room, RoomDatePrice, NaturalProfile, ClosedDate
-from .serializers import RoomSerializer
-
 try:
     logger = logging.getLogger(__name__)
 except Exception:
