@@ -910,4 +910,4 @@ class UpdateReservationSerializer(serializers.Serializer):
             total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
             if int(value[3:9]) == 0 or not ((total < 2 and check_digit == total) or (total >= 2 and check_digit == (11 - total))):
                 raise ValidationError(_('کد ملی معتبر نیست'))
-        return valu
+        return  value
