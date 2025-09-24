@@ -1,6 +1,4 @@
-import logging
 import re
-from venv import logger
 from pydantic import ValidationError
 from rest_framework import serializers
 import jdatetime
@@ -20,8 +18,6 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
-    ReservationRoomPassenger,
-    Reservationhotel,
     Room,
     RoomDatePrice,
     RoomFacilities,
