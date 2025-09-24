@@ -3074,18 +3074,6 @@ class ReservationDescriptionAPIView(APIView):
 
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
-pythonfrom rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from rest_framework.response import Response
-from django.core.exceptions import ValidationError
-from django.shortcuts import get_object_or_404
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from decimal import Decimal
-import re
-from .models import Reservationhotel, ReservationRoom, ReservationRoomPassenger
-
 # اعتبارسنجی‌ها
 def validate_phone_number(value):
     if not re.match(r'^09\d{9}$', value):
@@ -3483,6 +3471,8 @@ class ReservationRoomDetailAPIView(APIView):
         reservation.save()
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
+    
+    
 
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
