@@ -3076,6 +3076,7 @@ class ReservationDescriptionAPIView(APIView):
 
 #ای پی ای نمایش جزئیات اتاق ها با ویرایش 
 # API View for GET and PUT
+# API View for GET and PUT
 class ReservationRoomDetailAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3443,6 +3444,7 @@ class ReservationRoomDetailAPIView(APIView):
         reservation.save()
 
         return Response(ReservationDetailSerializer(reservation).data, status=status.HTTP_200_OK)
+
 
 # ای پی ای کد تخفیف برای رزرو 
 class ApplyDiscountCodeAPIView(APIView):
