@@ -7,6 +7,7 @@ import jdatetime
 from django.utils import timezone
 from django.db import models
 from authentication import models
+from django.utils.translation import gettext_lazy as _
 from config.serializers import PageSerializer
 from .models import (
     BestHotels,
