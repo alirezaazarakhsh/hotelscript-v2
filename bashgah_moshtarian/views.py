@@ -284,7 +284,8 @@ class DiscountActivationRecordListView(generics.ListAPIView):
         این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
         - کدهای تخفیف اتاق
         - کدهای تخفیف مرکز خرید
-        می‌باشد. نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
+        - `expires_at`: تاریخ انقضای کد
+        نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
         """,
         tags=['discount-crm'],
         responses={
@@ -301,6 +302,7 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                             "discount_value": "100,000",
                             "required_points": 500,
                             "activated_at": "2025-08-13T04:40:00+04:00",
+                            "expires_at": "2025-09-13T04:40:00+04:00",
                             "reward_claimed": False,
                             "related_info": {
                                 "room_id": 1,
@@ -315,6 +317,7 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                             "discount_value": "50,000",
                             "required_points": 300,
                             "activated_at": "2025-08-12T10:00:00+04:00",
+                            "expires_at": "2025-09-12T10:00:00+04:00",
                             "reward_claimed": True,
                             "related_info": {
                                 "shopping_center_name": "مرکز خرید پالادیوم"
