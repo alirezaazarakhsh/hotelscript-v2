@@ -1361,11 +1361,13 @@ class Reservationhotel(models.Model):
             ).first()
 
             if not price_obj:
-                raise ValidationError(f'قیمت برای تاریخ {check_in_date_std} در اتاق {room.title} موجود نیست.')
-
-            # جمع قیمت پایه اتاق‌ها از subtotal
-            total += Decimal(res_room.subtotal)
-
+                  logger.warning(
+                          f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد."
+                  )
+                  daily_price = Decimal('0')
+            else:
+                  daily_price = Decimal(res_room.subtotal)
+            
             # قیمت نفرات اضافه
             extra_price_per_person = Decimal(res_room.extra_passenger_price) if res_room.extra_passenger_price else Decimal(price_obj.extra_passenger_price)
             extra_price = extra_price_per_person * extra_guests
