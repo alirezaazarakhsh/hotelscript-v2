@@ -2584,21 +2584,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ### نحوه استفاده
         - **hotel_id**: شناسه هتل برای فیلتر رزروها (یک عدد صحیح).
         - **room_id**: شناسه اتاق برای فیلتر رزروها (یک عدد صحیح یا لیست اعداد).
-        - **date**: فیلتر بر اساس بازه زمانی (شامل `enter` و `exit` به فرمت‌های پشتیبانی‌شده).
-          - **فرمت رشته (String)**: باید به فرمت ISO باشد (مثلاً `1404-06-30` برای تاریخ جلالی یا `2025-09-20` برای تاریخ میلادی).
-          - **فرمت دیکشنری (Dictionary)**: شامل `year`, `month`, و `day` (مثلاً `{"year": 1404, "month": 6, "day": 30}`). اگر `calendar: "gregorian"` باشد، به جلالی تبدیل می‌شود.
-          - **مثال درخواست**:
-            ```json
-            {
-              "date": {
-                "enter": "1404-06-30",
-                "exit": "1404-07-02"
-              },
-              "hotel_id": 1,
-              "room_id": [1, 2]
-            }
-            ```
-          - **اعتبارسنجی**: تاریخ ورود نمی‌تواند قبل از امروز (20 سپتامبر 2025، معادل 30 شهریور 1404) باشد و تاریخ خروج باید بعد از ورود باشد.
+        - **date**: شامل `enter` و `exit` به یکی از فرمت‌های زیر:
+          - رشته (ISO): مثل `2025-09-20` (میلادی) یا `1404-06-30` (جلالی).
+          - دیکشنری: شامل `year`, `month`, `day` (و اختیاری: `calendar: "gregorian"`).
+        - **اعتبارسنجی**:
+          - تاریخ ورود < امروز ❌
+          - تاریخ خروج <= ورود ❌
         """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -2608,7 +2599,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری یکتا برای رزرو', example='sfa1234567890')
+                        'tracking_code': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='کد پیگیری یکتا برای رزرو',
+                            example='sfa1234567890'
+                        )
                     }
                 )
             ),
@@ -2682,15 +2677,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             buyer=request.user
         )
 
-        total_price = Decimal('0')
+        # اضافه کردن اتاق‌ها به رزرو
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
         nights = reservation.nights_count
 
         for room_id in room_ids:
             room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
-
             room_total_price = Decimal('0')
+
+            # محاسبه قیمت هر شب
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
 
@@ -2708,38 +2704,47 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
                 if not price_obj:
                     logger.warning(f"قیمت برای تاریخ {current_date} در اتاق {room.title} یافت نشد. قیمت پیش‌فرض (0) اعمال شد.")
-                    daily_price = Decimal('0')  # مقدار پیش‌فرض
+                    daily_price = Decimal('0')
                 else:
                     daily_price = Decimal(price_obj.price)
-
                     # اعمال تخفیف
                     if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                        daily_price = daily_price * (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
+                        daily_price *= (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
                     elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
-                        daily_price = daily_price - Decimal(price_obj.discount_value)
+                        daily_price -= Decimal(price_obj.discount_value)
 
                 room_total_price += daily_price
 
-            subtotal = room_total_price
-            total_price += subtotal
-
+            # ایجاد رکورد اتاق رزرو
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=1,
-                price_per_night=subtotal / nights if nights > 0 else subtotal,
-                subtotal=subtotal,
+                price_per_night=room_total_price / nights if nights > 0 else room_total_price,
+                subtotal=room_total_price,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
             )
 
-        # آپدیت قیمت کل رزرو
+        # ✅ محاسبه نهایی قیمت‌ها با متد مدل
+        total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
+
+        # ذخیره نتایج
         reservation.total_price = total_price
-        reservation.final_price = total_price
-        reservation.save(update_fields=['total_price', 'final_price'])
+        reservation.total_extra_passenger_charge = total_extra
+        reservation.discount = code_discount
+        reservation.room_fixed_discount = room_fixed
+        reservation.half_day_in_charge = half_in
+        reservation.half_day_out_charge = half_out
+        reservation.total_half_day_charge = total_half
+        reservation.final_price = final_price
+        reservation.save(update_fields=[
+            'total_price', 'total_extra_passenger_charge', 'discount',
+            'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
+            'total_half_day_charge', 'final_price'
+        ])
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
-    
     
     
     
