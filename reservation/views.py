@@ -1087,16 +1087,19 @@ class BaseHotelListView(APIView):
         return round(overall_average or 0, 1)
 
     def get_hotel_min_price_map(self, hotels):
-        """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل"""
+        """محاسبه کمترین قیمت برای هر هتل بدون اعمال تخفیف ثابت"""
+        # دریافت تاریخ امروز برای بررسی قیمت‌ها و تخفیف‌ها
         today = timezone.now().date()
         hotel_min_price_map = {}
         
         for hotel in hotels:
+            # دریافت تمام اتاق‌های مربوط به هتل
             rooms = Room.objects.filter(hotel=hotel)
             min_price = None
             min_price_data = {}
 
             for room in rooms:
+                # دریافت قیمت‌های معتبر برای اتاق در تاریخ امروز
                 prices = RoomDatePrice.objects.filter(
                     room=room,
                     start_date__lte=today,
@@ -1104,29 +1107,30 @@ class BaseHotelListView(APIView):
                 ).select_related('room')
 
                 for price in prices:
+                    # قیمت اصلی اتاق بدون اعمال تخفیف ثابت
                     original_price = price.price
                     total_price = original_price
 
+                    # اعمال تخفیف درصدی (در صورت وجود و معتبر بودن تاریخ تخفیف)
                     if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
                         total_price = original_price * (1 - price.discount_value / 100)
-                    elif price.discount_type == 'fixed' and price.is_fixed_discount_one_time:
-                        total_price = original_price - price.discount_value
+                    # تخفیف ثابت اعمال نمی‌شود، اما اطلاعات آن حفظ می‌شود
 
+                    # بررسی کمترین قیمت برای هتل
                     if min_price is None or total_price < min_price:
                         min_price = total_price
                         min_price_data = {
-                            'total_price': int(total_price),
-                            'original_total_price': int(original_price),
-                            'discount_type': price.discount_type,
-                            'discount_value': price.discount_value,
-                            'discount_date': price.discount_date
+                            'total_price': int(total_price),  # قیمت نهایی بدون تخفیف ثابت
+                            'original_total_price': int(original_price),  # قیمت اصلی
+                            'discount_type': price.discount_type,  # نوع تخفیف (برای اطلاعات)
+                            'discount_value': price.discount_value,  # مقدار تخفیف (برای اطلاعات)
+                            'discount_date': price.discount_date  # تاریخ تخفیف (برای اطلاعات)
                         }
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
         return hotel_min_price_map
-
 
 
 
@@ -1146,6 +1150,7 @@ class SuggesteHotelListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
+        # دریافت هتل‌های با پیشنهاد ویژه
         hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
@@ -1176,6 +1181,7 @@ class AmazingHotelsListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
+        # دریافت هتل‌های با فروش شگفت‌انگیز
         hotels = Hotel.objects.filter(is_flash_sale=True).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
@@ -1187,7 +1193,6 @@ class AmazingHotelsListView(BaseHotelListView):
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
-
 
 
 
@@ -1207,6 +1212,7 @@ class BestSellersListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
+        # دریافت هتل‌های پرفروش
         hotels = Hotel.objects.filter(is_best_seller=True).select_related('city', 'type').distinct()
         hotel_min_price_map = self.get_hotel_min_price_map(hotels)
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
@@ -1218,9 +1224,6 @@ class BestSellersListView(BaseHotelListView):
             best_sellers_data.append(serialized)
 
         return Response(best_sellers_data)
-
-
-
 
 
 # ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس اسلاگ هتل 
@@ -2895,7 +2898,7 @@ def parse_number(value):
 
 class ReservationInvoiceAPIView(APIView):
     """
-    API مدیریت صورت‌حساب رزرو هتل بدون نمایش قیمت نهایی.
+    API مدیریت صورت‌حساب رزرو بدون نمایش قیمت نهایی.
     """
 
     permission_classes = [IsAuthenticated]
@@ -2928,68 +2931,7 @@ class ReservationInvoiceAPIView(APIView):
             "discount_code": int(parse_number(reservation.discount))
         }
         return Response(response_data, status=200)
-
-    @swagger_auto_schema(
-        operation_summary="ویرایش صورت‌حساب رزرو",
-        operation_description="""
-        بروزرسانی مقادیر صورت‌حساب رزرو. فقط فیلدهای `extra_passengers`، `half_charges` و `discount_code` قابل ویرایش هستند.
-        مقادیر عددی می‌توانند با و بدون ویرگول باشند.
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "extra_passengers": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع قیمت نفرات اضافه"),
-                "half_charges": openapi.Schema(type=openapi.TYPE_STRING, description="مجموع نیم شارژها"),
-                "discount_code": openapi.Schema(type=openapi.TYPE_STRING, description="تخفیف کد تخفیف")
-            },
-            required=["extra_passengers", "half_charges", "discount_code"]
-        ),
-        responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    "message": openapi.Schema(type=openapi.TYPE_STRING, description="پیام موفقیت"),
-                    "invoice": openapi.Schema(
-                        type=openapi.TYPE_OBJECT,
-                        properties={
-                            "extra_passengers": openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع قیمت نفرات اضافه"),
-                            "half_charges": openapi.Schema(type=openapi.TYPE_NUMBER, description="مجموع نیم شارژها"),
-                            "discount_code": openapi.Schema(type=openapi.TYPE_NUMBER, description="تخفیف کد تخفیف")
-                        }
-                    )
-                }
-            )
-        },
-        tags=["reservation-api"]
-    )
-    def put(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        if reservation.buyer != request.user:
-            raise ValidationError("شما به این رزرو دسترسی ندارید.")
-
-        data = request.data
-        try:
-            reservation.total_extra_passenger_charge = parse_number(data.get("extra_passengers"))
-            reservation.total_half_day_charge = parse_number(data.get("half_charges"))
-            reservation.discount = parse_number(data.get("discount_code"))
-            reservation.save(update_fields=[
-                "total_extra_passenger_charge",
-                "total_half_day_charge",
-                "discount"
-            ])
-        except Exception as e:
-            logger.error(f"Invoice update error: {e}")
-            return Response({"error": "خطا در بروزرسانی صورت‌حساب"}, status=400)
-
-        response_data = {
-            "message": "صورت‌حساب با موفقیت ویرایش شد.",
-            "invoice": {
-                "extra_passengers": int(reservation.total_extra_passenger_charge),
-                "half_charges": int(reservation.total_half_day_charge),
-                "discount_code": int(reservation.discount)
-            }
-        }
-        return Response(response_data, status=200)
+    
 
 
 # ای پی ای توضیحات تکمیلی رزرو 
@@ -3353,6 +3295,8 @@ class ReservationRoomDetailAPIView(APIView):
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
     
     
+    
+    
 #لیست مسافران برای بخش رزرو
 class PassengerListForReservationView(generics.GenericAPIView):
     """
@@ -3382,6 +3326,7 @@ class PassengerListForReservationView(generics.GenericAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     
     
