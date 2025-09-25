@@ -367,7 +367,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         default_user_level = UserLevel.objects.filter(title="میهمان").first()
 
-        # تعیین سطح کاربری: اگر کاربر لاگین باشد، سطح او را بگیرید، در غیر این صورت سطح پیش‌فرض (میهمان)
         user_level = default_user_level
         if request.user.is_authenticated:
             try:
@@ -375,26 +374,24 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 if profile.level:
                     user_level = profile.level
             except NaturalProfile.DoesNotExist:
-                pass  # اگر پروفایل وجود نداشت، از پیش‌فرض استفاده کنید
+                pass
 
-        # Filter rooms to ensure they are available for the entire date range
+        # Filter rooms
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=start_date_obj,
             date_prices__end_date__gte=end_date_obj,
-            date_prices__user_level=user_level,  # فیلتر بر اساس سطح کاربری
+            date_prices__user_level=user_level,
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
-        # اگر هیچ اتاقی نبود، بررسی کنید آیا قیمت برای سطح null (عمومی) وجود دارد یا نه
         if not rooms_qs.exists():
             rooms_qs = hotel.rooms.filter(
                 date_prices__start_date__lte=start_date_obj,
                 date_prices__end_date__gte=end_date_obj,
-                date_prices__user_level__isnull=True,  # fallback به قیمت عمومی اگر سطح خاص نبود
+                date_prices__user_level__isnull=True,
                 inventory__gt=0
             ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
-        # اگر هنوز هیچ اتاقی نبود، پاسخ مناسب با status 200 برگردان
         if not rooms_qs.exists():
             return Response({
                 'detail': 'هیچ اتاقی برای این هتل موجود نیست.',
@@ -413,7 +410,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # فیلتر قیمت بر اساس سطح کاربری (اول خاص، اگر نبود عمومی)
+                # اصلاح اصلی: ابتدا سطح کاربری، سپس fallback به عمومی
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
@@ -452,6 +449,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     } if status == "open" else None
                 })
 
+            # first_price_data
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj,
@@ -464,7 +462,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     user_level__isnull=True
                 ).order_by('-id')
             first_price_data = first_price_data_qs.select_related('user_level').first()
-
             if not first_price_data:
                 continue
 
@@ -508,11 +505,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         room_data = list(room_dict.values())
 
+        # --- بقیه منطق single room و pack rooms بدون تغییر ---
         if not passengers_list:
             room_data.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(room_data)
 
-        # --- Single room ---
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
             filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
@@ -536,7 +533,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
                         day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
                     )
-                
                 room['selected_passenger'] = required_capacity
             
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
