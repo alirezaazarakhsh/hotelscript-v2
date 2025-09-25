@@ -276,6 +276,14 @@ except Exception:
         print(*args, file=sys.stderr)
     logger = type('Logger', (), {'info': logger_fallback, 'warning': logger_fallback, 'debug': logger_fallback})()
 
+def validate_phone_number(value):
+    if not re.match(r'^09\d{9}$', value):
+        raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
+
+def validate_national_code(value):
+    if not re.match(r'^\d{10}$', value):
+        raise ValidationError('کد ملی باید 10 رقمی باشد')
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -332,7 +340,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
         end_date = request.query_params.get('end-date')
         passengers = request.query_params.get('passengers')
 
-        # Parse passengers parameter
         passengers_list = []
         if passengers:
             try:
@@ -376,7 +383,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except NaturalProfile.DoesNotExist:
                 pass
 
-        # Filter rooms
+        # فیلتر اتاق‌ها بر اساس تاریخ و سطح کاربری
         rooms_qs = hotel.rooms.filter(
             date_prices__start_date__lte=start_date_obj,
             date_prices__end_date__gte=end_date_obj,
@@ -410,7 +417,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # اصلاح اصلی: ابتدا سطح کاربری، سپس fallback به عمومی
+                # ابتدا سطح کاربری، سپس fallback به عمومی
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
@@ -449,7 +456,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     } if status == "open" else None
                 })
 
-            # first_price_data
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj,
@@ -505,7 +511,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         room_data = list(room_dict.values())
 
-        # --- بقیه منطق single room و pack rooms بدون تغییر ---
+        # --- Single room ---
         if not passengers_list:
             room_data.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(room_data)
@@ -602,7 +608,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
     
     
     
