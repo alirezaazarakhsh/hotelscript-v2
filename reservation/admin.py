@@ -612,77 +612,28 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
 
-logger = logging.getLogger(__name__)
 
-# ---------------- اعتبارسنجی‌ها ----------------
-def validate_national_code(value):
-    """
-    اعتبارسنجی کد ملی:
-    - کد ملی باید 10 رقمی باشد.
-    - محاسبه رقم کنترل و بررسی صحت کد ملی.
-    """
-    if not value:
-        raise ValidationError('کد ملی الزامی است.')
-    if not re.match(r'^\d{10}$', value):
-        raise ValidationError('کد ملی باید 10 رقمی باشد.')
-    
-    check_digits = int(value[9])
-    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
-    
-    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
-        raise ValidationError('کد ملی معتبر نیست.')
-
-def validate_phone_number(value):
-    """
-    اعتبارسنجی شماره موبایل:
-    - شماره موبایل باید به فرمت 09xxxxxxxxx باشد.
-    """
-    if not re.match(r'^09\d{9}$', value):
-        raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
-
-# ---------------- فرم ادمین ----------------
+# ---------------- Reservationhotel Admin Form ----------------
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
 
-    def clean(self):
-        cleaned_data = super().clean()
-        # اعتبارسنجی تاریخ ورود
-        check_in = cleaned_data.get('check_in_date')
+    def clean_check_in_date(self):
+        check_in = self.cleaned_data['check_in_date']
         today_j = jdatetime.date.today()
-        if check_in and check_in < today_j:
+        if check_in < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        return check_in
 
-        # اعتبارسنجی تاریخ خروج
-        check_out = cleaned_data.get('check_out_date')
-        if check_in and check_out and check_out <= check_in:
+    def clean_check_out_date(self):
+        check_in = self.cleaned_data.get('check_in_date')
+        check_out = self.cleaned_data['check_out_date']
+        if check_in and check_out <= check_in:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+        return check_out
 
-        # اعتبارسنجی اطلاعات رزروکننده
-        reserver_phone = cleaned_data.get('reserver_phone_number')
-        reserver_national_code = cleaned_data.get('reserver_national_code')
-        
-        if reserver_phone:
-            validate_phone_number(reserver_phone)
-        if reserver_national_code:
-            validate_national_code(reserver_national_code)
-
-        return cleaned_data
-
-    def clean_reserver_national_code(self):
-        national_code = self.cleaned_data.get('reserver_national_code')
-        if national_code:
-            validate_national_code(national_code)
-        return national_code
-
-    def clean_reserver_phone_number(self):
-        phone_number = self.cleaned_data.get('reserver_phone_number')
-        if phone_number:
-            validate_phone_number(phone_number)
-        return phone_number
-
-# ---------------- این‌لاین مسافران ----------------
+# ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 8
@@ -696,7 +647,7 @@ class ReservationRoomPassengerInline(NestedTabularInline):
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
 
-# ---------------- این‌لاین اتاق‌ها ----------------
+# ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
@@ -755,14 +706,13 @@ class ReservationRoomInline(NestedTabularInline):
                 fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_out_selected')]
         return fields
 
-# ---------------- ادمین رزرو ----------------
+# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
-        'reserver_phone_number', 'reserver_national_code_display',
-        'check_in_date', 'check_out_date',
+        'reserver_phone_number', 'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
@@ -809,198 +759,96 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # ------------------ شماره موبایل buyer ------------------
+    @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
-        """
-        نمایش شماره تلفن خریدار
-        """
         if obj.buyer:
             return getattr(obj.buyer, 'phone_number', '-')
         return "-"
 
-    def reserver_national_code_display(self, obj):
-        """
-        نمایش کد ملی رزروکننده، ابتدا از مدل و سپس از پروفایل کاربر
-        """
-        if obj.reserver_national_code:
-            return obj.reserver_national_code
-        try:
-            profile = obj.buyer.natural_profile
-            if profile.national_code:
-                try:
-                    validate_national_code(profile.national_code)
-                    return profile.national_code
-                except ValidationError:
-                    return '-'  # اگر کد ملی پروفایل نامعتبر است
-            return '-'
-        except AttributeError:
-            return '-'
-
+    # ----------------- نمایش تاریخ‌ها -----------------
+    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
-        """
-        نمایش تاریخ ایجاد به‌صورت شمسی
-        """
         if obj.created_at:
             dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
+    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
     def updated_jalali(self, obj):
-        """
-        نمایش تاریخ به‌روزرسانی به‌صورت شمسی
-        """
         if obj.updated_at:
             dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
+    @admin.display(description=_('تعداد شب‌ها'))
     def nights_count_fa(self, obj):
-        """
-        نمایش تعداد شب‌های اقامت
-        """
         return obj.nights_count if obj.pk else 0
 
+    @admin.display(description=_('کل اتاق‌ها'))
     def total_rooms_fa(self, obj):
-        """
-        نمایش تعداد کل اتاق‌ها
-        """
         return obj.total_rooms if obj.pk else 0
 
+    @admin.display(description=_('کل مهمان‌ها'))
     def total_guests_fa(self, obj):
-        """
-        نمایش تعداد کل مهمان‌ها
-        """
+        # اگر اتاقی مسافر ندارد، نفرات باز باشد
         return obj.total_guests if obj.pk else 0
 
+    # ----------------- فرمت هزارگان برای قیمت -----------------
+    @admin.display(description=_('مجموع قیمت'))
     def total_price_fa(self, obj):
-        """
-        نمایش مجموع قیمت با فرمت هزارگان
-        """
         return "{:,}".format(obj.total_price) if obj.total_price else "-"
 
+    @admin.display(description=_('هزینه نفر اضافه'))
     def total_extra_passenger_charge_fa(self, obj):
-        """
-        نمایش هزینه نفرات اضافه با فرمت هزارگان
-        """
         return "{:,}".format(obj.total_extra_passenger_charge) if obj.total_extra_passenger_charge else "-"
 
+    @admin.display(description=_('هزینه نیم روز ورود'))
     def half_day_in_charge_fa(self, obj):
-        """
-        نمایش هزینه نیم‌شارژ ورود با فرمت هزارگان
-        """
         return "{:,}".format(obj.half_day_in_charge) if obj.half_day_in_charge else "-"
 
+    @admin.display(description=_('هزینه نیم روز خروج'))
     def half_day_out_charge_fa(self, obj):
-        """
-        نمایش هزینه نیم‌شارژ خروج با فرمت هزارگان
-        """
         return "{:,}".format(obj.half_day_out_charge) if obj.half_day_out_charge else "-"
 
+    @admin.display(description=_('کل هزینه نیم روز'))
     def total_half_day_charge_fa(self, obj):
-        """
-        نمایش مجموع هزینه نیم‌شارژها با فرمت هزارگان
-        """
         return "{:,}".format(obj.total_half_day_charge) if obj.total_half_day_charge else "-"
 
+    @admin.display(description=_('تخفیف کد'))
     def discount_fa(self, obj):
-        """
-        نمایش تخفیف کد با فرمت هزارگان
-        """
         return "{:,}".format(obj.discount) if obj.discount else "-"
 
+    @admin.display(description=_('تخفیف ثابت اتاق'))
     def room_fixed_discount_fa(self, obj):
-        """
-        نمایش تخفیف ثابت اتاق‌ها با فرمت هزارگان
-        """
         return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
 
+    @admin.display(description=_('قیمت نهایی'))
     def final_price_fa(self, obj):
-        """
-        نمایش قیمت نهایی با فرمت هزارگان
-        """
         return "{:,}".format(obj.final_price) if obj.final_price else "-"
 
+    # ----------------- save_model و save_related -----------------
     def save_model(self, request, obj, form, change):
-        """
-        ذخیره اطلاعات رزروکننده از فرم ادمین یا ورودی JSON
-        """
-        # استخراج اطلاعات رزروکننده از فرم
-        reserver_data = {
-            'first_name': form.cleaned_data.get('reserver_first_name'),
-            'last_name': form.cleaned_data.get('reserver_last_name'),
-            'phone_number': form.cleaned_data.get('reserver_phone_number'),
-            'national_code': form.cleaned_data.get('reserver_national_code'),
-        }
-
-        # اعتبارسنجی اطلاعات رزروکننده
-        try:
-            if reserver_data['phone_number']:
-                validate_phone_number(reserver_data['phone_number'])
-            if reserver_data['national_code']:
-                validate_national_code(reserver_data['national_code'])
-        except ValidationError as e:
-            form.add_error(None, str(e))
-            return
-
-        # ذخیره اطلاعات رزروکننده در مدل
-        obj.reserver_first_name = reserver_data['first_name']
-        obj.reserver_last_name = reserver_data['last_name']
-        obj.reserver_phone_number = reserver_data['phone_number']
-        obj.reserver_national_code = reserver_data['national_code']
-
-        # ذخیره کد ملی در پروفایل کاربر (اگر وجود داشته باشد)
-        if obj.reserver_national_code and hasattr(obj.buyer, 'natural_profile'):
-            profile = obj.buyer.natural_profile
-            profile.national_code = obj.reserver_national_code
-            profile.save(update_fields=['national_code'])
-
-        # اگر اطلاعات از JSON ورودی آمده باشد (مثلاً از API)
-        if hasattr(request, 'POST') and 'reserver_json' in request.POST:
-            try:
-                reserver_json = json.loads(request.POST.get('reserver_json', '{}'))
-                if isinstance(reserver_json, dict) and 'reserver' in reserver_json:
-                    reserver_data = reserver_json['reserver']
-                    # اعتبارسنجی اطلاعات JSON
-                    for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
-                        if field not in reserver_data or not reserver_data[field]:
-                            form.add_error(None, f'فیلد {field} برای رزروکننده الزامی است.')
-                            return
-                    try:
-                        validate_phone_number(reserver_data['phone_number'])
-                        validate_national_code(reserver_data['national_code'])
-                    except ValidationError as e:
-                        form.add_error(None, str(e))
-                        return
-                    # ذخیره اطلاعات از JSON
-                    obj.reserver_first_name = reserver_data['first_name']
-                    obj.reserver_last_name = reserver_data['last_name']
-                    obj.reserver_phone_number = reserver_data['phone_number']
-                    obj.reserver_national_code = reserver_data['national_code']
-            except json.JSONDecodeError:
-                form.add_error(None, 'فرمت JSON ورودی معتبر نیست.')
-                return
-
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
-        """
-        ذخیره اطلاعات مرتبط و بازمحاسبه قیمت‌ها
-        """
         super().save_related(request, form, formsets, change)
         obj = form.instance
-        if obj.reservation_rooms.exists() and not getattr(obj, '_price_calculation_done', False):
-            setattr(obj, '_price_calculation_done', True)
-            total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
-            obj.total_price = total_price
-            obj.total_extra_passenger_charge = total_extra
-            obj.discount = code_discount
-            obj.room_fixed_discount = room_fixed_discount
-            obj.half_day_in_charge = half_day_in_charge
-            obj.half_day_out_charge = half_day_out_charge
-            obj.total_half_day_charge = total_half_day_charge
-            obj.final_price = final_price
-            obj._skip_price_calculation = True
-            obj.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount',
-                'room_fixed_discount', 'half_day_in_charge',
-                'half_day_out_charge', 'total_half_day_charge', 'final_price'
-            ])
+        if obj.reservation_rooms.exists():
+            if not getattr(obj, '_price_calculation_done', False):
+                setattr(obj, '_price_calculation_done', True)
+                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
+                obj.total_price = total_price
+                obj.total_extra_passenger_charge = total_extra
+                obj.discount = code_discount
+                obj.room_fixed_discount = room_fixed_discount
+                obj.half_day_in_charge = half_day_in_charge
+                obj.half_day_out_charge = half_day_out_charge
+                obj.total_half_day_charge = total_half_day_charge
+                obj.final_price = final_price
+                obj._skip_price_calculation = True
+                obj.save(update_fields=[
+                    'total_price', 'total_extra_passenger_charge', 'discount',
+                    'room_fixed_discount', 'half_day_in_charge',
+                    'half_day_out_charge', 'total_half_day_charge', 'final_price'
+                ])
