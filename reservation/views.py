@@ -2666,15 +2666,25 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
+        # بررسی وجود پروفایل حقیقی و پر بودن فیلدهای موردنیاز
+        reserver_data = {}
+        if hasattr(request.user, 'natural_profile') and request.user.natural_profile:
+            profile = request.user.natural_profile
+            if all([profile.first_name, profile.last_name, profile.national_code]):
+                reserver_data = {
+                    'reserver_first_name': profile.first_name,
+                    'reserver_last_name': profile.last_name,
+                    'reserver_national_code': profile.national_code,
+                    'reserver_phone_number': request.user.phone_number
+                }
+
         # ایجاد رزرو اصلی
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
-            reserver_first_name=request.user.first_name,
-            reserver_last_name=request.user.last_name,
-            reserver_phone_number=getattr(request.user, 'phone_number', ''),
             check_in_date=check_in_date,
             check_out_date=check_out_date,
-            buyer=request.user
+            buyer=request.user,
+            **reserver_data
         )
 
         # اضافه کردن اتاق‌ها به رزرو
@@ -2745,6 +2755,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ])
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
+    
     
     
     
