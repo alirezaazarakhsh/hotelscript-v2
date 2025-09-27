@@ -2749,7 +2749,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     
     
 # ای پی ای جزئيات یک رزرو با tracking_code
-
 logger = logging.getLogger(__name__)
 
 class ReservationDetailAPIView(APIView):
@@ -2871,7 +2870,7 @@ class ReservationDetailAPIView(APIView):
             user = request.user
             # بررسی کامل بودن تمام فیلدها
             if (profile.first_name and profile.last_name and 
-                profile.national_code and user.phone_number):
+                profile.national_code and hasattr(user, 'phone_number') and user.phone_number):
                 reserver_data = {
                     'first_name': profile.first_name,
                     'last_name': profile.last_name,
@@ -2889,8 +2888,8 @@ class ReservationDetailAPIView(APIView):
                 'exit': reservation.check_out_date.isoformat() if reservation.check_out_date else None
             },
             'time': {
-                'enter': hotel.check_in_time.strftime('%H:%M:%S') if hotel.check_in_time else None,
-                'exit': hotel.check_out_time.strftime('%H:%M:%S') if hotel.check_out_time else None
+                'enter': hotel.check_in_time.strftime('%H:%M:%S') if hasattr(hotel, 'check_in_time') and hotel.check_in_time else None,
+                'exit': hotel.check_out_time.strftime('%H:%M:%S') if hasattr(hotel, 'check_out_time') and hotel.check_out_time else None
             },
             'number_of_nights': reservation.nights_count,
             'hotel_name': hotel.name,
@@ -2900,12 +2899,12 @@ class ReservationDetailAPIView(APIView):
             'number_of_rooms': reservation.total_rooms,
             'half_charges': {
                 'enter': {
-                    'enabled': hotel.has_check_in_half_day_charge,
-                    'price': int(reservation_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge else 0
+                    'enabled': reservation_room.half_day_in_selected,
+                    'price': int(reservation_room.half_day_in_price or 0)
                 },
                 'exit': {
-                    'enabled': hotel.has_check_out_half_day_charge,
-                    'price': int(reservation_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge else 0
+                    'enabled': reservation_room.half_day_out_selected,
+                    'price': int(reservation_room.half_day_out_price or 0)
                 }
             }
         }
@@ -3011,6 +3010,7 @@ class ReservationInvoiceAPIView(APIView):
         - `half_charges`: مجموع نیم شارژها
         - `discount_on_purchase`: تخفیف ثابت اتاق‌ها
         - `discount_code`: تخفیف کد تخفیف
+        - `final_price`: قیمت نهایی
         """,
         tags=["reservation-api"]
     )
@@ -3020,7 +3020,6 @@ class ReservationInvoiceAPIView(APIView):
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
         # اطمینان از به‌روزرسانی قیمت‌ها
-        reservation.calculate_prices()  # فراخوانی متد محاسبه قیمت
         reservation.save()
 
         response_data = {
@@ -3029,10 +3028,10 @@ class ReservationInvoiceAPIView(APIView):
             "extra_passengers": int(parse_number(reservation.total_extra_passenger_charge)),
             "half_charges": int(parse_number(reservation.total_half_day_charge)),
             "discount_on_purchase": int(parse_number(reservation.room_fixed_discount)),
-            "discount_code": int(parse_number(reservation.discount))
+            "discount_code": int(parse_number(reservation.discount)),
+            "final_price": int(parse_number(reservation.final_price))
         }
         return Response(response_data, status=status.HTTP_200_OK)
-    
 
 
 # ای پی ای توضیحات تکمیلی رزرو 
@@ -3137,8 +3136,7 @@ class ReservationRoomDetailAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # اطلاعات رزروکننده از پروفایل کاربر
-        user = request.user
+        # اطلاعات رزروکننده از پروفایل حقیقی و BaseUser
         reserver_data = {
             'first_name': '',
             'last_name': '',
@@ -3146,18 +3144,18 @@ class ReservationRoomDetailAPIView(APIView):
             'national_code': ''
         }
         try:
-            if (hasattr(user, 'first_name') and user.first_name and
-                hasattr(user, 'last_name') and user.last_name and
-                hasattr(user, 'phone_number') and user.phone_number and
-                hasattr(user, 'national_code') and user.national_code):
+            profile = request.user.natural_profile
+            user = request.user
+            if (profile.first_name and profile.last_name and 
+                profile.national_code and hasattr(user, 'phone_number') and user.phone_number):
                 reserver_data = {
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
+                    'first_name': profile.first_name,
+                    'last_name': profile.last_name,
                     'phone_number': user.phone_number,
-                    'national_code': user.national_code
+                    'national_code': profile.national_code
                 }
         except AttributeError:
-            logger.warning("پروفایل کاربر کامل نیست یا فیلدها وجود ندارند.")
+            logger.warning("پروفایل حقیقی کاربر یا شماره موبایل وجود ندارد یا کامل نیست.")
 
         response_data = {
             "reserver": reserver_data,
@@ -3321,11 +3319,12 @@ class ReservationRoomDetailAPIView(APIView):
             res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
             res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
             res_room.calculate_half_day_prices()
-            res_room.update_passenger_counts()
+            res_room.calculate_room_prices()
             res_room.save(update_fields=[
                 'half_day_in_selected', 'half_day_out_selected',
                 'half_day_in_price', 'half_day_out_price',
-                'extra_passenger_price', 'fixed_discount'
+                'extra_passenger_price', 'fixed_discount',
+                'price_per_night', 'subtotal'
             ])
 
             res_room.passengers.all().delete()
@@ -3354,11 +3353,9 @@ class ReservationRoomDetailAPIView(APIView):
                     )
 
         # به‌روزرسانی قیمت‌های رزرو
-        reservation.calculate_prices()  # فرض می‌کنیم این متد در مدل Reservationhotel وجود دارد
         reservation.save()
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
-    
     
     
     
