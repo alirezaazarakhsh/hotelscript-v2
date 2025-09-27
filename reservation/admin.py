@@ -612,6 +612,8 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
 
+logger = logging.getLogger(__name__)
+
 def validate_national_code(value):
     """
     اعتبارسنجی کد ملی:
@@ -791,13 +793,19 @@ class ReservationhotelAdmin(NestedModelAdmin):
     # ------------------ نمایش کد ملی ------------------
     @admin.display(description=_('کد ملی رزروکننده'))
     def reserver_national_code_display(self, obj):
-        # اولویت با reserver_national_code ذخیره‌شده در مدل
+        # ابتدا reserver_national_code مدل را بررسی کن
         if obj.reserver_national_code:
             return obj.reserver_national_code
-        # اگر خالی بود، از پروفایل کاربر بخوان
+        # اگر خالی بود، از natural_profile بخوان
         try:
             profile = obj.buyer.natural_profile
-            return profile.national_code if profile.national_code else '-'
+            if profile.national_code:
+                try:
+                    validate_national_code(profile.national_code)
+                    return profile.national_code
+                except ValidationError:
+                    return '-'  # اگر کد ملی پروفایل نامعتبر است
+            return '-'
         except AttributeError:
             return '-'
 
@@ -874,6 +882,13 @@ class ReservationhotelAdmin(NestedModelAdmin):
             except ValidationError as e:
                 form.add_error('reserver_national_code', str(e))
                 return
+        # اگر کد ملی در مدل خالی است، از natural_profile بخوان
+        elif hasattr(obj.buyer, 'natural_profile') and obj.buyer.natural_profile.national_code:
+            try:
+                validate_national_code(obj.buyer.natural_profile.national_code)
+                obj.reserver_national_code = obj.buyer.natural_profile.national_code
+            except ValidationError:
+                pass  # اگر کد ملی پروفایل معتبر نیست، نادیده بگیر
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
