@@ -2859,8 +2859,7 @@ class ReservationDetailAPIView(APIView):
         city = hotel.city
         province = city.province if hasattr(city, 'province') else None
 
-        # بررسی پروفایل کاربر برای اطلاعات رزروکننده
-        user = request.user
+        # بررسی پروفایل حقیقی کاربر برای اطلاعات رزروکننده
         reserver_data = {
             'first_name': '',
             'last_name': '',
@@ -2868,19 +2867,19 @@ class ReservationDetailAPIView(APIView):
             'national_code': ''
         }
         try:
-            # فرض می‌کنیم مدل User یا Profile فیلدهای زیر را دارد
-            if (hasattr(user, 'first_name') and user.first_name and
-                hasattr(user, 'last_name') and user.last_name and
-                hasattr(user, 'phone_number') and user.phone_number and
-                hasattr(user, 'national_code') and user.national_code):
+            profile = request.user.natural_profile
+            user = request.user
+            # بررسی کامل بودن تمام فیلدها
+            if (profile.first_name and profile.last_name and 
+                profile.national_code and user.phone_number):
                 reserver_data = {
-                    'first_name': user.first_name,
-                    'last_name': user.last_name,
+                    'first_name': profile.first_name,
+                    'last_name': profile.last_name,
                     'phone_number': user.phone_number,
-                    'national_code': user.national_code
+                    'national_code': profile.national_code
                 }
         except AttributeError:
-            logger.warning("پروفایل کاربر کامل نیست یا فیلدها وجود ندارند.")
+            logger.warning("پروفایل حقیقی کاربر یا شماره موبایل وجود ندارد یا کامل نیست.")
 
         # آماده‌سازی پاسخ
         response_data = {
@@ -2912,7 +2911,6 @@ class ReservationDetailAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
     
 
