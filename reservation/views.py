@@ -2853,9 +2853,10 @@ class ReservationDetailAPIView(APIView):
             'province_name': province.name if province else None,
             'number_of_rooms': reservation.total_rooms,
             'half_charges': {
-                'enter': reservation_room.half_day_in_selected and hotel.has_check_in_half_day_charge,
-                'exit': reservation_room.half_day_out_selected and hotel.has_check_out_half_day_charge
+            'enter': hotel.has_check_in_half_day_charge,
+            'exit': hotel.has_check_out_half_day_charge
             }
+
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
