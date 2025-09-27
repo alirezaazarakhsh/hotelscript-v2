@@ -612,6 +612,22 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
 
+def validate_national_code(value):
+    """
+    اعتبارسنجی کد ملی:
+    - کد ملی باید 10 رقمی باشد.
+    - محاسبه رقم کنترل و بررسی صحت کد ملی.
+    """
+    if not value:
+        raise ValidationError('کد ملی الزامی است.')
+    if not re.match(r'^\d{10}$', value):
+        raise ValidationError('کد ملی باید 10 رقمی باشد.')
+    
+    check_digits = int(value[9])
+    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+    
+    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+        raise ValidationError('کد ملی معتبر نیست.')
 
 # ---------------- Reservationhotel Admin Form ----------------
 class ReservationhotelAdminForm(forms.ModelForm):
@@ -632,6 +648,11 @@ class ReservationhotelAdminForm(forms.ModelForm):
         if check_in and check_out <= check_in:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
+
+    def clean_reserver_national_code(self):
+        national_code = self.cleaned_data.get('reserver_national_code')
+        validate_national_code(national_code)
+        return national_code
 
 # ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
@@ -712,7 +733,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
-        'reserver_phone_number', 'check_in_date', 'check_out_date',
+        'reserver_phone_number', 'reserver_national_code_display',
+        'check_in_date', 'check_out_date',
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
@@ -766,6 +788,19 @@ class ReservationhotelAdmin(NestedModelAdmin):
             return getattr(obj.buyer, 'phone_number', '-')
         return "-"
 
+    # ------------------ نمایش کد ملی ------------------
+    @admin.display(description=_('کد ملی رزروکننده'))
+    def reserver_national_code_display(self, obj):
+        # اولویت با reserver_national_code ذخیره‌شده در مدل
+        if obj.reserver_national_code:
+            return obj.reserver_national_code
+        # اگر خالی بود، از پروفایل کاربر بخوان
+        try:
+            profile = obj.buyer.natural_profile
+            return profile.national_code if profile.national_code else '-'
+        except AttributeError:
+            return '-'
+
     # ----------------- نمایش تاریخ‌ها -----------------
     @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
@@ -791,7 +826,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     @admin.display(description=_('کل مهمان‌ها'))
     def total_guests_fa(self, obj):
-        # اگر اتاقی مسافر ندارد، نفرات باز باشد
         return obj.total_guests if obj.pk else 0
 
     # ----------------- فرمت هزارگان برای قیمت -----------------
@@ -829,6 +863,17 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     # ----------------- save_model و save_related -----------------
     def save_model(self, request, obj, form, change):
+        # اگر کد ملی وارد شده، اعتبارسنجی و ذخیره در پروفایل
+        if obj.reserver_national_code:
+            try:
+                validate_national_code(obj.reserver_national_code)
+                if hasattr(obj.buyer, 'natural_profile'):
+                    profile = obj.buyer.natural_profile
+                    profile.national_code = obj.reserver_national_code
+                    profile.save(update_fields=['national_code'])
+            except ValidationError as e:
+                form.add_error('reserver_national_code', str(e))
+                return
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
