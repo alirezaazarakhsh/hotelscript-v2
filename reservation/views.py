@@ -3133,8 +3133,8 @@ class ReservationRoomDetailAPIView(APIView):
                 - `other_passengers`: لیست سایر مسافران
                 - `extra_capacity_passengers`: لیست مسافران اضافه
             - `half_charges`: شامل نیم‌شارژها:
-                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل و قیمت اتاق)
-                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل و قیمت اتاق)
+                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (نصف قیمت هر شب * تعداد اتاق‌ها)
+                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (نصف قیمت هر شب * تعداد اتاق‌ها)
         """,
         tags=["reservation-api"],
         responses={
@@ -3207,14 +3207,14 @@ class ReservationRoomDetailAPIView(APIView):
                                             'enter': openapi.Schema(
                                                 type=openapi.TYPE_OBJECT,
                                                 properties={
-                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ ورود توسط هتل', example=True),
+                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ ورود', example=True),
                                                     'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ ورود', example=2500000)
                                                 }
                                             ),
                                             'exit': openapi.Schema(
                                                 type=openapi.TYPE_OBJECT,
                                                 properties={
-                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=True),
+                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ خروج', example=True),
                                                     'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ خروج', example=2500000)
                                                 }
                                             )
@@ -3235,7 +3235,7 @@ class ReservationRoomDetailAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # اطلاعات رزروکننده از پروفایل حقیقی و BaseUser
+        # اطلاعات رزروکننده
         reserver_data = {
             'first_name': '',
             'last_name': '',
@@ -3266,8 +3266,12 @@ class ReservationRoomDetailAPIView(APIView):
                 raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
             
             hotel = res_room.room.hotel
-            # محاسبه قیمت‌های نیم‌شارژ با استفاده از متد calculate_half_day_prices
-            res_room.calculate_half_day_prices()
+            # محاسبه قیمت‌های نیم‌شارژ
+            res_room.calculate_room_prices()  # اطمینان از به‌روز بودن price_per_night
+            res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
+
+            if res_room.price_per_night == 0:
+                logger.warning(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است. احتمالاً RoomDatePrice وجود ندارد.")
 
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
@@ -3383,14 +3387,14 @@ class ReservationRoomDetailAPIView(APIView):
                                     'enter': openapi.Schema(
                                         type=openapi.TYPE_OBJECT,
                                         properties={
-                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ ورود توسط هتل', example=True),
+                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ ورود', example=True),
                                             'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ ورود', example=2500000)
                                         }
                                     ),
                                     'exit': openapi.Schema(
                                         type=openapi.TYPE_OBJECT,
                                         properties={
-                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=True),
+                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ خروج', example=True),
                                             'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ خروج', example=2500000)
                                         }
                                     )
@@ -3487,12 +3491,14 @@ class ReservationRoomDetailAPIView(APIView):
                     return Response({'detail': f'اطلاعات هتل برای اتاق {room_data["id"]} یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
                 
                 hotel = res_room.room.hotel
+                res_room.calculate_room_prices()  # اطمینان از به‌روز بودن price_per_night
+                res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
+
                 for charge_type in ['enter', 'exit']:
                     charge = half_charges.get(charge_type, {})
                     enabled = charge.get('enabled', False)
                     price = charge.get('price', 0)
 
-                    # بررسی پشتیبانی نیم‌شارژ توسط هتل
                     is_half_charge_supported = (
                         hotel.has_check_in_half_day_charge if charge_type == 'enter' 
                         else hotel.has_check_out_half_day_charge
@@ -3508,18 +3514,20 @@ class ReservationRoomDetailAPIView(APIView):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     if enabled and is_half_charge_supported:
-                        # محاسبه قیمت نیم‌شارژ اگر صفر یا نامعتبر باشد
-                        res_room.calculate_half_day_prices()
                         default_price = (
                             int(res_room.half_day_in_price or 0) if charge_type == 'enter'
                             else int(res_room.half_day_out_price or 0)
                         )
                         if price in [None, 0, ""]:
-                            price = default_price
-                            charge['price'] = price
-                        if price == 0:
+                            if default_price == 0:
+                                return Response(
+                                    {'detail': f'قیمت نیم‌شارژ {charge_type} نمی‌تواند صفر باشد چون فعال است (اتاق {room_data["id"]}).'},
+                                    status=status.HTTP_400_BAD_REQUEST
+                                )
+                            charge['price'] = default_price
+                        elif int(price) != default_price:
                             return Response(
-                                {'detail': f'قیمت نیم‌شارژ {charge_type} باید غیرصفر باشد (اتاق {room_data["id"]}).'},
+                                {'detail': f'قیمت نیم‌شارژ {charge_type} باید برابر با مقدار محاسبه‌شده ({default_price}) باشد (اتاق {room_data["id"]}).'},
                                 status=status.HTTP_400_BAD_REQUEST
                             )
                     try:
@@ -3599,7 +3607,7 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.final_price = final_price
             reservation._skip_price_calculation = True
             reservation.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount',
+                'total_price', 'total_extra_passenger_price', 'discount',
                 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
                 'total_half_day_charge', 'final_price'
             ])
