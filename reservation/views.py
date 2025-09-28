@@ -3157,7 +3157,7 @@ class ReservationRoomDetailAPIView(APIView):
                             items=openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=3),
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
                                     'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق', example='دو تخته دبل نرمال (طبقات3تا 17) (اقامت با صبحانه)'),
                                     'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق', example=1),
                                     'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق', example=0),
@@ -3235,6 +3235,11 @@ class ReservationRoomDetailAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
+        # بررسی تطابق هتل
+        if reservation.hotel.name != "پارسیان آزادی":
+            logger.warning(f"هتل رزرو ({reservation.hotel.name}) با پارسیان آزادی مطابقت ندارد.")
+            raise ValidationError("رزرو به هتل پارسیان آزادی تعلق ندارد.")
+
         # اطلاعات رزروکننده
         reserver_data = {
             'first_name': '',
@@ -3265,13 +3270,19 @@ class ReservationRoomDetailAPIView(APIView):
             if not res_room.room or not res_room.room.hotel:
                 raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
             
+            # بررسی تطابق room_id
+            if res_room.room.id != 1:
+                logger.warning(f"اتاق با id={res_room.room.id} به جای id=1 برای رزرو {tracking_code} یافت شد.")
+                raise ValidationError(f"اتاق با id={res_room.room.id} به هتل پارسیان آزادی تعلق ندارد.")
+
             hotel = res_room.room.hotel
-            # محاسبه قیمت‌های نیم‌شارژ
+            # محاسبه قیمت‌ها
             res_room.calculate_room_prices()  # اطمینان از به‌روز بودن price_per_night
             res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
 
             if res_room.price_per_night == 0:
-                logger.warning(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است. احتمالاً RoomDatePrice وجود ندارد.")
+                logger.error(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است. احتمالاً RoomDatePrice وجود ندارد.")
+                raise ValidationError(f"قیمت هر شب برای اتاق {res_room.room.title} صفر است.")
 
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
@@ -3323,6 +3334,7 @@ class ReservationRoomDetailAPIView(APIView):
         **ورودی:**
         - `reserver`: اطلاعات رزروکننده شامل نام، نام خانوادگی، شماره موبایل، و کد ملی
         - `rooms`: لیستی از اتاق‌ها با اطلاعات مسافران و نیم‌شارژها
+        - `half_charges`: نیم‌شارژها در سطح رزرو (اختیاری)
         """,
         tags=["reservation-api"],
         request_body=openapi.Schema(
@@ -3337,12 +3349,29 @@ class ReservationRoomDetailAPIView(APIView):
                         'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1461337879')
                     }
                 ),
+                'half_charges': openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'enter': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ ورود', example=True)
+                            }
+                        ),
+                        'exit': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ خروج', example=True)
+                            }
+                        )
+                    }
+                ),
                 'rooms': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Schema(
                         type=openapi.TYPE_OBJECT,
                         properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=3),
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
                             'passengers': openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
@@ -3419,7 +3448,12 @@ class ReservationRoomDetailAPIView(APIView):
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
             if reservation.buyer != request.user:
                 raise ValidationError("شما به این رزرو دسترسی ندارید.")
-            
+
+            # بررسی تطابق هتل
+            if reservation.hotel.name != "پارسیان آزادی":
+                logger.warning(f"هتل رزرو ({reservation.hotel.name}) با پارسیان آزادی مطابقت ندارد.")
+                raise ValidationError("رزرو به هتل پارسیان آزادی تعلق ندارد.")
+
             data = request.data
             if not isinstance(data, dict) or 'reserver' not in data or 'rooms' not in data:
                 return Response({'detail': 'فیلدهای reserver و rooms الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3441,8 +3475,15 @@ class ReservationRoomDetailAPIView(APIView):
 
             reservation_room_ids = [r.room.id for r in reservation.reservation_rooms.all() if r.room]
             for room_entry in rooms_data:
+                if room_entry['id'] != 1:
+                    return Response({'detail': f'اتاق با id={room_entry["id"]} به هتل پارسیان آزادی تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
                 if room_entry['id'] not in reservation_room_ids:
                     return Response({'detail': f'اتاق {room_entry["id"]} به این رزرو تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # اعمال half_charges در سطح رزرو به تمام اتاق‌ها
+            global_half_charges = data.get('half_charges', {})
+            global_half_in_enabled = global_half_charges.get('enter', {}).get('enabled', False)
+            global_half_out_enabled = global_half_charges.get('exit', {}).get('enabled', False)
 
             passenger_national_codes = []
             for room_data in rooms_data:
@@ -3494,9 +3535,17 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.calculate_room_prices()  # اطمینان از به‌روز بودن price_per_night
                 res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
 
+                if res_room.price_per_night == 0:
+                    logger.error(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است.")
+                    return Response({'detail': f'قیمت هر شب برای اتاق {res_room.room.title} صفر است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # اعمال half_charges در سطح رزرو
+                half_in_enabled = half_charges.get('enter', {}).get('enabled', global_half_in_enabled)
+                half_out_enabled = half_charges.get('exit', {}).get('enabled', global_half_out_enabled)
+
                 for charge_type in ['enter', 'exit']:
                     charge = half_charges.get(charge_type, {})
-                    enabled = charge.get('enabled', False)
+                    enabled = half_in_enabled if charge_type == 'enter' else half_out_enabled
                     price = charge.get('price', 0)
 
                     is_half_charge_supported = (
@@ -3555,8 +3604,9 @@ class ReservationRoomDetailAPIView(APIView):
                 passengers_data = room_data.get('passengers', {})
                 half_charges = room_data.get('half_charges', {})
 
-                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
-                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+                # اعمال half_charges در سطح رزرو
+                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', global_half_in_enabled)
+                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', global_half_out_enabled)
                 res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', 0))
                 res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
                 res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
@@ -3607,7 +3657,7 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.final_price = final_price
             reservation._skip_price_calculation = True
             reservation.save(update_fields=[
-                'total_price', 'total_extra_passenger_price', 'discount',
+                'total_price', 'total_extra_passenger_charge', 'discount',
                 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
                 'total_half_day_charge', 'final_price'
             ])
