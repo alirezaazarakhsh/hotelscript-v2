@@ -3080,7 +3080,6 @@ class ReservationDescriptionAPIView(APIView):
 
 
 
-
 logger = logging.getLogger(__name__)
 
 def validate_phone_number(value):
@@ -3132,8 +3131,8 @@ class ReservationRoomDetailAPIView(APIView):
                 - `other_passengers`: لیست سایر مسافران
                 - `extra_capacity_passengers`: لیست مسافران اضافه
             - `half_charges`: شامل نیم‌شارژها:
-                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل)
-                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل)
+                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل و قیمت اتاق)
+                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل و قیمت اتاق)
         """,
         tags=["reservation-api"],
         responses={
@@ -3265,6 +3264,11 @@ class ReservationRoomDetailAPIView(APIView):
                 raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
             
             hotel = res_room.room.hotel
+            # فرض می‌کنیم قیمت‌های نیم‌شارژ از مدل Room یا ReservationRoom گرفته می‌شوند
+            # اگر در مدل Room ذخیره شده باشند، باید از res_room.room دسترسی پیدا کنیم
+            half_day_in_price = int(res_room.half_day_in_price or 0) if hasattr(res_room, 'half_day_in_price') else 0
+            half_day_out_price = int(res_room.half_day_out_price or 0) if hasattr(res_room, 'half_day_out_price') else 0
+
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
                 "name": res_room.room.title if res_room.room else "",
@@ -3280,11 +3284,11 @@ class ReservationRoomDetailAPIView(APIView):
                 "half_charges": {
                     "enter": {
                         "enabled": hotel.has_check_in_half_day_charge,
-                        "price": int(res_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge else 0
+                        "price": half_day_in_price if hotel.has_check_in_half_day_charge else 0
                     },
                     "exit": {
                         "enabled": hotel.has_check_out_half_day_charge,
-                        "price": int(res_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge else 0
+                        "price": half_day_out_price if hotel.has_check_out_half_day_charge else 0
                     }
                 }
             }
@@ -3483,6 +3487,10 @@ class ReservationRoomDetailAPIView(APIView):
                     return Response({'detail': f'اطلاعات هتل برای اتاق {room_data["id"]} یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
                 
                 hotel = res_room.room.hotel
+                # فرض می‌کنیم قیمت‌های نیم‌شارژ از مدل ReservationRoom یا Room گرفته می‌شوند
+                half_day_in_price = int(res_room.half_day_in_price or 0) if hasattr(res_room, 'half_day_in_price') else 0
+                half_day_out_price = int(res_room.half_day_out_price or 0) if hasattr(res_room, 'half_day_out_price') else 0
+
                 for charge_type in ['enter', 'exit']:
                     charge = half_charges.get(charge_type, {})
                     enabled = charge.get('enabled', False)
@@ -3503,11 +3511,21 @@ class ReservationRoomDetailAPIView(APIView):
                             {'detail': f'قیمت نیم‌شارژ {charge_type} باید صفر باشد چون هتل آن را پشتیبانی نمی‌کند (اتاق {room_data["id"]}).'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-                    if enabled and price in [None, 0, ""]:
-                        return Response(
-                            {'detail': f'قیمت نیم‌شارژ {charge_type} باید مشخص و غیرصفر باشد (اتاق {room_data["id"]}).'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
+                    if enabled and is_half_charge_supported:
+                        # اگر نیم‌شارژ فعال است، قیمت باید از مدل گرفته شود یا معتبر باشد
+                        default_price = half_day_in_price if charge_type == 'enter' else half_day_out_price
+                        if price in [None, 0, ""]:
+                            # اگر قیمت صفر یا نامعتبر است، از مدل یا متد محاسباتی استفاده می‌کنیم
+                            if default_price == 0:
+                                # فرض می‌کنیم متد calculate_half_day_prices قیمت را محاسبه می‌کند
+                                res_room.calculate_half_day_prices()
+                                default_price = int(res_room.half_day_in_price or 0) if charge_type == 'enter' else int(res_room.half_day_out_price or 0)
+                            if default_price == 0:
+                                return Response(
+                                    {'detail': f'قیمت نیم‌شارژ {charge_type} باید غیرصفر باشد (اتاق {room_data["id"]}).'},
+                                    status=status.HTTP_400_BAD_REQUEST
+                                )
+                            charge['price'] = default_price
                     try:
                         if price is not None:
                             int(price)
@@ -3576,7 +3594,7 @@ class ReservationRoomDetailAPIView(APIView):
             # محاسبه و ذخیره قیمت‌های نهایی
             total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
             reservation.total_price = total_price
-            reservation.total_extra_passenger_charge = total_extra
+            reservation.total_extra_passenger_price = total_extra
             reservation.discount = code_discount
             reservation.room_fixed_discount = room_fixed
             reservation.half_day_in_charge = half_in
@@ -3585,7 +3603,7 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.final_price = final_price
             reservation._skip_price_calculation = True
             reservation.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount',
+                'total_price', 'total_extra_passenger_price', 'discount',
                 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
                 'total_half_day_charge', 'final_price'
             ])
