@@ -102,6 +102,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     card_numbers = CardNumberSerializer(many=True, required=False)
+    phone_number = serializers.SerializerMethodField()  # فیلد جدید برای شماره موبایل
 
     class Meta:
         model = NaturalProfile
@@ -116,6 +117,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level',
             'level_name',
             'card_numbers',
+            'phone_number',  # اضافه کردن phone_number به فیلدها
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -127,6 +129,12 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
 
     def get_level_name(self, obj):
         return obj.level.title if obj.level else None
+
+    def get_phone_number(self, obj):
+        """
+        استخراج شماره موبایل از base_user.
+        """
+        return obj.base_user.phone_number if obj.base_user else None
 
     def get_image(self, obj):
         request = self.context.get('request')
@@ -187,6 +195,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
                 else:
                     CardNumber.objects.create(profile=instance, **card_data)
         return instance
+    
 
 # -----------------------------
 # JuridicalProfileDocument Serializer

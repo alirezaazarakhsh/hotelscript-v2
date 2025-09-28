@@ -3086,6 +3086,7 @@ class ReservationDescriptionAPIView(APIView):
 
 
 
+
 logger = logging.getLogger(__name__)
 
 def validate_phone_number(value):
@@ -3228,145 +3229,162 @@ class ReservationRoomDetailAPIView(APIView):
         tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        if reservation.buyer != request.user:
-            raise ValidationError("شما به این رزرو دسترسی ندارید.")
-        
-        data = request.data
-        if not isinstance(data, dict) or 'reserver' not in data or 'rooms' not in data:
-            return Response({'detail': 'فیلدهای reserver و rooms الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+            if reservation.buyer != request.user:
+                raise ValidationError("شما به این رزرو دسترسی ندارید.")
+            
+            data = request.data
+            if not isinstance(data, dict) or 'reserver' not in data or 'rooms' not in data:
+                return Response({'detail': 'فیلدهای reserver و rooms الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        reserver_data = data['reserver']
-        for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
-            if field not in reserver_data or not reserver_data[field]:
-                return Response({'detail': f'فیلد {field} برای رزروکننده الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            validate_phone_number(reserver_data['phone_number'])
-            validate_national_code(reserver_data['national_code'])
-        except ValidationError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        rooms_data = data.get('rooms', [])
-        if not rooms_data:
-            return Response({'detail': 'حداقل یک اتاق باید مشخص شود.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        reservation_room_ids = [r.room.id for r in reservation.reservation_rooms.all() if r.room]
-        for room_entry in rooms_data:
-            if room_entry['id'] not in reservation_room_ids:
-                return Response({'detail': f'اتاق {room_entry["id"]} به این رزرو تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        passenger_national_codes = []
-        for room_data in rooms_data:
-            passengers = room_data.get('passengers', {})
-            main_passenger = passengers.get('main_passenger', {})
-
+            reserver_data = data['reserver']
             for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
-                if field not in main_passenger or not main_passenger[field]:
-                    return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                if field not in reserver_data or not reserver_data[field]:
+                    return Response({'detail': f'فیلد {field} برای رزروکننده الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
             try:
-                validate_phone_number(main_passenger['phone_number'])
-                validate_national_code(main_passenger['national_code'])
+                validate_phone_number(reserver_data['phone_number'])
+                validate_national_code(reserver_data['national_code'])
             except ValidationError as e:
-                return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            if main_passenger['national_code'] in passenger_national_codes:
-                return Response({'detail': f'کد ملی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
-            passenger_national_codes.append(main_passenger['national_code'])
+            rooms_data = data.get('rooms', [])
+            if not rooms_data:
+                return Response({'detail': 'حداقل یک اتاق باید مشخص شود.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            for p_type in ['other_passengers', 'extra_capacity_passengers']:
-                for passenger in passengers.get(p_type, []):
-                    if not passenger.get('first_name') or not passenger.get('last_name'):
-                        return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
-                    if passenger.get('phone_number'):
-                        try:
-                            validate_phone_number(passenger['phone_number'])
-                        except ValidationError as e:
-                            return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-                    if passenger.get('national_code'):
-                        try:
-                            validate_national_code(passenger['national_code'])
-                        except ValidationError as e:
-                            return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-                        if passenger['national_code'] in passenger_national_codes:
-                            return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
-                        passenger_national_codes.append(passenger['national_code'])
+            reservation_room_ids = [r.room.id for r in reservation.reservation_rooms.all() if r.room]
+            for room_entry in rooms_data:
+                if room_entry['id'] not in reservation_room_ids:
+                    return Response({'detail': f'اتاق {room_entry["id"]} به این رزرو تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
-            if total_passengers > (int(room_data.get('capacity', 0)) + int(room_data.get('extra_capacity', 0))):
-                return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
+            passenger_national_codes = []
+            for room_data in rooms_data:
+                passengers = room_data.get('passengers', {})
+                main_passenger = passengers.get('main_passenger', {})
 
-            half_charges = room_data.get('half_charges', {})
-            for charge_type in ['enter', 'exit']:
-                charge = half_charges.get(charge_type, {})
-                if charge.get('enabled') and charge.get('price') in [None, ""]:
-                    return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید مشخص باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
+                    if field not in main_passenger or not main_passenger[field]:
+                        return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
                 try:
-                    if charge.get('price') is not None:
-                        int(charge['price'])
-                except (ValueError, TypeError):
-                    return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید عدد معتبر باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                    validate_phone_number(main_passenger['phone_number'])
+                    validate_national_code(main_passenger['national_code'])
+                except ValidationError as e:
+                    return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ذخیره اطلاعات رزروکننده
-        reservation.reserver_first_name = reserver_data['first_name']
-        reservation.reserver_last_name = reserver_data['last_name']
-        reservation.reserver_phone_number = reserver_data['phone_number']
-        reservation.reserver_national_code = reserver_data['national_code']
-        reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
+                if main_passenger['national_code'] in passenger_national_codes:
+                    return Response({'detail': f'کد ملی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+                passenger_national_codes.append(main_passenger['national_code'])
 
-        # ذخیره اطلاعات اتاق‌ها و مسافران
-        res_rooms_list = list(reservation.reservation_rooms.all())
-        if len(rooms_data) != len(res_rooms_list):
-            return Response({'detail': 'تعداد اتاق‌های ورودی با تعداد اتاق‌های ذخیره‌شده مطابقت ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+                for p_type in ['other_passengers', 'extra_capacity_passengers']:
+                    for passenger in passengers.get(p_type, []):
+                        if not passenger.get('first_name') or not passenger.get('last_name'):
+                            return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                        if passenger.get('phone_number'):
+                            try:
+                                validate_phone_number(passenger['phone_number'])
+                            except ValidationError as e:
+                                return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                        if passenger.get('national_code'):
+                            try:
+                                validate_national_code(passenger['national_code'])
+                            except ValidationError as e:
+                                return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                            if passenger['national_code'] in passenger_national_codes:
+                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+                            passenger_national_codes.append(passenger['national_code'])
 
-        for room_data, res_room in zip(rooms_data, res_rooms_list):
-            passengers_data = room_data.get('passengers', {})
-            half_charges = room_data.get('half_charges', {})
+                total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
+                if total_passengers > (int(room_data.get('capacity', 0)) + int(room_data.get('extra_capacity', 0))):
+                    return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
-            res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
-            res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', 0))
-            res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
-            res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
-            res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
-            res_room.calculate_half_day_prices()
-            res_room.calculate_room_prices()
-            res_room.save(update_fields=[
-                'half_day_in_selected', 'half_day_out_selected',
-                'half_day_in_price', 'half_day_out_price',
-                'extra_passenger_price', 'fixed_discount',
-                'price_per_night', 'subtotal'
+                half_charges = room_data.get('half_charges', {})
+                for charge_type in ['enter', 'exit']:
+                    charge = half_charges.get(charge_type, {})
+                    if charge.get('enabled') and charge.get('price') in [None, ""]:
+                        return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید مشخص باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                    try:
+                        if charge.get('price') is not None:
+                            int(charge['price'])
+                    except (ValueError, TypeError):
+                        return Response({'detail': f'قیمت نیم‌شارژ {charge_type} باید عدد معتبر باشد (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ذخیره اطلاعات رزروکننده
+            reservation.reserver_first_name = reserver_data['first_name']
+            reservation.reserver_last_name = reserver_data['last_name']
+            reservation.reserver_phone_number = reserver_data['phone_number']
+            reservation.reserver_national_code = reserver_data['national_code']
+            reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
+
+            # ذخیره اطلاعات اتاق‌ها و مسافران
+            res_rooms_list = list(reservation.reservation_rooms.all())
+            if len(rooms_data) != len(res_rooms_list):
+                return Response({'detail': 'تعداد اتاق‌های ورودی با تعداد اتاق‌های ذخیره‌شده مطابقت ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            for room_data, res_room in zip(rooms_data, res_rooms_list):
+                passengers_data = room_data.get('passengers', {})
+                half_charges = room_data.get('half_charges', {})
+
+                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
+                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+                res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', 0))
+                res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
+                res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
+                res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
+                res_room.calculate_half_day_prices()
+                res_room.calculate_room_prices()
+                res_room.save(update_fields=[
+                    'half_day_in_selected', 'half_day_out_selected',
+                    'half_day_in_price', 'half_day_out_price',
+                    'extra_passenger_price', 'fixed_discount',
+                    'price_per_night', 'subtotal'
+                ])
+
+                res_room.passengers.all().delete()
+                main_passenger = passengers_data['main_passenger']
+                ReservationRoomPassenger.objects.create(
+                    reservation_room=res_room,
+                    passenger_type='primary',
+                    first_name=main_passenger['first_name'],
+                    last_name=main_passenger['last_name'],
+                    mobile_number=main_passenger['phone_number'],
+                    national_code=main_passenger['national_code'],
+                    is_primary=True
+                )
+
+                for p_type in ['other_passengers', 'extra_capacity_passengers']:
+                    passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
+                    for passenger in passengers_data.get(p_type, []):
+                        ReservationRoomPassenger.objects.create(
+                            reservation_room=res_room,
+                            passenger_type=passenger_type_db,
+                            first_name=passenger['first_name'],
+                            last_name=passenger['last_name'],
+                            mobile_number=passenger.get('phone_number', None),
+                            national_code=passenger.get('national_code', None),
+                            is_primary=False
+                        )
+
+            # محاسبه و ذخیره قیمت‌های نهایی
+            total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
+            reservation.total_price = total_price
+            reservation.total_extra_passenger_charge = total_extra
+            reservation.discount = code_discount
+            reservation.room_fixed_discount = room_fixed
+            reservation.half_day_in_charge = half_in
+            reservation.half_day_out_charge = half_out
+            reservation.total_half_day_charge = total_half
+            reservation.final_price = final_price
+            reservation._skip_price_calculation = True
+            reservation.save(update_fields=[
+                'total_price', 'total_extra_passenger_charge', 'discount',
+                'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
+                'total_half_day_charge', 'final_price'
             ])
 
-            res_room.passengers.all().delete()
-            main_passenger = passengers_data['main_passenger']
-            ReservationRoomPassenger.objects.create(
-                reservation_room=res_room,
-                passenger_type='primary',
-                first_name=main_passenger['first_name'],
-                last_name=main_passenger['last_name'],
-                mobile_number=main_passenger['phone_number'],
-                national_code=main_passenger['national_code'],
-                is_primary=True
-            )
-
-            for p_type in ['other_passengers', 'extra_capacity_passengers']:
-                passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
-                for passenger in passengers_data.get(p_type, []):
-                    ReservationRoomPassenger.objects.create(
-                        reservation_room=res_room,
-                        passenger_type=passenger_type_db,
-                        first_name=passenger['first_name'],
-                        last_name=passenger['last_name'],
-                        mobile_number=passenger.get('phone_number', None),
-                        national_code=passenger.get('national_code', None),
-                        is_primary=False
-                    )
-
-        # به‌روزرسانی قیمت‌های رزرو
-        reservation.save()
-
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
+    
+    
     
     
     
