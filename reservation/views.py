@@ -2788,8 +2788,8 @@ class ReservationDetailAPIView(APIView):
           - `city_name`: نام شهر هتل (رشته).
           - `province_name`: نام استان هتل (رشته).
           - `number_of_rooms`: تعداد اتاق‌های رزرو شده (یک عدد صحیح).
-          - `half_charges.enter`: وضعیت و قیمت نیم‌شارژ ورود.
-          - `half_charges.exit`: وضعیت و قیمت نیم‌شارژ خروج.
+          - `half_charges.enter.enabled`: وضعیت انتخاب نیم‌شارژ ورود توسط کاربر.
+          - `half_charges.exit.enabled`: وضعیت انتخاب نیم‌شارژ خروج توسط کاربر.
         - **اعتبارسنجی**: کاربر باید احراز هویت شده باشد و کد پیگیری باید متعلق به رزروهای او باشد.
         """,
         tags=["reservation-api"],
@@ -2834,15 +2834,13 @@ class ReservationDetailAPIView(APIView):
                                 'enter': openapi.Schema(
                                     type=openapi.TYPE_OBJECT,
                                     properties={
-                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ ورود', example=True),
-                                        'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ ورود', example=500000)
+                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت انتخاب نیم‌شارژ ورود توسط کاربر', example=True)
                                     }
                                 ),
                                 'exit': openapi.Schema(
                                     type=openapi.TYPE_OBJECT,
                                     properties={
-                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت نیم‌شارژ خروج', example=False),
-                                        'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ خروج', example=0)
+                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت انتخاب نیم‌شارژ خروج توسط کاربر', example=False)
                                     }
                                 )
                             }
@@ -2879,7 +2877,6 @@ class ReservationDetailAPIView(APIView):
         try:
             profile = request.user.natural_profile
             user = request.user
-            # بررسی کامل بودن تمام فیلدها
             if (profile.first_name and profile.last_name and 
                 profile.national_code and hasattr(user, 'phone_number') and user.phone_number):
                 reserver_data = {
@@ -2910,18 +2907,15 @@ class ReservationDetailAPIView(APIView):
             'number_of_rooms': reservation.total_rooms,
             'half_charges': {
                 'enter': {
-                    'enabled': reservation_room.half_day_in_selected,
-                    'price': int(reservation_room.half_day_in_price or 0)
+                    'enabled': reservation_room.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False)
                 },
                 'exit': {
-                    'enabled': reservation_room.half_day_out_selected,
-                    'price': int(reservation_room.half_day_out_price or 0)
+                    'enabled': reservation_room.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False)
                 }
             }
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
 
 # ای پی ای نمایش عکس هتل برای رزرو 
