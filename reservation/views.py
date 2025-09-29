@@ -3133,8 +3133,8 @@ class ReservationRoomDetailAPIView(APIView):
                 - `other_passengers`: لیست سایر مسافران
                 - `extra_capacity_passengers`: لیست مسافران اضافه
             - `half_charges`: شامل نیم‌شارژها:
-                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل و قیمت اتاق)
-                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل و قیمت اتاق)
+                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل و محاسبه قیمت)
+                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل و محاسبه قیمت)
         """,
         tags=["reservation-api"],
         responses={
@@ -3237,24 +3237,11 @@ class ReservationRoomDetailAPIView(APIView):
 
         # اطلاعات رزروکننده از پروفایل حقیقی و BaseUser
         reserver_data = {
-            'first_name': '',
-            'last_name': '',
-            'phone_number': '',
-            'national_code': ''
+            'first_name': reservation.reserver_first_name or '',
+            'last_name': reservation.reserver_last_name or '',
+            'phone_number': reservation.reserver_phone_number or '',
+            'national_code': reservation.reserver_national_code or ''
         }
-        try:
-            profile = request.user.natural_profile
-            user = request.user
-            if (profile.first_name and profile.last_name and 
-                profile.national_code and hasattr(user, 'phone_number') and user.phone_number):
-                reserver_data = {
-                    'first_name': profile.first_name,
-                    'last_name': profile.last_name,
-                    'phone_number': user.phone_number,
-                    'national_code': profile.national_code
-                }
-        except AttributeError:
-            logger.warning("پروفایل حقیقی کاربر یا شماره موبایل وجود ندارد یا کامل نیست.")
 
         response_data = {
             "reserver": reserver_data,
@@ -3266,10 +3253,12 @@ class ReservationRoomDetailAPIView(APIView):
                 raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
             
             hotel = res_room.room.hotel
-            # فرض می‌کنیم قیمت‌های نیم‌شارژ از مدل Room یا ReservationRoom گرفته می‌شوند
-            # اگر در مدل Room ذخیره شده باشند، باید از res_room.room دسترسی پیدا کنیم
-            half_day_in_price = int(res_room.half_day_in_price or 0) if hasattr(res_room, 'half_day_in_price') else 0
-            half_day_out_price = int(res_room.half_day_out_price or 0) if hasattr(res_room, 'half_day_out_price') else 0
+            # محاسبه مجدد قیمت‌ها برای اطمینان از صحت
+            res_room.calculate_room_prices()
+            res_room.calculate_half_day_prices()
+            # تنظیم قیمت نیم‌شارژ بر اساس پشتیبانی هتل
+            half_day_in_price = int(res_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge and res_room.half_day_in_selected else 0
+            half_day_out_price = int(res_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge and res_room.half_day_out_selected else 0
 
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
@@ -3285,12 +3274,12 @@ class ReservationRoomDetailAPIView(APIView):
                 },
                 "half_charges": {
                     "enter": {
-                        "enabled": hotel.has_check_in_half_day_charge,
-                        "price": half_day_in_price if hotel.has_check_in_half_day_charge else 0
+                        "enabled": hotel.has_check_in_half_day_charge and res_room.half_day_in_selected,
+                        "price": half_day_in_price
                     },
                     "exit": {
-                        "enabled": hotel.has_check_out_half_day_charge,
-                        "price": half_day_out_price if hotel.has_check_out_half_day_charge else 0
+                        "enabled": hotel.has_check_out_half_day_charge and res_room.half_day_out_selected,
+                        "price": half_day_out_price
                     }
                 }
             }
@@ -3492,7 +3481,7 @@ class ReservationRoomDetailAPIView(APIView):
                 for charge_type in ['enter', 'exit']:
                     charge = half_charges.get(charge_type, {})
                     enabled = charge.get('enabled', False)
-                    price = charge.get('price', 0)
+                    price = int(charge.get('price', 0))
 
                     is_half_charge_supported = (
                         hotel.has_check_in_half_day_charge if charge_type == 'enter' 
@@ -3503,17 +3492,16 @@ class ReservationRoomDetailAPIView(APIView):
                             {'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_data["id"]}).'},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-                    if not is_half_charge_supported and price != 0:
-                        return Response(
-                            {'detail': f'قیمت نیم‌شارژ {charge_type} باید صفر باشد چون هتل آن را پشتیبانی نمی‌کند (اتاق {room_data["id"]}).'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    if enabled and is_half_charge_supported and price <= 0:
-                        # محاسبه قیمت نیم‌شارژ
+                    if not is_half_charge_supported:
+                        # اگر هتل پشتیبانی نکنه، قیمت صفر و enabled غیرفعال
+                        charge['enabled'] = False
+                        charge['price'] = 0
+                    elif enabled and price <= 0:
+                        # اگر فعال باشه و قیمت نامعتبر باشه، محاسبه مجدد
                         res_room.calculate_room_prices()
                         res_room.calculate_half_day_prices()
                         default_price = res_room.half_day_in_price if charge_type == 'enter' else res_room.half_day_out_price
-                        charge['price'] = int(default_price) if default_price > 0 else 0  # اگر صفر شد، اجازه می‌دهیم
+                        charge['price'] = int(default_price) if default_price > 0 else 0
 
             # ذخیره اطلاعات رزروکننده
             reservation.reserver_first_name = reserver_data['first_name']
@@ -3537,8 +3525,8 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', 0))
                 res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', 0))
                 res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
-                res_room.calculate_room_prices()  # اطمینان از محاسبه price_per_night
-                res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژ با price_per_night به‌روز
+                res_room.calculate_room_prices()
+                res_room.calculate_half_day_prices()
                 res_room.save(update_fields=[
                     'half_day_in_selected', 'half_day_out_selected',
                     'half_day_in_price', 'half_day_out_price',
@@ -3574,7 +3562,7 @@ class ReservationRoomDetailAPIView(APIView):
             # محاسبه و ذخیره قیمت‌های نهایی
             total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
             reservation.total_price = total_price
-            reservation.total_extra_passenger_price = total_extra
+            reservation.total_extra_passenger_charge = total_extra
             reservation.discount = code_discount
             reservation.room_fixed_discount = room_fixed
             reservation.half_day_in_charge = half_in
@@ -3589,6 +3577,8 @@ class ReservationRoomDetailAPIView(APIView):
             ])
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
+    
+    
     
     
 #لیست مسافران برای بخش رزرو
