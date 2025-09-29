@@ -3593,8 +3593,6 @@ class ReservationRoomDetailAPIView(APIView):
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
     
-    
-    
 #لیست مسافران برای بخش رزرو
 class PassengerListForReservationView(generics.GenericAPIView):
     """
