@@ -3412,7 +3412,7 @@ class ReservationRoomDetailAPIView(APIView):
             404: openapi.Response(description="رزرو با کد پیگیری داده‌شده یافت نشد.")
         }
     )
-   def put(self, request, tracking_code):
+    def put(self, request, tracking_code):
         with transaction.atomic():
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
             if reservation.buyer != request.user:
