@@ -3133,8 +3133,8 @@ class ReservationRoomDetailAPIView(APIView):
                 - `other_passengers`: لیست سایر مسافران
                 - `extra_capacity_passengers`: لیست مسافران اضافه
             - `half_charges`: شامل نیم‌شارژها:
-                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (نصف قیمت هر شب * تعداد اتاق‌ها)
-                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (نصف قیمت هر شب * تعداد اتاق‌ها)
+                - `enter`: وضعیت و قیمت نیم‌شارژ ورود (نصف قیمت شب اول)
+                - `exit`: وضعیت و قیمت نیم‌شارژ خروج (نصف قیمت شب آخر)
         """,
         tags=["reservation-api"],
         responses={
@@ -3157,20 +3157,20 @@ class ReservationRoomDetailAPIView(APIView):
                             items=openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=2),
-                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق', example='دو تخته دبل نرمال (طبقات3تا 17) (اقامت با صبحانه)'),
-                                    'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق', example=1),
-                                    'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق', example=0),
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
+                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق', example='سوئیت دوبلکس دوتخته (اقامت با صبحانه)'),
+                                    'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق', example=2),
+                                    'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق', example=1),
                                     'extra_capacity_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت هر نفر اضافه', example=1200000),
-                                    'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=0),
+                                    'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=500000),
                                     'passengers': openapi.Schema(
                                         type=openapi.TYPE_OBJECT,
                                         properties={
                                             'main_passenger': openapi.Schema(
                                                 type=openapi.TYPE_OBJECT,
                                                 properties={
-                                                    'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='ساشای'),
-                                                    'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='آذرخش'),
+                                                    'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Alireza'),
+                                                    'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Azarakhsh'),
                                                     'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09120759419'),
                                                     'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1461337879')
                                                 }
@@ -3180,10 +3180,10 @@ class ReservationRoomDetailAPIView(APIView):
                                                 items=openapi.Schema(
                                                     type=openapi.TYPE_OBJECT,
                                                     properties={
-                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='رضا'),
-                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='رضایی'),
+                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Alireza00'),
+                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Azarakhsh'),
                                                         'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456788'),
-                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567891')
+                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='0084575948')
                                                     }
                                                 )
                                             ),
@@ -3192,10 +3192,10 @@ class ReservationRoomDetailAPIView(APIView):
                                                 items=openapi.Schema(
                                                     type=openapi.TYPE_OBJECT,
                                                     properties={
-                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='مریم'),
-                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='محمدی'),
+                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Tehran'),
+                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Tehran'),
                                                         'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456787'),
-                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567892')
+                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='0625897412')
                                                     }
                                                 )
                                             )
@@ -3235,12 +3235,12 @@ class ReservationRoomDetailAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # اطلاعات رزروکننده
+        # اطلاعات رزروکننده از reservation به‌عنوان پیش‌فرض و در صورت وجود از پروفایل کاربر
         reserver_data = {
-            'first_name': '',
-            'last_name': '',
-            'phone_number': '',
-            'national_code': ''
+            'first_name': reservation.reserver_first_name or '',
+            'last_name': reservation.reserver_last_name or '',
+            'phone_number': reservation.reserver_phone_number or '',
+            'national_code': reservation.reserver_national_code or ''
         }
         try:
             profile = request.user.natural_profile
@@ -3248,10 +3248,10 @@ class ReservationRoomDetailAPIView(APIView):
             if (profile.first_name and profile.last_name and 
                 profile.national_code and hasattr(user, 'phone_number') and user.phone_number):
                 reserver_data = {
-                    'first_name': profile.first_name,
-                    'last_name': profile.last_name,
-                    'phone_number': user.phone_number,
-                    'national_code': profile.natural_code
+                    'first_name': profile.first_name or reservation.reserver_first_name,
+                    'last_name': profile.last_name or reservation.reserver_last_name,
+                    'phone_number': user.phone_number or reservation.reserver_phone_number,
+                    'national_code': profile.national_code or reservation.reserver_national_code
                 }
         except AttributeError:
             logger.warning("پروفایل حقیقی کاربر یا شماره موبایل وجود ندارد یا کامل نیست.")
@@ -3267,12 +3267,19 @@ class ReservationRoomDetailAPIView(APIView):
             
             hotel = res_room.room.hotel
             # محاسبه قیمت‌ها
-            res_room.calculate_room_prices()  # اطمینان از به‌روز بودن price_per_night
+            res_room.calculate_room_prices()  # به‌روزرسانی price_per_night
             res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
 
-            if res_room.price_per_night == 0:
-                logger.error(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است. احتمالاً RoomDatePrice وجود ندارد.")
-                raise ValidationError(f"قیمت هر شب برای اتاق {res_room.room.title} صفر است.")
+            # فرض می‌کنیم قیمت شب اول و آخر از RoomDatePrice استخراج می‌شه
+            from django.db.models import Min, Max
+            room_date_prices = res_room.room.roomdateprice_set.filter(
+                date__range=[reservation.check_in_date, reservation.check_out_date]
+            )
+            first_night_price = room_date_prices.aggregate(Min('price'))['price__min'] or res_room.price_per_night
+            last_night_price = room_date_prices.aggregate(Max('price'))['price__max'] or res_room.price_per_night
+
+            half_day_in_price = int(first_night_price / 2) if hotel.has_check_in_half_day_charge else 0
+            half_day_out_price = int(last_night_price / 2) if hotel.has_check_out_half_day_charge else 0
 
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
@@ -3288,12 +3295,12 @@ class ReservationRoomDetailAPIView(APIView):
                 },
                 "half_charges": {
                     "enter": {
-                        "enabled": res_room.half_day_in_selected and hotel.has_check_in_half_day_charge,
-                        "price": int(res_room.half_day_in_price or 0)
+                        "enabled": hotel.has_check_in_half_day_charge,
+                        "price": half_day_in_price
                     },
                     "exit": {
-                        "enabled": res_room.half_day_out_selected and hotel.has_check_out_half_day_charge,
-                        "price": int(res_room.half_day_out_price or 0)
+                        "enabled": hotel.has_check_out_half_day_charge,
+                        "price": half_day_out_price
                     }
                 }
             }
@@ -3361,15 +3368,15 @@ class ReservationRoomDetailAPIView(APIView):
                     items=openapi.Schema(
                         type=openapi.TYPE_OBJECT,
                         properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=2),
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
                             'passengers': openapi.Schema(
                                 type=openapi.TYPE_OBJECT,
                                 properties={
                                     'main_passenger': openapi.Schema(
                                         type=openapi.TYPE_OBJECT,
                                         properties={
-                                            'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='ساشای'),
-                                            'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='آذرخش'),
+                                            'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Alireza'),
+                                            'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Azarakhsh'),
                                             'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09120759419'),
                                             'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1461337879')
                                         }
@@ -3379,10 +3386,10 @@ class ReservationRoomDetailAPIView(APIView):
                                         items=openapi.Schema(
                                             type=openapi.TYPE_OBJECT,
                                             properties={
-                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='رضا'),
-                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='رضایی'),
+                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Alireza00'),
+                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Azarakhsh'),
                                                 'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456788'),
-                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567891')
+                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='0084575948')
                                             }
                                         )
                                     ),
@@ -3391,10 +3398,10 @@ class ReservationRoomDetailAPIView(APIView):
                                         items=openapi.Schema(
                                             type=openapi.TYPE_OBJECT,
                                             properties={
-                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='مریم'),
-                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='محمدی'),
+                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='Tehran'),
+                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='Tehran'),
                                                 'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456787'),
-                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567892')
+                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='0625897412')
                                             }
                                         )
                                     )
@@ -3420,7 +3427,7 @@ class ReservationRoomDetailAPIView(APIView):
                                 }
                             ),
                             'extra_capacity_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت هر نفر اضافه', example=1200000),
-                            'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=0)
+                            'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=500000)
                         }
                     )
                 )
@@ -3522,6 +3529,14 @@ class ReservationRoomDetailAPIView(APIView):
                     logger.error(f"قیمت هر شب برای اتاق {res_room.room.title} (id: {res_room.room.id}) صفر است.")
                     return Response({'detail': f'قیمت هر شب برای اتاق {res_room.room.title} صفر است.'}, status=status.HTTP_400_BAD_REQUEST)
 
+                # محاسبه قیمت‌های نیم‌شارژ بر اساس درخواست
+                from django.db.models import Min, Max
+                room_date_prices = res_room.room.roomdateprice_set.filter(
+                    date__range=[reservation.check_in_date, reservation.check_out_date]
+                )
+                first_night_price = room_date_prices.aggregate(Min('price'))['price__min'] or res_room.price_per_night
+                last_night_price = room_date_prices.aggregate(Max('price'))['price__max'] or res_room.price_per_night
+
                 # اعمال half_charges در سطح رزرو
                 half_in_enabled = half_charges.get('enter', {}).get('enabled', global_half_in_enabled)
                 half_out_enabled = half_charges.get('exit', {}).get('enabled', global_half_out_enabled)
@@ -3541,10 +3556,7 @@ class ReservationRoomDetailAPIView(APIView):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     if enabled and is_half_charge_supported:
-                        default_price = (
-                            int(res_room.half_day_in_price or 0) if charge_type == 'enter'
-                            else int(res_room.half_day_out_price or 0)
-                        )
+                        default_price = int(first_night_price / 2) if charge_type == 'enter' else int(last_night_price / 2)
                         if default_price == 0:
                             logger.error(f"قیمت نیم‌شارژ {charge_type} برای اتاق {room_data['id']} صفر است.")
                             return Response(
@@ -3552,7 +3564,6 @@ class ReservationRoomDetailAPIView(APIView):
                                 status=status.HTTP_400_BAD_REQUEST
                             )
                         if price is None or price == '':
-                            # اگر قیمت ارسال نشده، از مقدار محاسبه‌شده استفاده می‌کنیم
                             charge['price'] = default_price
                         elif int(price) != default_price:
                             logger.warning(f"قیمت نیم‌شارژ {charge_type} ({price}) با مقدار محاسبه‌شده ({default_price}) برای اتاق {room_data['id']} مطابقت ندارد.")
@@ -3561,7 +3572,6 @@ class ReservationRoomDetailAPIView(APIView):
                                 status=status.HTTP_400_BAD_REQUEST
                             )
                     else:
-                        # اگر نیم‌شارژ غیرفعال است، قیمت باید صفر باشد
                         charge['price'] = 0
                     try:
                         if price is not None:
