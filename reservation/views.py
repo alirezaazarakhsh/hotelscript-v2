@@ -3271,8 +3271,7 @@ class ReservationRoomDetailAPIView(APIView):
             res_room.calculate_half_day_prices()  # محاسبه نیم‌شارژها
 
             # استخراج قیمت شب اول و آخر برای محاسبه نیم‌شارژ
-            from django.db.models import Min, Max
-            room_date_prices = res_room.room.roomdateprice_set.filter(
+            room_date_prices = res_room.room.date_prices.filter(
                 date__range=[reservation.check_in_date, reservation.check_out_date]
             )
             first_night_price = room_date_prices.aggregate(Min('price'))['price__min'] or res_room.price_per_night
