@@ -3082,6 +3082,20 @@ class ReservationDescriptionAPIView(APIView):
 
 
 
+import logging
+import re
+from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from django.db import transaction
+from rest_framework.exceptions import NotFound
+from .models import Reservationhotel, ReservationRoomPassenger
+
 logger = logging.getLogger(__name__)
 
 def validate_phone_number(value):
@@ -3100,10 +3114,8 @@ def validate_national_code(value):
     """
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
-
     check_digits = int(value[9])
     total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
-
     if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
         raise ValidationError('کد ملی معتبر نیست')
 
@@ -3136,106 +3148,14 @@ class ReservationRoomDetailAPIView(APIView):
                 - `enter`: وضعیت و قیمت نیم‌شارژ ورود (بر اساس پشتیبانی هتل و محاسبه قیمت)
                 - `exit`: وضعیت و قیمت نیم‌شارژ خروج (بر اساس پشتیبانی هتل و محاسبه قیمت)
         """,
-        tags=["reservation-api"],
-        responses={
-            200: openapi.Response(
-                description="جزئیات رزرو با موفقیت برگردانده شد.",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'reserver': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام رزروکننده', example='علی'),
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی رزروکننده', example='احمدی'),
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456789'),
-                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567890')
-                            }
-                        ),
-                        'rooms': openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
-                                    'name': openapi.Schema(type=openapi.TYPE_STRING, description='نام اتاق', example='اتاق دو تخته'),
-                                    'capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اصلی اتاق', example=2),
-                                    'extra_capacity': openapi.Schema(type=openapi.TYPE_INTEGER, description='ظرفیت اضافه اتاق', example=1),
-                                    'extra_capacity_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت هر نفر اضافه', example=500000),
-                                    'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=100000),
-                                    'passengers': openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'main_passenger': openapi.Schema(
-                                                type=openapi.TYPE_OBJECT,
-                                                properties={
-                                                    'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='علی'),
-                                                    'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='احمدی'),
-                                                    'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456789'),
-                                                    'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567890')
-                                                }
-                                            ),
-                                            'other_passengers': openapi.Schema(
-                                                type=openapi.TYPE_ARRAY,
-                                                items=openapi.Schema(
-                                                    type=openapi.TYPE_OBJECT,
-                                                    properties={
-                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='رضا'),
-                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='رضایی'),
-                                                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456788'),
-                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567891')
-                                                    }
-                                                )
-                                            ),
-                                            'extra_capacity_passengers': openapi.Schema(
-                                                type=openapi.TYPE_ARRAY,
-                                                items=openapi.Schema(
-                                                    type=openapi.TYPE_OBJECT,
-                                                    properties={
-                                                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='مریم'),
-                                                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='محمدی'),
-                                                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456787'),
-                                                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567892')
-                                                    }
-                                                )
-                                            )
-                                        }
-                                    ),
-                                    'half_charges': openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'enter': openapi.Schema(
-                                                type=openapi.TYPE_OBJECT,
-                                                properties={
-                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ ورود توسط هتل', example=True),
-                                                    'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ ورود', example=200000)
-                                                }
-                                            ),
-                                            'exit': openapi.Schema(
-                                                type=openapi.TYPE_OBJECT,
-                                                properties={
-                                                    'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=False),
-                                                    'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ خروج', example=0)
-                                                }
-                                            )
-                                        }
-                                    )
-                                }
-                            )
-                        )
-                    }
-                )
-            ),
-            404: openapi.Response(description="رزرو با کد پیگیری داده‌شده یافت نشد."),
-            403: openapi.Response(description="دسترسی غیرمجاز.")
-        }
+        tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # اطلاعات رزروکننده از پروفایل حقیقی و BaseUser
+        # اطلاعات رزروکننده
         reserver_data = {
             'first_name': reservation.reserver_first_name or '',
             'last_name': reservation.reserver_last_name or '',
@@ -3253,12 +3173,12 @@ class ReservationRoomDetailAPIView(APIView):
                 raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
             
             hotel = res_room.room.hotel
-            # محاسبه مجدد قیمت‌ها برای اطمینان از صحت
             res_room.calculate_room_prices()
             res_room.calculate_half_day_prices()
-            # تنظیم قیمت نیم‌شارژ بر اساس پشتیبانی هتل
-            half_day_in_price = int(res_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge and res_room.half_day_in_selected else 0
-            half_day_out_price = int(res_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge and res_room.half_day_out_selected else 0
+
+            # تنظیم نیم‌شارژ بر اساس پشتیبانی هتل و قیمت واقعی
+            half_day_in_price = int(res_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge else 0
+            half_day_out_price = int(res_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge else 0
 
             room_data = {
                 "id": res_room.room.id if res_room.room else None,
@@ -3274,11 +3194,11 @@ class ReservationRoomDetailAPIView(APIView):
                 },
                 "half_charges": {
                     "enter": {
-                        "enabled": hotel.has_check_in_half_day_charge and res_room.half_day_in_selected,
+                        "enabled": hotel.has_check_in_half_day_charge,
                         "price": half_day_in_price
                     },
                     "exit": {
-                        "enabled": hotel.has_check_out_half_day_charge and res_room.half_day_out_selected,
+                        "enabled": hotel.has_check_out_half_day_charge,
                         "price": half_day_out_price
                     }
                 }
@@ -3311,107 +3231,19 @@ class ReservationRoomDetailAPIView(APIView):
         - `reserver`: اطلاعات رزروکننده شامل نام، نام خانوادگی، شماره موبایل، و کد ملی
         - `rooms`: لیستی از اتاق‌ها با اطلاعات مسافران و نیم‌شارژها
         """,
-        tags=["reservation-api"],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'reserver': openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام رزروکننده', example='علی'),
-                        'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی رزروکننده', example='احمدی'),
-                        'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456789'),
-                        'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567890')
-                    }
-                ),
-                'rooms': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(
-                        type=openapi.TYPE_OBJECT,
-                        properties={
-                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه اتاق', example=1),
-                            'passengers': openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'main_passenger': openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='علی'),
-                                            'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='احمدی'),
-                                            'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456789'),
-                                            'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567890')
-                                        }
-                                    ),
-                                    'other_passengers': openapi.Schema(
-                                        type=openapi.TYPE_ARRAY,
-                                        items=openapi.Schema(
-                                            type=openapi.TYPE_OBJECT,
-                                            properties={
-                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='رضا'),
-                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='رضایی'),
-                                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456788'),
-                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567891')
-                                            }
-                                        )
-                                    ),
-                                    'extra_capacity_passengers': openapi.Schema(
-                                        type=openapi.TYPE_ARRAY,
-                                        items=openapi.Schema(
-                                            type=openapi.TYPE_OBJECT,
-                                            properties={
-                                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام', example='مریم'),
-                                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام خانوادگی', example='محمدی'),
-                                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره موبایل', example='09123456787'),
-                                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد ملی', example='1234567892')
-                                            }
-                                        )
-                                    )
-                                }
-                            ),
-                            'half_charges': openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'enter': openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ ورود توسط هتل', example=True),
-                                            'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ ورود', example=200000)
-                                        }
-                                    ),
-                                    'exit': openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=False),
-                                            'price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت نیم‌شارژ خروج', example=0)
-                                        }
-                                    )
-                                }
-                            ),
-                            'extra_capacity_price': openapi.Schema(type=openapi.TYPE_INTEGER, description='قیمت هر نفر اضافه', example=500000),
-                            'discount_on_purchase': openapi.Schema(type=openapi.TYPE_INTEGER, description='تخفیف ثابت اتاق', example=100000)
-                        }
-                    )
-                )
-            }
-        ),
-        responses={
-            200: openapi.Response(description="رزرو با موفقیت بروزرسانی شد."),
-            400: openapi.Response(description="خطا در ورودی‌ها یا اعتبارسنجی."),
-            403: openapi.Response(description="دسترسی غیرمجاز."),
-            404: openapi.Response(description="رزرو با کد پیگیری داده‌شده یافت نشد.")
-        }
+        tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
         with transaction.atomic():
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
             if reservation.buyer != request.user:
                 raise ValidationError("شما به این رزرو دسترسی ندارید.")
-            
-            data = request.data
-            if not isinstance(data, dict) or 'reserver' not in data or 'rooms' not in data:
-                return Response({'detail': 'فیلدهای reserver و rooms الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            reserver_data = data['reserver']
+            data = request.data
+            reserver_data = data.get('reserver', {})
+            rooms_data = data.get('rooms', [])
+
+            # اعتبارسنجی رزروکننده
             for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
                 if field not in reserver_data or not reserver_data[field]:
                     return Response({'detail': f'فیلد {field} برای رزروکننده الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3422,28 +3254,23 @@ class ReservationRoomDetailAPIView(APIView):
             except ValidationError as e:
                 return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            rooms_data = data.get('rooms', [])
-            if not rooms_data:
-                return Response({'detail': 'حداقل یک اتاق باید مشخص شود.'}, status=status.HTTP_400_BAD_REQUEST)
-
+            # اعتبارسنجی اتاق‌ها و مسافران
             reservation_room_ids = [r.room.id for r in reservation.reservation_rooms.all() if r.room]
+            passenger_national_codes = []
             for room_entry in rooms_data:
                 if room_entry['id'] not in reservation_room_ids:
                     return Response({'detail': f'اتاق {room_entry["id"]} به این رزرو تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            passenger_national_codes = []
-            for room_data in rooms_data:
-                passengers = room_data.get('passengers', {})
+                passengers = room_entry.get('passengers', {})
                 main_passenger = passengers.get('main_passenger', {})
-
                 for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
                     if field not in main_passenger or not main_passenger[field]:
-                        return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                        return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
                 try:
                     validate_phone_number(main_passenger['phone_number'])
                     validate_national_code(main_passenger['national_code'])
                 except ValidationError as e:
-                    return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
                 if main_passenger['national_code'] in passenger_national_codes:
                     return Response({'detail': f'کد ملی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3452,69 +3279,50 @@ class ReservationRoomDetailAPIView(APIView):
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     for passenger in passengers.get(p_type, []):
                         if not passenger.get('first_name') or not passenger.get('last_name'):
-                            return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_data["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                            return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
                         if passenger.get('phone_number'):
                             try:
                                 validate_phone_number(passenger['phone_number'])
                             except ValidationError as e:
-                                return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                         if passenger.get('national_code'):
                             try:
                                 validate_national_code(passenger['national_code'])
                             except ValidationError as e:
-                                return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_data["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                             if passenger['national_code'] in passenger_national_codes:
                                 return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
                             passenger_national_codes.append(passenger['national_code'])
 
-                total_passengers = 1 + len(passengers.get('other_passengers', [])) + len(passengers.get('extra_capacity_passengers', []))
-                if total_passengers > (int(room_data.get('capacity', 0)) + int(room_data.get('extra_capacity', 0))):
-                    return Response({'detail': f'تعداد مسافران در اتاق {room_data["id"]} از ظرفیت مجاز بیشتر است.'}, status=status.HTTP_400_BAD_REQUEST)
-
                 # اعتبارسنجی نیم‌شارژ
-                half_charges = room_data.get('half_charges', {})
-                res_room = reservation.reservation_rooms.filter(room_id=room_data['id']).first()
-                if not res_room or not res_room.room or not res_room.room.hotel:
-                    return Response({'detail': f'اطلاعات هتل برای اتاق {room_data["id"]} یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
-                
-                hotel = res_room.room.hotel
-                for charge_type in ['enter', 'exit']:
-                    charge = half_charges.get(charge_type, {})
-                    enabled = charge.get('enabled', False)
-                    price = int(charge.get('price', 0))
-
-                    is_half_charge_supported = (
-                        hotel.has_check_in_half_day_charge if charge_type == 'enter' 
-                        else hotel.has_check_out_half_day_charge
-                    )
-                    if enabled and not is_half_charge_supported:
-                        return Response(
-                            {'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_data["id"]}).'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    if not is_half_charge_supported:
-                        # اگر هتل پشتیبانی نکنه، قیمت صفر و enabled غیرفعال
-                        charge['enabled'] = False
-                        charge['price'] = 0
-                    elif enabled and price <= 0:
-                        # اگر فعال باشه و قیمت نامعتبر باشه، محاسبه مجدد
-                        res_room.calculate_room_prices()
-                        res_room.calculate_half_day_prices()
-                        default_price = res_room.half_day_in_price if charge_type == 'enter' else res_room.half_day_out_price
-                        charge['price'] = int(default_price) if default_price > 0 else 0
+                res_room = reservation.reservation_rooms.filter(room_id=room_entry['id']).first()
+                hotel = res_room.room.hotel if res_room and res_room.room else None
+                if hotel:
+                    half_charges = room_entry.get('half_charges', {})
+                    for charge_type in ['enter', 'exit']:
+                        charge = half_charges.get(charge_type, {})
+                        enabled = charge.get('enabled', False)
+                        price = int(charge.get('price', 0))
+                        is_half_charge_supported = hotel.has_check_in_half_day_charge if charge_type == 'enter' else hotel.has_check_out_half_day_charge
+                        if enabled and not is_half_charge_supported:
+                            return Response({'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                        if not is_half_charge_supported:
+                            charge['enabled'] = False
+                            charge['price'] = 0
+                        elif enabled and price <= 0:
+                            res_room.calculate_half_day_prices()
+                            default_price = res_room.half_day_in_price if charge_type == 'enter' else res_room.half_day_out_price
+                            charge['price'] = int(default_price) if default_price > 0 else 0
 
             # ذخیره اطلاعات رزروکننده
             reservation.reserver_first_name = reserver_data['first_name']
             reservation.reserver_last_name = reserver_data['last_name']
             reservation.reserver_phone_number = reserver_data['phone_number']
             reservation.reserver_national_code = reserver_data['national_code']
-            reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
+            reservation.save(update_fields=['reserver_first_name','reserver_last_name','reserver_phone_number','reserver_national_code'])
 
             # ذخیره اطلاعات اتاق‌ها و مسافران
             res_rooms_list = list(reservation.reservation_rooms.all())
-            if len(rooms_data) != len(res_rooms_list):
-                return Response({'detail': 'تعداد اتاق‌های ورودی با تعداد اتاق‌های ذخیره‌شده مطابقت ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
-
             for room_data, res_room in zip(rooms_data, res_rooms_list):
                 passengers_data = room_data.get('passengers', {})
                 half_charges = room_data.get('half_charges', {})
@@ -3527,15 +3335,10 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.fixed_discount = int(room_data.get('discount_on_purchase', 0))
                 res_room.calculate_room_prices()
                 res_room.calculate_half_day_prices()
-                res_room.save(update_fields=[
-                    'half_day_in_selected', 'half_day_out_selected',
-                    'half_day_in_price', 'half_day_out_price',
-                    'extra_passenger_price', 'fixed_discount',
-                    'price_per_night', 'subtotal'
-                ])
+                res_room.save(update_fields=['half_day_in_selected','half_day_out_selected','half_day_in_price','half_day_out_price','extra_passenger_price','fixed_discount','price_per_night','subtotal'])
 
                 res_room.passengers.all().delete()
-                main_passenger = passengers_data['main_passenger']
+                main_passenger = passengers_data.get('main_passenger', {})
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
                     passenger_type='primary',
@@ -3546,7 +3349,7 @@ class ReservationRoomDetailAPIView(APIView):
                     is_primary=True
                 )
 
-                for p_type in ['other_passengers', 'extra_capacity_passengers']:
+                for p_type in ['other_passengers','extra_capacity_passengers']:
                     passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
                     for passenger in passengers_data.get(p_type, []):
                         ReservationRoomPassenger.objects.create(
@@ -3570,11 +3373,7 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.total_half_day_charge = total_half
             reservation.final_price = final_price
             reservation._skip_price_calculation = True
-            reservation.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount',
-                'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
-                'total_half_day_charge', 'final_price'
-            ])
+            reservation.save(update_fields=['total_price','total_extra_passenger_charge','discount','room_fixed_discount','half_day_in_charge','half_day_out_charge','total_half_day_charge','final_price'])
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
     
