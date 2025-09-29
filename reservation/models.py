@@ -1676,7 +1676,6 @@ class ReservationRoom(models.Model):
     def calculate_half_day_prices(self):
         """
         محاسبه قیمت‌های نیم‌شارژ ورود و خروج بر اساس تنظیمات هتل و انتخاب کاربر.
-        اگر هتل نیم‌شارژ را پشتیبانی نکند، انتخاب کاربر نادیده گرفته می‌شود و قیمت صفر می‌شود.
         """
         if not self.room_id or not self.reservation_id:
             logger.warning(f"اتاق یا رزرو برای {self} وجود ندارد. نیم‌شارژ صفر تنظیم شد.")
@@ -1698,25 +1697,31 @@ class ReservationRoom(models.Model):
         half_in = Decimal('0')
         half_out = Decimal('0')
 
-        # بررسی پشتیبانی نیم‌شارژ ورود
+        # محاسبه قیمت نیم‌شارژ ورود
         if self.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
             if self.price_per_night <= 0:
-                logger.warning(f"price_per_night برای {self} صفر یا منفی است. نیم‌شارژ ورود صفر تنظیم شد.")
-            else:
+                logger.warning(f"price_per_night برای {self} صفر یا منفی است. محاسبه مجدد price_per_night...")
+                self.calculate_room_prices()  # محاسبه مجدد قیمت شب اگر صفر باشد
+            if self.price_per_night > 0:
                 half_in = (self.price_per_night / Decimal('2')) * self.quantity
                 logger.debug(f"نیم‌شارژ ورود برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_in={half_in}")
+            else:
+                logger.error(f"پس از محاسبه مجدد، price_per_night همچنان صفر است برای {self}.")
         else:
             self.half_day_in_selected = False
             half_in = Decimal('0')
             logger.debug(f"نیم‌شارژ ورود برای {self} غیرفعال شد: hotel_has_check_in={getattr(hotel, 'has_check_in_half_day_charge', False)}")
 
-        # بررسی پشتیبانی نیم‌شارژ خروج
+        # محاسبه قیمت نیم‌شارژ خروج
         if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
             if self.price_per_night <= 0:
-                logger.warning(f"price_per_night برای {self} صفر یا منفی است. نیم‌شارژ خروج صفر تنظیم شد.")
-            else:
+                logger.warning(f"price_per_night برای {self} صفر یا منفی است. محاسبه مجدد price_per_night...")
+                self.calculate_room_prices()  # محاسبه مجدد قیمت شب اگر صفر باشد
+            if self.price_per_night > 0:
                 half_out = (self.price_per_night / Decimal('2')) * self.quantity
                 logger.debug(f"نیم‌شارژ خروج برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_out={half_out}")
+            else:
+                logger.error(f"پس از محاسبه مجدد، price_per_night همچنان صفر است برای {self}.")
         else:
             self.half_day_out_selected = False
             half_out = Decimal('0')
@@ -1840,7 +1845,6 @@ class ReservationRoom(models.Model):
         self.calculate_half_day_prices()
         self.calculate_room_prices()
         super().save(*args, **kwargs)
-    
 
 
 # ---------------- ReservationRoomPassenger ----------------
