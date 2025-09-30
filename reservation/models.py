@@ -1570,7 +1570,6 @@ class ReservationRoom(models.Model):
         half_in = Decimal('0')
         half_out = Decimal('0')
 
-        # همیشه قیمت نیم‌شارژ محاسبه شود اگر هتل پشتیبانی کند
         if getattr(hotel, 'has_check_in_half_day_charge', False):
             half_in = (self.price_per_night / Decimal('2')) * self.quantity
             logger.debug(f"نیم‌شارژ ورود برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_in={half_in}")
@@ -1587,6 +1586,13 @@ class ReservationRoom(models.Model):
 
         self.half_day_in_price = half_in.quantize(Decimal('1'), rounding=ROUND_UP)
         self.half_day_out_price = half_out.quantize(Decimal('1'), rounding=ROUND_UP)
+
+    def update_passenger_counts(self):
+        """به‌روزرسانی تعداد مسافران اصلی و اضافه."""
+        self.primary_passengers_count = self.passengers.filter(passenger_type='primary').count()
+        self.extra_passengers_count = self.passengers.filter(passenger_type='extra').count()
+        self.save(update_fields=['primary_passengers_count', 'extra_passengers_count'])
+        logger.debug(f"به‌روزرسانی تعداد مسافران برای {self}: primary={self.primary_passengers_count}, extra={self.extra_passengers_count}")
 
     def save(self, *args, **kwargs):
         """ذخیره مدل با محاسبه قیمت‌ها و بررسی نیم‌شارژها."""
@@ -1613,7 +1619,6 @@ class ReservationRoom(models.Model):
                 self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
                 logger.debug(f"قیمت نفر اضافه برای {self} از RoomDatePrice: {self.extra_passenger_price}")
 
-        # تنظیم نیم‌شارژها بر اساس پشتیبانی هتل
         if self.room and self.room.hotel:
             hotel = self.room.hotel
             if not getattr(hotel, 'has_check_in_half_day_charge', False):
@@ -1627,6 +1632,7 @@ class ReservationRoom(models.Model):
         self.calculate_room_prices()
         self.calculate_half_day_prices()
         super().save(*args, **kwargs)
+
 
 # ---------------- ReservationRoomPassenger ----------------
 def validate_national_code(value):
