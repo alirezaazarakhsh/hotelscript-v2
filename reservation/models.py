@@ -1416,180 +1416,6 @@ class Reservationhotel(models.Model):
         super().save(*args, **kwargs)
 
 # ---------------- ReservationRoom ----------------
-class ReservationRoom(models.Model):
-    reservation = models.ForeignKey(
-        'Reservationhotel',
-        on_delete=models.CASCADE,
-        verbose_name='رزرو',
-        related_name='reservation_rooms'
-    )
-    room = models.ForeignKey(
-        'Room',
-        on_delete=models.CASCADE,
-        verbose_name='اتاق',
-        related_name='reservation_rooms'
-    )
-    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
-    price_per_night = models.DecimalField(
-        'قیمت هر شب',
-        max_digits=12,
-        decimal_places=0,
-        validators=[MinValueValidator(0)],
-        default=Decimal('0')
-    )
-    extra_passenger_price = models.DecimalField(
-        'قیمت هر نفر اضافه',
-        max_digits=12,
-        decimal_places=0,
-        validators=[MinValueValidator(0)],
-        default=Decimal('0'),
-        blank=True,
-        null=True,
-        help_text='قیمت هر نفر اضافه (قابل تغییر؛ پیش‌فرض از RoomDatePrice گرفته می‌شود)'
-    )
-    fixed_discount = models.DecimalField(
-        'تخفیف ثابت',
-        max_digits=12,
-        decimal_places=0,
-        validators=[MinValueValidator(0)],
-        default=Decimal('0'),
-        blank=True,
-        null=True,
-        help_text='تخفیف ثابت برای این اتاق (از RoomDatePrice گرفته می‌شود)'
-    )
-    subtotal = models.PositiveBigIntegerField(
-        verbose_name='مجموع قیمت (تومان)',
-        null=False,
-        blank=False,
-        default=0
-    )
-    primary_passengers_count = models.PositiveIntegerField(default=0, verbose_name='تعداد نفر اصلی')
-    extra_passengers_count = models.PositiveIntegerField(default=0, verbose_name='تعداد نفر اضافه')
-    half_day_in_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ ورود فعال است؟')
-    half_day_out_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ خروج فعال است؟')
-    half_day_in_price = models.DecimalField('قیمت نیم‌شارژ ورود', max_digits=12, decimal_places=0, default=Decimal('0'), validators=[MinValueValidator(0)])
-    half_day_out_price = models.DecimalField('قیمت نیم‌شارژ خروج', max_digits=12, decimal_places=0, default=Decimal('0'), validators=[MinValueValidator(0)])
-
-    class Meta:
-        verbose_name = 'اتاق رزرو شده'
-        verbose_name_plural = 'اتاق‌های رزرو شده'
-
-    def __str__(self):
-        room_title = self.room.title if self.room_id else "اتاق نامشخص"
-        reservation_code = self.reservation.tracking_code if self.reservation_id else "رزرو نامشخص"
-        return f'{room_title} (تعداد: {self.quantity}) در رزرو {reservation_code}'
-
-    def calculate_half_day_prices(self):
-        if not self.room_id:
-            self.half_day_in_price = Decimal('0')
-            self.half_day_out_price = Decimal('0')
-            return
-
-        hotel = self.room.hotel
-        half_in = Decimal('0')
-        half_out = Decimal('0')
-
-        if self.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
-            half_in = (self.price_per_night / Decimal('2')) * self.quantity
-        if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
-            half_out = (self.price_per_night / Decimal('2')) * self.quantity
-
-        self.half_day_in_price = half_in
-        self.half_day_out_price = half_out
-
-    def calculate_room_prices(self):
-        if not self.room_id or not self.reservation_id:
-            self.price_per_night = Decimal('0')
-            self.fixed_discount = Decimal('0')
-            self.subtotal = 0
-            return
-
-        nights = self.reservation.nights_count
-        if nights <= 0:
-            self.price_per_night = Decimal('0')
-            self.fixed_discount = Decimal('0')
-            self.subtotal = 0
-            return
-
-        check_in_date_std = (
-            self.reservation.check_in_date.togregorian()
-            if isinstance(self.reservation.check_in_date, jdatetime.date)
-            else self.reservation.check_in_date
-        )
-        user_level = getattr(getattr(self.reservation.buyer, 'natural_profile', None), 'level', None)
-
-        price_obj = (
-            self.room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level=user_level
-            ).first()
-            or self.room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level__isnull=True
-            ).first()
-        )
-
-        if not price_obj:
-            self.price_per_night = Decimal('0')
-            self.fixed_discount = Decimal('0')
-            self.subtotal = 0
-            return
-
-        self.price_per_night = Decimal(price_obj.price)
-        self.fixed_discount = Decimal('0')  
-
-        if price_obj.discount_type != 'none':
-            if price_obj.discount_type == 'percentage' and price_obj.discount_date:
-                discount_date_std = (
-                    price_obj.discount_date.togregorian()
-                    if isinstance(price_obj.discount_date, jdatetime.date)
-                    else price_obj.discount_date
-                )
-                if check_in_date_std <= discount_date_std:
-                    discount_percentage = Decimal(price_obj.discount_value) / Decimal('100')
-                    self.price_per_night = self.price_per_night * (1 - discount_percentage)
-            elif price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                self.fixed_discount = Decimal(price_obj.discount_value) * self.quantity  
-
-        room_total = self.price_per_night * self.quantity * nights
-        self.subtotal = int(room_total.quantize(Decimal('1'), rounding=ROUND_UP))
-
-    def update_passenger_counts(self):
-        self.primary_passengers_count = self.passengers.filter(passenger_type='primary').count()
-        self.extra_passengers_count = self.passengers.filter(passenger_type='extra').count()
-        self.save(update_fields=['primary_passengers_count', 'extra_passengers_count'])
-
-    def save(self, *args, **kwargs):
-        if not self.extra_passenger_price and self.room:
-            check_in_date_std = (
-                self.reservation.check_in_date.togregorian()
-                if isinstance(self.reservation.check_in_date, jdatetime.date)
-                else self.reservation.check_in_date
-            )
-            user_level = getattr(getattr(self.reservation.buyer, 'natural_profile', None), 'level', None)
-            price_obj = (
-                self.room.date_prices.filter(
-                    start_date__lte=check_in_date_std,
-                    end_date__gte=check_in_date_std,
-                    user_level=user_level
-                ).first()
-                or self.room.date_prices.filter(
-                    start_date__lte=check_in_date_std,
-                    end_date__gte=check_in_date_std,
-                    user_level__isnull=True
-                ).first()
-            )
-            if price_obj:
-                self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
-
-        self.calculate_half_day_prices()
-        self.calculate_room_prices()
-        super().save(*args, **kwargs)
-        
-        
-# ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
 class ReservationRoom(models.Model):
@@ -1647,8 +1473,8 @@ class ReservationRoom(models.Model):
         default=0,
         verbose_name='تعداد نفر اضافه'
     )
-    half_day_in_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ ورود فعال است؟')
-    half_day_out_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ خروج فعال است؟')
+    half_day_in_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ ورود انتخاب شده؟')
+    half_day_out_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ خروج انتخاب شده؟')
     half_day_in_price = models.DecimalField(
         'قیمت نیم‌شارژ ورود',
         max_digits=12,
@@ -1726,8 +1552,6 @@ class ReservationRoom(models.Model):
         """محاسبه قیمت‌های نیم‌شارژ ورود و خروج."""
         if not self.room_id or not self.reservation_id:
             logger.warning(f"اتاق یا رزرو برای {self} وجود ندارد. نیم‌شارژ صفر تنظیم شد.")
-            self.half_day_in_selected = False
-            self.half_day_out_selected = False
             self.half_day_in_price = Decimal('0')
             self.half_day_out_price = Decimal('0')
             return
@@ -1735,13 +1559,10 @@ class ReservationRoom(models.Model):
         hotel = self.room.hotel
         if not hotel:
             logger.error(f"هتل برای اتاق {self.room.title} یافت نشد.")
-            self.half_day_in_selected = False
-            self.half_day_out_selected = False
             self.half_day_in_price = Decimal('0')
             self.half_day_out_price = Decimal('0')
             return
 
-        # اطمینان از محاسبه price_per_night
         if self.price_per_night <= 0:
             logger.warning(f"price_per_night برای {self} صفر یا منفی است. محاسبه مجدد...")
             self.calculate_room_prices()
@@ -1749,35 +1570,23 @@ class ReservationRoom(models.Model):
         half_in = Decimal('0')
         half_out = Decimal('0')
 
-        if self.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
-            if self.price_per_night <= 0:
-                logger.error(f"price_per_night پس از محاسبه همچنان صفر است برای {self}. نیم‌شارژ صفر باقی می‌ماند.")
-            else:
-                half_in = (self.price_per_night / Decimal('2')) * self.quantity
-                logger.debug(f"نیم‌شارژ ورود برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_in={half_in}")
+        # همیشه قیمت نیم‌شارژ محاسبه شود اگر هتل پشتیبانی کند
+        if getattr(hotel, 'has_check_in_half_day_charge', False):
+            half_in = (self.price_per_night / Decimal('2')) * self.quantity
+            logger.debug(f"نیم‌شارژ ورود برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_in={half_in}")
         else:
             self.half_day_in_selected = False
             logger.debug(f"نیم‌شارژ ورود برای {self} غیرفعال شد: hotel_has_check_in={getattr(hotel, 'has_check_in_half_day_charge', False)}")
 
-        if self.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
-            if self.price_per_night <= 0:
-                logger.error(f"price_per_night پس از محاسبه همچنان صفر است برای {self}. نیم‌شارژ صفر باقی می‌ماند.")
-            else:
-                half_out = (self.price_per_night / Decimal('2')) * self.quantity
-                logger.debug(f"نیم‌شارژ خروج برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_out={half_out}")
+        if getattr(hotel, 'has_check_out_half_day_charge', False):
+            half_out = (self.price_per_night / Decimal('2')) * self.quantity
+            logger.debug(f"نیم‌شارژ خروج برای {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, half_out={half_out}")
         else:
             self.half_day_out_selected = False
             logger.debug(f"نیم‌شارژ خروج برای {self} غیرفعال شد: hotel_has_check_out={getattr(hotel, 'has_check_out_half_day_charge', False)}")
 
         self.half_day_in_price = half_in.quantize(Decimal('1'), rounding=ROUND_UP)
         self.half_day_out_price = half_out.quantize(Decimal('1'), rounding=ROUND_UP)
-
-    def update_passenger_counts(self):
-        """به‌روزرسانی تعداد مسافران اصلی و اضافه."""
-        self.primary_passengers_count = self.passengers.filter(passenger_type='primary').count()
-        self.extra_passengers_count = self.passengers.filter(passenger_type='extra').count()
-        self.save(update_fields=['primary_passengers_count', 'extra_passengers_count'])
-        logger.debug(f"به‌روزرسانی تعداد مسافران برای {self}: primary={self.primary_passengers_count}, extra={self.extra_passengers_count}")
 
     def save(self, *args, **kwargs):
         """ذخیره مدل با محاسبه قیمت‌ها و بررسی نیم‌شارژها."""
@@ -1804,6 +1613,7 @@ class ReservationRoom(models.Model):
                 self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
                 logger.debug(f"قیمت نفر اضافه برای {self} از RoomDatePrice: {self.extra_passenger_price}")
 
+        # تنظیم نیم‌شارژها بر اساس پشتیبانی هتل
         if self.room and self.room.hotel:
             hotel = self.room.hotel
             if not getattr(hotel, 'has_check_in_half_day_charge', False):

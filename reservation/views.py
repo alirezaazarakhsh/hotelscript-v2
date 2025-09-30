@@ -3082,19 +3082,6 @@ class ReservationDescriptionAPIView(APIView):
 
 
 
-import logging
-import re
-from django.shortcuts import get_object_or_404
-from django.core.exceptions import ValidationError
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-from django.db import transaction
-from rest_framework.exceptions import NotFound
-from .models import Reservationhotel, ReservationRoomPassenger
 
 logger = logging.getLogger(__name__)
 
