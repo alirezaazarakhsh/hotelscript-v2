@@ -3271,7 +3271,7 @@ class ReservationRoomDetailAPIView(APIView):
                             except ValidationError as e:
                                 return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                             if passenger['national_code'] in passenger_national_codes:
-                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکر confirmer است.'}, status=status.HTTP_400_BAD_REQUEST)
                             passenger_national_codes.append(passenger['national_code'])
 
                 # اعتبارسنجی و تنظیم نیم‌شارژها
@@ -3285,14 +3285,11 @@ class ReservationRoomDetailAPIView(APIView):
                         is_half_charge_supported = hotel.has_check_in_half_day_charge if charge_type == 'enter' else hotel.has_check_out_half_day_charge
                         if enabled and not is_half_charge_supported:
                             return Response({'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
-                        if not is_half_charge_supported:
-                            charge['enabled'] = False
-                            charge['price'] = 0
+                        # تنظیم مقدار enabled
+                        if charge_type == 'enter':
+                            res_room.half_day_in_selected = enabled and is_half_charge_supported
                         else:
-                            # محاسبه خودکار قیمت نیم‌شارژ
-                            res_room.calculate_half_day_prices()
-                            default_price = res_room.half_day_in_price if charge_type == 'enter' else res_room.half_day_out_price
-                            charge['price'] = int(default_price) if default_price > 0 else 0
+                            res_room.half_day_out_selected = enabled and is_half_charge_supported
 
             # ذخیره اطلاعات رزروکننده
             reservation.reserver_first_name = reserver_data['first_name']
@@ -3307,15 +3304,15 @@ class ReservationRoomDetailAPIView(APIView):
                 passengers_data = room_data.get('passengers', {})
                 half_charges = room_data.get('half_charges', {})
 
-                # تنظیم نیم‌شارژها بر اساس انتخاب کاربر
-                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False)
-                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False)
+                # تنظیم نیم‌شارژها
+                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', res_room.half_day_in_selected) and hotel.has_check_in_half_day_charge
+                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', res_room.half_day_out_selected) and hotel.has_check_out_half_day_charge
+                res_room.calculate_half_day_prices()  # محاسبه مجدد قیمت‌های نیم‌شارژ
                 res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', res_room.half_day_in_price))
                 res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', res_room.half_day_out_price))
                 res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', res_room.extra_passenger_price or 0))
                 res_room.fixed_discount = int(room_data.get('discount_on_purchase', res_room.fixed_discount or 0))
                 res_room.calculate_room_prices()
-                res_room.calculate_half_day_prices()
                 res_room.save(update_fields=[
                     'half_day_in_selected', 'half_day_out_selected',
                     'half_day_in_price', 'half_day_out_price',
@@ -3366,7 +3363,6 @@ class ReservationRoomDetailAPIView(APIView):
             ])
 
         return Response({'detail': 'رزرو با موفقیت بروزرسانی شد.'}, status=status.HTTP_200_OK)
-    
     
     
     
