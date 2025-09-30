@@ -686,7 +686,20 @@ class ReservationRoomInline(NestedTabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
-        # اطمینان از رندر صحیح فیلدهای بولین به‌عنوان چک‌باکس
+        # اطمینان از وجود فیلدهای half_day_in_selected و half_day_out_selected و تنظیم ویجت
+        if 'half_day_in_selected' not in formset.form.base_fields:
+            formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
+                label=_('نیم‌شارژ ورود'),
+                required=False,
+                initial=False
+            )
+        if 'half_day_out_selected' not in formset.form.base_fields:
+            formset.form.base_fields['half_day_out_selected'] = forms.BooleanField(
+                label=_('نیم‌شارژ خروج'),
+                required=False,
+                initial=False
+            )
+        # تنظیم ویجت برای رندر به‌عنوان چک‌باکس
         formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
         formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
         return formset
@@ -857,3 +870,12 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     'room_fixed_discount', 'half_day_in_charge',
                     'half_day_out_charge', 'total_half_day_charge', 'final_price'
                 ])
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj and obj.reservation_rooms.exists():
+            for res_room in obj.reservation_rooms.all():
+                if hasattr(res_room, 'calculate_half_day_prices'):
+                    res_room.calculate_half_day_prices()
+                    res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
+        return form
