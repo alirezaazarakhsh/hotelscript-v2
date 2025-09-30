@@ -636,7 +636,7 @@ class ReservationRoomPassengerInline(NestedTabularInline):
     extra = 8
     max_num = 8
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    can_delete = False
+    can_delete = True
     autocomplete_fields = ()
 
     def get_max_num(self, request, obj=None, **kwargs):
@@ -656,10 +656,10 @@ class ReservationRoomInline(NestedTabularInline):
         'subtotal',
         'primary_passengers_count',
         'extra_passengers_count',
+        'half_day_in_selected',
+        'half_day_out_selected',
         'half_day_in_price',
         'half_day_out_price',
-        # 'half_day_in_selected', # غیرفعال شده
-        # 'half_day_out_selected', # غیرفعال شده
     )
     readonly_fields = (
         'primary_passengers_count',
@@ -668,7 +668,7 @@ class ReservationRoomInline(NestedTabularInline):
         'half_day_out_price',
     )
     show_change_link = False
-    can_delete = False
+    can_delete = True
     autocomplete_fields = ('room',)
     inlines = [ReservationRoomPassengerInline]
 
@@ -690,8 +690,21 @@ class ReservationRoomInline(NestedTabularInline):
         return formset
 
     def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        # نمایش فیلدهای نیم‌شارژ فقط برای اطلاع (کاربر انتخاب می‌کند)
+        fields = list(super().get_fields(request, obj))
+        if obj and obj.reservation_rooms.exists():
+            try:
+                hotel = obj.reservation_rooms.first().room.hotel
+                if not getattr(hotel, 'has_check_in_half_day_charge', False):
+                    if 'half_day_in_selected' in fields:
+                        fields.remove('half_day_in_selected')
+                if not getattr(hotel, 'has_check_out_half_day_charge', False):
+                    if 'half_day_out_selected' in fields:
+                        fields.remove('half_day_out_selected')
+            except AttributeError:
+                if 'half_day_in_selected' in fields:
+                    fields.remove('half_day_in_selected')
+                if 'half_day_out_selected' in fields:
+                    fields.remove('half_day_out_selected')
         return fields
 
 @admin.register(Reservationhotel)
