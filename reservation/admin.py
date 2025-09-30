@@ -611,7 +611,6 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    # admin.py
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -687,6 +686,9 @@ class ReservationRoomInline(NestedTabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
+        # اطمینان از رندر صحیح فیلدهای بولین به‌عنوان چک‌باکس
+        formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
+        formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
         return formset
 
     def get_fields(self, request, obj=None):
