@@ -612,8 +612,6 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
 
-
-# ---------------- Reservationhotel Admin Form ----------------
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -633,7 +631,6 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
-# ---------------- Passenger Inline ----------------
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 8
@@ -647,7 +644,6 @@ class ReservationRoomPassengerInline(NestedTabularInline):
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
 
-# ---------------- Room Inline ----------------
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
@@ -662,8 +658,8 @@ class ReservationRoomInline(NestedTabularInline):
         'extra_passengers_count',
         'half_day_in_price',
         'half_day_out_price',
-        'half_day_in_selected',
-        'half_day_out_selected',
+        # 'half_day_in_selected', # غیرفعال شده
+        # 'half_day_out_selected', # غیرفعال شده
     )
     readonly_fields = (
         'primary_passengers_count',
@@ -695,18 +691,9 @@ class ReservationRoomInline(NestedTabularInline):
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
-        if obj and obj.reservation_rooms.exists():
-            try:
-                hotel = obj.reservation_rooms.first().room.hotel
-                if not getattr(hotel, 'has_check_in_half_day_charge', False):
-                    fields = [f for f in fields if f != 'half_day_in_selected']
-                if not getattr(hotel, 'has_check_out_half_day_charge', False):
-                    fields = [f for f in fields if f != 'half_day_out_selected']
-            except AttributeError:
-                fields = [f for f in fields if f not in ('half_day_in_selected', 'half_day_out_selected')]
+        # نمایش فیلدهای نیم‌شارژ فقط برای اطلاع (کاربر انتخاب می‌کند)
         return fields
 
-# ---------------- Reservationhotel Admin ----------------
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -759,14 +746,12 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
-    # ------------------ شماره موبایل buyer ------------------
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
         if obj.buyer:
             return getattr(obj.buyer, 'phone_number', '-')
         return "-"
 
-    # ----------------- نمایش تاریخ‌ها -----------------
     @admin.display(description=_('تاریخ ایجاد (شمسی)'))
     def created_jalali(self, obj):
         if obj.created_at:
@@ -791,10 +776,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     @admin.display(description=_('کل مهمان‌ها'))
     def total_guests_fa(self, obj):
-        # اگر اتاقی مسافر ندارد، نفرات باز باشد
         return obj.total_guests if obj.pk else 0
 
-    # ----------------- فرمت هزارگان برای قیمت -----------------
     @admin.display(description=_('مجموع قیمت'))
     def total_price_fa(self, obj):
         return "{:,}".format(obj.total_price) if obj.total_price else "-"
@@ -827,7 +810,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def final_price_fa(self, obj):
         return "{:,}".format(obj.final_price) if obj.final_price else "-"
 
-    # ----------------- save_model و save_related -----------------
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
