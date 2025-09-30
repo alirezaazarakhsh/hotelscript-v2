@@ -3083,6 +3083,7 @@ class ReservationDescriptionAPIView(APIView):
 
 
 
+# views.py
 logger = logging.getLogger(__name__)
 
 def validate_phone_number(value):
@@ -3271,7 +3272,7 @@ class ReservationRoomDetailAPIView(APIView):
                             except ValidationError as e:
                                 return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                             if passenger['national_code'] in passenger_national_codes:
-                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکر confirmer است.'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
                             passenger_national_codes.append(passenger['national_code'])
 
                 # اعتبارسنجی و تنظیم نیم‌شارژها

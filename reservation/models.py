@@ -1539,11 +1539,16 @@ class ReservationRoom(models.Model):
         if not price_obj:
             logger.warning(f"هیچ قیمت برای اتاق {self.room.title} در تاریخ {check_in_date_std} یافت نشد. استفاده از قیمت پیش‌فرض 1000000.")
             self.price_per_night = Decimal('1000000')  # مقدار پیش‌فرض برای تست
+            self.fixed_discount = Decimal('0')
         else:
             self.price_per_night = Decimal(price_obj.price)
-            logger.debug(f"قیمت هر شب برای {self} از RoomDatePrice: {self.price_per_night}")
+            # محاسبه تخفیف ثابت
+            if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                self.fixed_discount = Decimal(price_obj.discount_value)
+            else:
+                self.fixed_discount = Decimal('0')
+            logger.debug(f"قیمت هر شب برای {self} از RoomDatePrice: {self.price_per_night}, تخفیف ثابت: {self.fixed_discount}")
 
-        self.fixed_discount = Decimal('0')
         room_total = self.price_per_night * self.quantity * nights
         self.subtotal = int(room_total.quantize(Decimal('1'), rounding=ROUND_UP))
         logger.debug(f"محاسبه قیمت اتاق {self}: price_per_night={self.price_per_night}, quantity={self.quantity}, nights={nights}, subtotal={self.subtotal}")

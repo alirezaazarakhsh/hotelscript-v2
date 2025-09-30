@@ -611,7 +611,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-
+    # admin.py
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -830,6 +830,14 @@ class ReservationhotelAdmin(NestedModelAdmin):
         super().save_related(request, form, formsets, change)
         obj = form.instance
         if obj.reservation_rooms.exists():
+            for res_room in obj.reservation_rooms.all():
+                res_room.calculate_room_prices()
+                res_room.calculate_half_day_prices()
+                res_room.save(update_fields=[
+                    'price_per_night', 'subtotal', 'fixed_discount',
+                    'half_day_in_price', 'half_day_out_price',
+                    'half_day_in_selected', 'half_day_out_selected'
+                ])
             if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
                 total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
