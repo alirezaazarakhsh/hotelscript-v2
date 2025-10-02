@@ -5,8 +5,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from .consumer import MyConsumer
 
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core_app.settings')
-
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
  
 # application = get_asgi_application()
 
