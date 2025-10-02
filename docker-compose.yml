@@ -13,7 +13,7 @@ services:
       - "8000:8000"
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"  
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -24,8 +24,34 @@ services:
       MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
       ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,91.107.134.107"
       CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_network
+
+  channels_worker:
+    build: .
+    container_name: channels_worker
+    command: python manage.py runworker
+    volumes:
+      - /var/hotelscript-v2/media:/app/media
+      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
+      DB_ENGINE: "django.db.backends.postgresql"
+      DB_NAME: "safarname24"
+      DB_USER: "postgres"
+      DB_PASSWORD: "admin"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      MEDIA_ROOT: "/app/media"
+      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
     depends_on:
       - db
       - redis
@@ -104,7 +130,7 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -113,8 +139,8 @@ services:
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
       MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
     depends_on:
       - db
       - redis
@@ -130,7 +156,7 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -139,8 +165,8 @@ services:
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
       MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
     depends_on:
       - db
       - redis
