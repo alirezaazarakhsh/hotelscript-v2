@@ -82,3 +82,4 @@ urllib3==2.1.0
 vine==5.1.0
 wcwidth==0.2.13
 zarinpal==1.0.0
+daphne>=4.2.0
