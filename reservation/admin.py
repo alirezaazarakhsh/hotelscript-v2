@@ -610,7 +610,118 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-    
+ # Define ReservationhotelAdminForm first
+class ReservationhotelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Reservationhotel
+        fields = '__all__'
+
+    def clean_check_in_date(self):
+        check_in = self.cleaned_data['check_in_date']
+        today_j = jdatetime.date.today()
+        if check_in < today_j:
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        return check_in
+
+    def clean_check_out_date(self):
+        check_in = self.cleaned_data.get('check_in_date')
+        check_out = self.cleaned_data['check_out_date']
+        if check_in and check_out <= check_in:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+        return check_out
+
+# Define inlines
+class ReservationRoomPassengerInline(NestedTabularInline):
+    model = ReservationRoomPassenger
+    extra = 8
+    max_num = 8
+    fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
+    can_delete = True
+    autocomplete_fields = ()
+
+    def get_max_num(self, request, obj=None, **kwargs):
+        if obj and hasattr(obj, 'room') and obj.room:
+            return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
+        return self.max_num
+
+class ReservationRoomInline(NestedTabularInline):
+    model = ReservationRoom
+    extra = 3
+    max_num = 3
+    fields = (
+        'room',
+        'price_per_night',
+        'extra_passenger_price',
+        'fixed_discount',
+        'subtotal',
+        'primary_passengers_count',
+        'extra_passengers_count',
+        'half_day_in_selected',
+        'half_day_out_selected',
+        'half_day_in_price',
+        'half_day_out_price',
+    )
+    readonly_fields = (
+        'primary_passengers_count',
+        'extra_passengers_count',
+        'half_day_in_price',
+        'half_day_out_price',
+    )
+    show_change_link = False
+    can_delete = True
+    autocomplete_fields = ('room',)
+    inlines = [ReservationRoomPassengerInline]
+
+    def primary_passengers_count(self, obj):
+        if obj.room:
+            return obj.room.room_capacity
+        return 0
+    primary_passengers_count.short_description = _('تعداد نفر اصلی')
+
+    def extra_passengers_count(self, obj):
+        if obj.room:
+            return obj.room.extra_capacity
+        return 0
+    extra_passengers_count.short_description = _('تعداد نفر اضافه')
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['room'].required = False
+        if 'half_day_in_selected' not in formset.form.base_fields:
+            formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
+                label=_('نیم‌شارژ ورود'),
+                required=False,
+                initial=False
+            )
+        if 'half_day_out_selected' not in formset.form.base_fields:
+            formset.form.base_fields['half_day_out_selected'] = forms.BooleanField(
+                label=_('نیم‌شارژ خروج'),
+                required=False,
+                initial=False
+            )
+        formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
+        formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
+        return formset
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if obj and obj.reservation_rooms.exists():
+            try:
+                hotel = obj.reservation_rooms.first().room.hotel
+                if not getattr(hotel, 'has_check_in_half_day_charge', False):
+                    if 'half_day_in_selected' in fields:
+                        fields.remove('half_day_in_selected')
+                if not getattr(hotel, 'has_check_out_half_day_charge', False):
+                    if 'half_day_out_selected' in fields:
+                        fields.remove('half_day_out_selected')
+            except AttributeError:
+                if 'half_day_in_selected' in fields:
+                    fields.remove('half_day_in_selected')
+                if 'half_day_out_selected' in fields:
+                    fields.remove('half_day_out_selected')
+        return fields
+
+# Define ReservationhotelAdmin
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -729,7 +840,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        # Recalculate prices after save if discount has changed
         if 'discount' in form.changed_data or not obj.discount:
             total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
             obj.discount = code_discount
@@ -781,112 +891,3 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     res_room.calculate_half_day_prices()
                     res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
         return form
-
-class ReservationRoomPassengerInline(NestedTabularInline):
-    model = ReservationRoomPassenger
-    extra = 8
-    max_num = 8
-    fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
-    can_delete = True
-    autocomplete_fields = ()
-
-    def get_max_num(self, request, obj=None, **kwargs):
-        if obj and hasattr(obj, 'room') and obj.room:
-            return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
-        return self.max_num
-
-class ReservationRoomInline(NestedTabularInline):
-    model = ReservationRoom
-    extra = 3
-    max_num = 3
-    fields = (
-        'room',
-        'price_per_night',
-        'extra_passenger_price',
-        'fixed_discount',
-        'subtotal',
-        'primary_passengers_count',
-        'extra_passengers_count',
-        'half_day_in_selected',
-        'half_day_out_selected',
-        'half_day_in_price',
-        'half_day_out_price',
-    )
-    readonly_fields = (
-        'primary_passengers_count',
-        'extra_passengers_count',
-        'half_day_in_price',
-        'half_day_out_price',
-    )
-    show_change_link = False
-    can_delete = True
-    autocomplete_fields = ('room',)
-    inlines = [ReservationRoomPassengerInline]
-
-    def primary_passengers_count(self, obj):
-        if obj.room:
-            return obj.room.room_capacity
-        return 0
-    primary_passengers_count.short_description = _('تعداد نفر اصلی')
-
-    def extra_passengers_count(self, obj):
-        if obj.room:
-            return obj.room.extra_capacity
-        return 0
-    extra_passengers_count.short_description = _('تعداد نفر اضافه')
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['room'].required = False
-        if 'half_day_in_selected' not in formset.form.base_fields:
-            formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
-                label=_('نیم‌شارژ ورود'),
-                required=False,
-                initial=False
-            )
-        if 'half_day_out_selected' not in formset.form.base_fields:
-            formset.form.base_fields['half_day_out_selected'] = forms.BooleanField(
-                label=_('نیم‌شارژ خروج'),
-                required=False,
-                initial=False
-            )
-        formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
-        formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
-        return formset
-
-    def get_fields(self, request, obj=None):
-        fields = list(super().get_fields(request, obj))
-        if obj and obj.reservation_rooms.exists():
-            try:
-                hotel = obj.reservation_rooms.first().room.hotel
-                if not getattr(hotel, 'has_check_in_half_day_charge', False):
-                    if 'half_day_in_selected' in fields:
-                        fields.remove('half_day_in_selected')
-                if not getattr(hotel, 'has_check_out_half_day_charge', False):
-                    if 'half_day_out_selected' in fields:
-                        fields.remove('half_day_out_selected')
-            except AttributeError:
-                if 'half_day_in_selected' in fields:
-                    fields.remove('half_day_in_selected')
-                if 'half_day_out_selected' in fields:
-                    fields.remove('half_day_out_selected')
-        return fields
-
-class ReservationhotelAdminForm(forms.ModelForm):
-    class Meta:
-        model = Reservationhotel
-        fields = '__all__'
-
-    def clean_check_in_date(self):
-        check_in = self.cleaned_data['check_in_date']
-        today_j = jdatetime.date.today()
-        if check_in < today_j:
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
-        return check_in
-
-    def clean_check_out_date(self):
-        check_in = self.cleaned_data.get('check_in_date')
-        check_out = self.cleaned_data['check_out_date']
-        if check_in and check_out <= check_in:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-        return check_out
