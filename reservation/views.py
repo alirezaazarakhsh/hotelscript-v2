@@ -2991,19 +2991,17 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-logger = logging.getLogger(__name__)
-
-def parse_number(value):
-    """
-    تبدیل رشته یا عدد با یا بدون ویرگول به Decimal.
-    اگر مقدار None باشد، مقدار 0 برمی‌گردد.
-    """
-    if value is None:
-        return Decimal('0')
-    return Decimal(str(value).replace(',', '').strip())
-
 class ReservationInvoiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def parse_number(self, value):
+        """
+        تبدیل رشته یا عدد با یا بدون ویرگول به Decimal.
+        اگر مقدار None باشد، مقدار 0 برمی‌گردد.
+        """
+        if value is None:
+            return Decimal('0')
+        return Decimal(str(value).replace(',', '').strip())
 
     @swagger_auto_schema(
         operation_summary="دریافت صورت‌حساب رزرو",
@@ -3025,64 +3023,20 @@ class ReservationInvoiceAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # Force recalculation of prices without overwriting existing discount unless necessary
-        total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
-        
-        # Only update discount if it's not already set (e.g., by API)
-        if reservation.discount == 0 or 'discount' not in reservation.__dict__:
-            reservation.discount = code_discount
-        else:
-            code_discount = reservation.discount  # Use existing discount if set
-
-        reservation.total_price = total
-        reservation.total_extra_passenger_charge = total_extra
-        reservation.room_fixed_discount = room_fixed_discount
-        reservation.half_day_in_charge = half_day_in_charge
-        reservation.half_day_out_charge = half_day_out_charge
-        reservation.total_half_day_charge = total_half_day_charge
-        reservation.final_price = max(Decimal('0'), final_without_promo - code_discount - room_fixed_discount)
-
-        # Save only if values have changed to avoid triggering unintended recalculations
-        update_fields = []
-        if reservation.total_price != total:
-            reservation.total_price = total
-            update_fields.append('total_price')
-        if reservation.total_extra_passenger_charge != total_extra:
-            reservation.total_extra_passenger_charge = total_extra
-            update_fields.append('total_extra_passenger_charge')
-        if reservation.discount != code_discount:
-            reservation.discount = code_discount
-            update_fields.append('discount')
-        if reservation.room_fixed_discount != room_fixed_discount:
-            reservation.room_fixed_discount = room_fixed_discount
-            update_fields.append('room_fixed_discount')
-        if reservation.half_day_in_charge != half_day_in_charge:
-            reservation.half_day_in_charge = half_day_in_charge
-            update_fields.append('half_day_in_charge')
-        if reservation.half_day_out_charge != half_day_out_charge:
-            reservation.half_day_out_charge = half_day_out_charge
-            update_fields.append('half_day_out_charge')
-        if reservation.total_half_day_charge != total_half_day_charge:
-            reservation.total_half_day_charge = total_half_day_charge
-            update_fields.append('total_half_day_charge')
-        if reservation.final_price != (final_without_promo - code_discount - room_fixed_discount):
-            reservation.final_price = max(Decimal('0'), final_without_promo - code_discount - room_fixed_discount)
-            update_fields.append('final_price')
-
-        if update_fields:
-            reservation._skip_price_calculation = True
-            reservation.save(update_fields=update_fields)
-            delattr(reservation, '_skip_price_calculation')
-
+        # استفاده مستقیم از مقادیر ذخیره‌شده در رزرو
         response_data = {
             "nights_count": reservation.nights_count,
-            "total_price": int(parse_number(reservation.total_price)),
-            "extra_passengers": int(parse_number(reservation.total_extra_passenger_charge)),
-            "half_charges": int(parse_number(reservation.total_half_day_charge)),
-            "discount_on_purchase": int(parse_number(reservation.room_fixed_discount)),
-            "discount_code": int(parse_number(reservation.discount)),
-            "final_price": int(parse_number(reservation.final_price))
+            "total_price": int(self.parse_number(reservation.total_price)),
+            "extra_passengers": int(self.parse_number(reservation.total_extra_passenger_charge)),
+            "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
+            "discount_on_purchase": int(self.parse_number(reservation.room_fixed_discount)),
+            "discount_code": int(self.parse_number(reservation.discount)),
+            "final_price": int(self.parse_number(reservation.final_price))
         }
+
+        # لاگ کردن مقادیر برای دیباگ
+        logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
+
         return Response(response_data, status=status.HTTP_200_OK)
     
     
@@ -3483,7 +3437,7 @@ class ApplyDiscountCodeAPIView(APIView):
         except Reservationhotel.DoesNotExist:
             return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        # بررسی کد تخفیف برای اتاق
+        # بررسی کد تخفیف برای اتاق یا هتل
         room_discount = None
         hotel_discount = None
         try:
@@ -3499,6 +3453,9 @@ class ApplyDiscountCodeAPIView(APIView):
 
         now_j = jdatetime.datetime.now().date()
         discount_obj = room_discount or hotel_discount
+
+        # لاگ کردن مقدار تخفیف
+        logger.debug(f"discount_obj.discount_value: {discount_obj.discount_value}")
 
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
@@ -3523,7 +3480,6 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
         # دریافت یا ایجاد رکورد فعال‌سازی
-        activation_model = DiscountActivationRecord if room_discount else None
         if hotel_discount:
             activation_record, created = DiscountActivationRecord.objects.get_or_create(
                 user=request.user,
@@ -3544,17 +3500,22 @@ class ApplyDiscountCodeAPIView(APIView):
         try:
             # اعمال کد تخفیف و کاهش remaining_uses
             discount_obj.apply_discount(request.user)
-            activation_record.reward_claimed = True  # علامت‌گذاری جایزه دریافت شده
+            activation_record.reward_claimed = True
             activation_record.save()
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         # محاسبه تخفیف و قیمت نهایی رزرو
+        reservation.discount = Decimal('0')  # ریست تخفیف قبلی
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
-        total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
-        # Avoid double-counting discount
-        new_total_discount = discount_amount + (discount_value if discount_amount == 0 else 0)
+        total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        
+        # فقط از discount_value جدید استفاده کنید
+        new_total_discount = discount_value
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
+
+        # لاگ کردن مقادیر برای دیباگ
+        logger.debug(f"discount_value: {discount_value}, new_total_discount: {new_total_discount}, final_without_promo: {final_without_promo}, new_final_price: {new_final_price}")
 
         reservation.discount = new_total_discount
         reservation.final_price = new_final_price
@@ -3597,10 +3558,10 @@ class ApplyDiscountCodeAPIView(APIView):
         if reservation.discount <= 0:
             return Response({"error": "هیچ کد تخفیفی برای حذف وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Recalculate all prices to reset to the original state without discount
-        total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
-        reservation.discount = 0  # Explicitly set discount to zero
-        reservation.final_price = final_without_promo - room_fixed_discount  # Reset to original price minus fixed discounts
+        # بازمحاسبه قیمت‌ها برای ریست به حالت بدون تخفیف
+        total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        reservation.discount = Decimal('0')  # ریست تخفیف
+        reservation.final_price = final_without_promo - room_fixed_discount
         reservation.total_price = total
         reservation.half_day_in_charge = half_day_in_charge
         reservation.half_day_out_charge = half_day_out_charge
@@ -3618,3 +3579,5 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
+
+
