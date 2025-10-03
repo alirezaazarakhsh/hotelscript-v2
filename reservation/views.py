@@ -2991,7 +2991,7 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-ogger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 def parse_number(value):
     """
@@ -3025,19 +3025,54 @@ class ReservationInvoiceAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # Force recalculation of prices to ensure consistency
+        # Force recalculation of prices without overwriting existing discount unless necessary
         total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        
+        # Only update discount if it's not already set (e.g., by API)
+        if reservation.discount == 0 or 'discount' not in reservation.__dict__:
+            reservation.discount = code_discount
+        else:
+            code_discount = reservation.discount  # Use existing discount if set
+
         reservation.total_price = total
         reservation.total_extra_passenger_charge = total_extra
-        reservation.discount = code_discount
         reservation.room_fixed_discount = room_fixed_discount
         reservation.half_day_in_charge = half_day_in_charge
         reservation.half_day_out_charge = half_day_out_charge
         reservation.total_half_day_charge = total_half_day_charge
         reservation.final_price = max(Decimal('0'), final_without_promo - code_discount - room_fixed_discount)
-        reservation._skip_price_calculation = True
-        reservation.save(update_fields=['total_price', 'total_extra_passenger_charge', 'discount', 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'final_price'])
-        delattr(reservation, '_skip_price_calculation')
+
+        # Save only if values have changed to avoid triggering unintended recalculations
+        update_fields = []
+        if reservation.total_price != total:
+            reservation.total_price = total
+            update_fields.append('total_price')
+        if reservation.total_extra_passenger_charge != total_extra:
+            reservation.total_extra_passenger_charge = total_extra
+            update_fields.append('total_extra_passenger_charge')
+        if reservation.discount != code_discount:
+            reservation.discount = code_discount
+            update_fields.append('discount')
+        if reservation.room_fixed_discount != room_fixed_discount:
+            reservation.room_fixed_discount = room_fixed_discount
+            update_fields.append('room_fixed_discount')
+        if reservation.half_day_in_charge != half_day_in_charge:
+            reservation.half_day_in_charge = half_day_in_charge
+            update_fields.append('half_day_in_charge')
+        if reservation.half_day_out_charge != half_day_out_charge:
+            reservation.half_day_out_charge = half_day_out_charge
+            update_fields.append('half_day_out_charge')
+        if reservation.total_half_day_charge != total_half_day_charge:
+            reservation.total_half_day_charge = total_half_day_charge
+            update_fields.append('total_half_day_charge')
+        if reservation.final_price != (final_without_promo - code_discount - room_fixed_discount):
+            reservation.final_price = max(Decimal('0'), final_without_promo - code_discount - room_fixed_discount)
+            update_fields.append('final_price')
+
+        if update_fields:
+            reservation._skip_price_calculation = True
+            reservation.save(update_fields=update_fields)
+            delattr(reservation, '_skip_price_calculation')
 
         response_data = {
             "nights_count": reservation.nights_count,
@@ -3049,6 +3084,7 @@ class ReservationInvoiceAPIView(APIView):
             "final_price": int(parse_number(reservation.final_price))
         }
         return Response(response_data, status=status.HTTP_200_OK)
+    
     
 
 # ای پی ای توضیحات تکمیلی رزرو 
