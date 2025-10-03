@@ -630,7 +630,6 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
-# Define inlines
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 8
@@ -687,6 +686,7 @@ class ReservationRoomInline(NestedTabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
+        # اطمینان از وجود فیلدهای half_day_in_selected و half_day_out_selected و تنظیم ویجت
         if 'half_day_in_selected' not in formset.form.base_fields:
             formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
                 label=_('نیم‌شارژ ورود'),
@@ -699,6 +699,7 @@ class ReservationRoomInline(NestedTabularInline):
                 required=False,
                 initial=False
             )
+        # تنظیم ویجت برای رندر به‌عنوان چک‌باکس
         formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
         formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
         return formset
@@ -721,7 +722,6 @@ class ReservationRoomInline(NestedTabularInline):
                     fields.remove('half_day_out_selected')
         return fields
 
-# Define ReservationhotelAdmin
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -840,19 +840,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        # Only recalculate if discount is explicitly changed or zero
-        if 'discount' in form.changed_data or obj.discount == 0:
-            total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
-            obj.discount = code_discount
-            obj.final_price = final_without_promo - code_discount - room_fixed_discount
-            obj.total_price = total
-            obj.total_extra_passenger_charge = total_extra
-            obj.half_day_in_charge = half_day_in_charge
-            obj.half_day_out_charge = half_day_out_charge
-            obj.total_half_day_charge = total_half_day_charge
-            obj.room_fixed_discount = room_fixed_discount
-            obj._skip_price_calculation = True
-            obj.save(update_fields=['discount', 'final_price', 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'room_fixed_discount'])
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
@@ -866,10 +853,9 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     'half_day_in_price', 'half_day_out_price',
                     'half_day_in_selected', 'half_day_out_selected'
                 ])
-            # Recalculate only if not already done and discount hasn't been set by API
-            if not getattr(obj, '_price_calculation_done', False) and obj.discount == 0:
+            if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
-                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
+                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
                 obj.total_price = total_price
                 obj.total_extra_passenger_charge = total_extra
                 obj.discount = code_discount
@@ -877,7 +863,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
                 obj.total_half_day_charge = total_half_day_charge
-                obj.final_price = final_without_promo - code_discount - room_fixed_discount
+                obj.final_price = final_price
                 obj._skip_price_calculation = True
                 obj.save(update_fields=[
                     'total_price', 'total_extra_passenger_charge', 'discount',
