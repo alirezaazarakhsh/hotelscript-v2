@@ -840,7 +840,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        if 'discount' in form.changed_data or not obj.discount:
+        # Only recalculate if discount is explicitly changed or zero
+        if 'discount' in form.changed_data or obj.discount == 0:
             total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
             obj.discount = code_discount
             obj.final_price = final_without_promo - code_discount - room_fixed_discount
@@ -865,7 +866,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     'half_day_in_price', 'half_day_out_price',
                     'half_day_in_selected', 'half_day_out_selected'
                 ])
-            if not getattr(obj, '_price_calculation_done', False):
+            # Recalculate only if not already done and discount hasn't been set by API
+            if not getattr(obj, '_price_calculation_done', False) and obj.discount == 0:
                 setattr(obj, '_price_calculation_done', True)
                 total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
                 obj.total_price = total_price
