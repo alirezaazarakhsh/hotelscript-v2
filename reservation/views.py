@@ -13,7 +13,7 @@ from amqp import NotFound
 import jdatetime 
 from itertools import combinations
 from authentication.models import NaturalProfile
-from bashgah_moshtarian.models import DiscountActivationRecord, RoomDiscountCode
+from bashgah_moshtarian.models import DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
 from config.models import UserLevel
 from reservation.models import Hotel 
 from reservation.models import Reservationhotel, ReservationRoom
@@ -3402,12 +3402,14 @@ class PassengerListForReservationView(generics.GenericAPIView):
     
     
 # ای پی ای کد تخفیف برای رزرو 
+logger = logging.getLogger(__name__)
+
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="اعمال کد تخفیف روی رزرو",
-        operation_description="اعمال کد تخفیف وارد شده توسط کاربر روی رزرو.",
+        operation_description="اعمال کد تخفیف وارد شده توسط کاربر روی رزرو (برای اتاق‌ها یا هتل‌ها).",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -3434,13 +3436,23 @@ class ApplyDiscountCodeAPIView(APIView):
         except Reservationhotel.DoesNotExist:
             return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        # پیدا کردن کد تخفیف اتاق
+        # بررسی کد تخفیف برای اتاق
+        room_discount = None
+        hotel_discount = None
         try:
-            discount_obj = RoomDiscountCode.objects.get(code=code)
+            room_discount = RoomDiscountCode.objects.get(code=code)
         except RoomDiscountCode.DoesNotExist:
-            return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+            pass
+
+        if not room_discount:
+            try:
+                hotel_discount = HotelDiscountCode.objects.get(code=code)
+            except HotelDiscountCode.DoesNotExist:
+                return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
         now_j = jdatetime.datetime.now().date()
+        discount_obj = room_discount or hotel_discount
+
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3448,9 +3460,11 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی اینکه کد برای اتاق‌های رزرو معتبر است
-        if not any(rr.room == discount_obj.room for rr in reservation.reservation_rooms.all()):
+        # بررسی اینکه کد برای رزرو معتبر است
+        if room_discount and not any(rr.room == room_discount.room for rr in reservation.reservation_rooms.all()):
             return Response({"error": "این کد تخفیف برای اتاق‌های این رزرو معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        elif hotel_discount and reservation.reservation_rooms.first().room.hotel != hotel_discount.hotel:
+            return Response({"error": "این کد تخفیف برای این هتل معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
         # بررسی وضعیت رزرو
         if reservation.status in ['paid', 'cancelled']:
@@ -3462,11 +3476,19 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
         # دریافت یا ایجاد رکورد فعال‌سازی
-        activation_record, created = DiscountActivationRecord.objects.get_or_create(
-            user=request.user,
-            room_discount_code=discount_obj,
-            discount_type='room'
-        )
+        activation_model = DiscountActivationRecord if room_discount else None
+        if hotel_discount:
+            activation_record, created = DiscountActivationRecord.objects.get_or_create(
+                user=request.user,
+                hotel_discount_code=hotel_discount,
+                discount_type='hotel'
+            )
+        else:
+            activation_record, created = DiscountActivationRecord.objects.get_or_create(
+                user=request.user,
+                room_discount_code=room_discount,
+                discount_type='room'
+            )
 
         # اگر قبلاً استفاده شده باشد
         if activation_record.reward_claimed and not created:
@@ -3507,4 +3529,47 @@ class ApplyDiscountCodeAPIView(APIView):
             "total_discount": int(reservation.discount),
             "remaining_uses": discount_obj.remaining_uses,
             "usage_limit": discount_obj.usage_limit
+        }, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="حذف کد تخفیف از رزرو",
+        operation_description="حذف کد تخفیف اعمال‌شده از رزرو.",
+        responses={
+            200: openapi.Response(description="کد تخفیف با موفقیت حذف شد."),
+            404: openapi.Response(description="رزرو یا کد تخفیف یافت نشد.")
+        },
+        tags=["reservation-api"]
+    )
+    def delete(self, request, tracking_code, *args, **kwargs):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
+        except Reservationhotel.DoesNotExist:
+            return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        if reservation.discount <= 0:
+            return Response({"error": "هیچ کد تخفیفی برای حذف وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # بازگرداندن تخفیف و به‌روزرسانی قیمت‌ها
+        total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        new_total_discount = max(0, discount_amount - reservation.discount)
+        new_final_price = final_without_promo - new_total_discount - room_fixed_discount
+
+        reservation.discount = new_total_discount
+        reservation.final_price = new_final_price
+        reservation.total_price = total
+        reservation.half_day_in_charge = half_day_in_charge
+        reservation.half_day_out_charge = half_day_out_charge
+        reservation.total_half_day_charge = total_half_day_charge
+        reservation.total_extra_passenger_charge = total_extra
+
+        reservation._skip_price_calculation = True
+        reservation.save(update_fields=['discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
+        delattr(reservation, '_skip_price_calculation')
+
+        return Response({
+            "status": "ok",
+            "tracking_code": reservation.tracking_code,
+            "discount_code": None,
+            "final_price": int(reservation.final_price),
+            "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
