@@ -2917,6 +2917,8 @@ class ReservationDetailAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
     
+    
+    
 
 # ای پی ای نمایش عکس هتل برای رزرو 
 logger = logging.getLogger(__name__)
