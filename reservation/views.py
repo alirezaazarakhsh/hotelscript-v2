@@ -2840,7 +2840,7 @@ class ReservationDetailAPIView(APIView):
                                 'exit': openapi.Schema(
                                     type=openapi.TYPE_OBJECT,
                                     properties={
-                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=False)
+                                        'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='وضعیت پشتیبانی نیم‌شارژ خروج توسط هتل', example=True)
                                     }
                                 )
                             }
@@ -2916,7 +2916,6 @@ class ReservationDetailAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
     
 
