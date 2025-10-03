@@ -2991,7 +2991,7 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-logger = logging.getLogger(__name__)
+ogger = logging.getLogger(__name__)
 
 def parse_number(value):
     """
@@ -3025,7 +3025,7 @@ class ReservationInvoiceAPIView(APIView):
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # Force recalculation of prices
+        # Force recalculation of prices to ensure consistency
         total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
         reservation.total_price = total
         reservation.total_extra_passenger_charge = total_extra
@@ -3034,7 +3034,7 @@ class ReservationInvoiceAPIView(APIView):
         reservation.half_day_in_charge = half_day_in_charge
         reservation.half_day_out_charge = half_day_out_charge
         reservation.total_half_day_charge = total_half_day_charge
-        reservation.final_price = final_without_promo - code_discount - room_fixed_discount
+        reservation.final_price = max(Decimal('0'), final_without_promo - code_discount - room_fixed_discount)
         reservation._skip_price_calculation = True
         reservation.save(update_fields=['total_price', 'total_extra_passenger_charge', 'discount', 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'final_price'])
         delattr(reservation, '_skip_price_calculation')
@@ -3049,7 +3049,6 @@ class ReservationInvoiceAPIView(APIView):
             "final_price": int(parse_number(reservation.final_price))
         }
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
 
 # ای پی ای توضیحات تکمیلی رزرو 
@@ -3517,7 +3516,8 @@ class ApplyDiscountCodeAPIView(APIView):
         # محاسبه تخفیف و قیمت نهایی رزرو
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
         total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
-        new_total_discount = discount_amount + discount_value
+        # Avoid double-counting discount
+        new_total_discount = discount_amount + (discount_value if discount_amount == 0 else 0)
         new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
 
         reservation.discount = new_total_discount
