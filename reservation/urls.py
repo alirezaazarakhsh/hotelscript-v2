@@ -87,5 +87,5 @@ urlpatterns = [
 
 
     # ==== discount code reservation ===
-    path('reservations/apply-discount/<str:tracking_code>/', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
+    path('reservation/discountcode/<str:tracking_code>/', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
 ]
