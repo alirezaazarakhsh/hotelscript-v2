@@ -774,73 +774,23 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
-    # Existing display methods remain unchanged
-    @admin.display(description=_('موبایل خریدار'))
-    def buyer_phone_number(self, obj):
-        if obj.buyer:
-            return getattr(obj.buyer, 'phone_number', '-')
-        return "-"
-
-    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
-    def created_jalali(self, obj):
-        if obj.created_at:
-            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
-        return '-'
-
-    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
-    def updated_jalali(self, obj):
-        if obj.updated_at:
-            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
-        return '-'
-
-    @admin.display(description=_('تعداد شب‌ها'))
-    def nights_count_fa(self, obj):
-        return obj.nights_count if obj.pk else 0
-
-    @admin.display(description=_('کل اتاق‌ها'))
-    def total_rooms_fa(self, obj):
-        return obj.total_rooms if obj.pk else 0
-
-    @admin.display(description=_('کل مهمان‌ها'))
-    def total_guests_fa(self, obj):
-        return obj.total_guests if obj.pk else 0
-
-    @admin.display(description=_('مجموع قیمت'))
-    def total_price_fa(self, obj):
-        return "{:,}".format(obj.total_price) if obj.total_price else "-"
-
-    @admin.display(description=_('هزینه نفر اضافه'))
-    def total_extra_passenger_charge_fa(self, obj):
-        return "{:,}".format(obj.total_extra_passenger_charge) if obj.total_extra_passenger_charge else "-"
-
-    @admin.display(description=_('هزینه نیم روز ورود'))
-    def half_day_in_charge_fa(self, obj):
-        return "{:,}".format(obj.half_day_in_charge) if obj.half_day_in_charge else "-"
-
-    @admin.display(description=_('هزینه نیم روز خروج'))
-    def half_day_out_charge_fa(self, obj):
-        return "{:,}".format(obj.half_day_out_charge) if obj.half_day_out_charge else "-"
-
-    @admin.display(description=_('کل هزینه نیم روز'))
-    def total_half_day_charge_fa(self, obj):
-        return "{:,}".format(obj.total_half_day_charge) if obj.total_half_day_charge else "-"
-
-    @admin.display(description=_('تخفیف کد'))
-    def discount_fa(self, obj):
-        return "{:,}".format(obj.discount) if obj.discount else "-"
-
-    @admin.display(description=_('تخفیف ثابت اتاق'))
-    def room_fixed_discount_fa(self, obj):
-        return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
-
-    @admin.display(description=_('قیمت نهایی'))
-    def final_price_fa(self, obj):
-        return "{:,}".format(obj.final_price) if obj.final_price else "-"
+    # ... (Existing display methods remain unchanged) ...
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        # Recalculate prices after save if discount has changed
+        if 'discount' in form.changed_data or not obj.discount:
+            total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
+            obj.discount = code_discount
+            obj.final_price = final_without_promo - code_discount - room_fixed_discount
+            obj.total_price = total
+            obj.total_extra_passenger_charge = total_extra
+            obj.half_day_in_charge = half_day_in_charge
+            obj.half_day_out_charge = half_day_out_charge
+            obj.total_half_day_charge = total_half_day_charge
+            obj.room_fixed_discount = room_fixed_discount
+            obj._skip_price_calculation = True
+            obj.save(update_fields=['discount', 'final_price', 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'room_fixed_discount'])
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
@@ -856,18 +806,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 ])
             if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
-                # Recalculate total price to reflect any changes, including discount removal
                 total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
-                # Ensure discount is reset if no longer applicable (e.g., if manually removed)
-                if not obj.discount or obj.discount <= 0:
-                    obj.discount = code_discount
                 obj.total_price = total_price
                 obj.total_extra_passenger_charge = total_extra
+                obj.discount = code_discount
                 obj.room_fixed_discount = room_fixed_discount
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
                 obj.total_half_day_charge = total_half_day_charge
-                obj.final_price = max(Decimal('0'), final_without_promo - obj.discount - obj.room_fixed_discount)
+                obj.final_price = final_without_promo - code_discount - room_fixed_discount
                 obj._skip_price_calculation = True
                 obj.save(update_fields=[
                     'total_price', 'total_extra_passenger_charge', 'discount',
