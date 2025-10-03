@@ -774,6 +774,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # Existing display methods remain unchanged
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
         if obj.buyer:
@@ -855,15 +856,18 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 ])
             if not getattr(obj, '_price_calculation_done', False):
                 setattr(obj, '_price_calculation_done', True)
-                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_price, room_fixed_discount = obj.calculate_total_price()
+                # Recalculate total price to reflect any changes, including discount removal
+                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
+                # Ensure discount is reset if no longer applicable (e.g., if manually removed)
+                if not obj.discount or obj.discount <= 0:
+                    obj.discount = code_discount
                 obj.total_price = total_price
                 obj.total_extra_passenger_charge = total_extra
-                obj.discount = code_discount
                 obj.room_fixed_discount = room_fixed_discount
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
                 obj.total_half_day_charge = total_half_day_charge
-                obj.final_price = final_price
+                obj.final_price = max(Decimal('0'), final_without_promo - obj.discount - obj.room_fixed_discount)
                 obj._skip_price_calculation = True
                 obj.save(update_fields=[
                     'total_price', 'total_extra_passenger_charge', 'discount',
