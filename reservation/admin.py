@@ -611,24 +611,176 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-class ReservationhotelAdminForm(forms.ModelForm):
-    class Meta:
-        model = Reservationhotel
-        fields = '__all__'
+@admin.register(Reservationhotel)
+class ReservationhotelAdmin(NestedModelAdmin):
+    form = ReservationhotelAdminForm
+    list_display = (
+        'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
+        'reserver_phone_number', 'check_in_date', 'check_out_date',
+        'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+        'room_fixed_discount_fa', 'final_price_fa', 'status', 'created_jalali', 'updated_jalali'
+    )
 
-    def clean_check_in_date(self):
-        check_in = self.cleaned_data['check_in_date']
-        today_j = jdatetime.date.today()
-        if check_in < today_j:
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
-        return check_in
+    search_fields = (
+        'tracking_code', 'buyer__phone_number', 'reserver_first_name',
+        'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
+    )
 
-    def clean_check_out_date(self):
-        check_in = self.cleaned_data.get('check_in_date')
-        check_out = self.cleaned_data['check_out_date']
-        if check_in and check_out <= check_in:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-        return check_out
+    list_filter = ('status', 'check_in_date', 'check_out_date')
+    autocomplete_fields = ('buyer',)
+    inlines = [ReservationRoomInline]
+
+    readonly_fields = (
+        'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+        'created_jalali', 'updated_jalali',
+        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+        'room_fixed_discount_fa', 'final_price_fa'
+    )
+
+    fieldsets = (
+        (_('اطلاعات رزرو کننده'), {
+            'fields': (
+                'buyer', 'reserver_first_name', 'reserver_last_name',
+                'reserver_phone_number', 'reserver_national_code', 'additional_notes'
+            )
+        }),
+        (_('تاریخ رزرو'), {
+            'fields': ('check_in_date', 'check_out_date')
+        }),
+        (_('قیمت و وضعیت'), {
+            'fields': (
+                'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
+                'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
+                'room_fixed_discount_fa', 'final_price_fa', 'status'
+            )
+        }),
+        (_('اطلاعات سیستم'), {
+            'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
+                       'created_jalali', 'updated_jalali')
+        }),
+    )
+
+    @admin.display(description=_('موبایل خریدار'))
+    def buyer_phone_number(self, obj):
+        if obj.buyer:
+            return getattr(obj.buyer, 'phone_number', '-')
+        return "-"
+
+    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
+    def created_jalali(self, obj):
+        if obj.created_at:
+            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+        return '-'
+
+    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
+    def updated_jalali(self, obj):
+        if obj.updated_at:
+            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+        return '-'
+
+    @admin.display(description=_('تعداد شب‌ها'))
+    def nights_count_fa(self, obj):
+        return obj.nights_count if obj.pk else 0
+
+    @admin.display(description=_('کل اتاق‌ها'))
+    def total_rooms_fa(self, obj):
+        return obj.total_rooms if obj.pk else 0
+
+    @admin.display(description=_('کل مهمان‌ها'))
+    def total_guests_fa(self, obj):
+        return obj.total_guests if obj.pk else 0
+
+    @admin.display(description=_('مجموع قیمت'))
+    def total_price_fa(self, obj):
+        return "{:,}".format(obj.total_price) if obj.total_price else "-"
+
+    @admin.display(description=_('هزینه نفر اضافه'))
+    def total_extra_passenger_charge_fa(self, obj):
+        return "{:,}".format(obj.total_extra_passenger_charge) if obj.total_extra_passenger_charge else "-"
+
+    @admin.display(description=_('هزینه نیم روز ورود'))
+    def half_day_in_charge_fa(self, obj):
+        return "{:,}".format(obj.half_day_in_charge) if obj.half_day_in_charge else "-"
+
+    @admin.display(description=_('هزینه نیم روز خروج'))
+    def half_day_out_charge_fa(self, obj):
+        return "{:,}".format(obj.half_day_out_charge) if obj.half_day_out_charge else "-"
+
+    @admin.display(description=_('کل هزینه نیم روز'))
+    def total_half_day_charge_fa(self, obj):
+        return "{:,}".format(obj.total_half_day_charge) if obj.total_half_day_charge else "-"
+
+    @admin.display(description=_('تخفیف کد'))
+    def discount_fa(self, obj):
+        return "{:,}".format(obj.discount) if obj.discount else "-"
+
+    @admin.display(description=_('تخفیف ثابت اتاق'))
+    def room_fixed_discount_fa(self, obj):
+        return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
+
+    @admin.display(description=_('قیمت نهایی'))
+    def final_price_fa(self, obj):
+        return "{:,}".format(obj.final_price) if obj.final_price else "-"
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Recalculate prices after save if discount has changed
+        if 'discount' in form.changed_data or not obj.discount:
+            total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
+            obj.discount = code_discount
+            obj.final_price = final_without_promo - code_discount - room_fixed_discount
+            obj.total_price = total
+            obj.total_extra_passenger_charge = total_extra
+            obj.half_day_in_charge = half_day_in_charge
+            obj.half_day_out_charge = half_day_out_charge
+            obj.total_half_day_charge = total_half_day_charge
+            obj.room_fixed_discount = room_fixed_discount
+            obj._skip_price_calculation = True
+            obj.save(update_fields=['discount', 'final_price', 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'room_fixed_discount'])
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        obj = form.instance
+        if obj.reservation_rooms.exists():
+            for res_room in obj.reservation_rooms.all():
+                res_room.calculate_room_prices()
+                res_room.calculate_half_day_prices()
+                res_room.save(update_fields=[
+                    'price_per_night', 'subtotal', 'fixed_discount',
+                    'half_day_in_price', 'half_day_out_price',
+                    'half_day_in_selected', 'half_day_out_selected'
+                ])
+            if not getattr(obj, '_price_calculation_done', False):
+                setattr(obj, '_price_calculation_done', True)
+                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
+                obj.total_price = total_price
+                obj.total_extra_passenger_charge = total_extra
+                obj.discount = code_discount
+                obj.room_fixed_discount = room_fixed_discount
+                obj.half_day_in_charge = half_day_in_charge
+                obj.half_day_out_charge = half_day_out_charge
+                obj.total_half_day_charge = total_half_day_charge
+                obj.final_price = final_without_promo - code_discount - room_fixed_discount
+                obj._skip_price_calculation = True
+                obj.save(update_fields=[
+                    'total_price', 'total_extra_passenger_charge', 'discount',
+                    'room_fixed_discount', 'half_day_in_charge',
+                    'half_day_out_charge', 'total_half_day_charge', 'final_price'
+                ])
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj and obj.reservation_rooms.exists():
+            for res_room in obj.reservation_rooms.all():
+                if hasattr(res_room, 'calculate_half_day_prices'):
+                    res_room.calculate_half_day_prices()
+                    res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
+        return form
 
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -686,7 +838,6 @@ class ReservationRoomInline(NestedTabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
-        # اطمینان از وجود فیلدهای half_day_in_selected و half_day_out_selected و تنظیم ویجت
         if 'half_day_in_selected' not in formset.form.base_fields:
             formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
                 label=_('نیم‌شارژ ورود'),
@@ -699,7 +850,6 @@ class ReservationRoomInline(NestedTabularInline):
                 required=False,
                 initial=False
             )
-        # تنظیم ویجت برای رندر به‌عنوان چک‌باکس
         formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
         formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
         return formset
@@ -722,111 +872,21 @@ class ReservationRoomInline(NestedTabularInline):
                     fields.remove('half_day_out_selected')
         return fields
 
-@admin.register(Reservationhotel)
-class ReservationhotelAdmin(NestedModelAdmin):
-    form = ReservationhotelAdminForm
-    list_display = (
-        'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
-        'reserver_phone_number', 'check_in_date', 'check_out_date',
-        'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
-        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'final_price_fa', 'status', 'created_jalali', 'updated_jalali'
-    )
+class ReservationhotelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Reservationhotel
+        fields = '__all__'
 
-    search_fields = (
-        'tracking_code', 'buyer__phone_number', 'reserver_first_name',
-        'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
-    )
+    def clean_check_in_date(self):
+        check_in = self.cleaned_data['check_in_date']
+        today_j = jdatetime.date.today()
+        if check_in < today_j:
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        return check_in
 
-    list_filter = ('status', 'check_in_date', 'check_out_date')
-    autocomplete_fields = ('buyer',)
-    inlines = [ReservationRoomInline]
-
-    readonly_fields = (
-        'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'created_jalali', 'updated_jalali',
-        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
-        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'final_price_fa'
-    )
-
-    fieldsets = (
-        (_('اطلاعات رزرو کننده'), {
-            'fields': (
-                'buyer', 'reserver_first_name', 'reserver_last_name',
-                'reserver_phone_number', 'reserver_national_code', 'additional_notes'
-            )
-        }),
-        (_('تاریخ رزرو'), {
-            'fields': ('check_in_date', 'check_out_date')
-        }),
-        (_('قیمت و وضعیت'), {
-            'fields': (
-                'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
-                'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-                'room_fixed_discount_fa', 'final_price_fa', 'status'
-            )
-        }),
-        (_('اطلاعات سیستم'), {
-            'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-                       'created_jalali', 'updated_jalali')
-        }),
-    )
-
-    # ... (Existing display methods remain unchanged) ...
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        # Recalculate prices after save if discount has changed
-        if 'discount' in form.changed_data or not obj.discount:
-            total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
-            obj.discount = code_discount
-            obj.final_price = final_without_promo - code_discount - room_fixed_discount
-            obj.total_price = total
-            obj.total_extra_passenger_charge = total_extra
-            obj.half_day_in_charge = half_day_in_charge
-            obj.half_day_out_charge = half_day_out_charge
-            obj.total_half_day_charge = total_half_day_charge
-            obj.room_fixed_discount = room_fixed_discount
-            obj._skip_price_calculation = True
-            obj.save(update_fields=['discount', 'final_price', 'total_price', 'total_extra_passenger_charge', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'room_fixed_discount'])
-
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        obj = form.instance
-        if obj.reservation_rooms.exists():
-            for res_room in obj.reservation_rooms.all():
-                res_room.calculate_room_prices()
-                res_room.calculate_half_day_prices()
-                res_room.save(update_fields=[
-                    'price_per_night', 'subtotal', 'fixed_discount',
-                    'half_day_in_price', 'half_day_out_price',
-                    'half_day_in_selected', 'half_day_out_selected'
-                ])
-            if not getattr(obj, '_price_calculation_done', False):
-                setattr(obj, '_price_calculation_done', True)
-                total_price, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, code_discount, final_without_promo, room_fixed_discount = obj.calculate_total_price()
-                obj.total_price = total_price
-                obj.total_extra_passenger_charge = total_extra
-                obj.discount = code_discount
-                obj.room_fixed_discount = room_fixed_discount
-                obj.half_day_in_charge = half_day_in_charge
-                obj.half_day_out_charge = half_day_out_charge
-                obj.total_half_day_charge = total_half_day_charge
-                obj.final_price = final_without_promo - code_discount - room_fixed_discount
-                obj._skip_price_calculation = True
-                obj.save(update_fields=[
-                    'total_price', 'total_extra_passenger_charge', 'discount',
-                    'room_fixed_discount', 'half_day_in_charge',
-                    'half_day_out_charge', 'total_half_day_charge', 'final_price'
-                ])
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if obj and obj.reservation_rooms.exists():
-            for res_room in obj.reservation_rooms.all():
-                if hasattr(res_room, 'calculate_half_day_prices'):
-                    res_room.calculate_half_day_prices()
-                    res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
-        return form
+    def clean_check_out_date(self):
+        check_in = self.cleaned_data.get('check_in_date')
+        check_out = self.cleaned_data['check_out_date']
+        if check_in and check_out <= check_in:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+        return check_out
