@@ -2691,50 +2691,66 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
         nights = reservation.nights_count
+        allocated_rooms = []
 
-        for room_id in room_ids:
-            room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
-            room_total_price = Decimal('0')
+        try:
+            for room_id in room_ids:
+                room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
+                # فراخوانی reserve_room برای مدیریت موجودی
+                room_status, message = room.reserve_room(quantity=1)
+                if not room_status:
+                    raise ValidationError(message)
+                allocated_rooms.append(room)
 
-            # محاسبه قیمت هر شب
-            for night in range(nights):
-                current_date = check_in_date.togregorian() + timedelta(days=night)
+                # محاسبه قیمت هر شب
+                room_total_price = Decimal('0')
+                for night in range(nights):
+                    current_date = check_in_date.togregorian() + timedelta(days=night)
 
-                price_obj = RoomDatePrice.objects.filter(
+                    price_obj = RoomDatePrice.objects.filter(
+                        room=room,
+                        start_date__lte=current_date,
+                        end_date__gte=current_date,
+                        user_level=getattr(request.user, 'user_level', None)
+                    ).first() or RoomDatePrice.objects.filter(
+                        room=room,
+                        start_date__lte=current_date,
+                        end_date__gte=current_date,
+                        user_level__isnull=True
+                    ).first()
+
+                    if not price_obj:
+                        logger.warning(f"قیمت برای تاریخ {current_date} در اتاق {room.title} یافت نشد. قیمت پیش‌فرض (0) اعمال شد.")
+                        daily_price = Decimal('0')
+                    else:
+                        daily_price = Decimal(price_obj.price)
+                        # اعمال تخفیف
+                        if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
+                            daily_price *= (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
+                        elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
+                            daily_price -= Decimal(price_obj.discount_value)
+
+                    room_total_price += daily_price
+
+                # ایجاد رکورد اتاق رزرو
+                ReservationRoom.objects.create(
+                    reservation=reservation,
                     room=room,
-                    start_date__lte=current_date,
-                    end_date__gte=current_date,
-                    user_level=getattr(request.user, 'user_level', None)
-                ).first() or RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=current_date,
-                    end_date__gte=current_date,
-                    user_level__isnull=True
-                ).first()
+                    quantity=1,
+                    price_per_night=room_total_price / nights if nights > 0 else room_total_price,
+                    subtotal=room_total_price,
+                    primary_passengers_count=room.room_capacity,
+                    extra_passengers_count=room.extra_capacity
+                )
 
-                if not price_obj:
-                    logger.warning(f"قیمت برای تاریخ {current_date} در اتاق {room.title} یافت نشد. قیمت پیش‌فرض (0) اعمال شد.")
-                    daily_price = Decimal('0')
-                else:
-                    daily_price = Decimal(price_obj.price)
-                    # اعمال تخفیف
-                    if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
-                        daily_price *= (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
-                    elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
-                        daily_price -= Decimal(price_obj.discount_value)
-
-                room_total_price += daily_price
-
-            # ایجاد رکورد اتاق رزرو
-            ReservationRoom.objects.create(
-                reservation=reservation,
-                room=room,
-                quantity=1,
-                price_per_night=room_total_price / nights if nights > 0 else room_total_price,
-                subtotal=room_total_price,
-                primary_passengers_count=room.room_capacity,
-                extra_passengers_count=room.extra_capacity
-            )
+        except ValidationError as e:
+            # در صورت خطا، رزرو و تغییرات موجودی لغو می‌شود
+            reservation.delete()
+            for room in allocated_rooms:
+                room_status, _ = room.reserve_room(quantity=-1)  # بازگرداندن موجودی
+                logger.info(f"بازگرداندن موجودی برای اتاق {room.id}")
+            logger.error(f"رزرو با کد {reservation_id} به دلیل خطا حذف شد: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         # ✅ محاسبه نهایی قیمت‌ها با متد مدل
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
