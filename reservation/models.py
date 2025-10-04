@@ -1247,7 +1247,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        'BaseUser',
+        BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
