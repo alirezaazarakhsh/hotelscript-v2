@@ -2768,9 +2768,9 @@ class ReservationCreateAPIView(CreateAPIView):
             )
 
         # تنظیم وضعیت رزرو بر اساس نوع موجودی
-        reservation.status = 'confirmed' if all_auto_approved else 'unconfirmed'
+        reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         reservation.save(update_fields=['status'])
-
+        
         # محاسبه نهایی قیمت‌ها
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
