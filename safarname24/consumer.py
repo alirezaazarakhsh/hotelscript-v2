@@ -31,4 +31,3 @@ class MyConsumer(WebsocketConsumer):
             "message": event["message"]
         }))
 
-
