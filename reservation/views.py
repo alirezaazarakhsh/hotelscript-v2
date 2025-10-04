@@ -2793,10 +2793,13 @@ class ReservationCreateAPIView(CreateAPIView):
 
 
 #ای پی ای وضعیت رزرو ایجاد شده 
+
+logger = logging.getLogger(__name__)
+
 class ReservationStatusAPIView(APIView):
     """
     API برای بررسی وضعیت رزرو.
-    - وضعیت رزرو (status)، پیام (message) و زمان باقی‌مانده (remaining_time) را برمی‌گرداند.
+    - فقط وضعیت رزرو (status) و زمان باقی‌مانده (remaining_time) را برمی‌گرداند.
     - remaining_time به صورت ثانیه‌های باقی‌مانده تا انقضای رزرو نمایش داده می‌شود.
     - اگر رزرو منقضی شده باشد، وضعیت به cancelled تغییر می‌کند و موجودی به auto_approved_count یا count بازمی‌گردد.
     """
@@ -2811,7 +2814,6 @@ class ReservationStatusAPIView(APIView):
         - **tracking_code**: کد پیگیری رزرو (رشته، مثل sfa1234567890).
         - **خروجی**:
           - status: وضعیت رزرو (paid, confirmed, unconfirmed, unpaid, cancelled).
-          - message: توضیح وضعیت رزرو.
           - remaining_time: زمان باقی‌مانده تا انقضای رزرو (به ثانیه) یا null اگر رزرو تأیید یا پرداخت شده باشد.
         - **رفتار**:
           - اگر رزرو در وضعیت paid یا confirmed باشد، remaining_time برابر null است.
@@ -2834,20 +2836,10 @@ class ReservationStatusAPIView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'tracking_code': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description='کد پیگیری رزرو',
-                            example='sfa1234567890'
-                        ),
                         'status': openapi.Schema(
                             type=openapi.TYPE_STRING,
                             description='وضعیت رزرو (paid, confirmed, unconfirmed, unpaid, cancelled)',
-                            example='unconfirmed'
-                        ),
-                        'message': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description='توضیح وضعیت رزرو',
-                            example='رزرو در انتظار تأیید ادمین است.'
+                            example='confirmed'
                         ),
                         'remaining_time': openapi.Schema(
                             type=openapi.TYPE_INTEGER,
@@ -2874,17 +2866,13 @@ class ReservationStatusAPIView(APIView):
 
         if reservation.status in ['paid', 'confirmed']:
             return Response({
-                "tracking_code": reservation.tracking_code,
                 "status": reservation.status,
-                "message": "رزرو تأیید شده است." if reservation.status == 'confirmed' else "رزرو پرداخت شده است.",
                 "remaining_time": None
             }, status=status.HTTP_200_OK)
 
         if reservation.status == 'cancelled':
             return Response({
-                "tracking_code": reservation.tracking_code,
                 "status": reservation.status,
-                "message": "رزرو به دلیل انقضای زمان لغو شد.",
                 "remaining_time": None
             }, status=status.HTTP_200_OK)
 
@@ -2904,18 +2892,14 @@ class ReservationStatusAPIView(APIView):
                         logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
                     room.save(update_fields=['auto_approved_count', 'count'])
             return Response({
-                "tracking_code": reservation.tracking_code,
                 "status": reservation.status,
-                "message": "رزرو به دلیل انقضای زمان لغو شد.",
                 "remaining_time": None
             }, status=status.HTTP_200_OK)
 
         remaining_seconds = int((expiration_time - now).total_seconds())
 
         return Response({
-            "tracking_code": reservation.tracking_code,
             "status": reservation.status,
-            "message": "رزرو در انتظار تأیید ادمین است." if reservation.status == 'unconfirmed' else "رزرو در انتظار پرداخت است.",
             "remaining_time": remaining_seconds
         }, status=status.HTTP_200_OK)
 
@@ -2949,7 +2933,8 @@ def cleanup_expired_reservations():
             reservation.status = 'cancelled'
             reservation.save(update_fields=['status'])
             logger.info(f"Reservation {reservation.tracking_code}: Cancelled due to expiration.")
-    
+            
+            
     
     
 # ای پی ای جزئيات یک رزرو با tracking_code
