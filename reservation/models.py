@@ -10,6 +10,8 @@ import jdatetime
 from functools import cached_property
 from jdatetime import date as jdate
 from jalali_date import date2jalali
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 # 🌐 Django
 from django.db import models
@@ -1231,6 +1233,9 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
+
+logger = logging.getLogger(__name__)
+
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
         ('pending_admin', _('در حال بررسی ادمین')),
@@ -1242,7 +1247,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        'BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1318,7 +1323,7 @@ class Reservationhotel(models.Model):
 
         nights = self.nights_count
         if nights <= 0:
-            return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total, total, total, total
+            return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
         check_in_date_std = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
@@ -1339,18 +1344,12 @@ class Reservationhotel(models.Model):
             ).first()
 
             if not price_obj:
-                logger.warning(
-                    f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد."
-                )
+                logger.warning(f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد.")
                 daily_price = Decimal('0')
                 extra_price_per_person = Decimal('0')
             else:
                 daily_price = Decimal(res_room.subtotal)
-                extra_price_per_person = (
-                    Decimal(res_room.extra_passenger_price)
-                    if res_room.extra_passenger_price is not None
-                    else Decimal(price_obj.extra_passenger_price or 0)
-                )
+                extra_price_per_person = Decimal(res_room.extra_passenger_price or price_obj.extra_passenger_price or 0)
 
             extra_price = extra_price_per_person * extra_guests
             total_extra += extra_price * nights * quantity
@@ -1368,14 +1367,17 @@ class Reservationhotel(models.Model):
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-
         final_price = base_price - discount_amount - room_fixed_discount
         if final_price < 0:
             final_price = Decimal('0')
 
-        return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, self.discount, final_price, room_fixed_discount
+        return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, discount_amount, final_price, room_fixed_discount
 
     def save(self, *args, **kwargs):
+        previous_status = None
+        if self.pk:
+            previous_status = Reservationhotel.objects.filter(pk=self.pk).values_list('status', flat=True).first()
+
         if not getattr(self, '_skip_price_calculation', False):
             if not self.pk or any(getattr(self, field) is None for field in [
                 'total_price', 'discount', 'room_fixed_discount', 'final_price',
@@ -1391,7 +1393,23 @@ class Reservationhotel(models.Model):
                 self.total_half_day_charge = total_half
                 self.total_extra_passenger_charge = total_extra
                 self.final_price = final
+
         super().save(*args, **kwargs)
+
+        # WebSocket: اگر وضعیت رزرو تغییر کرد، پیام برای کاربر ارسال شود
+        if previous_status and previous_status != self.status:
+            channel_layer = get_channel_layer()
+            group_name = f"reservation_user_{self.buyer.id}"
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "status_update",
+                    "message": {
+                        "tracking_code": self.tracking_code,
+                        "status": self.status
+                    }
+                }
+            )
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
