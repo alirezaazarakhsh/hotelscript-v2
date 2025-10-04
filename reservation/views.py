@@ -10,6 +10,7 @@ import json
 import traceback
 import copy
 from amqp import NotFound
+from celery import shared_task
 import jdatetime 
 from itertools import combinations
 from authentication.models import NaturalProfile
@@ -81,6 +82,7 @@ from .models import (
     Hotel,
     HotelTag,
     HotelTagPublic,
+    ReservationApprovalDuration,
     ReservationRoom,
     ReservationRoomPassenger,
     Room,
@@ -2572,15 +2574,23 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
 
-class ReservationCreateAPIView(generics.CreateAPIView):
+class ReservationCreateAPIView(CreateAPIView):
+    """
+    API برای ایجاد رزرو موقت.
+    - فقط tracking_code را برمی‌گرداند.
+    - موجودی موقت از auto_approved_count یا count کسر می‌شود.
+    - اگر همه اتاق‌ها از auto_approved_count استفاده کنند، وضعیت رزرو به confirmed تنظیم می‌شود.
+    - اگر رزرو نیاز به تأیید ادمین داشته باشد، وضعیت به unconfirmed تنظیم می‌شود.
+    - موجودی اصلی (inventory) فقط در صورت پرداخت کامل (وضعیت paid) کسر می‌شود.
+    """
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
         operation_description="""
-        ایجاد یک رزرو جدید و بازگرداندن reservation_id.
-        
+        ایجاد یک رزرو جدید و بازگرداندن tracking_code.
+
         ### نحوه استفاده
         - **hotel_id**: شناسه هتل برای فیلتر رزروها (یک عدد صحیح).
         - **room_id**: شناسه اتاق برای فیلتر رزروها (یک عدد صحیح یا لیست اعداد).
@@ -2590,6 +2600,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         - **اعتبارسنجی**:
           - تاریخ ورود < امروز ❌
           - تاریخ خروج <= ورود ❌
+        - **مدیریت موجودی**:
+          - ابتدا از auto_approved_count (بدون نیاز به تأیید) کسر می‌شود.
+          - اگر auto_approved_count کافی نباشد، از count (نیاز به تأیید ادمین) کسر می‌شود.
+          - موجودی اصلی (inventory) فقط در صورت پرداخت کامل کسر می‌شود.
         """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -2612,6 +2626,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             403: openapi.Response(description="دسترسی غیرمجاز.")
         }
     )
+    @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -2625,11 +2640,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
-                    return jdate.fromisoformat(value)
+                    return jdatetime.date.fromisoformat(value)
                 except ValueError:
                     try:
                         g_d = gdate.fromisoformat(value)
-                        return jdate.fromgregorian(date=g_d)
+                        return jdatetime.date.fromgregorian(date=g_d)
                     except ValueError as e:
                         raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, dict):
@@ -2639,14 +2654,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     day = int(value["day"])
                     if value.get("calendar") == "gregorian":
                         g_d = gdate(year, month, day)
-                        return jdate.fromgregorian(date=g_d)
-                    return jdate(year, month, day)
+                        return jdatetime.date.fromgregorian(date=g_d)
+                    return jdatetime.date(year, month, day)
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
-            elif isinstance(value, jdate):
+            elif isinstance(value, jdatetime.date):
                 return value
             elif isinstance(value, gdate):
-                return jdate.fromgregorian(date=value)
+                return jdatetime.date.fromgregorian(date=value)
             else:
                 raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
@@ -2658,7 +2673,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
         # بررسی تاریخ گذشته
-        today_j = jdate.today()
+        today_j = jdatetime.date.today()
         if check_in_date < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
 
@@ -2678,28 +2693,45 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     'reserver_phone_number': request.user.phone_number
                 }
 
-        # ایجاد رزرو اصلی
+        # ایجاد رزرو اصلی با وضعیت موقت
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             buyer=request.user,
+            status='unpaid',
             **reserver_data
         )
 
-        # اضافه کردن اتاق‌ها به رزرو
+        # بررسی و کسر موقت موجودی اتاق‌ها
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
         nights = reservation.nights_count
+        all_auto_approved = True
 
         for room_id in room_ids:
-            room = get_object_or_404(Room, id=room_id, hotel_id=hotel_id)
-            room_total_price = Decimal('0')
+            room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
+            quantity = 1  # تعداد اتاق‌های رزرو شده (می‌توانید از ورودی کاربر بگیرید)
+
+            # بررسی موجودی بدون نیاز به تأیید
+            if room.auto_approved_count >= quantity:
+                room.auto_approved_count -= quantity
+                logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count. New value: {room.auto_approved_count}")
+            else:
+                # اگر موجودی بدون تأیید کافی نباشد، از موجودی با تأیید کسر می‌کنیم
+                if room.count >= quantity:
+                    room.count -= quantity
+                    all_auto_approved = False
+                    logger.info(f"Room {room.id}: Deducted {quantity} from count. New value: {room.count}")
+                else:
+                    raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
+            
+            room.save(update_fields=['auto_approved_count', 'count'])
 
             # محاسبه قیمت هر شب
+            room_total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
-
                 price_obj = RoomDatePrice.objects.filter(
                     room=room,
                     start_date__lte=current_date,
@@ -2717,29 +2749,30 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                     daily_price = Decimal('0')
                 else:
                     daily_price = Decimal(price_obj.price)
-                    # اعمال تخفیف
                     if price_obj.discount_type == 'percentage' and price_obj.discount_date and current_date <= price_obj.discount_date:
                         daily_price *= (Decimal('1') - Decimal(price_obj.discount_value) / Decimal('100'))
                     elif price_obj.discount_type == 'fixed' and getattr(price_obj, 'is_fixed_discount_one_time', False):
                         daily_price -= Decimal(price_obj.discount_value)
-
+                
                 room_total_price += daily_price
 
             # ایجاد رکورد اتاق رزرو
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
-                quantity=1,
+                quantity=quantity,
                 price_per_night=room_total_price / nights if nights > 0 else room_total_price,
                 subtotal=room_total_price,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity
             )
 
-        # ✅ محاسبه نهایی قیمت‌ها با متد مدل
-        total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
+        # تنظیم وضعیت رزرو بر اساس نوع موجودی
+        reservation.status = 'confirmed' if all_auto_approved else 'unconfirmed'
+        reservation.save(update_fields=['status'])
 
-        # ذخیره نتایج
+        # محاسبه نهایی قیمت‌ها
+        total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
         reservation.total_extra_passenger_charge = total_extra
         reservation.discount = code_discount
@@ -2755,7 +2788,167 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ])
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
-    
+
+
+
+
+#ای پی ای وضعیت رزرو ایجاد شده 
+class ReservationStatusAPIView(APIView):
+    """
+    API برای بررسی وضعیت رزرو.
+    - وضعیت رزرو (status)، پیام (message) و زمان باقی‌مانده (remaining_time) را برمی‌گرداند.
+    - remaining_time به صورت ثانیه‌های باقی‌مانده تا انقضای رزرو نمایش داده می‌شود.
+    - اگر رزرو منقضی شده باشد، وضعیت به cancelled تغییر می‌کند و موجودی به auto_approved_count یا count بازمی‌گردد.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="بررسی وضعیت رزرو",
+        operation_description="""
+        بررسی وضعیت رزرو با استفاده از tracking_code.
+
+        ### نحوه استفاده
+        - **tracking_code**: کد پیگیری رزرو (رشته، مثل sfa1234567890).
+        - **خروجی**:
+          - status: وضعیت رزرو (paid, confirmed, unconfirmed, unpaid, cancelled).
+          - message: توضیح وضعیت رزرو.
+          - remaining_time: زمان باقی‌مانده تا انقضای رزرو (به ثانیه) یا null اگر رزرو تأیید یا پرداخت شده باشد.
+        - **رفتار**:
+          - اگر رزرو در وضعیت paid یا confirmed باشد، remaining_time برابر null است.
+          - اگر رزرو منقضی شده باشد، وضعیت به cancelled تغییر می‌کند و موجودی بازمی‌گردد.
+          - اگر رزرو در انتظار پرداخت یا تأیید باشد، زمان باقی‌مانده محاسبه می‌شود.
+        """,
+        tags=["reservation-api"],
+        manual_parameters=[
+            openapi.Parameter(
+                'tracking_code',
+                openapi.IN_PATH,
+                description="کد پیگیری رزرو",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="وضعیت رزرو با موفقیت دریافت شد.",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'tracking_code': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='کد پیگیری رزرو',
+                            example='sfa1234567890'
+                        ),
+                        'status': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='وضعیت رزرو (paid, confirmed, unconfirmed, unpaid, cancelled)',
+                            example='unconfirmed'
+                        ),
+                        'message': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description='توضیح وضعیت رزرو',
+                            example='رزرو در انتظار تأیید ادمین است.'
+                        ),
+                        'remaining_time': openapi.Schema(
+                            type=openapi.TYPE_INTEGER,
+                            description='زمان باقی‌مانده تا انقضای رزرو (به ثانیه) یا null',
+                            example=525,
+                            nullable=True
+                        )
+                    }
+                )
+            ),
+            404: openapi.Response(description="رزرو یافت نشد یا متعلق به کاربر نیست."),
+            403: openapi.Response(description="دسترسی غیرمجاز.")
+        }
+    )
+    def get(self, request, tracking_code):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
+        except Reservationhotel.DoesNotExist:
+            return Response({"error": "رزرو یافت نشد یا متعلق به شما نیست."}, status=status.HTTP_404_NOT_FOUND)
+
+        duration = ReservationApprovalDuration.objects.first()
+        duration_minutes = duration.duration_minutes if duration else 10
+        expiration_time = reservation.created_at + timedelta(minutes=duration_minutes)
+
+        if reservation.status in ['paid', 'confirmed']:
+            return Response({
+                "tracking_code": reservation.tracking_code,
+                "status": reservation.status,
+                "message": "رزرو تأیید شده است." if reservation.status == 'confirmed' else "رزرو پرداخت شده است.",
+                "remaining_time": None
+            }, status=status.HTTP_200_OK)
+
+        if reservation.status == 'cancelled':
+            return Response({
+                "tracking_code": reservation.tracking_code,
+                "status": reservation.status,
+                "message": "رزرو به دلیل انقضای زمان لغو شد.",
+                "remaining_time": None
+            }, status=status.HTTP_200_OK)
+
+        # محاسبه زمان باقی‌مانده (به ثانیه)
+        now = timezone.now()
+        if now >= expiration_time:
+            reservation.status = 'cancelled'
+            reservation.save(update_fields=['status'])
+            with transaction.atomic():
+                for res_room in reservation.reservation_rooms.all():
+                    room = res_room.room
+                    if reservation.status == 'unconfirmed':
+                        room.count += res_room.quantity
+                        logger.info(f"Room {room.id}: Restored {res_room.quantity} to count. New value: {room.count}")
+                    else:
+                        room.auto_approved_count += res_room.quantity
+                        logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
+                    room.save(update_fields=['auto_approved_count', 'count'])
+            return Response({
+                "tracking_code": reservation.tracking_code,
+                "status": reservation.status,
+                "message": "رزرو به دلیل انقضای زمان لغو شد.",
+                "remaining_time": None
+            }, status=status.HTTP_200_OK)
+
+        remaining_seconds = int((expiration_time - now).total_seconds())
+
+        return Response({
+            "tracking_code": reservation.tracking_code,
+            "status": reservation.status,
+            "message": "رزرو در انتظار تأیید ادمین است." if reservation.status == 'unconfirmed' else "رزرو در انتظار پرداخت است.",
+            "remaining_time": remaining_seconds
+        }, status=status.HTTP_200_OK)
+
+@shared_task
+def cleanup_expired_reservations():
+    """
+    تسک دوره‌ای برای لغو رزروهای منقضی.
+    - رزروهای unpaid یا unconfirmed که از زمان ایجادشان بیش از مدت زمان مشخص‌شده گذشته، لغو می‌شوند.
+    - موجودی کسر شده به auto_approved_count یا count بازگردانده می‌شود.
+    """
+    duration = ReservationApprovalDuration.objects.first()
+    duration_minutes = duration.duration_minutes if duration else 10
+    expiration_time = timezone.now() - timedelta(minutes=duration_minutes)
+    expired_reservations = Reservationhotel.objects.filter(
+        status__in=['unpaid', 'unconfirmed'],
+        created_at__lte=expiration_time
+    )
+
+    for reservation in expired_reservations:
+        with transaction.atomic():
+            for res_room in reservation.reservation_rooms.all():
+                room = res_room.room
+                if reservation.status == 'confirmed':
+                    room.auto_approved_count += res_room.quantity
+                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
+                else:
+                    room.count += res_room.quantity
+                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to count. New value: {room.count}")
+                room.save(update_fields=['auto_approved_count', 'count'])
+            
+            reservation.status = 'cancelled'
+            reservation.save(update_fields=['status'])
+            logger.info(f"Reservation {reservation.tracking_code}: Cancelled due to expiration.")
     
     
     
