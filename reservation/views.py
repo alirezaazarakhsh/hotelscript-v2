@@ -2793,7 +2793,6 @@ class ReservationCreateAPIView(CreateAPIView):
 
 
 #ای پی ای وضعیت رزرو ایجاد شده 
-
 logger = logging.getLogger(__name__)
 
 class ReservationStatusAPIView(APIView):
@@ -2862,7 +2861,9 @@ class ReservationStatusAPIView(APIView):
 
         duration = ReservationApprovalDuration.objects.first()
         duration_minutes = duration.duration_minutes if duration else 10
+        logger.debug(f"Duration minutes: {duration_minutes}")
         expiration_time = reservation.created_at + timedelta(minutes=duration_minutes)
+        logger.debug(f"Created at: {reservation.created_at}, Expiration time: {expiration_time}")
 
         if reservation.status in ['paid', 'confirmed']:
             return Response({
@@ -2878,6 +2879,7 @@ class ReservationStatusAPIView(APIView):
 
         # محاسبه زمان باقی‌مانده (به ثانیه)
         now = timezone.now()
+        logger.debug(f"Current time: {now}")
         if now >= expiration_time:
             reservation.status = 'cancelled'
             reservation.save(update_fields=['status'])
@@ -2897,6 +2899,7 @@ class ReservationStatusAPIView(APIView):
             }, status=status.HTTP_200_OK)
 
         remaining_seconds = int((expiration_time - now).total_seconds())
+        logger.debug(f"Remaining seconds: {remaining_seconds}")
 
         return Response({
             "status": reservation.status,
@@ -2911,7 +2914,7 @@ def cleanup_expired_reservations():
     - موجودی کسر شده به auto_approved_count یا count بازگردانده می‌شود.
     """
     duration = ReservationApprovalDuration.objects.first()
-    duration_minutes = duration.duration_minutes if duration else 10
+    duration_minutes = duration.duration_minutes if duration else 20
     expiration_time = timezone.now() - timedelta(minutes=duration_minutes)
     expired_reservations = Reservationhotel.objects.filter(
         status__in=['unpaid', 'unconfirmed'],
@@ -2933,8 +2936,6 @@ def cleanup_expired_reservations():
             reservation.status = 'cancelled'
             reservation.save(update_fields=['status'])
             logger.info(f"Reservation {reservation.tracking_code}: Cancelled due to expiration.")
-            
-            
     
     
 # ای پی ای جزئيات یک رزرو با tracking_code
