@@ -1233,6 +1233,7 @@ class BestHotels(models.Model):
 # ---------------- Reservationhotel ----------------
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
+        ('pending_admin', _('در حال بررسی ادمین')),
         ('paid', _('پرداخت شده')),
         ('unpaid', _('پرداخت نشده')),
         ('confirmed', _('تایید رزرو')),
