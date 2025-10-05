@@ -1400,6 +1400,7 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
+
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     if created:
@@ -1410,6 +1411,21 @@ def notify_status_change(sender, instance, created, **kwargs):
         instance.is_approved = True
         instance.save(update_fields=['is_approved'])
 
+    # بررسی تغییر به وضعیت pending_admin و دریافت مدت زمان تأیید
+    previous_status = None
+    if instance.pk:
+        previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+
+    if instance.status == 'pending_admin' and previous_status != 'pending_admin':
+        try:
+            approval_duration = ReservationApprovalDuration.objects.first()
+            duration_minutes = approval_duration.duration_minutes if approval_duration else 5  # مقدار پیش‌فرض 5 دقیقه
+            logger.info(f"رزرو {instance.tracking_code} در وضعیت pending_admin قرار گرفت. مدت زمان تأیید: {duration_minutes} دقیقه")
+            # اینجا می‌توانید منطق اضافی مثل تنظیم تایمر یا اطلاع‌رسانی اضافه کنید
+        except ObjectDoesNotExist:
+            logger.warning("مدل ReservationApprovalDuration یافت نشد. مقدار پیش‌فرض 5 دقیقه استفاده می‌شود.")
+            duration_minutes = 5
+
     # ارسال اعلان از طریق WebSocket
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
@@ -1417,13 +1433,10 @@ def notify_status_change(sender, instance, created, **kwargs):
         {
             "type": "status_update",
             "message": {
-                "reserve": instance.id,
-                "tracking_code": instance.tracking_code,
                 "status": instance.status
             }
         }
     )
-
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
