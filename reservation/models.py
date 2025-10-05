@@ -1406,13 +1406,20 @@ class Reservationhotel(models.Model):
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     if created:
-        return  # رزرو جدید نیازی به اعلان ندارد
+        return
 
-    previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+    # گرفتن previous_status قبل از تغییرات save
+    if not hasattr(instance, '_previous_status'):
+        try:
+            instance._previous_status = sender.objects.get(pk=instance.pk).status
+        except sender.DoesNotExist:
+            instance._previous_status = None
 
+    previous_status = instance._previous_status
+
+    # بروزرسانی is_approved بدون ایجاد حلقه سیگنال
     if not instance.is_approved and instance.status == 'confirmed':
-        instance.is_approved = True
-        instance.save(update_fields=['is_approved'])
+        sender.objects.filter(pk=instance.pk).update(is_approved=True)
 
     duration_minutes = None
     timer_start = None
@@ -1427,7 +1434,7 @@ def notify_status_change(sender, instance, created, **kwargs):
         timer_start = timezone.now().isoformat()
         logger.info(f"رزرو {instance.tracking_code} وارد حالت pending_admin شد ({duration_minutes} دقیقه).")
 
-    # اصلاح شده: تبدیل status_display به رشته واقعی
+    # ارسال به WebSocket
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1441,7 +1448,8 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
+    
+    
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
