@@ -787,6 +787,7 @@ class RoomService(models.Model):
 
 #مدل اتاق ها 
 # تنظیم logging
+# تنظیم logging
 logger = logging.getLogger(__name__)
 
 class Room(models.Model):
@@ -937,7 +938,6 @@ class Room(models.Model):
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
 
 
 
@@ -1417,27 +1417,36 @@ def notify_status_change(sender, instance, created, **kwargs):
     if instance.pk:
         previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
 
+    duration_minutes = None
+    timer_start = None
     if instance.status == 'pending_admin' and previous_status != 'pending_admin':
         try:
             approval_duration = ReservationApprovalDuration.objects.first()
-            duration_minutes = approval_duration.duration_minutes if approval_duration else 5  # مقدار پیش‌فرض 5 دقیقه
+            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+            timer_start = instance.updated_at.isoformat()  # زمان شروع تایمر
             logger.info(f"رزرو {instance.tracking_code} در وضعیت pending_admin قرار گرفت. مدت زمان تأیید: {duration_minutes} دقیقه")
-            # اینجا می‌توانید منطق اضافی مثل تنظیم تایمر یا اطلاع‌رسانی اضافه کنید
         except ObjectDoesNotExist:
             logger.warning("مدل ReservationApprovalDuration یافت نشد. مقدار پیش‌فرض 5 دقیقه استفاده می‌شود.")
             duration_minutes = 5
+            timer_start = instance.updated_at.isoformat()
 
-    # ارسال اعلان از طریق WebSocket
+    # ارسال اعلان از طریق WebSocket به گروه خاص رزرو
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
-        "reservation_notifications",
+        f"reservation_{instance.tracking_code}",  # گروه خاص برای رزرو
         {
             "type": "status_update",
             "message": {
-                "status": instance.status
+                "tracking_code": instance.tracking_code,
+                "status": instance.status,
+                "status_display": dict(instance.STATUS_CHOICES).get(instance.status, instance.status),
+                "duration_minutes": duration_minutes if duration_minutes is not None else None,
+                "timer_start": timer_start if timer_start is not None else None
             }
         }
     )
+    
+    
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
