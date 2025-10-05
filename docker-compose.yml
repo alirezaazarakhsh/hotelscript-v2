@@ -35,7 +35,7 @@ services:
   channels_worker:
     build: .
     container_name: channels_worker
-    command: python manage.py runworker
+    command: python manage.py runworker default
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
