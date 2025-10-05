@@ -1405,47 +1405,44 @@ class Reservationhotel(models.Model):
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     if created:
-        return  # اگر رزرو جدید باشد، کاری انجام نده
+        return  # رزرو جدید نیازی به اعلان ندارد
 
-    # بررسی تغییر وضعیت و تنظیم is_approved
+    previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
+
+    # اگر وضعیت تأیید شد، فیلد is_approved هم بروزرسانی شود
     if not instance.is_approved and instance.status == 'confirmed':
         instance.is_approved = True
         instance.save(update_fields=['is_approved'])
 
-    # بررسی تغییر به وضعیت pending_admin و دریافت مدت زمان تأیید
-    previous_status = None
-    if instance.pk:
-        previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
-
     duration_minutes = None
     timer_start = None
+
+    # اگر تازه وارد وضعیت "در حال بررسی ادمین" شد
     if instance.status == 'pending_admin' and previous_status != 'pending_admin':
         try:
             approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-            timer_start = instance.updated_at.isoformat()  # زمان شروع تایمر
-            logger.info(f"رزرو {instance.tracking_code} در وضعیت pending_admin قرار گرفت. مدت زمان تأیید: {duration_minutes} دقیقه")
         except ObjectDoesNotExist:
-            logger.warning("مدل ReservationApprovalDuration یافت نشد. مقدار پیش‌فرض 5 دقیقه استفاده می‌شود.")
             duration_minutes = 5
-            timer_start = instance.updated_at.isoformat()
 
-    # ارسال اعلان از طریق WebSocket به گروه خاص رزرو
+        timer_start = timezone.now().isoformat()
+        logger.info(f"رزرو {instance.tracking_code} وارد حالت pending_admin شد ({duration_minutes} دقیقه).")
+
+    # ارسال به WebSocket
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
-        f"reservation_{instance.tracking_code}",  # گروه خاص برای رزرو
+        f"reservation_{instance.tracking_code}",
         {
             "type": "status_update",
             "message": {
-                "tracking_code": instance.tracking_code,
                 "status": instance.status,
                 "status_display": dict(instance.STATUS_CHOICES).get(instance.status, instance.status),
-                "duration_minutes": duration_minutes if duration_minutes is not None else None,
-                "timer_start": timer_start if timer_start is not None else None
-            }
-        }
+                "duration_minutes": duration_minutes,
+                "timer_start": timer_start,
+            },
+        },
     )
-    
+
     
 
 # ---------------- ReservationRoom ----------------

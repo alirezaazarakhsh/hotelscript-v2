@@ -1,25 +1,18 @@
 import os
-from django.core.asgi import get_asgi_application
-from django.urls import path
+import django
 from channels.routing import ProtocolTypeRouter, URLRouter
-from .consumer import MyConsumer
+from channels.auth import AuthMiddlewareStack
+from django.core.asgi import get_asgi_application
+from reservation import routing  
 
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
+django.setup()
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core_app.settings')
-
- 
-# application = get_asgi_application()
-
-
-application = ProtocolTypeRouter(
-    {
-        "http": get_asgi_application(),
-        "websocket": 
-            URLRouter(
-                [
-                    path("ws/websocket/", MyConsumer.as_asgi()),
-                ]
-            )
-        
-    }
-)
+application = ProtocolTypeRouter({
+    "http": get_asgi_application(),
+    "websocket": AuthMiddlewareStack(
+        URLRouter(
+            routing.websocket_urlpatterns
+        )
+    ),
+})
