@@ -15,6 +15,8 @@ from asgiref.sync import async_to_sync
 from django.db.models.signals import post_save
 from channels.layers import get_channel_layer
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils.encoding import force_str
+
 
 # 🌐 Django
 from django.db import models
@@ -1236,7 +1238,6 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
-
 logger = logging.getLogger(__name__)
 
 class Reservationhotel(models.Model):
@@ -1409,7 +1410,6 @@ def notify_status_change(sender, instance, created, **kwargs):
 
     previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
 
-    # اگر وضعیت تأیید شد، فیلد is_approved هم بروزرسانی شود
     if not instance.is_approved and instance.status == 'confirmed':
         instance.is_approved = True
         instance.save(update_fields=['is_approved'])
@@ -1417,7 +1417,6 @@ def notify_status_change(sender, instance, created, **kwargs):
     duration_minutes = None
     timer_start = None
 
-    # اگر تازه وارد وضعیت "در حال بررسی ادمین" شد
     if instance.status == 'pending_admin' and previous_status != 'pending_admin':
         try:
             approval_duration = ReservationApprovalDuration.objects.first()
@@ -1428,7 +1427,7 @@ def notify_status_change(sender, instance, created, **kwargs):
         timer_start = timezone.now().isoformat()
         logger.info(f"رزرو {instance.tracking_code} وارد حالت pending_admin شد ({duration_minutes} دقیقه).")
 
-    # ارسال به WebSocket
+    # اصلاح شده: تبدیل status_display به رشته واقعی
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1436,14 +1435,12 @@ def notify_status_change(sender, instance, created, **kwargs):
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "status_display": dict(instance.STATUS_CHOICES).get(instance.status, instance.status),
+                "status_display": force_str(dict(instance.STATUS_CHOICES).get(instance.status, instance.status)),
                 "duration_minutes": duration_minutes,
                 "timer_start": timer_start,
             },
         },
     )
-
-    
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
