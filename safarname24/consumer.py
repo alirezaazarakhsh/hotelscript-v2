@@ -4,30 +4,31 @@ from asgiref.sync import async_to_sync
 
 class MyConsumer(WebsocketConsumer):
     def connect(self):
-        user = self.scope["user"]
-        if user.is_anonymous:
-            # اجازه اتصال به ناشناس‌ها ندیم
-            self.close()
-        else:
-            # گروه اختصاصی برای هر کاربر
-            self.group_name = f"reservation_user_{user.id}"
-            async_to_sync(self.channel_layer.group_add)(
-                self.group_name,
-                self.channel_name
-            )
-            self.accept()
-            self.send(text_data=json.dumps({"message": "You are connected!"}))
+        # اتصال به گروه "reservation_notifications"
+        async_to_sync(self.channel_layer.group_add)(
+            "reservation_notifications",  # نام گروه
+            self.channel_name
+        )
+        self.accept()
+        self.send(text_data=json.dumps({"message": "You are connected!"}))
+        
 
     def disconnect(self, close_code):
+        # حذف از گروه هنگام قطع اتصال
         async_to_sync(self.channel_layer.group_discard)(
-            getattr(self, "group_name", None),
+            "reservation_notifications",
             self.channel_name
         )
 
     def receive(self, text_data):
-        # این پروژه فقط ارسال وضعیت از سرور به کلاینت است
-        pass
+        # دریافت پیام از کلاینت
+        print("Received data:", text_data)
+        self.send(text_data="thanks")
 
     def status_update(self, event):
-        # ارسال پیام به کلاینت
-        self.send(text_data=json.dumps(event["message"]))
+        # ارسال پیام به کلاینت وقتی وضعیت رزرو تغییر کرد
+        self.send(text_data=json.dumps({
+            "message": event["message"]
+        }))
+
+

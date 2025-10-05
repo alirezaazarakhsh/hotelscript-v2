@@ -11,6 +11,8 @@ import traceback
 import copy
 from amqp import NotFound
 from celery import shared_task
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 import jdatetime 
 from itertools import combinations
 from authentication.models import NaturalProfile
@@ -2881,18 +2883,47 @@ class ReservationStatusAPIView(APIView):
         now = timezone.now()
         logger.debug(f"Current time: {now}")
         if now >= expiration_time:
-            reservation.status = 'cancelled'
-            reservation.save(update_fields=['status'])
             with transaction.atomic():
+                previous_status = reservation.status
+                reservation.status = 'cancelled'
+                reservation.save(update_fields=['status'])
+
+                # Restore room counts
                 for res_room in reservation.reservation_rooms.all():
                     room = res_room.room
-                    if reservation.status == 'unconfirmed':
+                    if previous_status == 'unconfirmed':
                         room.count += res_room.quantity
                         logger.info(f"Room {room.id}: Restored {res_room.quantity} to count. New value: {room.count}")
                     else:
                         room.auto_approved_count += res_room.quantity
                         logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
                     room.save(update_fields=['auto_approved_count', 'count'])
+
+                # Send WebSocket notifications
+                channel_layer = get_channel_layer()
+                # User-specific notification
+                async_to_sync(channel_layer.group_send)(
+                    f"reservation_user_{reservation.buyer.id}",
+                    {
+                        "type": "status_update",
+                        "message": {
+                            "tracking_code": reservation.tracking_code,
+                            "status": reservation.status
+                        }
+                    }
+                )
+                # General notification (aligned with signal)
+                async_to_sync(channel_layer.group_send)(
+                    "reservation_notifications",
+                    {
+                        "type": "status_update",
+                        "message": {
+                            "reserve": reservation.id,
+                            "status": reservation.status
+                        }
+                    }
+                )
+
             return Response({
                 "status": reservation.status,
                 "remaining_time": None
@@ -2912,6 +2943,7 @@ def cleanup_expired_reservations():
     تسک دوره‌ای برای لغو رزروهای منقضی.
     - رزروهای unpaid یا unconfirmed که از زمان ایجادشان بیش از مدت زمان مشخص‌شده گذشته، لغو می‌شوند.
     - موجودی کسر شده به auto_approved_count یا count بازگردانده می‌شود.
+    - اعلان‌های WebSocket برای تغییرات وضعیت ارسال می‌شود.
     """
     duration = ReservationApprovalDuration.objects.first()
     duration_minutes = duration.duration_minutes if duration else 20
@@ -2921,22 +2953,50 @@ def cleanup_expired_reservations():
         created_at__lte=expiration_time
     )
 
+    channel_layer = get_channel_layer()
     for reservation in expired_reservations:
         with transaction.atomic():
-            for res_room in reservation.reservation_rooms.all():
-                room = res_room.room
-                if reservation.status == 'confirmed':
-                    room.auto_approved_count += res_room.quantity
-                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
-                else:
-                    room.count += res_room.quantity
-                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to count. New value: {room.count}")
-                room.save(update_fields=['auto_approved_count', 'count'])
-            
+            previous_status = reservation.status
             reservation.status = 'cancelled'
             reservation.save(update_fields=['status'])
             logger.info(f"Reservation {reservation.tracking_code}: Cancelled due to expiration.")
-    
+
+            # Restore room counts
+            for res_room in reservation.reservation_rooms.all():
+                room = res_room.room
+                if previous_status == 'unconfirmed':
+                    room.count += res_room.quantity
+                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to count. New value: {room.count}")
+                else:
+                    room.auto_approved_count += res_room.quantity
+                    logger.info(f"Room {room.id}: Restored {res_room.quantity} to auto_approved_count. New value: {room.auto_approved_count}")
+                room.save(update_fields=['auto_approved_count', 'count'])
+
+            # Send WebSocket notifications
+            # User-specific notification
+            async_to_sync(channel_layer.group_send)(
+                f"reservation_user_{reservation.buyer.id}",
+                {
+                    "type": "status_update",
+                    "message": {
+                        "tracking_code": reservation.tracking_code,
+                        "status": reservation.status
+                    }
+                }
+            )
+            # General notification (aligned with signal)
+            async_to_sync(channel_layer.group_send)(
+                "reservation_notifications",
+                {
+                    "type": "status_update",
+                    "message": {
+                        "reserve": reservation.id,
+                        "status": reservation.status
+                    }
+                }
+            )
+            
+            
     
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)

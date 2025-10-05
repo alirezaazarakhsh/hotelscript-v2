@@ -6,11 +6,13 @@ import re
 import uuid
 from decimal import Decimal, ROUND_UP
 from datetime import timedelta
+from django.dispatch import receiver
 import jdatetime
 from functools import cached_property
 from jdatetime import date as jdate
 from jalali_date import date2jalali
 from asgiref.sync import async_to_sync
+from django.db.models.signals import post_save
 from channels.layers import get_channel_layer
 
 # 🌐 Django
@@ -1268,6 +1270,8 @@ class Reservationhotel(models.Model):
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_half_day_charge = models.DecimalField(_('مجموع نیم‌شارژها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
+    
+    is_approved = models.BooleanField(_('تایید شده'), default=False)
 
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
@@ -1410,7 +1414,8 @@ class Reservationhotel(models.Model):
                     }
                 }
             )
-
+        
+        
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
