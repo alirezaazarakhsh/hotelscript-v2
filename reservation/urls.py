@@ -15,7 +15,6 @@ from .views import (
     ReservationDescriptionAPIView,
     ReservationDetailAPIView,
     ReservationInvoiceAPIView,
-    ReservationStatusAPIView,
     SuggesteHotelListView,
     ReservationRoomDetailAPIView
     
@@ -77,7 +76,6 @@ urlpatterns = [
     # ==== Room Info ====
     path('hotels/<slug:slug>/rooms/', views.HotelRoomsView.as_view(), name='hotel-rooms'),
     path('reservation/create/', ReservationCreateAPIView.as_view(), name='reservation-create'),    
-    path('reservation/status/<str:tracking_code>/', ReservationStatusAPIView.as_view(), name='reservation-status'),
     path('reservation/reservation-detail/<str:tracking_code>/', ReservationDetailAPIView.as_view(), name='reservation-detail'),
     path('reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
     path("reservation/invoice/<str:tracking_code>/", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),

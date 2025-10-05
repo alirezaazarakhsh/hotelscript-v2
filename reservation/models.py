@@ -1400,22 +1400,31 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-        # WebSocket: اگر وضعیت رزرو تغییر کرد، پیام برای کاربر ارسال شود
-        if previous_status and previous_status != self.status:
-            channel_layer = get_channel_layer()
-            group_name = f"reservation_user_{self.buyer.id}"
-            async_to_sync(channel_layer.group_send)(
-                group_name,
-                {
-                    "type": "status_update",
-                    "message": {
-                        "tracking_code": self.tracking_code,
-                        "status": self.status
-                    }
-                }
-            )
-        
-        
+@receiver(post_save, sender=Reservationhotel)
+def notify_status_change(sender, instance, created, **kwargs):
+    if created:
+        return  # اگر رزرو جدید باشد، کاری انجام نده
+
+    # بررسی تغییر وضعیت و تنظیم is_approved
+    if not instance.is_approved and instance.status == 'confirmed':
+        instance.is_approved = True
+        instance.save(update_fields=['is_approved'])
+
+    # ارسال اعلان از طریق WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        "reservation_notifications",
+        {
+            "type": "status_update",
+            "message": {
+                "reserve": instance.id,
+                "tracking_code": instance.tracking_code,
+                "status": instance.status
+            }
+        }
+    )
+
+
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
