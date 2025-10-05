@@ -1274,7 +1274,6 @@ class Reservationhotel(models.Model):
     total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     
     is_approved = models.BooleanField(_('تایید شده'), default=False)
-
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
@@ -1402,22 +1401,18 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     if created:
         return
 
-    # گرفتن previous_status قبل از تغییرات save
-    if not hasattr(instance, '_previous_status'):
-        try:
-            instance._previous_status = sender.objects.get(pk=instance.pk).status
-        except sender.DoesNotExist:
-            instance._previous_status = None
+    # گرفتن وضعیت قبلی
+    try:
+        previous_status = sender.objects.get(pk=instance.pk).status
+    except sender.DoesNotExist:
+        previous_status = None
 
-    previous_status = instance._previous_status
-
-    # بروزرسانی is_approved بدون ایجاد حلقه سیگنال
+    # بروزرسانی is_approved بدون فراخوانی دوباره سیگنال
     if not instance.is_approved and instance.status == 'confirmed':
         sender.objects.filter(pk=instance.pk).update(is_approved=True)
 
