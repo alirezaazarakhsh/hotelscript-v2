@@ -1401,35 +1401,34 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-@receiver(post_save, sender=Reservationhotel)
+@receiver(models.signals.post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     if created:
         return
 
-    # گرفتن وضعیت قبلی
-    try:
-        previous_status = sender.objects.get(pk=instance.pk).status
-    except sender.DoesNotExist:
-        previous_status = None
+    # جلوگیری از ارسال تکراری
+    if hasattr(instance, "_old_status") and instance.status == instance._old_status:
+        return
 
-    # بروزرسانی is_approved بدون فراخوانی دوباره سیگنال
+    # آپدیت تایید
     if not instance.is_approved and instance.status == 'confirmed':
         sender.objects.filter(pk=instance.pk).update(is_approved=True)
 
     duration_minutes = None
     timer_start = None
 
-    if instance.status == 'pending_admin' and previous_status != 'pending_admin':
+    if instance.status == 'pending_admin':
         try:
+            from reservation.models import ReservationApprovalDuration
             approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-        except ObjectDoesNotExist:
+        except Exception as e:
+            logger.error(f"خطا در دریافت مدت زمان تایید: {e}")
             duration_minutes = 5
 
         timer_start = timezone.now().isoformat()
-        logger.info(f"رزرو {instance.tracking_code} وارد حالت pending_admin شد ({duration_minutes} دقیقه).")
 
-    # ارسال به WebSocket
+    # ارسال پیام به WebSocket
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1437,13 +1436,12 @@ def notify_status_change(sender, instance, created, **kwargs):
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "status_display": force_str(dict(instance.STATUS_CHOICES).get(instance.status, instance.status)),
                 "duration_minutes": duration_minutes,
                 "timer_start": timer_start,
             },
         },
     )
-    
+
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
