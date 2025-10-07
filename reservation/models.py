@@ -19,7 +19,7 @@ from django.utils.encoding import force_str
 
 
 # 🌐 Django
-from django.db import models
+from django.db import models , transaction
 from django.apps import apps
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
