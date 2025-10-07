@@ -1402,6 +1402,7 @@ class Reservationhotel(models.Model):
         if self.pk:
             previous_status = Reservationhotel.objects.filter(pk=self.pk).values_list('status', flat=True).first()
 
+        # محاسبه قیمت فقط اگر نیاز باشد
         if not getattr(self, '_skip_price_calculation', False):
             if not self.pk or any(getattr(self, field) is None for field in [
                 'total_price', 'discount', 'room_fixed_discount', 'final_price',
@@ -1418,35 +1419,74 @@ class Reservationhotel(models.Model):
                 self.total_extra_passenger_charge = total_extra
                 self.final_price = final
 
-        # Handle inventory restoration on cancellation
+        # ✅ وقتی رزرو تازه ایجاد می‌شود
+        if not self.pk:
+            super().save(*args, **kwargs)  # اول ذخیره تا شناسه (id) داشته باشیم
+
+            # کاهش موجودی در هنگام ایجاد رزرو
+            with transaction.atomic():
+                reservation_rooms = self.reservation_rooms.select_related('room').all()
+                for res_room in reservation_rooms:
+                    room = res_room.room
+                    quantity = res_room.quantity or 1
+
+                    if room.auto_approval:  # اگر تأیید خودکار فعال است
+                        room.auto_approved_count = max(0, (room.auto_approved_count or 0) - quantity)
+                    else:
+                        room.count = max(0, (room.count or 0) - quantity)
+
+                    room.save(update_fields=['count', 'auto_approved_count'])
+
+            return  # چون رزرو تازه ساخته شده، نیازی به ادامه نیست
+
+        # ✅ بازگردانی موجودی در زمان لغو رزرو
         if previous_status in ['pending_admin', 'confirmed', 'unpaid', 'paid'] and self.status == 'cancelled':
             with transaction.atomic():
-                for res_room in self.reservation_rooms.select_related('room').all():
+                reservation_rooms = self.reservation_rooms.select_related('room').all()
+                for res_room in reservation_rooms:
                     room = res_room.room
-                    quantity = res_room.quantity
-                    if previous_status == 'confirmed':
+                    quantity = res_room.quantity or 1
+
+                    # اگر قبلاً در حالت تأیید خودکار بوده، از auto_approved_count برگردون
+                    if previous_status == 'confirmed' or room.auto_approval:
                         room.auto_approved_count = (room.auto_approved_count or 0) + quantity
-                        logger.info(f"Room {room.id}: Restored {quantity} to auto_approved_count. New value: {room.auto_approved_count}")
-                    elif previous_status == 'pending_admin':
+                    else:
                         room.count = (room.count or 0) + quantity
-                        logger.info(f"Room {room.id}: Restored {quantity} to count. New value: {room.count}")
+
                     room.save(update_fields=['auto_approved_count', 'count'])
 
+        # ✅ ذخیره نهایی رزرو
         super().save(*args, **kwargs)
+        
 
 @receiver(models.signals.post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
+    # ✅ قبلاً return می‌کردی اگر created بود — حالا حذف کن
+    duration_minutes = None
+    timer_start = None
+
+    # اگر رزرو تازه ساخته شده، از همان لحظه وضعیت اولیه را بفرست
     if created:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"reservation_{instance.tracking_code}",
+            {
+                "type": "status_update",
+                "message": {
+                    "status": instance.status,
+                    "duration_minutes": duration_minutes,
+                    "timer_start": timer_start,
+                },
+            },
+        )
         return
 
+    # ✅ بقیه بخش بدون تغییر
     if hasattr(instance, "_old_status") and instance.status == instance._old_status:
         return
 
     if not instance.is_approved and instance.status == 'confirmed':
         sender.objects.filter(pk=instance.pk).update(is_approved=True)
-
-    duration_minutes = None
-    timer_start = None
 
     if instance.status == 'pending_admin':
         try:
@@ -1471,8 +1511,8 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-    
-    
+
+
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
