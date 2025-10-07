@@ -788,9 +788,9 @@ class RoomService(models.Model):
 
 
 #مدل اتاق ها 
-#مدل اتاق ها 
 # تنظیم logging
 logger = logging.getLogger(__name__)
+
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -817,7 +817,6 @@ class Room(models.Model):
         help_text=_('تعداد اتاق‌های قابل رزرو در حال حاضر'),
         default=0,
     )
-
     count = models.PositiveIntegerField(
         verbose_name=_('تعداد رزرو نیازمند تایید ادمین'),
         help_text=_('تعداد رزروهایی که باید تایید ادمین داشته باشند'),
@@ -861,7 +860,7 @@ class Room(models.Model):
 
     class Meta:
         verbose_name = 'اتاق'
-        verbose_name_plural = 'اتاق ها'
+        verbose_name_plural = 'اتاق‌ها'
         constraints = [
             models.CheckConstraint(
                 check=models.Q(count__gte=0),
@@ -961,8 +960,6 @@ class Room(models.Model):
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
-
 
 
 
@@ -1421,6 +1418,20 @@ class Reservationhotel(models.Model):
                 self.total_extra_passenger_charge = total_extra
                 self.final_price = final
 
+        # Handle inventory restoration on cancellation
+        if previous_status in ['pending_admin', 'confirmed', 'unpaid', 'paid'] and self.status == 'cancelled':
+            with transaction.atomic():
+                for res_room in self.reservation_rooms.select_related('room').all():
+                    room = res_room.room
+                    quantity = res_room.quantity
+                    if previous_status == 'confirmed':
+                        room.auto_approved_count = (room.auto_approved_count or 0) + quantity
+                        logger.info(f"Room {room.id}: Restored {quantity} to auto_approved_count. New value: {room.auto_approved_count}")
+                    elif previous_status == 'pending_admin':
+                        room.count = (room.count or 0) + quantity
+                        logger.info(f"Room {room.id}: Restored {quantity} to count. New value: {room.count}")
+                    room.save(update_fields=['auto_approved_count', 'count'])
+
         super().save(*args, **kwargs)
 
 @receiver(models.signals.post_save, sender=Reservationhotel)
@@ -1428,11 +1439,9 @@ def notify_status_change(sender, instance, created, **kwargs):
     if created:
         return
 
-    # جلوگیری از ارسال تکراری
     if hasattr(instance, "_old_status") and instance.status == instance._old_status:
         return
 
-    # آپدیت تایید
     if not instance.is_approved and instance.status == 'confirmed':
         sender.objects.filter(pk=instance.pk).update(is_approved=True)
 
@@ -1450,7 +1459,6 @@ def notify_status_change(sender, instance, created, **kwargs):
 
         timer_start = timezone.now().isoformat()
 
-    # ارسال پیام به WebSocket
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1463,7 +1471,8 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
+    
+    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
