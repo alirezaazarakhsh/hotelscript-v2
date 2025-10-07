@@ -2623,7 +2623,7 @@ class ReservationCreateAPIView(CreateAPIView):
                     }
                 )
             ),
-            400: openapi.Response(description="درخواست نامعتبر (مثلاً تاریخ نامعتبر یا فرمت نادرست)."),
+            400: openapi.Response(description="درخواست نامعتبر (مثلاً تاریخ نامعتبر یا فرمت نادرست یا موجودی کافی نیست)."),
             404: openapi.Response(description="هتل یا اتاق یافت نشد."),
             403: openapi.Response(description="دسترسی غیرمجاز.")
         }
@@ -2714,6 +2714,10 @@ class ReservationCreateAPIView(CreateAPIView):
         for room_id in room_ids:
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1  # تعداد اتاق‌های رزرو شده (می‌توانید از ورودی کاربر بگیرید)
+
+            # اعتبارسنجی موجودی قبل از کسر
+            if room.inventory < quantity:
+                raise ValidationError(f"موجودی کافی برای اتاق {room.title} (موجودی فعلی: {room.inventory}) وجود ندارد.")
 
             # بررسی موجودی بدون نیاز به تأیید
             if room.auto_approved_count >= quantity:
