@@ -788,10 +788,9 @@ class RoomService(models.Model):
 
 
 #مدل اتاق ها 
-# تنظیم logging
+#مدل اتاق ها 
 # تنظیم logging
 logger = logging.getLogger(__name__)
-
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -818,16 +817,17 @@ class Room(models.Model):
         help_text=_('تعداد اتاق‌های قابل رزرو در حال حاضر'),
         default=0,
     )
+
     count = models.PositiveIntegerField(
-        verbose_name=_('تعداد رزرو نیازمند تأیید ادمین'),
-        help_text=_('تعداد رزروهایی که باید تأیید ادمین داشته باشند'),
+        verbose_name=_('تعداد رزرو نیازمند تایید ادمین'),
+        help_text=_('تعداد رزروهایی که باید تایید ادمین داشته باشند'),
         default=0,
         null=True,
         blank=True,
     )
     auto_approved_count = models.PositiveIntegerField(
-        verbose_name=_('تعداد رزرو بدون تأیید ادمین'),
-        help_text=_('تعداد رزروهایی که بدون تأیید ادمین تأیید می‌شوند'),
+        verbose_name=_('تعداد رزرو بدون تایید ادمین'),
+        help_text=_('تعداد رزروهایی که بدون تایید ادمین تایید می‌شوند'),
         default=0,
         null=True,
         blank=True,
@@ -861,7 +861,7 @@ class Room(models.Model):
 
     class Meta:
         verbose_name = 'اتاق'
-        verbose_name_plural = 'اتاق‌ها'
+        verbose_name_plural = 'اتاق ها'
         constraints = [
             models.CheckConstraint(
                 check=models.Q(count__gte=0),
@@ -870,6 +870,14 @@ class Room(models.Model):
             models.CheckConstraint(
                 check=models.Q(auto_approved_count__gte=0),
                 name='check_auto_approved_non_negative',
+            ),
+            models.CheckConstraint(
+                check=models.Q(count__lte=models.F('inventory')),
+                name='count_lte_inventory',
+            ),
+            models.CheckConstraint(
+                check=models.Q(auto_approved_count__lte=models.F('inventory')),
+                name='auto_count_lte_inventory',
             ),
         ]
 
@@ -880,8 +888,8 @@ class Room(models.Model):
         current_auto_approved_count = self.auto_approved_count or 0
         if current_count + current_auto_approved_count > current_inventory:
             raise ValidationError({
-                'count': _('جمع تعداد رزروهای تأیید شده و بدون تأیید نمی‌تواند بیشتر از موجودی باشد.'),
-                'auto_approved_count': _('جمع تعداد رزروهای تأیید شده و بدون تأیید نمی‌تواند بیشتر از موجودی باشد.'),
+                'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
+                'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
             })
 
     def __str__(self):
@@ -889,7 +897,6 @@ class Room(models.Model):
 
     def is_closed(self, target_date=None):
         if target_date is None:
-            from jdatetime import date as JalaliDate
             target_date = JalaliDate.today()
         active_prices = self.date_prices.filter(
             start_date__lte=target_date,
@@ -918,18 +925,32 @@ class Room(models.Model):
         current_auto_approved_count = self.auto_approved_count or 0
         logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}, Current count = {current_count}, Current auto_approved_count = {current_auto_approved_count}")
 
-        # If both count and auto_approved_count are zero, set inventory to zero
-        if current_count == 0 and current_auto_approved_count == 0 and current_inventory != 0:
-            logger.info(f"Room {self.pk}: Setting inventory to 0 because both count and auto_approved_count are 0")
-            self.inventory = 0
+        # Calculate differences
+        count_diff = old_count - current_count if old_count is not None else 0
+        auto_approved_diff = old_auto_approved_count - current_auto_approved_count if old_auto_approved_count is not None else 0
+
+        # Check if inventory will be zero after reduction
+        will_inventory_be_zero = False
+        if count_diff > 0 or auto_approved_diff > 0:
+            total_reduction = count_diff + auto_approved_diff
+            if total_reduction > 0:
+                if current_inventory >= total_reduction:
+                    self.inventory = current_inventory - total_reduction
+                    logger.info(f"Room {self.pk}: Reduced inventory by {total_reduction} (count_diff={count_diff}, auto_approved_diff={auto_approved_diff}) to {self.inventory}")
+                    if self.inventory == 0:
+                        will_inventory_be_zero = True
+                else:
+                    logger.error(f"Room {self.pk}: Cannot reduce inventory by {total_reduction} as it would result in negative inventory")
+                    raise ValidationError(_('نمی‌توان موجودی را کاهش داد زیرا کمتر از مجموع کسر رزروها می‌شود.'))
 
         super().save(*args, **kwargs)
 
-        # Handle inventory reaching zero (manually or due to count/auto_approved_count being zero)
-        if (old_instance and old_inventory != 0 and self.inventory == 0):
+        # Handle inventory reaching zero (either manually or due to count/auto_approved_count reduction)
+        if (old_instance and old_inventory != 0 and self.inventory == 0) or will_inventory_be_zero:
             room_name = self.title.strip() if self.title else "اتاق"
             room_full_name = f"{room_name} - آیدی {self.pk}"
             status = "تکمیل"
+
             logger.info(f"Room {self.pk}: Inventory changed to 0 for '{room_full_name}', attempting to send SMS")
             try:
                 from reservation.sms.sms import send_room_availability_sms
@@ -940,6 +961,7 @@ class Room(models.Model):
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+
 
 
 
