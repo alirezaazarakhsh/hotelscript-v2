@@ -2576,7 +2576,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
 
-class ReservationCreateAPIView(APIView):
+class ReservationCreateAPIView(CreateAPIView):
     """
     API برای ایجاد رزرو موقت.
     - فقط tracking_code را برمی‌گرداند.
@@ -2843,7 +2843,7 @@ class ReservationCreateAPIView(APIView):
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
     
-            
+                
     
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)
