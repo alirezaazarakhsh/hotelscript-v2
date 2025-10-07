@@ -2715,28 +2715,27 @@ class ReservationCreateAPIView(CreateAPIView):
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1  # تعداد اتاق‌های رزرو شده (می‌توانید از ورودی کاربر بگیرید)
 
-            # اعتبارسنجی موجودی قبل از کسر
+            # اعتبارسنجی اولیه موجودی
             if room.inventory < quantity:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} (موجودی فعلی: {room.inventory}) وجود ندارد.")
 
             # کسر از موجودی و بررسی
             if room.auto_approved_count >= quantity:
                 room.auto_approved_count -= quantity
-                logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count. New value: {room.auto_approved_count}")
                 room.inventory -= quantity
-                logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
+                logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count and inventory. New values: auto_approved_count={room.auto_approved_count}, inventory={room.inventory}")
             else:
                 if room.count >= quantity:
                     room.count -= quantity
-                    all_auto_approved = False
-                    logger.info(f"Room {room.id}: Deducted {quantity} from count. New value: {room.count}")
                     room.inventory -= quantity
-                    logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
+                    all_auto_approved = False
+                    logger.info(f"Room {room.id}: Deducted {quantity} from count and inventory. New values: count={room.count}, inventory={room.inventory}")
                 else:
                     raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            # ذخیره تغییرات قبل از ایجاد ReservationRoom
+            # ذخیره تغییرات و رفرش برای اطمینان از وضعیت به‌روز
             room.save(update_fields=['auto_approved_count', 'count', 'inventory'])
+            room.refresh_from_db()  # رفرش برای اطمینان از وضعیت فعلی در دیتابیس
 
             # اعتبارسنجی پس از کسر
             if room.count > room.inventory:
@@ -2828,6 +2827,7 @@ class ReservationCreateAPIView(CreateAPIView):
         )
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
+
             
     
 # ای پی ای جزئيات یک رزرو با tracking_code
