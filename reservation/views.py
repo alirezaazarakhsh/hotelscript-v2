@@ -2645,8 +2645,8 @@ class ReservationCreateAPIView(CreateAPIView):
                     return jdatetime.date.fromisoformat(value)
                 except ValueError:
                     try:
-                        g_d = gdate.fromisoformat(value)
-                        return jdatetime.date.fromgregorian(date=g_d)
+                        g_d = jdatetime.date.fromgregorian(date=jdatetime.date.fromisoformat(value))
+                        return g_d
                     except ValueError as e:
                         raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, dict):
@@ -2655,14 +2655,14 @@ class ReservationCreateAPIView(CreateAPIView):
                     month = int(value["month"])
                     day = int(value["day"])
                     if value.get("calendar") == "gregorian":
-                        g_d = gdate(year, month, day)
-                        return jdatetime.date.fromgregorian(date=g_d)
+                        g_d = jdatetime.date.fromgregorian(date=jdatetime.date(year, month, day))
+                        return g_d
                     return jdatetime.date(year, month, day)
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, jdatetime.date):
                 return value
-            elif isinstance(value, gdate):
+            elif isinstance(value, jdatetime.date):
                 return jdatetime.date.fromgregorian(date=value)
             else:
                 raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
@@ -2719,16 +2719,20 @@ class ReservationCreateAPIView(CreateAPIView):
             if room.auto_approved_count >= quantity:
                 room.auto_approved_count -= quantity
                 logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count. New value: {room.auto_approved_count}")
+                room.inventory -= quantity  # کسر از موجودی فعلی
+                logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
             else:
                 # اگر موجودی بدون تأیید کافی نباشد، از موجودی با تأیید کسر می‌کنیم
                 if room.count >= quantity:
                     room.count -= quantity
                     all_auto_approved = False
                     logger.info(f"Room {room.id}: Deducted {quantity} from count. New value: {room.count}")
+                    room.inventory -= quantity  # کسر از موجودی فعلی
+                    logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
                 else:
                     raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
             
-            room.save(update_fields=['auto_approved_count', 'count'])
+            room.save(update_fields=['auto_approved_count', 'count', 'inventory'])
 
             # محاسبه قیمت هر شب
             room_total_price = Decimal('0')
@@ -2789,8 +2793,33 @@ class ReservationCreateAPIView(CreateAPIView):
             'total_half_day_charge', 'final_price'
         ])
 
-        return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
+        # Send initial status to WebSocket
+        duration_minutes = None
+        timer_start = None
+        if reservation.status == 'pending_admin':
+            try:
+                from reservation.models import ReservationApprovalDuration
+                approval_duration = ReservationApprovalDuration.objects.first()
+                duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+            except Exception as e:
+                logger.error(f"خطا در دریافت مدت زمان تایید: {e}")
+                duration_minutes = 5
+            timer_start = timezone.now().isoformat()
 
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"reservation_{reservation.tracking_code}",
+            {
+                "type": "status_update",
+                "message": {
+                    "status": reservation.status,
+                    "duration_minutes": duration_minutes,
+                    "timer_start": timer_start,
+                },
+            },
+        )
+
+        return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
 
 
 
