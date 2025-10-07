@@ -2623,7 +2623,7 @@ class ReservationCreateAPIView(CreateAPIView):
                     }
                 )
             ),
-            400: openapi.Response(description="درخواست نامعتبر (مثلاً تاریخ نامعتبر یا فرمت نادرست یا موجودی کافی نیست)."),
+            400: openapi.Response(description="درخواست نامعتبر (مثلاً تاریخ نامعتبر یا موجودی کافی نیست)."),
             404: openapi.Response(description="هتل یا اتاق یافت نشد."),
             403: openapi.Response(description="دسترسی غیرمجاز.")
         }
@@ -2719,24 +2719,28 @@ class ReservationCreateAPIView(CreateAPIView):
             if room.inventory < quantity:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} (موجودی فعلی: {room.inventory}) وجود ندارد.")
 
-            # بررسی موجودی بدون نیاز به تأیید
+            # کسر از موجودی و بررسی
             if room.auto_approved_count >= quantity:
                 room.auto_approved_count -= quantity
                 logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count. New value: {room.auto_approved_count}")
-                room.inventory -= quantity  # کسر از موجودی فعلی
+                room.inventory -= quantity
                 logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
             else:
-                # اگر موجودی بدون تأیید کافی نباشد، از موجودی با تأیید کسر می‌کنیم
                 if room.count >= quantity:
                     room.count -= quantity
                     all_auto_approved = False
                     logger.info(f"Room {room.id}: Deducted {quantity} from count. New value: {room.count}")
-                    room.inventory -= quantity  # کسر از موجودی فعلی
+                    room.inventory -= quantity
                     logger.info(f"Room {room.id}: Deducted {quantity} from inventory. New value: {room.inventory}")
                 else:
                     raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
-            
+
+            # ذخیره تغییرات قبل از ایجاد ReservationRoom
             room.save(update_fields=['auto_approved_count', 'count', 'inventory'])
+
+            # اعتبارسنجی پس از کسر
+            if room.count > room.inventory:
+                raise ValidationError(f"تعداد رزروهای نیازمند تأیید (count: {room.count}) نمی‌تواند بیشتر از موجودی فعلی (inventory: {room.inventory}) باشد.")
 
             # محاسبه قیمت هر شب
             room_total_price = Decimal('0')
@@ -2766,7 +2770,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 
                 room_total_price += daily_price
 
-            # ایجاد رکورد اتاق رزرو
+            # ایجاد رکورد اتاق رزرو پس از به‌روزرسانی اتاق
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
@@ -2824,10 +2828,6 @@ class ReservationCreateAPIView(CreateAPIView):
         )
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
-
-
-
-
             
     
 # ای پی ای جزئيات یک رزرو با tracking_code
