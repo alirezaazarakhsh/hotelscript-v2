@@ -2576,13 +2576,13 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
 
-class ReservationCreateAPIView(CreateAPIView):
+class ReservationCreateAPIView(APIView):
     """
     API برای ایجاد رزرو موقت.
     - فقط tracking_code را برمی‌گرداند.
     - موجودی موقت از auto_approved_count یا count کسر می‌شود.
     - اگر همه اتاق‌ها از auto_approved_count استفاده کنند، وضعیت رزرو به confirmed تنظیم می‌شود.
-    - اگر رزرو نیاز به تأیید ادمین داشته باشد، وضعیت به unconfirmed تنظیم می‌شود.
+    - اگر رزرو نیاز به تأیید ادمین داشته باشد، وضعیت به pending_admin تنظیم می‌شود.
     - موجودی اصلی (inventory) فقط در صورت پرداخت کامل (وضعیت paid) کسر می‌شود.
     """
     serializer_class = ReservationCreateSerializer
@@ -2635,17 +2635,17 @@ class ReservationCreateAPIView(CreateAPIView):
         data = serializer.validated_data
         logger.debug(f"Request data: {data}")
 
-        # ساخت کد رزرو یکتا
+        # Create unique tracking code
         reservation_id = 'sfa' + ''.join([str(random.randint(0, 9)) for _ in range(10)])
 
-        # تابع امن برای تبدیل تاریخ
+        # Parse dates
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
                     return jdatetime.date.fromisoformat(value)
                 except ValueError:
                     try:
-                        g_d = jdatetime.date.fromgregorian(date=jdatetime.date.fromisoformat(value))
+                        g_d = jdatetime.date.fromgregorian(date=date.fromisoformat(value))
                         return g_d
                     except ValueError as e:
                         raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}, خطا: {str(e)}")
@@ -2655,35 +2655,33 @@ class ReservationCreateAPIView(CreateAPIView):
                     month = int(value["month"])
                     day = int(value["day"])
                     if value.get("calendar") == "gregorian":
-                        g_d = jdatetime.date.fromgregorian(date=jdatetime.date(year, month, day))
+                        g_d = jdatetime.date.fromgregorian(date=date(year, month, day))
                         return g_d
                     return jdatetime.date(year, month, day)
                 except (KeyError, ValueError) as e:
                     raise ValidationError(f"دیکشنری تاریخ ناقص یا نامعتبر است: {value}, خطا: {str(e)}")
             elif isinstance(value, jdatetime.date):
                 return value
-            elif isinstance(value, jdatetime.date):
+            elif isinstance(value, date):
                 return jdatetime.date.fromgregorian(date=value)
             else:
                 raise ValidationError(f"فرمت تاریخ نامعتبر است: نوع {type(value)}, مقدار {value}")
 
-        # گرفتن تاریخ ورود و خروج
+        # Get check-in and check-out dates
         try:
             check_in_date = parse_jdate(data['date']['enter'])
             check_out_date = parse_jdate(data['date']['exit'])
         except KeyError as e:
             raise ValidationError(f"کلید {e} در داده‌های تاریخ یافت نشد")
 
-        # بررسی تاریخ گذشته
+        # Validate dates
         today_j = jdatetime.date.today()
         if check_in_date < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
-
-        # اعتبارسنجی: خروج باید بعد از ورود باشد
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # بررسی وجود پروفایل حقیقی و پر بودن فیلدهای موردنیاز
+        # Check user profile for reserver data
         reserver_data = {}
         if hasattr(request.user, 'natural_profile') and request.user.natural_profile:
             profile = request.user.natural_profile
@@ -2695,7 +2693,7 @@ class ReservationCreateAPIView(CreateAPIView):
                     'reserver_phone_number': request.user.phone_number
                 }
 
-        # ایجاد رزرو اصلی با وضعیت موقت
+        # Create reservation with unpaid status
         reservation = Reservationhotel.objects.create(
             tracking_code=reservation_id,
             check_in_date=check_in_date,
@@ -2705,43 +2703,61 @@ class ReservationCreateAPIView(CreateAPIView):
             **reserver_data
         )
 
-        # بررسی و کسر موقت موجودی اتاق‌ها
+        # Process rooms
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
         nights = reservation.nights_count
         all_auto_approved = True
 
         for room_id in room_ids:
+            # Lock room for update to prevent race conditions
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
-            quantity = 1  # تعداد اتاق‌های رزرو شده (می‌توانید از ورودی کاربر بگیرید)
+            quantity = 1  # Adjust based on input if needed
 
-            # اعتبارسنجی اولیه موجودی
+            # Log current room state
+            logger.debug(f"Room {room.id}: Before deduction - inventory={room.inventory}, count={room.count}, auto_approved_count={room.auto_approved_count}")
+
+            # Validate inventory
             if room.inventory < quantity:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} (موجودی فعلی: {room.inventory}) وجود ندارد.")
 
-            # کسر از موجودی و بررسی
+            # Determine deduction source and validate constraints
             if room.auto_approved_count >= quantity:
-                room.auto_approved_count -= quantity
-                room.inventory -= quantity
-                logger.info(f"Room {room.id}: Deducted {quantity} from auto_approved_count and inventory. New values: auto_approved_count={room.auto_approved_count}, inventory={room.inventory}")
+                new_auto_approved_count = room.auto_approved_count - quantity
+                new_inventory = room.inventory - quantity
+                new_count = room.count
+            elif room.count >= quantity:
+                new_count = room.count - quantity
+                new_inventory = room.inventory - quantity
+                new_auto_approved_count = room.auto_approved_count
+                all_auto_approved = False
             else:
-                if room.count >= quantity:
-                    room.count -= quantity
-                    room.inventory -= quantity
-                    all_auto_approved = False
-                    logger.info(f"Room {room.id}: Deducted {quantity} from count and inventory. New values: count={room.count}, inventory={room.inventory}")
-                else:
-                    raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
+                raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد (count={room.count}, auto_approved_count={room.auto_approved_count}).")
 
-            # ذخیره تغییرات و رفرش برای اطمینان از وضعیت به‌روز
+            # Validate constraints before saving
+            if new_count > new_inventory:
+                raise ValidationError(
+                    f"نمی‌توان رزرو کرد: تعداد رزروهای نیازمند تأیید ({new_count}) نمی‌تواند بیشتر از موجودی ({new_inventory}) برای اتاق {room.title} باشد."
+                )
+            if new_auto_approved_count > new_inventory:
+                raise ValidationError(
+                    f"نمی‌توان رزرو کرد: تعداد رزروهای خودکار ({new_auto_approved_count}) نمی‌تواند بیشتر از موجودی ({new_inventory}) برای اتاق {room.title} باشد."
+                )
+            if new_inventory < 0 or new_count < 0 or new_auto_approved_count < 0:
+                raise ValidationError(f"نمی‌توان موجودی، count یا auto_approved_count را برای اتاق {room.title} به زیر صفر کاهش داد.")
+
+            # Apply deductions
+            room.inventory = new_inventory
+            room.count = new_count
+            room.auto_approved_count = new_auto_approved_count
+
+            # Log updated room state
+            logger.debug(f"Room {room.id}: After deduction - inventory={room.inventory}, count={room.count}, auto_approved_count={room.auto_approved_count}")
+
+            # Save room changes
             room.save(update_fields=['auto_approved_count', 'count', 'inventory'])
-            room.refresh_from_db()  # رفرش برای اطمینان از وضعیت فعلی در دیتابیس
 
-            # اعتبارسنجی پس از کسر
-            if room.count > room.inventory:
-                raise ValidationError(f"تعداد رزروهای نیازمند تأیید (count: {room.count}) نمی‌تواند بیشتر از موجودی فعلی (inventory: {room.inventory}) باشد.")
-
-            # محاسبه قیمت هر شب
+            # Calculate room price
             room_total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2769,7 +2785,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 
                 room_total_price += daily_price
 
-            # ایجاد رکورد اتاق رزرو پس از به‌روزرسانی اتاق
+            # Create ReservationRoom record
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
@@ -2780,11 +2796,10 @@ class ReservationCreateAPIView(CreateAPIView):
                 extra_passengers_count=room.extra_capacity
             )
 
-        # تنظیم وضعیت رزرو بر اساس نوع موجودی
+        # Set reservation status
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
-        reservation.save(update_fields=['status'])
         
-        # محاسبه نهایی قیمت‌ها
+        # Calculate and update prices
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
         reservation.total_extra_passenger_charge = total_extra
@@ -2795,12 +2810,12 @@ class ReservationCreateAPIView(CreateAPIView):
         reservation.total_half_day_charge = total_half
         reservation.final_price = final_price
         reservation.save(update_fields=[
-            'total_price', 'total_extra_passenger_charge', 'discount',
+            'status', 'total_price', 'total_extra_passenger_charge', 'discount',
             'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
             'total_half_day_charge', 'final_price'
         ])
 
-        # Send initial status to WebSocket
+        # Send WebSocket notification
         duration_minutes = None
         timer_start = None
         if reservation.status == 'pending_admin':
@@ -2827,7 +2842,7 @@ class ReservationCreateAPIView(CreateAPIView):
         )
 
         return Response({"tracking_code": reservation_id}, status=status.HTTP_200_OK)
-
+    
             
     
 # ای پی ای جزئيات یک رزرو با tracking_code
