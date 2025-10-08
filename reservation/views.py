@@ -2574,32 +2574,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-import logging
-import random
-from decimal import Decimal
-from datetime import date, timedelta
-import jdatetime
-from django.utils import timezone
-from django.db import transaction
-from django.core.cache import cache
-from django.core.exceptions import ValidationError
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import CreateAPIView
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-
-from .models import (
-    Reservationhotel,
-    Room,
-    ReservationRoom,
-    RoomDatePrice,
-    ReservationApprovalDuration,
-)
-from .serializers import ReservationCreateSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -2743,12 +2717,12 @@ class ReservationCreateAPIView(CreateAPIView):
         # ذخیره زمان شروع تایمر در cache اگر pending_admin است
         timer = None
         if reservation.status == 'pending_admin':
-            approval_duration = ReservationApprovalDuration.objects.first()
+            approval_duration = ReservationApprovalDuration.objects.first()  # حتما ()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
             timer = duration_minutes * 60
             cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
 
-        # ارسال WebSocket
+        # ارسال WebSocket فقط status و timer
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
