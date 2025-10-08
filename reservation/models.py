@@ -1466,6 +1466,7 @@ def notify_status_change(sender, instance, created, **kwargs):
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
         cache_key = f"reservation_timer_{instance.tracking_code}"
+        # ذخیره شروع تایمر فقط اگر قبلاً وجود نداشته باشد
         if not cache.get(cache_key):
             cache.set(cache_key, timezone.now(), timeout=duration_minutes*60)
 
@@ -1483,8 +1484,6 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
-
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)

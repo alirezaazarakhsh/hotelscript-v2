@@ -2,8 +2,8 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.utils import timezone
-from .models import Reservationhotel, ReservationApprovalDuration
 from django.core.cache import cache
+from .models import Reservationhotel, ReservationApprovalDuration
 
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -14,6 +14,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
         reservation = await self.get_reservation(self.tracking_code)
+
         if not reservation:
             await self.send_json({"status": "not_found", "timer": None})
             return
@@ -42,6 +43,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             if not reservation:
                 await self.send_json({"status": "not_found", "timer": 0})
                 return
+
             remaining = await self.get_remaining_time(reservation) if reservation.status == "pending_admin" else None
             await self.send_json({
                 "status": reservation.status,
@@ -76,8 +78,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         start_time = cache.get(cache_key)
         approval_duration = ReservationApprovalDuration.objects.first()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+
         if not start_time:
             return duration_minutes * 60
+
         elapsed = (timezone.now() - start_time).total_seconds()
         return max(0, duration_minutes * 60 - elapsed)
 

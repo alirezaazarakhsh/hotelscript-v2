@@ -2609,53 +2609,12 @@ class ReservationCreateAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # تولید کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
-        # تابع کمکی برای تبدیل تاریخ
-        def parse_jdate(value):
-            if isinstance(value, str):
-                try:
-                    return jdatetime.date.fromisoformat(value)
-                except ValueError:
-                    return jdatetime.date.fromgregorian(date=date.fromisoformat(value))
-            elif isinstance(value, dict):
-                year, month, day = int(value["year"]), int(value["month"]), int(value["day"])
-                if value.get("calendar") == "gregorian":
-                    return jdatetime.date.fromgregorian(date=date(year, month, day))
-                return jdatetime.date(year, month, day)
-            elif isinstance(value, date):
-                return jdatetime.date.fromgregorian(date=value)
-            elif isinstance(value, jdatetime.date):
-                return value
-            raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}")
-
-        check_in_date = parse_jdate(data['date']['enter'])
-        check_out_date = parse_jdate(data['date']['exit'])
-        if check_in_date < jdatetime.date.today():
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
-        if check_out_date <= check_in_date:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-
-        # اطلاعات رزرو کننده
-        reserver_data = {}
-        if hasattr(request.user, 'natural_profile'):
-            profile = request.user.natural_profile
-            reserver_data = {
-                'reserver_first_name': profile.first_name or '',
-                'reserver_last_name': profile.last_name or '',
-                'reserver_national_code': profile.national_code or '',
-                'reserver_phone_number': request.user.phone_number
-            }
-
-        # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
-            check_in_date=check_in_date,
-            check_out_date=check_out_date,
             buyer=request.user,
-            status='unpaid',
-            **reserver_data
+            status='unpaid'
         )
 
         hotel_id = data.get('hotel_id')
@@ -2667,29 +2626,23 @@ class ReservationCreateAPIView(CreateAPIView):
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
-            current_inventory = room.inventory or 0
-            current_count = room.count or 0
-            current_auto_approved = room.auto_approved_count or 0
-
-            if current_inventory < quantity:
+            if (room.inventory or 0) < quantity:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            if current_auto_approved >= quantity:
+            if (room.auto_approved_count or 0) >= quantity:
                 room.auto_approved_count -= quantity
-                room.inventory -= quantity
-            elif current_count >= quantity:
+            elif (room.count or 0) >= quantity:
                 room.count -= quantity
-                room.inventory -= quantity
                 all_auto_approved = False
             else:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
+            room.inventory -= quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
-            # محاسبه قیمت
             total_price = Decimal('0')
             for night in range(nights):
-                current_date = check_in_date.togregorian() + timedelta(days=night)
+                current_date = reservation.check_in_date.togregorian() + timedelta(days=night)
                 price = RoomDatePrice.objects.filter(
                     room=room,
                     start_date__lte=current_date,
@@ -2702,27 +2655,19 @@ class ReservationCreateAPIView(CreateAPIView):
                 room=room,
                 quantity=quantity,
                 price_per_night=total_price / nights if nights > 0 else total_price,
-                subtotal=total_price,
-                primary_passengers_count=room.room_capacity,
-                extra_passengers_count=room.extra_capacity
+                subtotal=total_price
             )
 
-        # تعیین وضعیت نهایی رزرو
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
-        total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
-        reservation.total_price = total_price
-        reservation.final_price = final_price
-        reservation.save(update_fields=['status', 'total_price', 'final_price'])
+        reservation.save(update_fields=['status'])
 
-        # ذخیره زمان شروع تایمر در cache اگر pending_admin است
         timer = None
         if reservation.status == 'pending_admin':
-            approval_duration = ReservationApprovalDuration.objects.first()  # حتما ()
+            approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
             timer = duration_minutes * 60
             cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
 
-        # ارسال WebSocket فقط status و timer
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2730,12 +2675,11 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": timer
+                    "timer": timer,
                 },
             },
         )
 
-        logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
     
     
