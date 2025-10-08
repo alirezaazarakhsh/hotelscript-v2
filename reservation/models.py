@@ -1456,23 +1456,19 @@ class Reservationhotel(models.Model):
         # ✅ ذخیره نهایی رزرو
         super().save(*args, **kwargs)
         
-
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     timer = None
 
-    # اگر رزرو تازه ساخته شده یا وضعیت pending_admin
     if instance.status == 'pending_admin':
         approval_duration = ReservationApprovalDuration.objects.first()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
-        # ذخیره شروع تایمر در cache فقط اگر قبلاً وجود نداشته باشد
         cache_key = f"reservation_timer_{instance.tracking_code}"
         if not cache.get(cache_key):
             cache.set(cache_key, timezone.now(), timeout=duration_minutes*60)
 
-        # محاسبه زمان باقی مانده برای ارسال
         start_time = cache.get(cache_key)
         elapsed = (timezone.now() - start_time).total_seconds() if start_time else 0
         timer = max(0, duration_minutes*60 - elapsed)
@@ -1488,7 +1484,8 @@ def notify_status_change(sender, instance, created, **kwargs):
         },
     )
 
-    
+
+
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
