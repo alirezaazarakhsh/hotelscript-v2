@@ -8,7 +8,7 @@ from decimal import Decimal, ROUND_UP
 from datetime import timedelta
 from django.dispatch import receiver
 import jdatetime
-from functools import cached_property
+from functools import cache, cached_property
 from jdatetime import date as jdate
 from jalali_date import date2jalali
 from asgiref.sync import async_to_sync
@@ -1457,38 +1457,26 @@ class Reservationhotel(models.Model):
         super().save(*args, **kwargs)
         
 
-@receiver(models.signals.post_save, sender=Reservationhotel)
+@receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
-    from django.utils import timezone
-    from asgiref.sync import async_to_sync
-    from channels.layers import get_channel_layer
-
-    duration_seconds = None
+    channel_layer = get_channel_layer()
     timer = None
 
-    # جلوگیری از ارسال اضافی اگر وضعیت تغییر نکرده
-    if hasattr(instance, "_old_status") and instance.status == instance._old_status:
-        return
-
-    # اگر pending_admin است
+    # اگر رزرو تازه ساخته شده یا وضعیت pending_admin
     if instance.status == 'pending_admin':
-        try:
-            from reservation.models import ReservationApprovalDuration
-            approval_duration = ReservationApprovalDuration.objects.first()
-            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-            duration_seconds = duration_minutes * 60
-        except Exception:
-            duration_seconds = 300
+        approval_duration = ReservationApprovalDuration.objects.first()
+        duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
-        # ذخیره زمان شروع تایمر فقط اولین بار
-        if not instance.timer_start:
-            instance.timer_start = timezone.now()
-            instance.save(update_fields=["timer_start"])
+        # ذخیره شروع تایمر در cache فقط اگر قبلاً وجود نداشته باشد
+        cache_key = f"reservation_timer_{instance.tracking_code}"
+        if not cache.get(cache_key):
+            cache.set(cache_key, timezone.now(), timeout=duration_minutes*60)
 
-        timer = duration_seconds
+        # محاسبه زمان باقی مانده برای ارسال
+        start_time = cache.get(cache_key)
+        elapsed = (timezone.now() - start_time).total_seconds() if start_time else 0
+        timer = max(0, duration_minutes*60 - elapsed)
 
-    # ارسال به کانال فقط status و timer
-    channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
         {

@@ -2,7 +2,8 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.utils import timezone
-from .models import Reservationhotel
+from .models import Reservationhotel, ReservationApprovalDuration
+from django.core.cache import cache
 
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -18,12 +19,11 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"status": "not_found", "timer": None})
             return
 
-        # وضعیت لغو یا منقضی‌شده
         if reservation.status in ["cancelled", "expired"]:
             await self.send_json({"status": reservation.status, "timer": 0})
             return
 
-        # pending_admin → تایمر واقعی
+        # تایمر pending_admin
         if reservation.status == "pending_admin":
             remaining = await self.get_remaining_time(reservation)
             if remaining == 0:
@@ -33,11 +33,9 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"status": "pending_admin", "timer": int(remaining)})
             return
 
-        # سایر وضعیت‌ها
         await self.send_json({"status": reservation.status, "timer": None})
 
     async def receive(self, text_data):
-        """درخواست وضعیت فعلی از سمت کلاینت"""
         data = json.loads(text_data)
         action = data.get("action")
 
@@ -47,27 +45,16 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 await self.send_json({"status": "not_found", "timer": 0})
                 return
 
-            remaining = (
-                await self.get_remaining_time(reservation)
-                if reservation.status == "pending_admin"
-                else None
-            )
-
+            remaining = await self.get_remaining_time(reservation) if reservation.status == "pending_admin" else None
             await self.send_json({
                 "status": reservation.status,
                 "timer": int(remaining) if remaining is not None else None
             })
 
     async def status_update(self, event):
-        """دریافت بروزرسانی از سیگنال"""
         message = event["message"]
         status = message.get("status", "unknown")
-        timer = message.get("timer")
-
-        # اگر pending_admin باشد ولی تایمر نفرستاده → محاسبه کن
-        if status == "pending_admin" and timer is None:
-            reservation = await self.get_reservation(self.tracking_code)
-            timer = await self.get_remaining_time(reservation)
+        timer = message.get("timer")  # مقدار مستقیم ثانیه
 
         await self.send_json({
             "status": status,
@@ -82,29 +69,26 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             return None
 
     @sync_to_async
-    def get_duration_minutes(self):
-        """خواندن مدت زمان تایید از مدل ReservationApprovalDuration"""
-        try:
-            from reservation.models import ReservationApprovalDuration
-            obj = ReservationApprovalDuration.objects.first()
-            return obj.duration_minutes if obj else 5
-        except Exception:
-            return 5
-
-    @sync_to_async
     def expire_reservation(self, reservation):
         reservation.status = "expired"
         reservation.save(update_fields=["status"])
+        # حذف cache تایمر
+        cache.delete(f"reservation_timer_{reservation.tracking_code}")
 
     @sync_to_async
     def get_remaining_time(self, reservation):
-        """محاسبه زمان باقی‌مانده بر اساس duration و timer_start"""
-        duration_minutes = self.get_duration_minutes.sync()  # اجرای sync به صورت امن
-        total_duration = duration_minutes * 60
+        cache_key = f"reservation_timer_{reservation.tracking_code}"
+        start_time = cache.get(cache_key)
+        if not start_time:
+            # اگر cache پاک شده یا تایمر تمام شده
+            approval_duration = ReservationApprovalDuration.objects.first()
+            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+            return duration_minutes * 60
 
-        timer_start = getattr(reservation, "timer_start", None) or reservation.created_at
-        elapsed = (timezone.now() - timer_start).total_seconds()
-        return max(0, total_duration - elapsed)
+        approval_duration = ReservationApprovalDuration.objects.first()
+        duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+        elapsed = (timezone.now() - start_time).total_seconds()
+        return max(0, duration_minutes * 60 - elapsed)
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)

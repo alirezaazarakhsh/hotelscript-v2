@@ -2578,22 +2578,28 @@ import logging
 import random
 from decimal import Decimal
 from datetime import date, timedelta
-
 import jdatetime
-from django.db import transaction
 from django.utils import timezone
+from django.db import transaction
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import CreateAPIView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.core.exceptions import ValidationError
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-from reservation.models import Reservationhotel, Room, RoomDatePrice, ReservationRoom, ReservationApprovalDuration
-from reservation.serializers import ReservationCreateSerializer
+from .models import (
+    Reservationhotel,
+    Room,
+    ReservationRoom,
+    RoomDatePrice,
+    ReservationApprovalDuration,
+)
+from .serializers import ReservationCreateSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -2629,8 +2635,10 @@ class ReservationCreateAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # تولید کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
+        # تابع کمکی برای تبدیل تاریخ
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
@@ -2655,6 +2663,7 @@ class ReservationCreateAPIView(CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
+        # اطلاعات رزرو کننده
         reserver_data = {}
         if hasattr(request.user, 'natural_profile'):
             profile = request.user.natural_profile
@@ -2665,6 +2674,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 'reserver_phone_number': request.user.phone_number
             }
 
+        # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             check_in_date=check_in_date,
@@ -2702,6 +2712,7 @@ class ReservationCreateAPIView(CreateAPIView):
 
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
+            # محاسبه قیمت
             total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2722,23 +2733,22 @@ class ReservationCreateAPIView(CreateAPIView):
                 extra_passengers_count=room.extra_capacity
             )
 
+        # تعیین وضعیت نهایی رزرو
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
         reservation.final_price = final_price
         reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        # ارسال WebSocket فقط status و timer
+        # ذخیره زمان شروع تایمر در cache اگر pending_admin است
         timer = None
         if reservation.status == 'pending_admin':
             approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-            timer = duration_minutes * 60  # ثانیه
+            timer = duration_minutes * 60
+            cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
 
-            # ذخیره زمان شروع تایمر در دیتابیس
-            reservation.timer_start = timezone.now()
-            reservation.save(update_fields=["timer_start"])
-
+        # ارسال WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2746,14 +2756,13 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": timer,
+                    "timer": timer
                 },
             },
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
-    
     
     
     
