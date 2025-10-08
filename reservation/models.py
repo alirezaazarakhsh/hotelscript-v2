@@ -791,6 +791,7 @@ class RoomService(models.Model):
 # تنظیم logging
 logger = logging.getLogger(__name__)
 
+
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -840,15 +841,11 @@ class Room(models.Model):
     room_capacity = models.PositiveIntegerField(
         verbose_name=_('ظرفیت اتاق'),
         help_text=_('تعداد نفرات پایه قابل اقامت'),
-        null=False,
-        blank=False,
         default=0,
     )
     extra_capacity = models.PositiveIntegerField(
         verbose_name=_('ظرفیت نفر اضافه'),
         help_text=_('تعداد نفرات اضافی مجاز'),
-        null=False,
-        blank=False,
         default=0,
     )
     services = models.ManyToManyField(
@@ -870,25 +867,17 @@ class Room(models.Model):
                 check=models.Q(auto_approved_count__gte=0),
                 name='check_auto_approved_non_negative',
             ),
-            models.CheckConstraint(
-                check=models.Q(count__lte=models.F('inventory')),
-                name='count_lte_inventory',
-            ),
-            models.CheckConstraint(
-                check=models.Q(auto_approved_count__lte=models.F('inventory')),
-                name='auto_count_lte_inventory',
-            ),
         ]
 
     def clean(self):
         super().clean()
-        current_inventory = self.inventory or 0
-        current_count = self.count or 0
-        current_auto_approved_count = self.auto_approved_count or 0
-        if current_count + current_auto_approved_count > current_inventory:
+        if self.count < 0 or self.auto_approved_count < 0:
+            raise ValidationError(_('تعداد رزرو نمی‌تواند منفی باشد.'))
+        if self.inventory < 0:
+            raise ValidationError(_('موجودی نمی‌تواند منفی باشد.'))
+        if (self.count + self.auto_approved_count) > self.inventory:
             raise ValidationError({
-                'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
-                'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
+                'inventory': _('جمع رزروها نمی‌تواند بیشتر از موجودی باشد.'),
             })
 
     def __str__(self):
@@ -903,63 +892,55 @@ class Room(models.Model):
         )
         return not active_prices.exists()
 
-    def save(self, *args, **kwargs):
-        old_instance = None
-        old_inventory = None
-        old_count = None
-        old_auto_approved_count = None
+    def adjust_inventory_for_reservation(self, quantity: int, auto_approval: bool):
+        """
+        Called when a reservation is created or cancelled.
+        This keeps count, auto_approved_count, and inventory in sync safely.
+        """
+        logger.info(
+            f"Adjusting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
+        )
 
-        if self.pk:
-            try:
-                old_instance = Room.objects.get(pk=self.pk)
-                old_inventory = old_instance.inventory or 0
-                old_count = old_instance.count or 0
-                old_auto_approved_count = old_instance.auto_approved_count or 0
-                logger.debug(f"Room {self.pk}: Old inventory = {old_inventory}, Old count = {old_count}, Old auto_approved_count = {old_auto_approved_count}")
-            except Room.DoesNotExist:
-                logger.error(f"Room with pk {self.pk} not found during save")
+        if quantity <= 0:
+            raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
 
-        current_inventory = self.inventory or 0
-        current_count = self.count or 0
-        current_auto_approved_count = self.auto_approved_count or 0
-        logger.debug(f"Room {self.pk}: Current inventory = {current_inventory}, Current count = {current_count}, Current auto_approved_count = {current_auto_approved_count}")
+        if self.inventory < quantity:
+            raise ValidationError(_('موجودی کافی برای رزرو وجود ندارد.'))
 
-        # Calculate differences
-        count_diff = old_count - current_count if old_count is not None else 0
-        auto_approved_diff = old_auto_approved_count - current_auto_approved_count if old_auto_approved_count is not None else 0
+        # کاهش از inventory
+        self.inventory -= quantity
 
-        # Check if inventory will be zero after reduction
-        will_inventory_be_zero = False
-        if count_diff > 0 or auto_approved_diff > 0:
-            total_reduction = count_diff + auto_approved_diff
-            if total_reduction > 0:
-                if current_inventory >= total_reduction:
-                    self.inventory = current_inventory - total_reduction
-                    logger.info(f"Room {self.pk}: Reduced inventory by {total_reduction} (count_diff={count_diff}, auto_approved_diff={auto_approved_diff}) to {self.inventory}")
-                    if self.inventory == 0:
-                        will_inventory_be_zero = True
-                else:
-                    logger.error(f"Room {self.pk}: Cannot reduce inventory by {total_reduction} as it would result in negative inventory")
-                    raise ValidationError(_('نمی‌توان موجودی را کاهش داد زیرا کمتر از مجموع کسر رزروها می‌شود.'))
+        # افزایش شمارنده متناسب با نوع رزرو
+        if auto_approval:
+            self.auto_approved_count += quantity
+        else:
+            self.count += quantity
 
-        super().save(*args, **kwargs)
+        self.save(update_fields=['inventory', 'count', 'auto_approved_count'])
+        logger.info(f"Room {self.pk}: Reservation added successfully")
 
-        # Handle inventory reaching zero (either manually or due to count/auto_approved_count reduction)
-        if (old_instance and old_inventory != 0 and self.inventory == 0) or will_inventory_be_zero:
-            room_name = self.title.strip() if self.title else "اتاق"
-            room_full_name = f"{room_name} - آیدی {self.pk}"
-            status = "تکمیل"
+    def revert_inventory_for_cancellation(self, quantity: int, auto_approval: bool):
+        """
+        Called when a reservation is cancelled or expired.
+        """
+        logger.info(
+            f"Reverting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
+        )
 
-            logger.info(f"Room {self.pk}: Inventory changed to 0 for '{room_full_name}', attempting to send SMS")
-            try:
-                from reservation.sms.sms import send_room_availability_sms
-                success = send_room_availability_sms(room_full_name, status)
-                if success:
-                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
-                else:
-                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
-            except Exception as e:
-                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+        if quantity <= 0:
+            raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
+
+        # برگرداندن موجودی
+        self.inventory += quantity
+
+        # کاهش شمارنده متناسب با نوع رزرو
+        if auto_approval:
+            self.auto_approved_count = max(0, self.auto_approved_count - quantity)
+        else:
+            self.count = max(0, self.count - quantity)
+
+        self.save(update_fields=['inventory', 'count', 'auto_approved_count'])
+        logger.info(f"Room {self.pk}: Reservation cancelled and reverted successfully")
 
 
 
