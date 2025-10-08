@@ -791,6 +791,7 @@ class RoomService(models.Model):
 # تنظیم logging
 logger = logging.getLogger(__name__)
 
+
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -911,13 +912,9 @@ class Room(models.Model):
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
 
     def adjust_inventory_for_reservation(self, quantity: int, auto_approval: bool):
-        """
-        Called when a reservation is created.
-        """
         logger.info(
             f"Adjusting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
         )
-
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
         if self.inventory < quantity:
@@ -934,13 +931,9 @@ class Room(models.Model):
         logger.info(f"Room {self.pk}: Reservation added successfully")
 
     def revert_inventory_for_cancellation(self, quantity: int, auto_approval: bool):
-        """
-        Called when a reservation is cancelled.
-        """
         logger.info(
             f"Reverting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
         )
-
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
 
