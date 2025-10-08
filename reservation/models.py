@@ -867,17 +867,30 @@ class Room(models.Model):
                 check=models.Q(auto_approved_count__gte=0),
                 name='check_auto_approved_non_negative',
             ),
+            models.CheckConstraint(
+                check=models.Q(count__lte=models.F('inventory')),
+                name='count_lte_inventory',
+            ),
+            models.CheckConstraint(
+                check=models.Q(auto_approved_count__lte=models.F('inventory')),
+                name='auto_count_lte_inventory',
+            ),
         ]
 
     def clean(self):
         super().clean()
-        if self.count < 0 or self.auto_approved_count < 0:
+        current_inventory = self.inventory or 0
+        current_count = self.count or 0
+        current_auto_approved_count = self.auto_approved_count or 0
+
+        if current_count < 0 or current_auto_approved_count < 0:
             raise ValidationError(_('تعداد رزرو نمی‌تواند منفی باشد.'))
-        if self.inventory < 0:
+        if current_inventory < 0:
             raise ValidationError(_('موجودی نمی‌تواند منفی باشد.'))
-        if (self.count + self.auto_approved_count) > self.inventory:
+        if current_count + current_auto_approved_count > current_inventory:
             raise ValidationError({
-                'inventory': _('جمع رزروها نمی‌تواند بیشتر از موجودی باشد.'),
+                'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
+                'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
             })
 
     def __str__(self):
@@ -892,31 +905,11 @@ class Room(models.Model):
         )
         return not active_prices.exists()
 
-    def _send_inventory_sms_if_zero(self):
-        """
-        Send SMS if inventory reached zero.
-        """
-        if self.inventory == 0:
-            room_name = self.title.strip() if self.title else "اتاق"
-            room_full_name = f"{room_name} - آیدی {self.pk}"
-            status = "تکمیل"
-            logger.info(f"Room {self.pk}: Inventory is 0, sending SMS for '{room_full_name}'")
-            try:
-                from reservation.sms.sms import send_room_availability_sms
-                success = send_room_availability_sms(room_full_name, status)
-                if success:
-                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
-                else:
-                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
-            except Exception as e:
-                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
     def adjust_inventory_for_reservation(self, quantity: int, auto_approval: bool):
-        logger.info(
-            f"Adjusting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
-        )
+        logger.info(f"Adjusting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}")
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
+
         if self.inventory < quantity:
             raise ValidationError(_('موجودی کافی برای رزرو وجود ندارد.'))
 
@@ -931,21 +924,41 @@ class Room(models.Model):
         logger.info(f"Room {self.pk}: Reservation added successfully")
 
     def revert_inventory_for_cancellation(self, quantity: int, auto_approval: bool):
-        logger.info(
-            f"Reverting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}"
-        )
+        logger.info(f"Reverting inventory for Room {self.pk} | quantity={quantity} | auto_approval={auto_approval}")
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
 
-        self.inventory += quantity
         if auto_approval:
             self.auto_approved_count = max(0, self.auto_approved_count - quantity)
         else:
             self.count = max(0, self.count - quantity)
 
+        self.inventory += quantity
+
+        if self.count + self.auto_approved_count > self.inventory:
+            raise ValidationError(_('جمع رزروها نمی‌تواند بیشتر از موجودی باشد.'))
+
         self.save(update_fields=['inventory', 'count', 'auto_approved_count'])
         self._send_inventory_sms_if_zero()
         logger.info(f"Room {self.pk}: Reservation cancelled and reverted successfully")
+
+    def _send_inventory_sms_if_zero(self):
+        if self.inventory == 0:
+            room_name = self.title.strip() if self.title else "اتاق"
+            room_full_name = f"{room_name} - آیدی {self.pk}"
+            status = "تکمیل"
+
+            logger.info(f"Room {self.pk}: Inventory is 0, sending SMS for '{room_full_name}'")
+            try:
+                from reservation.sms.sms import send_room_availability_sms
+                success = send_room_availability_sms(room_full_name, status)
+                if success:
+                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
+                else:
+                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
+            except Exception as e:
+                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+
 
 
 # مدل بازه زمانی اتاق ها 
