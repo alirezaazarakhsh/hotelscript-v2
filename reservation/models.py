@@ -1459,44 +1459,35 @@ class Reservationhotel(models.Model):
 
 @receiver(models.signals.post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
-    # ✅ قبلاً return می‌کردی اگر created بود — حالا حذف کن
-    duration_minutes = None
-    timer_start = None
+    from django.utils import timezone
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
 
-    # اگر رزرو تازه ساخته شده، از همان لحظه وضعیت اولیه را بفرست
-    if created:
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"reservation_{instance.tracking_code}",
-            {
-                "type": "status_update",
-                "message": {
-                    "status": instance.status,
-                    "duration_minutes": duration_minutes,
-                    "timer_start": timer_start,
-                },
-            },
-        )
-        return
+    duration_seconds = None
+    timer = None
 
-    # ✅ بقیه بخش بدون تغییر
+    # جلوگیری از ارسال اضافی اگر وضعیت تغییر نکرده
     if hasattr(instance, "_old_status") and instance.status == instance._old_status:
         return
 
-    if not instance.is_approved and instance.status == 'confirmed':
-        sender.objects.filter(pk=instance.pk).update(is_approved=True)
-
+    # اگر pending_admin است
     if instance.status == 'pending_admin':
         try:
             from reservation.models import ReservationApprovalDuration
             approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-        except Exception as e:
-            logger.error(f"خطا در دریافت مدت زمان تایید: {e}")
-            duration_minutes = 5
+            duration_seconds = duration_minutes * 60
+        except Exception:
+            duration_seconds = 300
 
-        timer_start = timezone.now().isoformat()
+        # ذخیره زمان شروع تایمر فقط اولین بار
+        if not instance.timer_start:
+            instance.timer_start = timezone.now()
+            instance.save(update_fields=["timer_start"])
 
+        timer = duration_seconds
+
+    # ارسال به کانال فقط status و timer
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1504,12 +1495,10 @@ def notify_status_change(sender, instance, created, **kwargs):
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "duration_minutes": duration_minutes,
-                "timer_start": timer_start,
+                "timer": timer,
             },
         },
     )
-
 
     
 # ---------------- ReservationRoom ----------------

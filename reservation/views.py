@@ -2574,6 +2574,26 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+import logging
+import random
+from decimal import Decimal
+from datetime import date, timedelta
+
+import jdatetime
+from django.db import transaction
+from django.utils import timezone
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import CreateAPIView
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+from django.core.exceptions import ValidationError
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+from reservation.models import Reservationhotel, Room, RoomDatePrice, ReservationRoom, ReservationApprovalDuration
+from reservation.serializers import ReservationCreateSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -2609,10 +2629,8 @@ class ReservationCreateAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # ساخت کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
-        # تابع کمکی برای تبدیل تاریخ
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
@@ -2630,7 +2648,6 @@ class ReservationCreateAPIView(CreateAPIView):
                 return value
             raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}")
 
-        # تاریخ ورود و خروج
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
         if check_in_date < jdatetime.date.today():
@@ -2638,7 +2655,6 @@ class ReservationCreateAPIView(CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # اطلاعات رزروکننده
         reserver_data = {}
         if hasattr(request.user, 'natural_profile'):
             profile = request.user.natural_profile
@@ -2649,7 +2665,6 @@ class ReservationCreateAPIView(CreateAPIView):
                 'reserver_phone_number': request.user.phone_number
             }
 
-        # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             check_in_date=check_in_date,
@@ -2668,9 +2683,6 @@ class ReservationCreateAPIView(CreateAPIView):
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
-            # وضعیت فعلی قبل از تغییر
-            logger.debug(f"[Before] Room {room.id}: inventory={room.inventory}, count={room.count}, auto_approved_count={room.auto_approved_count}")
-
             current_inventory = room.inventory or 0
             current_count = room.count or 0
             current_auto_approved = room.auto_approved_count or 0
@@ -2688,12 +2700,8 @@ class ReservationCreateAPIView(CreateAPIView):
             else:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            if any(v < 0 for v in [room.inventory, room.count, room.auto_approved_count]):
-                raise ValidationError(f"مقادیر اتاق {room.title} نمی‌توانند منفی باشند.")
-
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
-            # محاسبه قیمت
             total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2720,14 +2728,16 @@ class ReservationCreateAPIView(CreateAPIView):
         reservation.final_price = final_price
         reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        # ارسال WebSocket
-        duration_minutes = None
-        timer_start = None
+        # ارسال WebSocket فقط status و timer
+        timer = None
         if reservation.status == 'pending_admin':
-            from reservation.models import ReservationApprovalDuration
             approval_duration = ReservationApprovalDuration.objects.first()
             duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-            timer_start = timezone.now().isoformat()
+            timer = duration_minutes * 60  # ثانیه
+
+            # ذخیره زمان شروع تایمر در دیتابیس
+            reservation.timer_start = timezone.now()
+            reservation.save(update_fields=["timer_start"])
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -2736,8 +2746,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "duration_minutes": duration_minutes,
-                    "timer_start": timer_start,
+                    "timer": timer,
                 },
             },
         )
@@ -2745,7 +2754,9 @@ class ReservationCreateAPIView(CreateAPIView):
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
     
-                
+    
+    
+    
     
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)
