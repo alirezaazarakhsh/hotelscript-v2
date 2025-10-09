@@ -1462,15 +1462,32 @@ def notify_status_change(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     timer = None
 
+    # مدیریت تایمر فقط برای pending_admin
     if instance.status == 'pending_admin':
         approval_duration = ReservationApprovalDuration.objects.first()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
         cache_key = f"reservation_timer_{instance.tracking_code}"
 
         start_time = cache.get(cache_key)
-        if start_time:
+        if not start_time:
+            start_time = timezone.now()
+            cache.set(cache_key, start_time, timeout=duration_minutes * 60)
+        else:
             elapsed = (timezone.now() - start_time).total_seconds()
             timer = max(0, duration_minutes * 60 - elapsed)
+
+    # وقتی رزرو expired یا cancelled شد، موجودی اتاق‌ها بازگرده
+    elif instance.status in ['expired', 'cancelled']:
+        rooms = ReservationRoom.objects.filter(reservation=instance)
+        for r in rooms:
+            room = r.room
+            room.inventory += r.quantity
+            # اگر رزرو auto_approved نبوده، count هم اصلاح می‌کنیم
+            if instance.status != 'confirmed':
+                room.count += r.quantity
+            room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
+        cache.delete(f"reservation_timer_{instance.tracking_code}")
+        timer = 0
 
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
