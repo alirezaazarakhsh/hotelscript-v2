@@ -2576,6 +2576,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
+logger = logging.getLogger(__name__)
+
 class ReservationCreateAPIView(CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2602,17 +2604,16 @@ class ReservationCreateAPIView(CreateAPIView):
             400: openapi.Response(description="درخواست نامعتبر یا موجودی ناکافی."),
         }
     )
-    
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # تولید کد پیگیری
+        # ساخت کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
-        # تبدیل تاریخ جلالی یا گرگوری به jdatetime
+        # تابع کمکی برای تبدیل تاریخ
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
@@ -2628,42 +2629,48 @@ class ReservationCreateAPIView(CreateAPIView):
                 return jdatetime.date.fromgregorian(date=value)
             elif isinstance(value, jdatetime.date):
                 return value
-            raise ValueError(f"فرمت تاریخ نامعتبر: {value}")
+            raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}")
 
+        # تاریخ ورود و خروج
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
+        if check_in_date < jdatetime.date.today():
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        if check_out_date <= check_in_date:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # اطلاعات رزروکننده از پروفایل حقیقی
-        profile = getattr(request.user, 'natural_profile', None)
-        reserver_data = {
-            'reserver_first_name': profile.first_name if profile else '',
-            'reserver_last_name': profile.last_name if profile else '',
-            'reserver_national_code': profile.national_code if profile else '',
-            'reserver_phone_number': request.user.phone_number or ''
-        }
+        # اطلاعات رزروکننده
+        reserver_data = {}
+        if hasattr(request.user, 'natural_profile'):
+            profile = request.user.natural_profile
+            reserver_data = {
+                'reserver_first_name': profile.first_name or '',
+                'reserver_last_name': profile.last_name or '',
+                'reserver_national_code': profile.national_code or '',
+                'reserver_phone_number': request.user.phone_number
+            }
 
-        # ایجاد رزرو در حالت پیش‌فرض بدون تایمر
+        # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
-            buyer=request.user,
-            status='unpaid',  # قبل از کاهش موجودی
             check_in_date=check_in_date.togregorian(),
             check_out_date=check_out_date.togregorian(),
+            buyer=request.user,
+            status='unpaid',
             **reserver_data
         )
 
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
-        nights = (check_out_date.togregorian() - check_in_date.togregorian()).days
+        nights = reservation.nights_count
         all_auto_approved = True
 
-        # پردازش اتاق‌ها و کاهش موجودی
         for room_id in room_ids:
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
             if (room.inventory or 0) < quantity:
-                return Response({"error": f"موجودی کافی برای اتاق {room.title} وجود ندارد."}, status=400)
+                raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
             if (room.auto_approved_count or 0) >= quantity:
                 room.auto_approved_count -= quantity
@@ -2671,7 +2678,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 room.count -= quantity
                 all_auto_approved = False
             else:
-                return Response({"error": f"موجودی کافی برای اتاق {room.title} وجود ندارد."}, status=400)
+                raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
             room.inventory -= quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
@@ -2700,7 +2707,7 @@ class ReservationCreateAPIView(CreateAPIView):
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         reservation.save(update_fields=['status'])
 
-        # اطلاع WebSocket
+        # اطلاع WebSocket فقط با status و timer
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2708,12 +2715,13 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": None,  # تایمر فقط در WebSocket مدیریت می‌شود
+                    "timer": True if reservation.status == 'pending_admin' else None,
                 },
             },
         )
 
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
+
     
 
 
