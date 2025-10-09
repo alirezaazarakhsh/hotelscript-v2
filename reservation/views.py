@@ -2606,10 +2606,6 @@ class ReservationCreateAPIView(CreateAPIView):
         }
     )
     
-class ReservationCreateAPIView(CreateAPIView):
-    serializer_class = ReservationCreateSerializer
-    permission_classes = [IsAuthenticated]
-
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
