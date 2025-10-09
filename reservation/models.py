@@ -1462,7 +1462,7 @@ def notify_status_change(sender, instance, created, **kwargs):
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
     from django.utils import timezone
-    from django.core.cache import cache  # اطمینان حاصل کن این خط هست
+    from django.core.cache import cache
 
     channel_layer = get_channel_layer()
     timer = None
@@ -1470,14 +1470,13 @@ def notify_status_change(sender, instance, created, **kwargs):
     if instance.status == 'pending_admin':
         approval_duration = ReservationApprovalDuration.objects.first()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-
         cache_key = f"reservation_timer_{instance.tracking_code}"
-        if not cache.get(cache_key):
-            cache.set(cache_key, timezone.now(), timeout=duration_minutes*60)
 
+        # تایمر فقط در WebSocket Consumer تنظیم می‌شود، اینجا فقط مقدار باقی‌مانده را می‌خوانیم
         start_time = cache.get(cache_key)
-        elapsed = (timezone.now() - start_time).total_seconds() if start_time else 0
-        timer = max(0, duration_minutes*60 - elapsed)
+        if start_time:
+            elapsed = (timezone.now() - start_time).total_seconds()
+            timer = max(0, duration_minutes * 60 - elapsed)
 
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
@@ -1485,11 +1484,10 @@ def notify_status_change(sender, instance, created, **kwargs):
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "timer": timer,
+                "timer": int(timer) if timer is not None else None,
             },
         },
     )
-
 
 
 # ---------------- ReservationRoom ----------------

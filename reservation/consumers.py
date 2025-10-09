@@ -24,6 +24,16 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             return
 
         if reservation.status == "pending_admin":
+            # تنظیم تایمر در لحظه اتصال
+            cache_key = f"reservation_timer_{self.tracking_code}"
+            start_time = cache.get(cache_key)
+            approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+
+            if not start_time:
+                start_time = timezone.now()
+                cache.set(cache_key, start_time, timeout=duration_minutes * 60)
+
             remaining = await self.get_remaining_time(reservation)
             if remaining == 0:
                 await self.expire_reservation(reservation)
@@ -80,11 +90,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
         if not start_time:
-            start_time = timezone.now()
-            cache.set(cache_key, start_time, timeout=duration_minutes*60)
+            return 0  # اگر تایمر تنظیم نشده، رزرو منقضی شده است
 
         elapsed = (timezone.now() - start_time).total_seconds()
-        return max(0, duration_minutes*60 - elapsed)
+        return max(0, duration_minutes * 60 - elapsed)
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)

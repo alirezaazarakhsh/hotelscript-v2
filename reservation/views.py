@@ -2653,8 +2653,8 @@ class ReservationCreateAPIView(CreateAPIView):
         # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
-            check_in_date=check_in_date.togregorian(),
-            check_out_date=check_out_date.togregorian(),
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
             buyer=request.user,
             status='unpaid',
             **reserver_data
@@ -2669,21 +2669,32 @@ class ReservationCreateAPIView(CreateAPIView):
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
-            if (room.inventory or 0) < quantity:
+            # وضعیت فعلی قبل از تغییر
+            logger.debug(f"[Before] Room {room.id}: inventory={room.inventory}, count={room.count}, auto_approved_count={room.auto_approved_count}")
+
+            current_inventory = room.inventory or 0
+            current_count = room.count or 0
+            current_auto_approved = room.auto_approved_count or 0
+
+            if current_inventory < quantity:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            if (room.auto_approved_count or 0) >= quantity:
+            if current_auto_approved >= quantity:
                 room.auto_approved_count -= quantity
-            elif (room.count or 0) >= quantity:
+                room.inventory -= quantity
+            elif current_count >= quantity:
                 room.count -= quantity
+                room.inventory -= quantity
                 all_auto_approved = False
             else:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            room.inventory -= quantity
+            if any(v < 0 for v in [room.inventory, room.count, room.auto_approved_count]):
+                raise ValidationError(f"مقادیر اتاق {room.title} نمی‌توانند منفی باشند.")
+
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
-            # محاسبه قیمت کل
+            # محاسبه قیمت
             total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2694,20 +2705,23 @@ class ReservationCreateAPIView(CreateAPIView):
                 ).first()
                 total_price += Decimal(price.price) if price else Decimal('0')
 
-            # ایجاد رابطه رزرو-اتاق
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
                 quantity=quantity,
                 price_per_night=total_price / nights if nights > 0 else total_price,
-                subtotal=total_price
+                subtotal=total_price,
+                primary_passengers_count=room.room_capacity,
+                extra_passengers_count=room.extra_capacity
             )
 
-        # تعیین وضعیت نهایی رزرو
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
-        reservation.save(update_fields=['status'])
+        total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
+        reservation.total_price = total_price
+        reservation.final_price = final_price
+        reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        # اطلاع WebSocket فقط با status و timer
+        # ارسال WebSocket بدون تایمر
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2715,13 +2729,13 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": True if reservation.status == 'pending_admin' else None,
+                    "timer": None,  # تایمر در WebSocket Consumer مدیریت می‌شود
                 },
             },
         )
 
+        logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
-
     
 
 
