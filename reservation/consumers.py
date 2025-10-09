@@ -24,7 +24,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             return
 
         if reservation.status == "pending_admin":
-            # تنظیم تایمر در لحظه اتصال
+            # تنظیم تایمر در لحظه اتصال فقط یک‌بار
             cache_key = f"reservation_timer_{self.tracking_code}"
             start_time = cache.get(cache_key)
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()

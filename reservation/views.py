@@ -2631,7 +2631,6 @@ class ReservationCreateAPIView(CreateAPIView):
                 return value
             raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}")
 
-        # تاریخ ورود و خروج
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
         if check_in_date < jdatetime.date.today():
@@ -2640,37 +2639,32 @@ class ReservationCreateAPIView(CreateAPIView):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
         # اطلاعات رزروکننده
-        reserver_data = {}
-        if hasattr(request.user, 'natural_profile'):
-            profile = request.user.natural_profile
-            reserver_data = {
-                'reserver_first_name': profile.first_name or '',
-                'reserver_last_name': profile.last_name or '',
-                'reserver_national_code': profile.national_code or '',
-                'reserver_phone_number': request.user.phone_number
-            }
+        profile = getattr(request.user, 'natural_profile', None)
+        reserver_data = {
+            'reserver_first_name': profile.first_name if profile else '',
+            'reserver_last_name': profile.last_name if profile else '',
+            'reserver_national_code': profile.national_code if profile else '',
+            'reserver_phone_number': request.user.phone_number or ''
+        }
 
         # ایجاد رزرو پایه
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
-            check_in_date=check_in_date,
-            check_out_date=check_out_date,
             buyer=request.user,
             status='unpaid',
+            check_in_date=check_in_date.togregorian(),
+            check_out_date=check_out_date.togregorian(),
             **reserver_data
         )
 
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
-        nights = reservation.nights_count
+        nights = (check_out_date.togregorian() - check_in_date.togregorian()).days
         all_auto_approved = True
 
         for room_id in room_ids:
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
-
-            # وضعیت فعلی قبل از تغییر
-            logger.debug(f"[Before] Room {room.id}: inventory={room.inventory}, count={room.count}, auto_approved_count={room.auto_approved_count}")
 
             current_inventory = room.inventory or 0
             current_count = room.count or 0
@@ -2729,7 +2723,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": None,  # تایمر در WebSocket Consumer مدیریت می‌شود
+                    "timer": None,  # تایمر فقط در WebSocket Consumer مدیریت می‌شود
                 },
             },
         )

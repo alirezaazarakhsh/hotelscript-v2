@@ -1459,11 +1459,6 @@ class Reservationhotel(models.Model):
         
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
-    from channels.layers import get_channel_layer
-    from asgiref.sync import async_to_sync
-    from django.utils import timezone
-    from django.core.cache import cache
-
     channel_layer = get_channel_layer()
     timer = None
 
@@ -1472,7 +1467,6 @@ def notify_status_change(sender, instance, created, **kwargs):
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
         cache_key = f"reservation_timer_{instance.tracking_code}"
 
-        # تایمر فقط در WebSocket Consumer تنظیم می‌شود، اینجا فقط مقدار باقی‌مانده را می‌خوانیم
         start_time = cache.get(cache_key)
         if start_time:
             elapsed = (timezone.now() - start_time).total_seconds()
@@ -1488,7 +1482,8 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
+    
+    
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
