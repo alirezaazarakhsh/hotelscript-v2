@@ -1461,27 +1461,14 @@ class Reservationhotel(models.Model):
         
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
+    """
+    اطلاع‌رسانی تغییر وضعیت رزرو به WebSocket و مدیریت بازگردانی موجودی در صورت لغو رزرو
+    """
     channel_layer = get_channel_layer()
     timer = None
 
-    # تایمر فقط برای pending_admin
-    if instance.status == 'pending_admin':
-        from django.utils import timezone
-        from .models import ReservationApprovalDuration
-        approval_duration = ReservationApprovalDuration.objects.first()
-        duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-        cache_key = f"reservation_timer_{instance.tracking_code}"
-
-        start_time = cache.get(cache_key)
-        if not start_time:
-            start_time = timezone.now()
-            cache.set(cache_key, start_time, timeout=duration_minutes * 60)
-        else:
-            elapsed = (timezone.now() - start_time).total_seconds()
-            timer = max(0, duration_minutes * 60 - elapsed)
-
-    # وقتی رزرو cancelled شد، موجودی بازگرده
-    elif instance.status == 'cancelled':
+    # فقط وقتی رزرو cancelled شد موجودی اتاق‌ها بازگردد
+    if instance.status == 'cancelled':
         rooms = ReservationRoom.objects.filter(reservation=instance)
         for r in rooms:
             room = r.room
@@ -1489,19 +1476,30 @@ def notify_status_change(sender, instance, created, **kwargs):
             if not room.auto_approval:
                 room.count += r.quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
+        # حذف تایمر cache
         cache.delete(f"reservation_timer_{instance.tracking_code}")
         timer = 0
 
+    # برای pending_admin تایمر هنوز استارت نشده → timer=None
+    elif instance.status == 'pending_admin':
+        timer = None
+
+    # برای سایر وضعیت‌ها (paid, confirmed, unconfirmed) تایمر نمایش داده نمی‌شود
+    else:
+        timer = None
+
+    # ارسال پیام به WebSocket
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
         {
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "timer": int(timer) if timer is not None else None,
+                "timer": timer,
             },
         },
     )
+    
     
 
 # ---------------- ReservationRoom ----------------

@@ -6,44 +6,73 @@ from django.utils import timezone
 from django.core.cache import cache
 from .models import Reservationhotel, ReservationRoom, ReservationApprovalDuration
 
+
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.tracking_code = self.scope['url_route']['kwargs']['tracking_code']
+        self.tracking_code = self.scope["url_route"]["kwargs"]["tracking_code"]
         self.group_name = f"reservation_{self.tracking_code}"
+
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        self.reservation = await self.get_reservation(self.tracking_code)
 
+        self.reservation = await self.get_reservation(self.tracking_code)
         if not self.reservation:
             await self.send_json({"status": "not_found", "timer": 0})
             return
 
+        # اگر رزرو منتظر ادمین است، تایمر را تازه شروع کن
         if self.reservation.status == "pending_admin":
-            await self.start_timer_loop()
+            await self.start_timer_if_not_started()
+            asyncio.create_task(self.timer_loop())
         else:
+            # اگر رزرو در وضعیت نهایی است (paid, confirmed, cancelled)
             await self.send_json({"status": self.reservation.status, "timer": None})
 
-    async def start_timer_loop(self):
+    async def start_timer_if_not_started(self):
+        """تایمر فقط وقتی کاربر وارد صفحه انتظار شود شروع می‌شود."""
         cache_key = f"reservation_timer_{self.tracking_code}"
-        start_time = cache.get(cache_key)
+        if not cache.get(cache_key):
+            start_time = timezone.now()
+            approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
+            cache.set(cache_key, start_time, timeout=duration_minutes * 60)
+
+    async def timer_loop(self):
+        """تایمر تا زمانی که به صفر برسد یا رزرو تایید/لغو شود اجرا می‌شود."""
+        cache_key = f"reservation_timer_{self.tracking_code}"
         approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
+        start_time = cache.get(cache_key)
         if not start_time:
-            start_time = timezone.now()
-            cache.set(cache_key, start_time, timeout=duration_minutes * 60)
+            return  # نباید بدون استارت تایمر اجرا شود
 
         while True:
+            # وضعیت رزرو را چک کن تا اگر تایید یا لغو شد متوقف شود
+            self.reservation = await self.get_reservation(self.tracking_code)
+            if self.reservation.status in ["confirmed", "paid", "cancelled"]:
+                await self.send_json({"status": self.reservation.status, "timer": None})
+                break
+
             elapsed = (timezone.now() - start_time).total_seconds()
             remaining = max(0, duration_minutes * 60 - elapsed)
-            if remaining <= 0:
+
+            # وقتی تایمر تمام شود و هنوز pending_admin است → لغو کن
+            if remaining <= 0 and self.reservation.status == "pending_admin":
                 await self.cancel_reservation()
                 await self.send_json({"status": "cancelled", "timer": 0})
                 break
-            await self.send_json({"status": "pending_admin", "timer": int(remaining)})
+
+            # ارسال تایمر فعلی به کلاینت
+            await self.send_json({
+                "status": self.reservation.status,
+                "timer": int(remaining)
+            })
+
             await asyncio.sleep(1)
 
     async def receive(self, text_data):
+        """درخواست کاربر برای دریافت وضعیت فعلی"""
         data = json.loads(text_data)
         if data.get("action") == "get_status":
             remaining = await self.get_remaining_time()
@@ -61,19 +90,24 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
     @sync_to_async
     def cancel_reservation(self):
-        self.reservation.status = "cancelled"
-        self.reservation.save(update_fields=["status"])
-        rooms = ReservationRoom.objects.filter(reservation=self.reservation)
-        for r in rooms:
-            room = r.room
-            room.inventory += r.quantity
-            if not room.auto_approval:
-                room.count += r.quantity
-            room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
-        cache.delete(f"reservation_timer_{self.tracking_code}")
+        """لغو رزرو و بازگرداندن موجودی اتاق‌ها"""
+        if self.reservation.status != "cancelled":
+            self.reservation.status = "cancelled"
+            self.reservation.save(update_fields=["status"])
+
+            rooms = ReservationRoom.objects.filter(reservation=self.reservation)
+            for r in rooms:
+                room = r.room
+                room.inventory += r.quantity
+                if not room.auto_approval:
+                    room.count += r.quantity
+                room.save(update_fields=["inventory", "count", "auto_approved_count"])
+
+            cache.delete(f"reservation_timer_{self.tracking_code}")
 
     @sync_to_async
     def get_remaining_time(self):
+        """محاسبه زمان باقیمانده"""
         cache_key = f"reservation_timer_{self.tracking_code}"
         start_time = cache.get(cache_key)
         if not start_time:
@@ -88,3 +122,6 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
     async def send_json(self, data):
         await self.send(text_data=json.dumps(data))
+
+    async def status_update(self, event):
+        await self.send_json(event["message"])

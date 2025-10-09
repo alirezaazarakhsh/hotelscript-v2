@@ -2630,6 +2630,7 @@ class ReservationCreateAPIView(CreateAPIView):
 
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
+
         if check_in_date < jdatetime.date.today():
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         if check_out_date <= check_in_date:
@@ -2680,9 +2681,6 @@ class ReservationCreateAPIView(CreateAPIView):
             else:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
-            if any(v < 0 for v in [room.inventory, room.count, room.auto_approved_count]):
-                raise ValidationError(f"مقادیر اتاق {room.title} نمی‌توانند منفی باشند.")
-
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
             total_price = Decimal('0')
@@ -2705,13 +2703,14 @@ class ReservationCreateAPIView(CreateAPIView):
                 extra_passengers_count=room.extra_capacity
             )
 
+        # تعیین وضعیت رزرو
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
         reservation.final_price = final_price
         reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        # تایمر cache فقط وقتی pending_admin است، مدیریت در Consumer
+        # پیام WebSocket فقط برای اطلاع وضعیت و تایمر=None
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2725,8 +2724,7 @@ class ReservationCreateAPIView(CreateAPIView):
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
-        return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
-    
+        return Response({"tracking_code": tracking_code})    
     
     
 
