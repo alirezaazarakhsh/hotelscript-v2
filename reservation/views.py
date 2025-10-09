@@ -2576,9 +2576,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
 
 # ای پی ای رزرو 
-
-logger = logging.getLogger(__name__)
-
 class ReservationCreateAPIView(CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2636,13 +2633,23 @@ class ReservationCreateAPIView(CreateAPIView):
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
 
+        # اطلاعات رزروکننده از پروفایل حقیقی
+        profile = getattr(request.user, 'natural_profile', None)
+        reserver_data = {
+            'reserver_first_name': profile.first_name if profile else '',
+            'reserver_last_name': profile.last_name if profile else '',
+            'reserver_national_code': profile.national_code if profile else '',
+            'reserver_phone_number': request.user.phone_number or ''
+        }
+
         # ایجاد رزرو در حالت پیش‌فرض بدون تایمر
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             buyer=request.user,
             status='unpaid',  # قبل از کاهش موجودی
             check_in_date=check_in_date.togregorian(),
-            check_out_date=check_out_date.togregorian()
+            check_out_date=check_out_date.togregorian(),
+            **reserver_data
         )
 
         hotel_id = data.get('hotel_id')
@@ -2693,8 +2700,6 @@ class ReservationCreateAPIView(CreateAPIView):
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         reservation.save(update_fields=['status'])
 
-        # ✅ هیچ تایمری در API ست نمی‌شود، تایمر فقط از WebSocket شروع می‌شود
-
         # اطلاع WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -2710,7 +2715,8 @@ class ReservationCreateAPIView(CreateAPIView):
 
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
     
-    
+
+
     
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)
