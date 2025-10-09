@@ -2609,17 +2609,42 @@ class ReservationCreateAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # تولید کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
+        # تبدیل تاریخ
+        def parse_jdate(value):
+            if isinstance(value, str):
+                try:
+                    return jdatetime.date.fromisoformat(value)
+                except ValueError:
+                    return jdatetime.date.fromgregorian(date=date.fromisoformat(value))
+            elif isinstance(value, dict):
+                year, month, day = int(value["year"]), int(value["month"]), int(value["day"])
+                if value.get("calendar") == "gregorian":
+                    return jdatetime.date.fromgregorian(date=date(year, month, day))
+                return jdatetime.date(year, month, day)
+            elif isinstance(value, date):
+                return jdatetime.date.fromgregorian(date=value)
+            elif isinstance(value, jdatetime.date):
+                return value
+            raise ValueError(f"فرمت تاریخ نامعتبر: {value}")
+
+        check_in_date = parse_jdate(data['date']['enter'])
+        check_out_date = parse_jdate(data['date']['exit'])
+
+        # ایجاد رزرو با تاریخ‌ها
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             buyer=request.user,
-            status='unpaid'
+            status='unpaid',
+            check_in_date=check_in_date.togregorian(),
+            check_out_date=check_out_date.togregorian()
         )
 
         hotel_id = data.get('hotel_id')
         room_ids = data.get('room_id', [])
-        nights = reservation.nights_count
+        nights = (check_out_date.togregorian() - check_in_date.togregorian()).days
         all_auto_approved = True
 
         for room_id in room_ids:
@@ -2627,7 +2652,7 @@ class ReservationCreateAPIView(CreateAPIView):
             quantity = 1
 
             if (room.inventory or 0) < quantity:
-                raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
+                return Response({"error": f"موجودی کافی برای اتاق {room.title} وجود ندارد."}, status=400)
 
             if (room.auto_approved_count or 0) >= quantity:
                 room.auto_approved_count -= quantity
@@ -2635,14 +2660,14 @@ class ReservationCreateAPIView(CreateAPIView):
                 room.count -= quantity
                 all_auto_approved = False
             else:
-                raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
+                return Response({"error": f"موجودی کافی برای اتاق {room.title} وجود ندارد."}, status=400)
 
             room.inventory -= quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
             total_price = Decimal('0')
             for night in range(nights):
-                current_date = reservation.check_in_date.togregorian() + timedelta(days=night)
+                current_date = check_in_date.togregorian() + timedelta(days=night)
                 price = RoomDatePrice.objects.filter(
                     room=room,
                     start_date__lte=current_date,
@@ -2668,6 +2693,7 @@ class ReservationCreateAPIView(CreateAPIView):
             timer = duration_minutes * 60
             cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
 
+        # ارسال WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2681,7 +2707,6 @@ class ReservationCreateAPIView(CreateAPIView):
         )
 
         return Response({"tracking_code": tracking_code}, status=status.HTTP_200_OK)
-    
     
     
     
