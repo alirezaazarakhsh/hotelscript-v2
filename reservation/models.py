@@ -8,7 +8,7 @@ from decimal import Decimal, ROUND_UP
 from datetime import timedelta
 from django.dispatch import receiver
 import jdatetime
-from functools import cache, cached_property
+from functools import cached_property
 from jdatetime import date as jdate
 from jalali_date import date2jalali
 from asgiref.sync import async_to_sync
@@ -16,6 +16,8 @@ from django.db.models.signals import post_save
 from channels.layers import get_channel_layer
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.encoding import force_str
+from django.core.cache import cache
+
 
 
 # 🌐 Django
@@ -1458,6 +1460,11 @@ class Reservationhotel(models.Model):
         
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    from django.utils import timezone
+    from django.core.cache import cache  # اطمینان حاصل کن این خط هست
+
     channel_layer = get_channel_layer()
     timer = None
 
@@ -1466,7 +1473,6 @@ def notify_status_change(sender, instance, created, **kwargs):
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
         cache_key = f"reservation_timer_{instance.tracking_code}"
-        # ذخیره شروع تایمر فقط اگر قبلاً وجود نداشته باشد
         if not cache.get(cache_key):
             cache.set(cache_key, timezone.now(), timeout=duration_minutes*60)
 
@@ -1484,6 +1490,8 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
+
+
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
