@@ -37,6 +37,8 @@ from rest_framework.generics import ListCreateAPIView
 from rest_framework import generics
 from rest_framework import serializers  # Explicit import from rest_framework
 from django.db.models import Prefetch
+from django.core.cache import cache
+
 
 
 
@@ -2609,10 +2611,8 @@ class ReservationCreateAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # تولید کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
-        # تبدیل تاریخ
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
@@ -2633,7 +2633,6 @@ class ReservationCreateAPIView(CreateAPIView):
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
 
-        # ایجاد رزرو با تاریخ‌ها
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             buyer=request.user,
@@ -2693,7 +2692,6 @@ class ReservationCreateAPIView(CreateAPIView):
             timer = duration_minutes * 60
             cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
 
-        # ارسال WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",

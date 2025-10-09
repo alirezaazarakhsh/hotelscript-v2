@@ -16,7 +16,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         reservation = await self.get_reservation(self.tracking_code)
 
         if not reservation:
-            await self.send_json({"status": "not_found", "timer": None})
+            await self.send_json({"status": "not_found", "timer": 0})
             return
 
         if reservation.status in ["cancelled", "expired"]:
@@ -47,7 +47,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             remaining = await self.get_remaining_time(reservation) if reservation.status == "pending_admin" else None
             await self.send_json({
                 "status": reservation.status,
-                "timer": int(remaining) if remaining is not None else None
+                "timer": int(remaining) if remaining is not None else 0
             })
 
     async def status_update(self, event):
@@ -56,7 +56,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         timer = message.get("timer")
         await self.send_json({
             "status": status,
-            "timer": int(timer) if timer is not None else None
+            "timer": int(timer) if timer is not None else 0
         })
 
     @sync_to_async
@@ -80,10 +80,11 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
         if not start_time:
-            return duration_minutes * 60
+            start_time = timezone.now()
+            cache.set(cache_key, start_time, timeout=duration_minutes*60)
 
         elapsed = (timezone.now() - start_time).total_seconds()
-        return max(0, duration_minutes * 60 - elapsed)
+        return max(0, duration_minutes*60 - elapsed)
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
