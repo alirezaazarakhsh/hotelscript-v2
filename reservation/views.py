@@ -2605,14 +2605,21 @@ class ReservationCreateAPIView(CreateAPIView):
             400: openapi.Response(description="درخواست نامعتبر یا موجودی ناکافی."),
         }
     )
+    
+class ReservationCreateAPIView(CreateAPIView):
+    serializer_class = ReservationCreateSerializer
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # تولید کد پیگیری
         tracking_code = 'sfa' + ''.join(str(random.randint(0, 9)) for _ in range(10))
 
+        # تبدیل تاریخ جلالی یا گرگوری به jdatetime
         def parse_jdate(value):
             if isinstance(value, str):
                 try:
@@ -2633,10 +2640,11 @@ class ReservationCreateAPIView(CreateAPIView):
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
 
+        # ایجاد رزرو در حالت پیش‌فرض بدون تایمر
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             buyer=request.user,
-            status='unpaid',
+            status='unpaid',  # قبل از کاهش موجودی
             check_in_date=check_in_date.togregorian(),
             check_out_date=check_out_date.togregorian()
         )
@@ -2646,6 +2654,7 @@ class ReservationCreateAPIView(CreateAPIView):
         nights = (check_out_date.togregorian() - check_in_date.togregorian()).days
         all_auto_approved = True
 
+        # پردازش اتاق‌ها و کاهش موجودی
         for room_id in room_ids:
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
@@ -2664,6 +2673,7 @@ class ReservationCreateAPIView(CreateAPIView):
             room.inventory -= quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
+            # محاسبه قیمت کل
             total_price = Decimal('0')
             for night in range(nights):
                 current_date = check_in_date.togregorian() + timedelta(days=night)
@@ -2674,6 +2684,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 ).first()
                 total_price += Decimal(price.price) if price else Decimal('0')
 
+            # ایجاد رابطه رزرو-اتاق
             ReservationRoom.objects.create(
                 reservation=reservation,
                 room=room,
@@ -2682,16 +2693,13 @@ class ReservationCreateAPIView(CreateAPIView):
                 subtotal=total_price
             )
 
+        # تعیین وضعیت نهایی رزرو
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         reservation.save(update_fields=['status'])
 
-        timer = None
-        if reservation.status == 'pending_admin':
-            approval_duration = ReservationApprovalDuration.objects.first()
-            duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-            timer = duration_minutes * 60
-            cache.set(f"reservation_timer_{reservation.tracking_code}", timezone.now(), timeout=timer)
+        # ✅ هیچ تایمری در API ست نمی‌شود، تایمر فقط از WebSocket شروع می‌شود
 
+        # اطلاع WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2699,7 +2707,7 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": timer,
+                    "timer": None,  # تایمر فقط در WebSocket مدیریت می‌شود
                 },
             },
         )
