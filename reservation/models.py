@@ -1467,8 +1467,8 @@ def notify_status_change(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     timer = None
 
-    # فقط وقتی رزرو cancelled شد موجودی اتاق‌ها بازگردد
     if instance.status == 'cancelled':
+        # بازگرداندن موجودی اتاق‌ها
         rooms = ReservationRoom.objects.filter(reservation=instance)
         for r in rooms:
             room = r.room
@@ -1480,12 +1480,12 @@ def notify_status_change(sender, instance, created, **kwargs):
         cache.delete(f"reservation_timer_{instance.tracking_code}")
         timer = 0
 
-    # برای pending_admin تایمر هنوز استارت نشده → timer=None
     elif instance.status == 'pending_admin':
+        # تایمر هنوز در WebSocket مدیریت می‌شود
         timer = None
 
-    # برای سایر وضعیت‌ها (paid, confirmed, unconfirmed) تایمر نمایش داده نمی‌شود
     else:
+        # وضعیت‌های نهایی دیگر (paid, confirmed, unconfirmed)
         timer = None
 
     # ارسال پیام به WebSocket
@@ -1499,7 +1499,6 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-    
     
 
 # ---------------- ReservationRoom ----------------

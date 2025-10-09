@@ -6,7 +6,6 @@ from django.utils import timezone
 from django.core.cache import cache
 from .models import Reservationhotel, ReservationRoom, ReservationApprovalDuration
 
-
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.tracking_code = self.scope["url_route"]["kwargs"]["tracking_code"]
@@ -20,16 +19,16 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"status": "not_found", "timer": 0})
             return
 
-        # اگر رزرو منتظر ادمین است، تایمر را تازه شروع کن
+        # اگر رزرو در حالت pending_admin است، تایمر را شروع کن
         if self.reservation.status == "pending_admin":
             await self.start_timer_if_not_started()
             asyncio.create_task(self.timer_loop())
         else:
-            # اگر رزرو در وضعیت نهایی است (paid, confirmed, cancelled)
+            # وضعیت نهایی: paid, confirmed, cancelled
             await self.send_json({"status": self.reservation.status, "timer": None})
 
     async def start_timer_if_not_started(self):
-        """تایمر فقط وقتی کاربر وارد صفحه انتظار شود شروع می‌شود."""
+        """شروع تایمر فقط اگر هنوز در cache نباشد"""
         cache_key = f"reservation_timer_{self.tracking_code}"
         if not cache.get(cache_key):
             start_time = timezone.now()
@@ -38,18 +37,19 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             cache.set(cache_key, start_time, timeout=duration_minutes * 60)
 
     async def timer_loop(self):
-        """تایمر تا زمانی که به صفر برسد یا رزرو تایید/لغو شود اجرا می‌شود."""
+        """تایمر تا پایان یا تغییر وضعیت رزرو اجرا می‌شود"""
         cache_key = f"reservation_timer_{self.tracking_code}"
         approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
         duration_minutes = approval_duration.duration_minutes if approval_duration else 5
 
         start_time = cache.get(cache_key)
         if not start_time:
-            return  # نباید بدون استارت تایمر اجرا شود
+            return
 
         while True:
-            # وضعیت رزرو را چک کن تا اگر تایید یا لغو شد متوقف شود
+            # بروزرسانی وضعیت رزرو
             self.reservation = await self.get_reservation(self.tracking_code)
+
             if self.reservation.status in ["confirmed", "paid", "cancelled"]:
                 await self.send_json({"status": self.reservation.status, "timer": None})
                 break
@@ -57,22 +57,19 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             elapsed = (timezone.now() - start_time).total_seconds()
             remaining = max(0, duration_minutes * 60 - elapsed)
 
-            # وقتی تایمر تمام شود و هنوز pending_admin است → لغو کن
-            if remaining <= 0 and self.reservation.status == "pending_admin":
-                await self.cancel_reservation()
-                await self.send_json({"status": "cancelled", "timer": 0})
+            # وقتی تایمر تمام شود و هنوز pending_admin است
+            if remaining <= 0:
+                if self.reservation.status == "pending_admin":
+                    await self.cancel_reservation()
+                    await self.send_json({"status": "cancelled", "timer": 0})
                 break
 
-            # ارسال تایمر فعلی به کلاینت
-            await self.send_json({
-                "status": self.reservation.status,
-                "timer": int(remaining)
-            })
-
+            # ارسال وضعیت و زمان باقی‌مانده به کاربر
+            await self.send_json({"status": self.reservation.status, "timer": int(remaining)})
             await asyncio.sleep(1)
 
     async def receive(self, text_data):
-        """درخواست کاربر برای دریافت وضعیت فعلی"""
+        """دریافت درخواست وضعیت فعلی از کلاینت"""
         data = json.loads(text_data)
         if data.get("action") == "get_status":
             remaining = await self.get_remaining_time()
@@ -107,7 +104,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
     @sync_to_async
     def get_remaining_time(self):
-        """محاسبه زمان باقیمانده"""
+        """محاسبه زمان باقی‌مانده تایمر"""
         cache_key = f"reservation_timer_{self.tracking_code}"
         start_time = cache.get(cache_key)
         if not start_time:
