@@ -1462,33 +1462,36 @@ class Reservationhotel(models.Model):
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     """
-    اطلاع‌رسانی تغییر وضعیت رزرو به WebSocket و مدیریت بازگردانی موجودی در صورت لغو رزرو
+    اطلاع‌رسانی تغییر وضعیت رزرو به WebSocket و بازگردانی موجودی در صورت لغو رزرو
+    (هماهنگ با WebSocket Consumer جدید)
     """
     channel_layer = get_channel_layer()
+    cache_key = f"reservation_timer_{instance.tracking_code}"
     timer = None
 
-    if instance.status == 'cancelled':
-        # بازگرداندن موجودی اتاق‌ها
+    # اگر رزرو لغو شد → بازگرداندن موجودی و حذف تایمر
+    if instance.status == "cancelled":
         rooms = ReservationRoom.objects.filter(reservation=instance)
         for r in rooms:
             room = r.room
             room.inventory += r.quantity
             if not room.auto_approval:
                 room.count += r.quantity
-            room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
-        # حذف تایمر cache
-        cache.delete(f"reservation_timer_{instance.tracking_code}")
+            room.save(update_fields=["inventory", "count", "auto_approved_count"])
+
+        cache.delete(cache_key)
         timer = 0
 
-    elif instance.status == 'pending_admin':
-        # تایمر هنوز در WebSocket مدیریت می‌شود
+    # اگر رزرو تازه در حالت pending_admin قرار گرفته، ولی تایمر از قبل cache نشده
+    elif instance.status == "pending_admin" and not cache.get(cache_key):
+        # WebSocket خودش تایمر رو مدیریت می‌کنه
         timer = None
 
     else:
-        # وضعیت‌های نهایی دیگر (paid, confirmed, unconfirmed)
+        # سایر وضعیت‌ها: paid, confirmed, unconfirmed
         timer = None
 
-    # ارسال پیام به WebSocket
+    # ارسال آپدیت به WebSocket (فقط وضعیت و تایمر)
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
         {
@@ -1499,7 +1502,6 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-    
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)

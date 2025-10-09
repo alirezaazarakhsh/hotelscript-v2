@@ -2577,6 +2577,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # ای پی ای رزرو 
 logger = logging.getLogger(__name__)
 
+
 class ReservationCreateAPIView(CreateAPIView):
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
@@ -2710,7 +2711,7 @@ class ReservationCreateAPIView(CreateAPIView):
         reservation.final_price = final_price
         reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        # پیام WebSocket فقط برای اطلاع وضعیت و تایمر=None
+        # 🔔 هماهنگ با WebSocket جدید (status + timer)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2718,14 +2719,13 @@ class ReservationCreateAPIView(CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": None
+                    "timer": None  # تایمر فقط در WebSocket مدیریت می‌شود
                 },
             },
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code})    
-    
     
 
     
