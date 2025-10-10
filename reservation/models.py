@@ -1387,10 +1387,6 @@ class Reservationhotel(models.Model):
         return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, discount_amount, final_price, room_fixed_discount
 
     def save(self, *args, **kwargs):
-        previous_status = None
-        if self.pk:
-            previous_status = Reservationhotel.objects.filter(pk=self.pk).values_list('status', flat=True).first()
-
         if not getattr(self, '_skip_price_calculation', False):
             if not self.pk or any(getattr(self, field) is None for field in [
                 'total_price', 'discount', 'room_fixed_discount', 'final_price',
@@ -1409,14 +1405,17 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-        # مدیریت موجودی و تایمرها در سیگنال post_save
-
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     timer = None
+
+    # فقط در حالتی که رزرو به‌روزرسانی می‌شود، previous_status را بررسی می‌کنیم
+    previous_status = None
+    if not created:  # اگر رزرو جدید نیست (به‌روزرسانی است)
+        previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
 
     if instance.status == "cancelled":
         rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
@@ -1428,11 +1427,11 @@ def notify_status_change(sender, instance, created, **kwargs):
         timer = 0
 
     elif instance.status == "pending_admin" and not cache.get(cache_key_approval):
-        cache.set(cache_key_approval, timezone.now(), timeout=300)  # 5 دقیقه
+        cache.set(cache_key_approval, timezone.now(), timeout=300)  # 5 دقیقه برای تأیید ادمین
 
     elif previous_status == "pending_admin" and instance.status == "confirmed":
         cache.delete(cache_key_approval)
-        cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه
+        cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه برای پرداخت
 
     elif instance.status in ["paid", "unconfirmed"]:
         cache.delete_many([cache_key_approval, cache_key_payment])
@@ -1447,8 +1446,6 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
-
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
