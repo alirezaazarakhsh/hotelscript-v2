@@ -2678,24 +2678,36 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             room.adjust_inventory_for_reservation(quantity, auto_approval)
 
-            total_price = Decimal('0')
-            for night in range(nights):
-                current_date = check_in_date.togregorian() + timedelta(days=night)
-                price = RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=current_date,
-                    end_date__gte=current_date
-                ).first()
-                total_price += Decimal(price.price) if price else Decimal('0')
+            # دریافت قیمت از RoomDatePrice برای تاریخ ورود
+            check_in_date_std = check_in_date.togregorian()
+            price_obj = room.date_prices.filter(
+                start_date__lte=check_in_date_std,
+                end_date__gte=check_in_date_std
+            ).first()
+
+            if not price_obj:
+                raise ValidationError(f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد.")
+
+            daily_price = Decimal(price_obj.price)
+            extra_price_per_person = Decimal(price_obj.extra_passenger_price or 0)
+            room_fixed_discount = Decimal(0)
+            if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
+                    room_fixed_discount = Decimal(price_obj.discount_value)
+
+            total_price = daily_price * nights * quantity
+            extra_passengers_count = data.get('extra_passengers', {}).get(room_id, 0)  # فرض می‌کنیم تعداد نفرات اضافه از درخواست می‌آید
+            extra_price = extra_price_per_person * extra_passengers_count * nights * quantity
+            subtotal = total_price + extra_price - room_fixed_discount
 
             res_room = ReservationRoom(
                 reservation=reservation,
                 room=room,
                 quantity=quantity,
-                price_per_night=total_price / nights if nights > 0 else total_price,
-                subtotal=total_price,
+                price_per_night=daily_price,
+                subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
-                extra_passengers_count=room.extra_capacity,
+                extra_passengers_count=extra_passengers_count,
             )
             reservation_rooms.append(res_room)
 
@@ -2704,8 +2716,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
+        reservation.discount = code_discount
+        reservation.room_fixed_discount = room_fixed
+        reservation.half_day_in_charge = half_in
+        reservation.half_day_out_charge = half_out
+        reservation.total_half_day_charge = total_half
+        reservation.total_extra_passenger_charge = total_extra
         reservation.final_price = final_price
-        reservation.save(update_fields=['status', 'total_price', 'final_price'])
+        reservation.save()
 
         cache_key_approval = f"reservation_approval_timer_{reservation.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{reservation.tracking_code}"
