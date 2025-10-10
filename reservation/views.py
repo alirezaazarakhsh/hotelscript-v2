@@ -37,6 +37,8 @@ from rest_framework.generics import ListCreateAPIView
 from rest_framework import generics
 from rest_framework import serializers  # Explicit import from rest_framework
 from django.db.models import Prefetch
+from django.core.cache import cache  
+
 
 
 
