@@ -2658,13 +2658,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         hotel_id = data.get('hotel_id')
-        room_ids = data.get('room_id', [])
+        rooms_data = data.get('rooms', [])  # فرض می‌کنیم rooms از درخواست می‌آید
         nights = reservation.nights_count
         all_auto_approved = True
 
         reservation_rooms = []
 
-        for room_id in room_ids:
+        for room_data in rooms_data:
+            room_id = room_data.get('id')
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
@@ -2678,33 +2679,50 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             room.adjust_inventory_for_reservation(quantity, auto_approval)
 
-            # دریافت قیمت از RoomDatePrice برای تاریخ ورود
+            # محاسبه قیمت‌ها برای هر شب از RoomDatePrice
+            total_price = Decimal('0')
+            total_extra_price = Decimal('0')
+            total_fixed_discount = Decimal('0')
             check_in_date_std = check_in_date.togregorian()
-            price_obj = room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std
-            ).first()
 
-            if not price_obj:
-                raise ValidationError(f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد.")
+            for night in range(nights):
+                current_date = check_in_date_std + timedelta(days=night)
+                price_obj = room.date_prices.filter(
+                    start_date__lte=current_date,
+                    end_date__gte=current_date,
+                    user_level__isnull=True  # یا فیلتر بر اساس user_level اگر نیاز باشد
+                ).first()
 
-            daily_price = Decimal(price_obj.price)
-            extra_price_per_person = Decimal(price_obj.extra_passenger_price or 0)
-            room_fixed_discount = Decimal(0)
-            if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
-                    room_fixed_discount = Decimal(price_obj.discount_value)
+                if not price_obj:
+                    logger.warning(f"هیچ قیمتی برای تاریخ {current_date} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد.")
+                    continue
 
-            total_price = daily_price * nights * quantity
-            extra_passengers_count = data.get('extra_passengers', {}).get(room_id, 0)  # فرض می‌کنیم تعداد نفرات اضافه از درخواست می‌آید
-            extra_price = extra_price_per_person * extra_passengers_count * nights * quantity
-            subtotal = total_price + extra_price - room_fixed_discount
+                # محاسبه قیمت هر شب
+                daily_price = Decimal(price_obj.price)
+                total_price += daily_price
+
+                # محاسبه قیمت نفرات اضافه
+                extra_passengers = room_data.get('passengers', {}).get('extra_capacity_passengers', [])
+                extra_passengers_count = len(extra_passengers)
+                extra_price_per_person = Decimal(price_obj.extra_passenger_price or 0)
+                total_extra_price += extra_price_per_person * extra_passengers_count
+
+                # محاسبه تخفیف ثابت
+                if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                    if not price_obj.discount_date or current_date <= price_obj.discount_date.togregorian():
+                        total_fixed_discount += Decimal(price_obj.discount_value)
+
+            total_price *= quantity
+            total_extra_price *= quantity
+            total_fixed_discount *= quantity
+
+            subtotal = total_price + total_extra_price - total_fixed_discount
 
             res_room = ReservationRoom(
                 reservation=reservation,
                 room=room,
                 quantity=quantity,
-                price_per_night=daily_price,
+                price_per_night=total_price / nights if nights > 0 else total_price,
                 subtotal=subtotal,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=extra_passengers_count,
