@@ -2658,14 +2658,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         hotel_id = data.get('hotel_id')
-        rooms_data = data.get('rooms', [])  # فرض می‌کنیم rooms از درخواست می‌آید
+        room_ids = data.get('room_id', [])
         nights = reservation.nights_count
         all_auto_approved = True
 
         reservation_rooms = []
 
-        for room_data in rooms_data:
-            room_id = room_data.get('id')
+        for room_id in room_ids:
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
             quantity = 1
 
@@ -2679,53 +2678,24 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
             room.adjust_inventory_for_reservation(quantity, auto_approval)
 
-            # محاسبه قیمت‌ها برای هر شب از RoomDatePrice
             total_price = Decimal('0')
-            total_extra_price = Decimal('0')
-            total_fixed_discount = Decimal('0')
-            check_in_date_std = check_in_date.togregorian()
-
             for night in range(nights):
-                current_date = check_in_date_std + timedelta(days=night)
-                price_obj = room.date_prices.filter(
+                current_date = check_in_date.togregorian() + timedelta(days=night)
+                price = RoomDatePrice.objects.filter(
+                    room=room,
                     start_date__lte=current_date,
-                    end_date__gte=current_date,
-                    user_level__isnull=True  # یا فیلتر بر اساس user_level اگر نیاز باشد
+                    end_date__gte=current_date
                 ).first()
-
-                if not price_obj:
-                    logger.warning(f"هیچ قیمتی برای تاریخ {current_date} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد.")
-                    continue
-
-                # محاسبه قیمت هر شب
-                daily_price = Decimal(price_obj.price)
-                total_price += daily_price
-
-                # محاسبه قیمت نفرات اضافه
-                extra_passengers = room_data.get('passengers', {}).get('extra_capacity_passengers', [])
-                extra_passengers_count = len(extra_passengers)
-                extra_price_per_person = Decimal(price_obj.extra_passenger_price or 0)
-                total_extra_price += extra_price_per_person * extra_passengers_count
-
-                # محاسبه تخفیف ثابت
-                if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                    if not price_obj.discount_date or current_date <= price_obj.discount_date.togregorian():
-                        total_fixed_discount += Decimal(price_obj.discount_value)
-
-            total_price *= quantity
-            total_extra_price *= quantity
-            total_fixed_discount *= quantity
-
-            subtotal = total_price + total_extra_price - total_fixed_discount
+                total_price += Decimal(price.price) if price else Decimal('0')
 
             res_room = ReservationRoom(
                 reservation=reservation,
                 room=room,
                 quantity=quantity,
                 price_per_night=total_price / nights if nights > 0 else total_price,
-                subtotal=subtotal,
+                subtotal=total_price,
                 primary_passengers_count=room.room_capacity,
-                extra_passengers_count=extra_passengers_count,
+                extra_passengers_count=room.extra_capacity,
             )
             reservation_rooms.append(res_room)
 
@@ -2734,14 +2704,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
-        reservation.discount = code_discount
-        reservation.room_fixed_discount = room_fixed
-        reservation.half_day_in_charge = half_in
-        reservation.half_day_out_charge = half_out
-        reservation.total_half_day_charge = total_half
-        reservation.total_extra_passenger_charge = total_extra
         reservation.final_price = final_price
-        reservation.save()
+        reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
         cache_key_approval = f"reservation_approval_timer_{reservation.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{reservation.tracking_code}"
