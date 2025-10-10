@@ -794,7 +794,6 @@ class RoomService(models.Model):
 # تنظیم logging
 logger = logging.getLogger(__name__)
 
-
 class Room(models.Model):
     hotel = models.ForeignKey(
         'Hotel',
@@ -822,15 +821,15 @@ class Room(models.Model):
         default=0,
     )
     count = models.PositiveIntegerField(
-        verbose_name=_('تعداد رزرو نیازمند تایید ادمین'),
-        help_text=_('تعداد رزروهایی که باید تایید ادمین داشته باشند'),
+        verbose_name=_('ظرفیت رزرو نیازمند تأیید ادمین'),
+        help_text=_('ظرفیت رزروهایی که باید تأیید ادمین داشته باشند'),
         default=0,
         null=True,
         blank=True,
     )
     auto_approved_count = models.PositiveIntegerField(
-        verbose_name=_('تعداد رزرو بدون تایید ادمین'),
-        help_text=_('تعداد رزروهایی که بدون تایید ادمین تایید می‌شوند'),
+        verbose_name=_('ظرفیت رزرو بدون تأیید ادمین'),
+        help_text=_('ظرفیت رزروهایی که بدون تأیید ادمین تأیید می‌شوند'),
         default=0,
         null=True,
         blank=True,
@@ -870,14 +869,6 @@ class Room(models.Model):
                 check=models.Q(auto_approved_count__gte=0),
                 name='check_auto_approved_non_negative',
             ),
-            models.CheckConstraint(
-                check=models.Q(count__lte=models.F('inventory')),
-                name='count_lte_inventory',
-            ),
-            models.CheckConstraint(
-                check=models.Q(auto_approved_count__lte=models.F('inventory')),
-                name='auto_count_lte_inventory',
-            ),
         ]
 
     def clean(self):
@@ -887,21 +878,16 @@ class Room(models.Model):
         current_auto_approved_count = self.auto_approved_count or 0
 
         if current_count < 0 or current_auto_approved_count < 0:
-            raise ValidationError(_('تعداد رزرو نمی‌تواند منفی باشد.'))
+            raise ValidationError(_('ظرفیت رزرو نمی‌تواند منفی باشد.'))
         if current_inventory < 0:
             raise ValidationError(_('موجودی نمی‌تواند منفی باشد.'))
-        if current_count + current_auto_approved_count > current_inventory:
-            raise ValidationError({
-                'count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
-                'auto_approved_count': _('جمع تعداد رزروهای تایید شده و بدون تایید نمی‌تواند بیشتر از موجودی باشد.'),
-            })
 
     def __str__(self):
         return f'{self.title} - {self.hotel}' if self.hotel else self.title or 'اتاق بدون نام'
 
     def is_closed(self, target_date=None):
         if target_date is None:
-            target_date = JalaliDate.today()
+            target_date = jdatetime.date.today()
         active_prices = self.date_prices.filter(
             start_date__lte=target_date,
             end_date__gte=target_date
@@ -913,16 +899,20 @@ class Room(models.Model):
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
 
-        if self.inventory < quantity:
-            raise ValidationError(_('موجودی کافی برای رزرو وجود ندارد.'))
+        with transaction.atomic():
+            # قفل کردن رکورد برای جلوگیری از race condition
+            room = Room.objects.select_for_update().get(pk=self.pk)
+            if auto_approval:
+                if room.auto_approved_count < quantity:
+                    raise ValidationError(_('ظرفیت بدون تأیید ادمین کافی نیست.'))
+                room.auto_approved_count -= quantity
+            else:
+                if room.count < quantity:
+                    raise ValidationError(_('ظرفیت نیازمند تأیید ادمین کافی نیست.'))
+                room.count -= quantity
+            room.inventory -= quantity
+            room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
-        self.inventory -= quantity
-        if auto_approval:
-            self.auto_approved_count += quantity
-        else:
-            self.count += quantity
-
-        self.save(update_fields=['inventory', 'count', 'auto_approved_count'])
         self._send_inventory_sms_if_zero()
         logger.info(f"Room {self.pk}: Reservation added successfully")
 
@@ -931,17 +921,16 @@ class Room(models.Model):
         if quantity <= 0:
             raise ValidationError(_('تعداد رزرو باید بیشتر از صفر باشد.'))
 
-        if auto_approval:
-            self.auto_approved_count = max(0, self.auto_approved_count - quantity)
-        else:
-            self.count = max(0, self.count - quantity)
+        with transaction.atomic():
+            # قفل کردن رکورد
+            room = Room.objects.select_for_update().get(pk=self.pk)
+            if auto_approval:
+                room.auto_approved_count += quantity
+            else:
+                room.count += quantity
+            room.inventory += quantity
+            room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
 
-        self.inventory += quantity
-
-        if self.count + self.auto_approved_count > self.inventory:
-            raise ValidationError(_('جمع رزروها نمی‌تواند بیشتر از موجودی باشد.'))
-
-        self.save(update_fields=['inventory', 'count', 'auto_approved_count'])
         self._send_inventory_sms_if_zero()
         logger.info(f"Room {self.pk}: Reservation cancelled and reverted successfully")
 
@@ -961,8 +950,7 @@ class Room(models.Model):
                     logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
             except Exception as e:
                 logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-
-
+                
 
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
@@ -1265,13 +1253,13 @@ class Reservationhotel(models.Model):
         ('pending_admin', _('در حال بررسی ادمین')),
         ('paid', _('پرداخت شده')),
         ('unpaid', _('پرداخت نشده')),
-        ('confirmed', _('تایید رزرو')),
-        ('unconfirmed', _('عدم تایید رزرو')),
+        ('confirmed', _('تأیید رزرو')),
+        ('unconfirmed', _('عدم تأیید رزرو')),
         ('cancelled', _('لغو شده')),
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        'BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1293,7 +1281,7 @@ class Reservationhotel(models.Model):
     total_half_day_charge = models.DecimalField(_('مجموع نیم‌شارژها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     
-    is_approved = models.BooleanField(_('تایید شده'), default=False)
+    is_approved = models.BooleanField(_('تأیید شده'), default=False)
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
@@ -1303,7 +1291,7 @@ class Reservationhotel(models.Model):
 
     class Meta:
         verbose_name = _('رزرو')
-        verbose_name_plural = _('رزرو ها')
+        verbose_name_plural = _('رزرو‌ها')
 
     def __str__(self):
         return f'رزرو {self.tracking_code} توسط {self.buyer.phone_number}'
@@ -1403,7 +1391,6 @@ class Reservationhotel(models.Model):
         if self.pk:
             previous_status = Reservationhotel.objects.filter(pk=self.pk).values_list('status', flat=True).first()
 
-        # محاسبه قیمت فقط اگر نیاز باشد
         if not getattr(self, '_skip_price_calculation', False):
             if not self.pk or any(getattr(self, field) is None for field in [
                 'total_price', 'discount', 'room_fixed_discount', 'final_price',
@@ -1420,88 +1407,48 @@ class Reservationhotel(models.Model):
                 self.total_extra_passenger_charge = total_extra
                 self.final_price = final
 
-        # ✅ وقتی رزرو تازه ایجاد می‌شود
-        if not self.pk:
-            super().save(*args, **kwargs)  # اول ذخیره تا شناسه (id) داشته باشیم
-
-            # کاهش موجودی در هنگام ایجاد رزرو
-            with transaction.atomic():
-                reservation_rooms = self.reservation_rooms.select_related('room').all()
-                for res_room in reservation_rooms:
-                    room = res_room.room
-                    quantity = res_room.quantity or 1
-
-                    if room.auto_approval:  # اگر تأیید خودکار فعال است
-                        room.auto_approved_count = max(0, (room.auto_approved_count or 0) - quantity)
-                    else:
-                        room.count = max(0, (room.count or 0) - quantity)
-
-                    room.save(update_fields=['count', 'auto_approved_count'])
-
-            return  # چون رزرو تازه ساخته شده، نیازی به ادامه نیست
-
-        # ✅ بازگردانی موجودی در زمان لغو رزرو
-        if previous_status in ['pending_admin', 'confirmed', 'unpaid', 'paid'] and self.status == 'cancelled':
-            with transaction.atomic():
-                reservation_rooms = self.reservation_rooms.select_related('room').all()
-                for res_room in reservation_rooms:
-                    room = res_room.room
-                    quantity = res_room.quantity or 1
-
-                    # اگر قبلاً در حالت تأیید خودکار بوده، از auto_approved_count برگردون
-                    if previous_status == 'confirmed' or room.auto_approval:
-                        room.auto_approved_count = (room.auto_approved_count or 0) + quantity
-                    else:
-                        room.count = (room.count or 0) + quantity
-
-                    room.save(update_fields=['auto_approved_count', 'count'])
-
-        # ✅ ذخیره نهایی رزرو
         super().save(*args, **kwargs)
-        
+
+        # مدیریت موجودی و تایمرها در سیگنال post_save
+
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change(sender, instance, created, **kwargs):
-    """
-    اطلاع‌رسانی تغییر وضعیت رزرو به WebSocket و بازگردانی موجودی در صورت لغو رزرو
-    (هماهنگ با WebSocket Consumer جدید)
-    """
     channel_layer = get_channel_layer()
-    cache_key = f"reservation_timer_{instance.tracking_code}"
+    cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
+    cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     timer = None
 
-    # اگر رزرو لغو شد → بازگرداندن موجودی و حذف تایمر
     if instance.status == "cancelled":
-        rooms = ReservationRoom.objects.filter(reservation=instance)
-        for r in rooms:
-            room = r.room
-            room.inventory += r.quantity
-            if not room.auto_approval:
-                room.count += r.quantity
-            room.save(update_fields=["inventory", "count", "auto_approved_count"])
-
-        cache.delete(cache_key)
+        rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
+        with transaction.atomic():
+            for r in rooms:
+                room = Room.objects.select_for_update().get(pk=r.room.pk)
+                room.revert_inventory_for_cancellation(r.quantity, r.was_auto_approved)
+        cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
 
-    # اگر رزرو تازه در حالت pending_admin قرار گرفته، ولی تایمر از قبل cache نشده
-    elif instance.status == "pending_admin" and not cache.get(cache_key):
-        # WebSocket خودش تایمر رو مدیریت می‌کنه
-        timer = None
+    elif instance.status == "pending_admin" and not cache.get(cache_key_approval):
+        cache.set(cache_key_approval, timezone.now(), timeout=300)  # 5 دقیقه
 
-    else:
-        # سایر وضعیت‌ها: paid, confirmed, unconfirmed
-        timer = None
+    elif previous_status == "pending_admin" and instance.status == "confirmed":
+        cache.delete(cache_key_approval)
+        cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه
 
-    # ارسال آپدیت به WebSocket (فقط وضعیت و تایمر)
+    elif instance.status in ["paid", "unconfirmed"]:
+        cache.delete_many([cache_key_approval, cache_key_payment])
+
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
         {
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "timer": timer,
+                "timer": timer if instance.status == "pending_admin" else None,
             },
         },
     )
+
+
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
