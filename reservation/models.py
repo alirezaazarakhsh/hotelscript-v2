@@ -1319,7 +1319,7 @@ class Reservationhotel(models.Model):
 
     def calculate_total_price(self):
         if not self.pk or not self.reservation_rooms.exists():
-            return Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
+            return (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
 
         hotel = self.reservation_rooms.first().room.hotel
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
@@ -1334,7 +1334,7 @@ class Reservationhotel(models.Model):
 
         nights = self.nights_count
         if nights <= 0:
-            return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
+            return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
         check_in_date_std = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
@@ -1344,6 +1344,7 @@ class Reservationhotel(models.Model):
             quantity = res_room.quantity
             extra_guests = res_room.passengers.filter(passenger_type='extra').count()
 
+            # دریافت قیمت از RoomDatePrice بر اساس تاریخ و سطح کاربر
             price_obj = room.date_prices.filter(
                 start_date__lte=check_in_date_std,
                 end_date__gte=check_in_date_std,
@@ -1359,22 +1360,28 @@ class Reservationhotel(models.Model):
                 daily_price = Decimal('0')
                 extra_price_per_person = Decimal('0')
             else:
-                daily_price = Decimal(res_room.subtotal)
-                extra_price_per_person = Decimal(res_room.extra_passenger_price or price_obj.extra_passenger_price or 0)
+                daily_price = Decimal(price_obj.price)
+                extra_price_per_person = Decimal(price_obj.extra_passenger_price)
 
+            # محاسبه قیمت کل برای اتاق
+            total += daily_price * nights * quantity
+
+            # محاسبه قیمت نفرات اضافه
             extra_price = extra_price_per_person * extra_guests
             total_extra += extra_price * nights * quantity
 
+            # اعمال تخفیف ثابت (fixed discount) اگر applicable باشد
+            if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
+                    room_fixed_discount += Decimal(price_obj.discount_value) * quantity
+
+            # محاسبه نیم‌شارژها
             if res_room.half_day_in_selected and hotel.has_check_in_half_day_charge:
-                half_day_in_charge += res_room.half_day_in_price
+                half_day_in_charge += res_room.half_day_in_price * quantity
             if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
-                half_day_out_charge += res_room.half_day_out_price
+                half_day_out_charge += res_room.half_day_out_price * quantity
 
-            if res_room.fixed_discount:
-                room_fixed_discount += Decimal(res_room.fixed_discount)
-
-            total += daily_price
-
+        # اعمال تخفیف کد تخفیف (در حال حاضر از self.discount استفاده می‌شود)
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
@@ -1382,7 +1389,8 @@ class Reservationhotel(models.Model):
         if final_price < 0:
             final_price = Decimal('0')
 
-        return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, total_half_day_charge, discount_amount, final_price, room_fixed_discount
+        return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge,
+                total_half_day_charge, discount_amount, final_price, room_fixed_discount)
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation', False):
@@ -1415,8 +1423,6 @@ def notify_status_change(sender, instance, created, **kwargs):
         with transaction.atomic():
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                # چون was_auto_approved در ReservationRoom نیست، از منطق دیگری برای بازگردانی موجودی استفاده می‌کنیم
-                # فرض می‌کنیم اگر رزرو confirmed بود، از auto_approved_count استفاده شده است
                 is_auto_approved = instance.status == 'confirmed'
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
         cache.delete_many([cache_key_approval, cache_key_payment])
@@ -1443,6 +1449,7 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
+    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
