@@ -4,7 +4,8 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 from django.core.cache import cache
-from .models import Reservationhotel, ReservationRoom
+from django.db import transaction
+from .models import Reservationhotel, ReservationRoom, Room, ReservationApprovalDuration
 
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -25,7 +26,8 @@ class ReservationConsumer(AsyncWebsocketConsumer):
     async def timer_loop(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
-        approval_duration_seconds = 300  # 5 دقیقه
+        approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+        approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
         payment_duration_seconds = 1200  # 20 دقیقه
 
         while self.connected:
@@ -102,8 +104,6 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
             reservation.status = "cancelled"
             reservation.save(update_fields=["status"])
-            # موجودی در سیگنال post_save بازگشت داده می‌شود
-            # از status=confirmed برای تعیین auto_approval استفاده می‌کنیم
             rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
             with transaction.atomic():
                 for r in rooms:
@@ -111,11 +111,12 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     is_auto_approved = reservation.status == 'confirmed'
                     room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
 
-    @(sync_to_async)
+    @sync_to_async
     def get_remaining_time(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
-        approval_duration_seconds = 300
+        approval_duration = ReservationApprovalDuration.objects.first()
+        approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
         payment_duration_seconds = 1200
 
         if self.reservation.status == "pending_admin":

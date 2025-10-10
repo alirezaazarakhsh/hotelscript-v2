@@ -2696,7 +2696,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 subtotal=total_price,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity,
-                # was_auto_approved حذف شده است
             )
             reservation_rooms.append(res_room)
 
@@ -2710,8 +2709,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         cache_key_approval = f"reservation_approval_timer_{reservation.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{reservation.tracking_code}"
+        
         if reservation.status == 'pending_admin':
-            cache.set(cache_key_approval, timezone.now(), timeout=300)
+            approval_duration = ReservationApprovalDuration.objects.first()
+            duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
         elif reservation.status == 'confirmed':
             cache.set(cache_key_payment, timezone.now(), timeout=1200)
 
@@ -2722,14 +2724,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": None
+                    "timer": None if reservation.status == 'confirmed' else duration_seconds
                 },
             },
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
-        return Response({"tracking_code": tracking_code})   
-
+        return Response({"tracking_code": tracking_code})
+    
+    
     
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)
