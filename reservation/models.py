@@ -1246,8 +1246,6 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
-logger = logging.getLogger(__name__)
-
 class Reservationhotel(models.Model):
     STATUS_CHOICES = [
         ('pending_admin', _('در حال بررسی ادمین')),
@@ -1280,7 +1278,7 @@ class Reservationhotel(models.Model):
     half_day_out_charge = models.DecimalField(_('نیم‌شارژ خروج'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_half_day_charge = models.DecimalField(_('مجموع نیم‌شارژها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
-    
+
     is_approved = models.BooleanField(_('تأیید شده'), default=False)
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
@@ -1299,8 +1297,8 @@ class Reservationhotel(models.Model):
     @cached_property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
-            check_in = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
-            check_out = self.check_out_date.togregorian() if isinstance(self.check_out_date, jdatetime.date) else self.check_out_date
+            check_in = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
+            check_out = self.check_out_date.togregorian() if hasattr(self.check_out_date, 'togregorian') else self.check_out_date
             return max(0, (check_out - check_in).days)
         return 0
 
@@ -1327,19 +1325,19 @@ class Reservationhotel(models.Model):
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-        total = Decimal('0')  
-        total_extra = Decimal('0')  
-        discount_amount = Decimal('0')  
-        room_fixed_discount = Decimal('0')  
-        half_day_in_charge = Decimal('0')  
-        half_day_out_charge = Decimal('0')  
+        total = Decimal('0')
+        total_extra = Decimal('0')
+        discount_amount = Decimal('0')
+        room_fixed_discount = Decimal('0')
+        half_day_in_charge = Decimal('0')
+        half_day_out_charge = Decimal('0')
 
         nights = self.nights_count
         if nights <= 0:
             return total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0')
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
-        check_in_date_std = self.check_in_date.togregorian() if isinstance(self.check_in_date, jdatetime.date) else self.check_in_date
+        check_in_date_std = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
 
         for res_room in self.reservation_rooms.all():
             room = res_room.room
@@ -1412,26 +1410,25 @@ def notify_status_change(sender, instance, created, **kwargs):
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     timer = None
 
-    # فقط در حالتی که رزرو به‌روزرسانی می‌شود، previous_status را بررسی می‌کنیم
-    previous_status = None
-    if not created:  # اگر رزرو جدید نیست (به‌روزرسانی است)
-        previous_status = Reservationhotel.objects.filter(pk=instance.pk).values_list('status', flat=True).first()
-
     if instance.status == "cancelled":
         rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
         with transaction.atomic():
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                room.revert_inventory_for_cancellation(r.quantity, r.was_auto_approved)
+                # چون was_auto_approved در ReservationRoom نیست، از منطق دیگری برای بازگردانی موجودی استفاده می‌کنیم
+                # فرض می‌کنیم اگر رزرو confirmed بود، از auto_approved_count استفاده شده است
+                is_auto_approved = instance.status == 'confirmed'
+                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
 
     elif instance.status == "pending_admin" and not cache.get(cache_key_approval):
         cache.set(cache_key_approval, timezone.now(), timeout=300)  # 5 دقیقه برای تأیید ادمین
 
-    elif previous_status == "pending_admin" and instance.status == "confirmed":
+    elif instance.status == "confirmed":
         cache.delete(cache_key_approval)
-        cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه برای پرداخت
+        if not cache.get(cache_key_payment):
+            cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه برای پرداخت
 
     elif instance.status in ["paid", "unconfirmed"]:
         cache.delete_many([cache_key_approval, cache_key_payment])
@@ -1446,7 +1443,7 @@ def notify_status_change(sender, instance, created, **kwargs):
             },
         },
     )
-
+    
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 

@@ -2694,7 +2694,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 subtotal=total_price,
                 primary_passengers_count=room.room_capacity,
                 extra_passengers_count=room.extra_capacity,
-                was_auto_approved=auto_approval
+                # was_auto_approved حذف شده است
             )
             reservation_rooms.append(res_room)
 
@@ -2726,7 +2726,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
-        return Response({"tracking_code": tracking_code})    
+        return Response({"tracking_code": tracking_code})   
 
     
 # ای پی ای جزئيات یک رزرو با tracking_code

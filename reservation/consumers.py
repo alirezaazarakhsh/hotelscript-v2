@@ -102,9 +102,16 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
             reservation.status = "cancelled"
             reservation.save(update_fields=["status"])
-            # موجودی در سیگنال post_save بازگردانده می‌شود
+            # موجودی در سیگنال post_save بازگشت داده می‌شود
+            # از status=confirmed برای تعیین auto_approval استفاده می‌کنیم
+            rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
+            with transaction.atomic():
+                for r in rooms:
+                    room = Room.objects.select_for_update().get(pk=r.room.pk)
+                    is_auto_approved = reservation.status == 'confirmed'
+                    room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
 
-    @sync_to_async
+    @(sync_to_async)
     def get_remaining_time(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
