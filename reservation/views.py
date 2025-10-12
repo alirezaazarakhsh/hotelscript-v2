@@ -3440,7 +3440,7 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "این کد تخفیف برای این هتل معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
         # بررسی وضعیت رزرو
-        if reservation.status in ['paid', 'cancelled']:
+        if reservation.payment_status == 'paid' or reservation.capacity_status == 'rejected':
             return Response({"error": "نمی‌توان روی رزرو پرداخت‌شده یا لغو‌شده تخفیف اعمال کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
         # بررسی سطح کاربری
@@ -3467,29 +3467,46 @@ class ApplyDiscountCodeAPIView(APIView):
         if activation_exists:
             return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # ذخیره موقت کد تخفیف در رزرو (به‌صورت حروف بزرگ)
-        reservation.applied_discount_code = code
-        discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
-        total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
+        # ایجاد یا به‌روزرسانی رکورد DiscountActivationRecord
+        with transaction.atomic():
+            if hotel_discount:
+                activation_record, created = DiscountActivationRecord.objects.get_or_create(
+                    user=request.user,
+                    hotel_discount_code=hotel_discount,
+                    discount_type='hotel',
+                    defaults={'reward_claimed': False}
+                )
+            else:
+                activation_record, created = DiscountActivationRecord.objects.get_or_create(
+                    user=request.user,
+                    room_discount_code=room_discount,
+                    discount_type='room',
+                    defaults={'reward_claimed': False}
+                )
 
-        # محاسبه تخفیف و قیمت نهایی
-        new_total_discount = discount_value
-        new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
+            # ذخیره موقت کد تخفیف در رزرو (به‌صورت حروف بزرگ)
+            reservation.applied_discount_code = code
+            discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
+            total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
 
-        # لاگ کردن مقادیر برای دیباگ
-        logger.debug(f"discount_value: {discount_value}, new_total_discount: {new_total_discount}, final_without_promo: {final_without_promo}, new_final_price: {new_final_price}")
+            # محاسبه تخفیف و قیمت نهایی
+            new_total_discount = discount_value
+            new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
 
-        reservation.discount = new_total_discount
-        reservation.final_price = new_final_price
-        reservation.total_price = total
-        reservation.half_day_in_charge = half_day_in_charge
-        reservation.half_day_out_charge = half_day_out_charge
-        reservation.total_half_day_charge = total_half_day_charge
-        reservation.total_extra_passenger_charge = total_extra
+            # لاگ کردن مقادیر برای دیباگ
+            logger.debug(f"discount_value: {discount_value}, new_total_discount: {new_total_discount}, final_without_promo: {final_without_promo}, new_final_price: {new_final_price}")
 
-        reservation._skip_price_calculation = True
-        reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
-        delattr(reservation, '_skip_price_calculation')
+            reservation.discount = new_total_discount
+            reservation.final_price = new_final_price
+            reservation.total_price = total
+            reservation.half_day_in_charge = half_day_in_charge
+            reservation.half_day_out_charge = half_day_out_charge
+            reservation.total_half_day_charge = total_half_day_charge
+            reservation.total_extra_passenger_charge = total_extra
+
+            reservation._skip_price_calculation = True
+            reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
+            delattr(reservation, '_skip_price_calculation')
 
         return Response({
             "status": "ok",
@@ -3502,6 +3519,7 @@ class ApplyDiscountCodeAPIView(APIView):
             "usage_limit": discount_obj.usage_limit
         }, status=status.HTTP_200_OK)
 
+    # متد delete بدون تغییر باقی می‌ماند
     @swagger_auto_schema(
         operation_summary="حذف کد تخفیف از رزرو",
         operation_description="حذف کد تخفیف اعمال‌شده از رزرو.",

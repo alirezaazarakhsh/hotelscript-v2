@@ -93,7 +93,6 @@ def update_room_inventory_on_delete(sender, instance, **kwargs):
             except Exception as e:
                 logger.error(f"Room {room.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
 
-# بقیه سیگنال‌ها (مانند add_to_passenger_book، update_hotel_status، notify_status_change_and_handle_discount) بدون تغییر
 @receiver(post_save, sender=ReservationRoomPassenger)
 def add_to_passenger_book(sender, instance, created, **kwargs):
     """
@@ -175,17 +174,27 @@ def update_hotel_status(sender, instance, **kwargs):
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_handle_discount(sender, instance, created, **kwargs):
     """
-    مدیریت کد تخفیف هنگام تغییر وضعیت رزرو به 'paid' و ارسال به‌روزرسانی وضعیت.
+    مدیریت کد تخفیف هنگام تغییر وضعیت رزرو به 'paid' و ارسال به‌روزرسانی وضعیت از طریق WebSocket.
+    
+    وظایف:
+    1. اگر payment_status به 'paid' تغییر کند و کد تخفیف اعمال شده باشد، یک رکورد
+       DiscountActivationRecord با reward_claimed=True ایجاد یا به‌روزرسانی می‌شود.
+    2. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود.
+    3. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
     """
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     timer = None
 
-    logger.debug(f"سیگنال post_save برای رزرو {instance.tracking_code} فراخوانی شد. status: {instance.status}, applied_discount_code: {instance.applied_discount_code}, created: {created}")
+    logger.debug(f"سیگنال post_save برای رزرو {instance.tracking_code} فراخوانی شد. "
+                 f"payment_status: {instance.payment_status}, "
+                 f"capacity_status: {instance.capacity_status}, "
+                 f"applied_discount_code: {instance.applied_discount_code}, "
+                 f"created: {created}")
 
     # مدیریت کد تخفیف هنگام تغییر وضعیت به paid
-    if not created and instance.status == 'paid' and instance.applied_discount_code:
+    if not created and instance.payment_status == 'paid' and instance.applied_discount_code:
         with transaction.atomic():
             try:
                 logger.debug(f"شروع اعمال کد تخفیف برای رزرو {instance.tracking_code}")
@@ -207,7 +216,7 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
 
                 discount_obj = room_discount or hotel_discount
 
-                # بررسی اعتبار کد تخفیف برای اتاق‌ها با توجه به هتل
+                # بررسی اعتبار کد تخفیف برای اتاق‌ها یا هتل
                 if hotel_discount:
                     rooms = instance.reservation_rooms.all()
                     if not rooms.exists():
@@ -215,6 +224,10 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                         return
                     if not all(rr.room.hotel == hotel_discount.hotel for rr in rooms):
                         logger.error(f"کد تخفیف هتل {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
+                        return
+                elif room_discount:
+                    if not any(rr.room == room_discount.room for rr in instance.reservation_rooms.all()):
+                        logger.error(f"کد تخفیف اتاق {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
                         return
 
                 # بررسی تعداد استفاده باقی‌مانده
@@ -233,21 +246,23 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                     logger.error(f"کاربر {instance.buyer} قبلاً از کد تخفیف {instance.applied_discount_code} استفاده کرده است.")
                     return
 
-                # اعمال کد تخفیف و کاهش remaining_uses
+                # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
                 discount_obj.remaining_uses -= 1
                 discount_obj.activated_users.add(instance.buyer)
-                discount_obj.save()
+                discount_obj.save(update_fields=['remaining_uses'])
                 logger.debug(f"remaining_uses به‌روزرسانی شد: {discount_obj.remaining_uses}")
 
-                # ثبت در DiscountActivationRecord با reward_claimed=True
-                activation_record = DiscountActivationRecord.objects.create(
+                # ثبت یا به‌روزرسانی DiscountActivationRecord با reward_claimed=True
+                activation_record, created = DiscountActivationRecord.objects.get_or_create(
                     user=instance.buyer,
                     discount_type='room' if room_discount else 'hotel',
-                    room_discount_code=room_discount,
-                    hotel_discount_code=hotel_discount,
-                    reward_claimed=True
+                    **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
+                    defaults={'reward_claimed': True}
                 )
-                logger.debug(f"DiscountActivationRecord ایجاد شد با reward_claimed=True: ID {activation_record.id}")
+                if not created and not activation_record.reward_claimed:
+                    activation_record.reward_claimed = True
+                    activation_record.save(update_fields=['reward_claimed'])
+                logger.debug(f"DiscountActivationRecord {'ایجاد شد' if created else 'به‌روزرسانی شد'} با reward_claimed=True: ID {activation_record.id}")
 
                 logger.info(f"کد تخفیف {instance.applied_discount_code} برای رزرو {instance.tracking_code} با موفقیت ثبت شد.")
 
@@ -255,4 +270,34 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                 logger.error(f"خطا در ثبت کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
                 raise  # برای rollback تراکنش
 
-    # مدیریت
+    # بررسی وضعیت لغو رزرو
+    if instance.capacity_status == 'rejected':
+        rooms = instance.reservation_rooms.all().select_related('room')
+        with transaction.atomic():
+            for r in rooms:
+                room = Room.objects.select_for_update().get(pk=r.room.pk)
+                # فرض می‌کنیم متد revert_inventory_for_cancellation در مدل Room تعریف شده است
+                is_auto_approved = instance.capacity_status == 'confirmed'
+                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
+                logger.debug(f"Inventory reverted for room {room.id}: quantity={r.quantity}, is_auto_approved={is_auto_approved}")
+        cache.delete_many([cache_key_approval, cache_key_payment])
+        timer = 0
+        logger.debug(f"رزرو {instance.tracking_code} رد شد، تایمرها حذف شدند.")
+
+    # حذف تایمرها در صورت تأیید یا رد ظرفیت
+    elif instance.capacity_status in ['confirmed', 'rejected']:
+        cache.delete_many([cache_key_approval, cache_key_payment])
+        logger.debug(f"تایمرها برای رزرو {instance.tracking_code} حذف شدند.")
+
+    # ارسال اعلان به‌روزرسانی وضعیت فقط برای capacity_status
+    async_to_sync(channel_layer.group_send)(
+        f"reservation_{instance.tracking_code}",
+        {
+            "type": "status_update",
+            "message": {
+                "capacity_status": instance.capacity_status,
+                "timer": timer,
+            },
+        },
+    )
+    logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
