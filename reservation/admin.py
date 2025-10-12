@@ -731,7 +731,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'final_price_fa', 'status', 'created_jalali', 'updated_jalali'
+        'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
+        'created_jalali', 'updated_jalali'
     )
 
     search_fields = (
@@ -739,7 +740,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
 
-    list_filter = ('status', 'check_in_date', 'check_out_date')
+    list_filter = ('capacity_status', 'payment_status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
 
@@ -765,7 +766,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
             'fields': (
                 'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-                'room_fixed_discount_fa', 'final_price_fa', 'status'
+                'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status'
             )
         }),
         (_('اطلاعات سیستم'), {

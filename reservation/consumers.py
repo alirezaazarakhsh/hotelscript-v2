@@ -6,6 +6,9 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.db import transaction
 from .models import Reservationhotel, ReservationRoom, Room, ReservationApprovalDuration
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ReservationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -13,114 +16,84 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         self.group_name = f"reservation_{self.tracking_code}"
         self.connected = True
 
-        print(f"Connecting to WebSocket with tracking_code: {self.tracking_code}")
+        logger.info(f"Connecting to WebSocket with tracking_code: {self.tracking_code}")
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
         self.reservation = await self.get_reservation(self.tracking_code)
         if not self.reservation:
-            print(f"Reservation {self.tracking_code} not found on connect")
-            await self.send_json({"status": "not_found", "timer": 0})
+            logger.error(f"Reservation {self.tracking_code} not found on connect")
+            await self.send_json({"capacity_status": "not_found", "timer": 0})
             return
 
-        # تنظیم تایمر فقط اگر قبلاً تنظیم نشده باشد
+        # تنظیم تایمر فقط برای capacity_status == 'pending' اگر قبلاً تنظیم نشده باشد
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
-        cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
-
-        if self.reservation.status == "pending_admin" and not cache.get(cache_key_approval):
+        if self.reservation.capacity_status == "pending" and not cache.get(cache_key_approval):
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
             duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
             cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-            print(f"Timer set for {self.tracking_code} (pending_admin): {duration_seconds} seconds")
+            logger.info(f"Timer set for {self.tracking_code} (pending): {duration_seconds} seconds")
 
         asyncio.create_task(self.timer_loop())
 
     async def timer_loop(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
-        cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
         approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
         approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-        payment_duration_seconds = 1200  # 20 دقیقه
 
         while self.connected:
             self.reservation = await self.get_reservation(self.tracking_code)
             if not self.reservation:
-                print(f"Reservation {self.tracking_code} not found in timer_loop")
-                await self.send_json({"status": "not_found", "timer": 0})
+                logger.error(f"Reservation {self.tracking_code} not found in timer_loop")
+                await self.send_json({"capacity_status": "not_found", "timer": 0})
                 break
 
-            status = self.reservation.status
-            print(f"Checking status for {self.tracking_code}: {status}")
+            capacity_status = self.reservation.capacity_status
+            logger.debug(f"Checking capacity_status for {self.tracking_code}: {capacity_status}")
 
-            if status in ["paid", "cancelled", "unconfirmed"]:
-                print(f"Reservation {self.tracking_code} in final state: {status}")
-                await self.send_json({"status": status, "timer": None})
+            if capacity_status in ["confirmed", "rejected"]:
+                logger.info(f"Reservation {self.tracking_code} in final state: {capacity_status}")
+                await self.send_json({"capacity_status": capacity_status, "timer": None})
                 break
 
             remaining = 0
             show_timer = False
 
-            if status == "pending_admin":
+            if capacity_status == "pending":
                 start_time = cache.get(cache_key_approval)
                 if start_time:
                     elapsed = (timezone.now() - start_time).total_seconds()
                     remaining = max(0, approval_duration_seconds - elapsed)
                     show_timer = True
-                    print(f"Pending admin timer for {self.tracking_code}: {remaining} seconds remaining")
+                    logger.debug(f"Pending timer for {self.tracking_code}: {remaining} seconds remaining")
                     if remaining <= 0:
-                        print(f"Timer expired for {self.tracking_code} (pending_admin), cancelling...")
-                        await self.cancel_reservation(reason="approval_timeout")
-                        # بررسی دوباره رزرو برای اطمینان از لغو
+                        logger.info(f"Timer expired for {self.tracking_code} (pending), rejecting...")
+                        await self.reject_reservation(reason="approval_timeout")
                         self.reservation = await self.get_reservation(self.tracking_code)
-                        if self.reservation and self.reservation.status == "cancelled":
-                            print(f"Reservation {self.tracking_code} successfully cancelled")
-                            await self.send_json({"status": "cancelled", "timer": None})
+                        if self.reservation and self.reservation.capacity_status == "rejected":
+                            logger.info(f"Reservation {self.tracking_code} successfully rejected")
+                            await self.send_json({"capacity_status": "rejected", "timer": None})
                             break
                         else:
-                            print(f"Error: Failed to cancel {self.tracking_code}, current status: {self.reservation.status if self.reservation else 'not found'}")
-                            await self.send_json({"status": status, "timer": None})
+                            logger.error(f"Error: Failed to reject {self.tracking_code}, current capacity_status: {self.reservation.capacity_status if self.reservation else 'not found'}")
+                            await self.send_json({"capacity_status": capacity_status, "timer": None})
                             break
                 else:
-                    # اگر تایمر فعال نیست، بررسی می‌کنیم که آیا رزرو باید لغو شود
-                    print(f"No active timer for {self.tracking_code} (pending_admin)")
-                    await self.cancel_reservation(reason="approval_timeout")
+                    logger.warning(f"No active timer for {self.tracking_code} (pending)")
+                    await self.reject_reservation(reason="approval_timeout")
                     self.reservation = await self.get_reservation(self.tracking_code)
-                    if self.reservation and self.reservation.status == "cancelled":
-                        print(f"Reservation {self.tracking_code} cancelled due to missing timer")
-                        await self.send_json({"status": "cancelled", "timer": None})
+                    if self.reservation and self.reservation.capacity_status == "rejected":
+                        logger.info(f"Reservation {self.tracking_code} rejected due to missing timer")
+                        await self.send_json({"capacity_status": "rejected", "timer": None})
                         break
                     else:
-                        print(f"Error: Failed to cancel {self.tracking_code} due to missing timer, current status: {self.reservation.status if self.reservation else 'not found'}")
-                        await self.send_json({"status": status, "timer": None})
+                        logger.error(f"Error: Failed to reject {self.tracking_code} due to missing timer, current capacity_status: {self.reservation.capacity_status if self.reservation else 'not found'}")
+                        await self.send_json({"capacity_status": capacity_status, "timer": None})
                         break
 
-            elif status == "confirmed":
-                start_time = cache.get(cache_key_payment)
-                if start_time:
-                    elapsed = (timezone.now() - start_time).total_seconds()
-                    remaining = max(0, payment_duration_seconds - elapsed)
-                    show_timer = False
-                    print(f"Confirmed timer for {self.tracking_code}: {remaining} seconds remaining")
-                    if remaining <= 0:
-                        print(f"Timer expired for {self.tracking_code} (confirmed), cancelling...")
-                        await self.cancel_reservation(reason="payment_timeout")
-                        self.reservation = await self.get_reservation(self.tracking_code)
-                        if self.reservation and self.reservation.status == "cancelled":
-                            print(f"Reservation {self.tracking_code} successfully cancelled")
-                            await self.send_json({"status": "cancelled", "timer": None})
-                            break
-                        else:
-                            print(f"Error: Failed to cancel {self.tracking_code}, current status: {self.reservation.status if self.reservation else 'not found'}")
-                            await self.send_json({"status": status, "timer": None})
-                            break
-                else:
-                    print(f"No active timer for {self.tracking_code} (confirmed)")
-                    await self.send_json({"status": status, "timer": None})
-                    break
-
             await self.send_json({
-                "status": status,
+                "capacity_status": capacity_status,
                 "timer": int(remaining) if show_timer else None
             })
 
@@ -131,85 +104,74 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         if data.get("action") == "get_status":
             remaining = await self.get_remaining_time()
             await self.send_json({
-                "status": self.reservation.status,
-                "timer": int(remaining) if self.reservation.status == "pending_admin" else None
+                "capacity_status": self.reservation.capacity_status,
+                "timer": int(remaining) if self.reservation.capacity_status == "pending" else None
             })
 
     @sync_to_async
     def get_reservation(self, tracking_code):
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
-            print(f"Reservation found for {tracking_code}: status={reservation.status}")
+            logger.debug(f"Reservation found for {tracking_code}: capacity_status={reservation.capacity_status}")
             return reservation
         except Reservationhotel.DoesNotExist:
-            print(f"Reservation {tracking_code} not found in database")
+            logger.error(f"Reservation {tracking_code} not found in database")
             return None
         except Exception as e:
-            print(f"Error fetching reservation {tracking_code}: {str(e)}")
+            logger.error(f"Error fetching reservation {tracking_code}: {str(e)}")
             return None
 
     @sync_to_async
-    def cancel_reservation(self, reason):
+    def reject_reservation(self, reason):
         with transaction.atomic():
             reservation = Reservationhotel.objects.select_for_update().filter(
                 tracking_code=self.tracking_code
             ).first()
             if not reservation:
-                print(f"Error: Reservation {self.tracking_code} not found for cancellation")
+                logger.error(f"Error: Reservation {self.tracking_code} not found for rejection")
                 return
 
-            if reason == "approval_timeout" and reservation.status != "pending_admin":
-                print(f"Error: Cannot cancel {self.tracking_code} for approval_timeout, current status: {reservation.status}")
-                return
-            if reason == "payment_timeout" and reservation.status != "confirmed":
-                print(f"Error: Cannot cancel {self.tracking_code} for payment_timeout, current status: {reservation.status}")
+            if reason == "approval_timeout" and reservation.capacity_status != "pending":
+                logger.error(f"Error: Cannot reject {self.tracking_code} for approval_timeout, current capacity_status: {reservation.capacity_status}")
                 return
 
-            reservation.status = "cancelled"
-            reservation.save(update_fields=["status"])
-            print(f"Reservation {self.tracking_code} cancelled successfully")
+            reservation.capacity_status = "rejected"
+            reservation.save(update_fields=["capacity_status"])
+            logger.info(f"Reservation {self.tracking_code} rejected successfully")
             rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                is_auto_approved = reservation.status == 'confirmed'
+                is_auto_approved = reservation.capacity_status == 'confirmed'
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
-                print(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, auto_approved: {is_auto_approved}")
-            
-            # پاک کردن تایمرها از cache
+                logger.debug(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, auto_approved: {is_auto_approved}")
+
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
             cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
             cache.delete_many([cache_key_approval, cache_key_payment])
-            print(f"Cache cleared for {self.tracking_code}")
+            logger.debug(f"Cache cleared for {self.tracking_code}")
 
     @sync_to_async
     def get_remaining_time(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
-        cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
         approval_duration = ReservationApprovalDuration.objects.first()
         approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-        payment_duration_seconds = 1200
 
-        if self.reservation.status == "pending_admin":
+        if self.reservation.capacity_status == "pending":
             start_time = cache.get(cache_key_approval)
             if start_time:
                 elapsed = (timezone.now() - start_time).total_seconds()
                 return max(0, approval_duration_seconds - elapsed)
-        elif self.reservation.status == "confirmed":
-            start_time = cache.get(cache_key_payment)
-            if start_time:
-                elapsed = (timezone.now() - start_time).total_seconds()
-                return max(0, payment_duration_seconds - elapsed)
         return 0
 
     async def disconnect(self, close_code):
         self.connected = False
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
-        print(f"WebSocket disconnected for {self.tracking_code}")
+        logger.info(f"WebSocket disconnected for {self.tracking_code}")
 
     async def send_json(self, data):
-        print(f"Sending message for {self.tracking_code}: {data}")
+        logger.debug(f"Sending message for {self.tracking_code}: {data}")
         await self.send(text_data=json.dumps(data))
 
     async def status_update(self, event):
-        print(f"Status update received for {self.tracking_code}: {event['message']}")
+        logger.debug(f"Status update received for {self.tracking_code}: {event['message']}")
         await self.send_json(event["message"])

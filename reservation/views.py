@@ -2588,7 +2588,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         operation_description="""
         ایجاد یک رزرو موقت برای کاربر و کاهش موقت موجودی اتاق‌ها.
         - اگر اتاق در حالت auto_approved باشد، رزرو مستقیماً confirmed می‌شود.
-        - اگر نیاز به تأیید ادمین داشته باشد، status = pending_admin.
+        - اگر نیاز به تأیید ادمین داشته باشد، capacity_status = pending.
         """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -2653,7 +2653,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             check_in_date=check_in_date,
             check_out_date=check_out_date,
             buyer=request.user,
-            status='unpaid',
+            capacity_status='pending',
+            payment_status='unpaid',
             **reserver_data
         )
 
@@ -2701,11 +2702,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         ReservationRoom.objects.bulk_create(reservation_rooms)
 
-        reservation.status = 'confirmed' if all_auto_approved else 'pending_admin'
+        reservation.capacity_status = 'confirmed' if all_auto_approved else 'pending'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         reservation.total_price = total_price
         reservation.final_price = final_price
-        reservation.save(update_fields=['status', 'total_price', 'final_price'])
+        reservation.save(update_fields=['capacity_status', 'total_price', 'final_price'])
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -2713,15 +2714,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             {
                 "type": "status_update",
                 "message": {
-                    "status": reservation.status,
-                    "timer": None  # تایمر در این مرحله تنظیم نمی‌شود
+                    "capacity_status": reservation.capacity_status,
+                    "timer": None
                 },
             },
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code})
-    
     
     
     

@@ -1229,14 +1229,19 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
+logger = logging.getLogger(__name__)
+
 class Reservationhotel(models.Model):
-    STATUS_CHOICES = [
-        ('pending_admin', _('در حال بررسی ادمین')),
+    CAPACITY_STATUS_CHOICES = [
+        ('pending', _('در حال بررسی')),
+        ('confirmed', _('تأیید رزرو')),
+        ('rejected', _('رزرو رد شده')),
+    ]
+
+    PAYMENT_STATUS_CHOICES = [
         ('paid', _('پرداخت شده')),
         ('unpaid', _('پرداخت نشده')),
-        ('confirmed', _('تأیید رزرو')),
-        ('unconfirmed', _('عدم تأیید رزرو')),
-        ('cancelled', _('لغو شده')),
+        ('pending', _('در انتظار پرداخت')),
     ]
 
     buyer = models.ForeignKey(
@@ -1265,7 +1270,8 @@ class Reservationhotel(models.Model):
     is_approved = models.BooleanField(_('تأیید شده'), default=False)
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
-    status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    capacity_status = models.CharField(_('وضعیت ظرفیت'), max_length=20, choices=CAPACITY_STATUS_CHOICES, default='pending')
+    payment_status = models.CharField(_('وضعیت پرداخت'), max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
     applied_discount_code = models.CharField(
         max_length=8,
         blank=True,
@@ -1408,29 +1414,34 @@ def notify_status_change(sender, instance, created, **kwargs):
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     timer = None
 
-    if instance.status == "cancelled":
+    # بررسی وضعیت لغو رزرو
+    if instance.capacity_status == 'rejected':
         rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
         with transaction.atomic():
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                is_auto_approved = instance.status == 'confirmed'
+                is_auto_approved = instance.capacity_status == 'confirmed'
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
 
-    elif instance.status in ["paid", "unconfirmed"]:
+    # حذف تایمرها در صورت تأیید یا رد ظرفیت
+    elif instance.capacity_status in ['confirmed', 'rejected']:
         cache.delete_many([cache_key_approval, cache_key_payment])
 
+    # ارسال اعلان به‌روزرسانی وضعیت فقط برای capacity_status
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
         {
             "type": "status_update",
             "message": {
-                "status": instance.status,
+                "capacity_status": instance.capacity_status,
                 "timer": timer,
             },
         },
     )
+    
+    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
