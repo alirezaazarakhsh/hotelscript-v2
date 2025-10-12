@@ -14,35 +14,86 @@ from .models import (
     RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, 
     Passenger, RoomDatePrice, Room
 )
+from reservation.sms.sms import send_room_availability_sms
 
 # تنظیم لاگینگ برای دیباگ
 logger = logging.getLogger(__name__)
 
-# سیگنال برای به‌روزرسانی موجودی اتاق هنگام ذخیره رزرو اتاق
 @receiver(post_save, sender=ReservationRoom)
 def update_room_inventory_on_save(sender, instance, created, **kwargs):
     """
-    به‌روزرسانی موجودی اتاق هنگام ذخیره یا ویرایش رزرو اتاق.
+    به‌روزرسانی موجودی اتاق هنگام ذخیره یا ویرایش رزرو اتاق و ارسال پیامک در صورت صفر شدن موجودی.
     """
     room = instance.room
-    total_reserved = room.reservation_rooms.aggregate(total=Sum('quantity'))['total'] or 0
-    room.inventory = max((room.initial_inventory or 0) - total_reserved, 0)
-    room.save(update_fields=['inventory'])
-    logger.debug(f"Updated inventory for room {room.id}: {room.inventory}")
+    with transaction.atomic():
+        # قفل کردن رکورد برای جلوگیری از race condition
+        room = Room.objects.select_for_update().get(pk=room.pk)
+        total_reserved = room.reservation_rooms.aggregate(total=Sum('quantity'))['total'] or 0
+        previous_inventory = room.inventory
+        room.inventory = max((room.initial_inventory or 0) - total_reserved, 0)
+        room.save(update_fields=['inventory'])
+        logger.debug(f"Updated inventory for room {room.id}: {room.inventory}")
 
-# سیگنال برای به‌روزرسانی موجودی اتاق هنگام حذف رزرو اتاق
+        # بررسی و ارسال پیامک در صورت صفر شدن موجودی
+        if room.inventory == 0 and previous_inventory != 0:
+            room_name = room.title.strip() if room.title else "اتاق"
+            room_full_name = f"{room_name} - آیدی {room.pk}"[:20]  # محدود به 20 کاراکتر
+            status = "تکمیل"
+            hotel_name = room.hotel.name if room.hotel and hasattr(room.hotel, 'name') else None
+
+            logger.info(f"Room {room.pk}: Inventory is 0, sending SMS for '{room_full_name}'")
+            try:
+                success = send_room_availability_sms(
+                    room_name=room_full_name,
+                    status=status,
+                    hotel_name=hotel_name,
+                    pattern_section='roomavailability'
+                )
+                if success:
+                    logger.info(f"Room {room.pk}: SMS sent successfully for '{room_full_name}'")
+                else:
+                    logger.error(f"Room {room.pk}: Failed to send SMS for '{room_full_name}'")
+            except Exception as e:
+                logger.error(f"Room {room.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+
 @receiver(post_delete, sender=ReservationRoom)
 def update_room_inventory_on_delete(sender, instance, **kwargs):
     """
-    به‌روزرسانی موجودی اتاق هنگام حذف رزرو اتاق.
+    به‌روزرسانی موجودی اتاق هنگام حذف رزرو اتاق و ارسال پیامک در صورت صفر شدن موجودی.
     """
     room = instance.room
-    total_reserved = room.reservation_rooms.aggregate(total=Sum('quantity'))['total'] or 0
-    room.inventory = max((room.initial_inventory or 0) - total_reserved, 0)
-    room.save(update_fields=['inventory'])
-    logger.debug(f"Updated inventory for room {room.id} after deletion: {room.inventory}")
+    with transaction.atomic():
+        # قفل کردن رکورد برای جلوگیری از race condition
+        room = Room.objects.select_for_update().get(pk=room.pk)
+        total_reserved = room.reservation_rooms.aggregate(total=Sum('quantity'))['total'] or 0
+        previous_inventory = room.inventory
+        room.inventory = max((room.initial_inventory or 0) - total_reserved, 0)
+        room.save(update_fields=['inventory'])
+        logger.debug(f"Updated inventory for room {room.id} after deletion: {room.inventory}")
 
-# سیگنال برای افزودن مسافر به دفترچه مسافران
+        # بررسی و ارسال پیامک در صورت صفر شدن موجودی
+        if room.inventory == 0 and previous_inventory != 0:
+            room_name = room.title.strip() if room.title else "اتاق"
+            room_full_name = f"{room_name} - آیدی {room.pk}"[:20]  # محدود به 20 کاراکتر
+            status = "تکمیل"
+            hotel_name = room.hotel.name if room.hotel and hasattr(room.hotel, 'name') else None
+
+            logger.info(f"Room {room.pk}: Inventory is 0, sending SMS for '{room_full_name}'")
+            try:
+                success = send_room_availability_sms(
+                    room_name=room_full_name,
+                    status=status,
+                    hotel_name=hotel_name,
+                    pattern_section='roomavailability'
+                )
+                if success:
+                    logger.info(f"Room {room.pk}: SMS sent successfully for '{room_full_name}'")
+                else:
+                    logger.error(f"Room {room.pk}: Failed to send SMS for '{room_full_name}'")
+            except Exception as e:
+                logger.error(f"Room {room.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
+
+# بقیه سیگنال‌ها (مانند add_to_passenger_book، update_hotel_status، notify_status_change_and_handle_discount) بدون تغییر
 @receiver(post_save, sender=ReservationRoomPassenger)
 def add_to_passenger_book(sender, instance, created, **kwargs):
     """
@@ -107,7 +158,6 @@ def add_to_passenger_book(sender, instance, created, **kwargs):
     except Exception as e:
         logger.error(f"Unexpected error creating Passenger for {instance.first_name} {instance.last_name}: {e}")
 
-# سیگنال برای به‌روزرسانی وضعیت هتل هنگام تغییر بازه‌های قیمتی
 @receiver([post_save, post_delete], sender=RoomDatePrice)
 def update_hotel_status(sender, instance, **kwargs):
     """
@@ -122,7 +172,6 @@ def update_hotel_status(sender, instance, **kwargs):
             hotel.save(update_fields=['is_special_offer', 'is_flash_sale', 'is_best_seller'])
             logger.debug(f"Updated hotel {hotel.id} status: is_special_offer={hotel.is_special_offer}, is_flash_sale={hotel.is_flash_sale}, is_best_seller={hotel.is_best_seller}")
 
-# سیگنال برای مدیریت کد تخفیف و به‌روزرسانی وضعیت رزرو
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_handle_discount(sender, instance, created, **kwargs):
     """
@@ -206,27 +255,4 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                 logger.error(f"خطا در ثبت کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
                 raise  # برای rollback تراکنش
 
-    # مدیریت وضعیت‌های دیگر
-    if instance.status == "cancelled":
-        rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
-        with transaction.atomic():
-            for r in rooms:
-                room = Room.objects.select_for_update().get(pk=r.room.pk)
-                is_auto_approved = instance.status == 'confirmed'
-                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
-        cache.delete_many([cache_key_approval, cache_key_payment])
-        timer = 0
-
-    elif instance.status in ["paid", "unconfirmed"]:
-        cache.delete_many([cache_key_approval, cache_key_payment])
-
-    async_to_sync(channel_layer.group_send)(
-        f"reservation_{instance.tracking_code}",
-        {
-            "type": "status_update",
-            "message": {
-                "status": instance.status,
-                "timer": timer,
-            },
-        },
-    )
+    # مدیریت

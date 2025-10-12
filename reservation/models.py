@@ -912,8 +912,6 @@ class Room(models.Model):
                 room.count -= quantity
             room.inventory -= quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
-
-        self._send_inventory_sms_if_zero()
         logger.info(f"Room {self.pk}: Reservation added successfully")
 
     def revert_inventory_for_cancellation(self, quantity: int, auto_approval: bool):
@@ -930,33 +928,12 @@ class Room(models.Model):
                 room.count += quantity
             room.inventory += quantity
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
-
-        self._send_inventory_sms_if_zero()
         logger.info(f"Room {self.pk}: Reservation cancelled and reverted successfully")
 
     def _send_inventory_sms_if_zero(self):
-        if self.inventory == 0:
-            room_name = self.title.strip() if self.title else "اتاق"
-            room_full_name = f"{room_name} - آیدی {self.pk}"[:20]  # محدود به 20 کاراکتر
-            status = "تکمیل"
-            hotel_name = self.hotel.name if self.hotel and hasattr(self.hotel, 'name') else None
-
-            logger.info(f"Room {self.pk}: Inventory is 0, sending SMS for '{room_full_name}'")
-            try:
-                from reservation.sms.sms import send_room_availability_sms
-                success = send_room_availability_sms(
-                    room_name=room_full_name,
-                    status=status,
-                    hotel_name=hotel_name,
-                    pattern_section='roomavailability'
-                )
-                if success:
-                    logger.info(f"Room {self.pk}: SMS sent successfully for '{room_full_name}'")
-                else:
-                    logger.error(f"Room {self.pk}: Failed to send SMS for '{room_full_name}'")
-            except Exception as e:
-                logger.error(f"Room {self.pk}: Exception while sending SMS for '{room_full_name}': {str(e)}")
-                    
+        pass  # منطق ارسال پیامک به سیگنال‌ها منتقل شده است
+    
+    
 
 # مدل بازه زمانی اتاق ها 
 class RoomDatePrice(models.Model):
