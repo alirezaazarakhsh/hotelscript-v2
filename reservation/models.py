@@ -1428,14 +1428,6 @@ def notify_status_change(sender, instance, created, **kwargs):
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
 
-    elif instance.status == "pending_admin" and not cache.get(cache_key_approval):
-        cache.set(cache_key_approval, timezone.now(), timeout=300)  # 5 دقیقه برای تأیید ادمین
-
-    elif instance.status == "confirmed":
-        cache.delete(cache_key_approval)
-        if not cache.get(cache_key_payment):
-            cache.set(cache_key_payment, timezone.now(), timeout=1200)  # 20 دقیقه برای پرداخت
-
     elif instance.status in ["paid", "unconfirmed"]:
         cache.delete_many([cache_key_approval, cache_key_payment])
 
@@ -1445,11 +1437,10 @@ def notify_status_change(sender, instance, created, **kwargs):
             "type": "status_update",
             "message": {
                 "status": instance.status,
-                "timer": timer if instance.status == "pending_admin" else None,
+                "timer": timer,
             },
         },
     )
-    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
