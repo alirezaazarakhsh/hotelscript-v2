@@ -19,10 +19,9 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         self.reservation = await self.get_reservation(self.tracking_code)
         if not self.reservation:
             await self.send_json({"status": "not_found", "timer": 0})
-            await self.close()
             return
 
-        # تنظیم تایمر در لحظه اتصال به وب‌سوکت
+        # تنظیم تایمر فقط اگر قبلاً تنظیم نشده باشد
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
 
@@ -46,13 +45,11 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             self.reservation = await self.get_reservation(self.tracking_code)
             if not self.reservation:
                 await self.send_json({"status": "not_found", "timer": 0})
-                await self.close()
                 break
 
             status = self.reservation.status
             if status in ["paid", "cancelled", "unconfirmed"]:
                 await self.send_json({"status": status, "timer": None})
-                await self.close()
                 break
 
             remaining = 0
@@ -66,13 +63,18 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     show_timer = True
                     if remaining <= 0:
                         await self.cancel_reservation(reason="approval_timeout")
-                        await self.send_json({"status": "cancelled", "timer": 0})
-                        await self.close()
-                        break
+                        # بررسی دوباره رزرو برای اطمینان از لغو
+                        self.reservation = await self.get_reservation(self.tracking_code)
+                        if self.reservation and self.reservation.status == "cancelled":
+                            await self.send_json({"status": "cancelled", "timer": None})
+                            break
+                        else:
+                            # اگر لغو ناموفق بود، پیام خطا و توقف
+                            await self.send_json({"status": status, "timer": None})
+                            break
                 else:
-                    # اگر تایمر فعال نیست (مثلاً پس از پایان یا حذف cache)، پیام ارسال و متوقف شو
+                    # اگر تایمر فعال نیست، پیام ارسال و متوقف شو
                     await self.send_json({"status": status, "timer": None})
-                    await self.close()
                     break
 
             elif status == "confirmed":
@@ -83,13 +85,18 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     show_timer = False
                     if remaining <= 0:
                         await self.cancel_reservation(reason="payment_timeout")
-                        await self.send_json({"status": "cancelled", "timer": 0})
-                        await self.close()
-                        break
+                        # بررسی دوباره رزرو برای اطمینان از لغو
+                        self.reservation = await self.get_reservation(self.tracking_code)
+                        if self.reservation and self.reservation.status == "cancelled":
+                            await self.send_json({"status": "cancelled", "timer": None})
+                            break
+                        else:
+                            # اگر لغو ناموفق بود، پیام خطا و توقف
+                            await self.send_json({"status": status, "timer": None})
+                            break
                 else:
                     # اگر تایمر فعال نیست، پیام ارسال و متوقف شو
                     await self.send_json({"status": status, "timer": None})
-                    await self.close()
                     break
 
             await self.send_json({
