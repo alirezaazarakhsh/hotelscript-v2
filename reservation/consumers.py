@@ -13,11 +13,14 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         self.group_name = f"reservation_{self.tracking_code}"
         self.connected = True
 
+        print(f"Connecting to WebSocket with tracking_code: {self.tracking_code}")
+
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
         self.reservation = await self.get_reservation(self.tracking_code)
         if not self.reservation:
+            print(f"Reservation {self.tracking_code} not found on connect")
             await self.send_json({"status": "not_found", "timer": 0})
             return
 
@@ -29,8 +32,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
             duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
             cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-        elif self.reservation.status == "confirmed" and not cache.get(cache_key_payment):
-            cache.set(cache_key_payment, timezone.now(), timeout=1200)
+            print(f"Timer set for {self.tracking_code} (pending_admin): {duration_seconds} seconds")
 
         asyncio.create_task(self.timer_loop())
 
@@ -44,11 +46,15 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         while self.connected:
             self.reservation = await self.get_reservation(self.tracking_code)
             if not self.reservation:
+                print(f"Reservation {self.tracking_code} not found in timer_loop")
                 await self.send_json({"status": "not_found", "timer": 0})
                 break
 
             status = self.reservation.status
+            print(f"Checking status for {self.tracking_code}: {status}")
+
             if status in ["paid", "cancelled", "unconfirmed"]:
+                print(f"Reservation {self.tracking_code} in final state: {status}")
                 await self.send_json({"status": status, "timer": None})
                 break
 
@@ -61,21 +67,33 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     elapsed = (timezone.now() - start_time).total_seconds()
                     remaining = max(0, approval_duration_seconds - elapsed)
                     show_timer = True
+                    print(f"Pending admin timer for {self.tracking_code}: {remaining} seconds remaining")
                     if remaining <= 0:
+                        print(f"Timer expired for {self.tracking_code} (pending_admin), cancelling...")
                         await self.cancel_reservation(reason="approval_timeout")
                         # بررسی دوباره رزرو برای اطمینان از لغو
                         self.reservation = await self.get_reservation(self.tracking_code)
                         if self.reservation and self.reservation.status == "cancelled":
+                            print(f"Reservation {self.tracking_code} successfully cancelled")
                             await self.send_json({"status": "cancelled", "timer": None})
                             break
                         else:
-                            # اگر لغو ناموفق بود، پیام خطا و توقف
+                            print(f"Error: Failed to cancel {self.tracking_code}, current status: {self.reservation.status if self.reservation else 'not found'}")
                             await self.send_json({"status": status, "timer": None})
                             break
                 else:
-                    # اگر تایمر فعال نیست، پیام ارسال و متوقف شو
-                    await self.send_json({"status": status, "timer": None})
-                    break
+                    # اگر تایمر فعال نیست، بررسی می‌کنیم که آیا رزرو باید لغو شود
+                    print(f"No active timer for {self.tracking_code} (pending_admin)")
+                    await self.cancel_reservation(reason="approval_timeout")
+                    self.reservation = await self.get_reservation(self.tracking_code)
+                    if self.reservation and self.reservation.status == "cancelled":
+                        print(f"Reservation {self.tracking_code} cancelled due to missing timer")
+                        await self.send_json({"status": "cancelled", "timer": None})
+                        break
+                    else:
+                        print(f"Error: Failed to cancel {self.tracking_code} due to missing timer, current status: {self.reservation.status if self.reservation else 'not found'}")
+                        await self.send_json({"status": status, "timer": None})
+                        break
 
             elif status == "confirmed":
                 start_time = cache.get(cache_key_payment)
@@ -83,19 +101,21 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     elapsed = (timezone.now() - start_time).total_seconds()
                     remaining = max(0, payment_duration_seconds - elapsed)
                     show_timer = False
+                    print(f"Confirmed timer for {self.tracking_code}: {remaining} seconds remaining")
                     if remaining <= 0:
+                        print(f"Timer expired for {self.tracking_code} (confirmed), cancelling...")
                         await self.cancel_reservation(reason="payment_timeout")
-                        # بررسی دوباره رزرو برای اطمینان از لغو
                         self.reservation = await self.get_reservation(self.tracking_code)
                         if self.reservation and self.reservation.status == "cancelled":
+                            print(f"Reservation {self.tracking_code} successfully cancelled")
                             await self.send_json({"status": "cancelled", "timer": None})
                             break
                         else:
-                            # اگر لغو ناموفق بود، پیام خطا و توقف
+                            print(f"Error: Failed to cancel {self.tracking_code}, current status: {self.reservation.status if self.reservation else 'not found'}")
                             await self.send_json({"status": status, "timer": None})
                             break
                 else:
-                    # اگر تایمر فعال نیست، پیام ارسال و متوقف شو
+                    print(f"No active timer for {self.tracking_code} (confirmed)")
                     await self.send_json({"status": status, "timer": None})
                     break
 
@@ -118,8 +138,14 @@ class ReservationConsumer(AsyncWebsocketConsumer):
     @sync_to_async
     def get_reservation(self, tracking_code):
         try:
-            return Reservationhotel.objects.get(tracking_code=tracking_code)
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            print(f"Reservation found for {tracking_code}: status={reservation.status}")
+            return reservation
         except Reservationhotel.DoesNotExist:
+            print(f"Reservation {tracking_code} not found in database")
+            return None
+        except Exception as e:
+            print(f"Error fetching reservation {tracking_code}: {str(e)}")
             return None
 
     @sync_to_async
@@ -129,26 +155,31 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 tracking_code=self.tracking_code
             ).first()
             if not reservation:
+                print(f"Error: Reservation {self.tracking_code} not found for cancellation")
                 return
 
             if reason == "approval_timeout" and reservation.status != "pending_admin":
+                print(f"Error: Cannot cancel {self.tracking_code} for approval_timeout, current status: {reservation.status}")
                 return
             if reason == "payment_timeout" and reservation.status != "confirmed":
+                print(f"Error: Cannot cancel {self.tracking_code} for payment_timeout, current status: {reservation.status}")
                 return
 
             reservation.status = "cancelled"
             reservation.save(update_fields=["status"])
+            print(f"Reservation {self.tracking_code} cancelled successfully")
             rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
-            with transaction.atomic():
-                for r in rooms:
-                    room = Room.objects.select_for_update().get(pk=r.room.pk)
-                    is_auto_approved = reservation.status == 'confirmed'
-                    room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
+            for r in rooms:
+                room = Room.objects.select_for_update().get(pk=r.room.pk)
+                is_auto_approved = reservation.status == 'confirmed'
+                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
+                print(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, auto_approved: {is_auto_approved}")
             
             # پاک کردن تایمرها از cache
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
             cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
             cache.delete_many([cache_key_approval, cache_key_payment])
+            print(f"Cache cleared for {self.tracking_code}")
 
     @sync_to_async
     def get_remaining_time(self):
@@ -173,9 +204,12 @@ class ReservationConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         self.connected = False
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        print(f"WebSocket disconnected for {self.tracking_code}")
 
     async def send_json(self, data):
+        print(f"Sending message for {self.tracking_code}: {data}")
         await self.send(text_data=json.dumps(data))
 
     async def status_update(self, event):
+        print(f"Status update received for {self.tracking_code}: {event['message']}")
         await self.send_json(event["message"])
