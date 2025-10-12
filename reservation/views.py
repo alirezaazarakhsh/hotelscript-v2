@@ -3376,7 +3376,7 @@ class ApplyDiscountCodeAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="اعمال کد تخفیف روی رزرو",
-        operation_description="اعمال کد تخفیف وارد شده توسط کاربر روی رزرو (برای اتاق‌ها یا هتل‌ها).",
+        operation_description="اعمال کد تخفیف وارد شده توسط کاربر روی رزرو (برای اتاق‌ها یا هتل‌ها). کد تخفیف به‌صورت غیرحساس به حروف بزرگ و کوچک پردازش می‌شود.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -3397,6 +3397,9 @@ class ApplyDiscountCodeAPIView(APIView):
         if not code:
             return Response({"error": "discount_code الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # تبدیل کد تخفیف به حروف بزرگ
+        code = code.upper()
+
         # پیدا کردن رزرو
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=request.user)
@@ -3407,13 +3410,13 @@ class ApplyDiscountCodeAPIView(APIView):
         room_discount = None
         hotel_discount = None
         try:
-            room_discount = RoomDiscountCode.objects.get(code=code)
+            room_discount = RoomDiscountCode.objects.get(code__iexact=code)
         except RoomDiscountCode.DoesNotExist:
             pass
 
         if not room_discount:
             try:
-                hotel_discount = HotelDiscountCode.objects.get(code=code)
+                hotel_discount = HotelDiscountCode.objects.get(code__iexact=code)
             except HotelDiscountCode.DoesNotExist:
                 return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3464,7 +3467,7 @@ class ApplyDiscountCodeAPIView(APIView):
         if activation_exists:
             return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # ذخیره موقت کد تخفیف در رزرو
+        # ذخیره موقت کد تخفیف در رزرو (به‌صورت حروف بزرگ)
         reservation.applied_discount_code = code
         discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
         total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
