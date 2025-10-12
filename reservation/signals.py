@@ -8,6 +8,7 @@ from django.core.cache import cache
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from decimal import Decimal
+from django.db import transaction
 from .models import (
     Reservationhotel, ReservationRoom, ReservationRoomPassenger, 
     RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, 
@@ -133,7 +134,7 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
     timer = None
 
     # مدیریت کد تخفیف هنگام تغییر وضعیت به paid
-    if instance.status == 'paid' and instance.applied_discount_code:
+    if not created and instance.status == 'paid' and instance.applied_discount_code:
         try:
             # پیدا کردن کد تخفیف
             room_discount = None
@@ -179,7 +180,7 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
             discount_obj.activated_users.add(instance.buyer)
             discount_obj.save()
 
-            # ثبت در DiscountActivationRecord
+            # ثبت در DiscountActivationRecord با reward_claimed=True
             if hotel_discount:
                 DiscountActivationRecord.objects.create(
                     user=instance.buyer,
