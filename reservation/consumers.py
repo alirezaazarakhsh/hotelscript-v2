@@ -69,6 +69,11 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                         await self.send_json({"status": "cancelled", "timer": 0})
                         await self.close()
                         break
+                else:
+                    # اگر تایمر فعال نیست (مثلاً پس از پایان یا حذف cache)، پیام ارسال و متوقف شو
+                    await self.send_json({"status": status, "timer": None})
+                    await self.close()
+                    break
 
             elif status == "confirmed":
                 start_time = cache.get(cache_key_payment)
@@ -81,8 +86,8 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                         await self.send_json({"status": "cancelled", "timer": 0})
                         await self.close()
                         break
-                # برای confirmed بدون تایمر فعال، حلقه را متوقف می‌کنیم
                 else:
+                    # اگر تایمر فعال نیست، پیام ارسال و متوقف شو
                     await self.send_json({"status": status, "timer": None})
                     await self.close()
                     break
