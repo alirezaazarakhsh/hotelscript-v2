@@ -21,6 +21,17 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"status": "not_found", "timer": 0})
             return
 
+        # تنظیم تایمر در لحظه اتصال به وب‌سوکت
+        cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
+        cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
+
+        if self.reservation.status == "pending_admin" and not cache.get(cache_key_approval):
+            approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+            duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
+        elif self.reservation.status == "confirmed" and not cache.get(cache_key_payment):
+            cache.set(cache_key_payment, timezone.now(), timeout=1200)
+
         asyncio.create_task(self.timer_loop())
 
     async def timer_loop(self):
@@ -60,7 +71,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 if start_time:
                     elapsed = (timezone.now() - start_time).total_seconds()
                     remaining = max(0, payment_duration_seconds - elapsed)
-                    show_timer = False
+                    show_timer = False  # تایمر برای confirmed نمایش داده نمی‌شود
                     if remaining <= 0:
                         await self.cancel_reservation(reason="payment_timeout")
                         continue

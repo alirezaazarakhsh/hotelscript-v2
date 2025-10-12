@@ -2707,16 +2707,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation.final_price = final_price
         reservation.save(update_fields=['status', 'total_price', 'final_price'])
 
-        cache_key_approval = f"reservation_approval_timer_{reservation.tracking_code}"
-        cache_key_payment = f"reservation_payment_timer_{reservation.tracking_code}"
-        
-        if reservation.status == 'pending_admin':
-            approval_duration = ReservationApprovalDuration.objects.first()
-            duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-        elif reservation.status == 'confirmed':
-            cache.set(cache_key_payment, timezone.now(), timeout=1200)
-
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -2724,13 +2714,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "status": reservation.status,
-                    "timer": None if reservation.status == 'confirmed' else duration_seconds
+                    "timer": None  # تایمر در این مرحله تنظیم نمی‌شود
                 },
             },
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
         return Response({"tracking_code": tracking_code})
+    
     
     
     
