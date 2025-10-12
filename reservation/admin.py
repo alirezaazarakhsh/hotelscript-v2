@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 import logging
 import re
@@ -619,6 +620,11 @@ class ReservationhotelAdminForm(forms.ModelForm):
     def clean_check_in_date(self):
         check_in = self.cleaned_data['check_in_date']
         today_j = jdatetime.date.today()
+
+        # Convert check_in to jdatetime.date if it's a datetime.date
+        if isinstance(check_in, date) and not isinstance(check_in, jdatetime.date):
+            check_in = jdatetime.date.fromgregorian(date=check_in)
+
         if check_in < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         return check_in
@@ -626,6 +632,13 @@ class ReservationhotelAdminForm(forms.ModelForm):
     def clean_check_out_date(self):
         check_in = self.cleaned_data.get('check_in_date')
         check_out = self.cleaned_data['check_out_date']
+
+        # Convert check_in and check_out to jdatetime.date if necessary
+        if isinstance(check_in, date) and not isinstance(check_in, jdatetime.date):
+            check_in = jdatetime.date.fromgregorian(date=check_in)
+        if isinstance(check_out, date) and not isinstance(check_out, jdatetime.date):
+            check_out = jdatetime.date.fromgregorian(date=check_out)
+
         if check_in and check_out <= check_in:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
