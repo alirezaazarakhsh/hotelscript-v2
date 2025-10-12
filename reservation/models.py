@@ -1283,6 +1283,13 @@ class Reservationhotel(models.Model):
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     status = models.CharField(_('وضعیت رزرو'), max_length=20, choices=STATUS_CHOICES, default='unpaid')
+    applied_discount_code = models.CharField(
+        max_length=8,
+        blank=True,
+        null=True,
+        verbose_name=_("کد تخفیف اعمال‌شده"),
+        help_text=_("کد تخفیف اعمال‌شده به‌صورت موقت تا زمان پرداخت رزرو")
+    )
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
@@ -1381,7 +1388,7 @@ class Reservationhotel(models.Model):
             if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
                 half_day_out_charge += res_room.half_day_out_price * quantity
 
-        # اعمال تخفیف کد تخفیف (در حال حاضر از self.discount استفاده می‌شود)
+        # اعمال تخفیف کد تخفیف
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
