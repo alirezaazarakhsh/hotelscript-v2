@@ -616,15 +616,19 @@ class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
+        widgets = {
+            'check_in_date': forms.DateInput(attrs={'class': 'vDateField'}),
+            'check_out_date': forms.DateInput(attrs={'class': 'vDateField'}),
+        }
 
     def clean_check_in_date(self):
         check_in = self.cleaned_data['check_in_date']
-        today_j = jdatetime.date.today()
-
-        # Convert check_in to jdatetime.date if it's a datetime.date
-        if isinstance(check_in, date) and not isinstance(check_in, jdatetime.date):
-            check_in = jdatetime.date.fromgregorian(date=check_in)
-
+        try:
+            today_j = jdatetime.date.today()
+            logger.debug(f"today_j type: {type(today_j)}, value: {today_j}")
+        except Exception as e:
+            logger.error(f"Error in jdatetime.date.today(): {str(e)}")
+            raise ValidationError(f"خطا در دریافت تاریخ امروز: {str(e)}")
         if check_in < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         return check_in
@@ -632,13 +636,6 @@ class ReservationhotelAdminForm(forms.ModelForm):
     def clean_check_out_date(self):
         check_in = self.cleaned_data.get('check_in_date')
         check_out = self.cleaned_data['check_out_date']
-
-        # Convert check_in and check_out to jdatetime.date if necessary
-        if isinstance(check_in, date) and not isinstance(check_in, jdatetime.date):
-            check_in = jdatetime.date.fromgregorian(date=check_in)
-        if isinstance(check_out, date) and not isinstance(check_out, jdatetime.date):
-            check_out = jdatetime.date.fromgregorian(date=check_out)
-
         if check_in and check_out <= check_in:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
@@ -699,7 +696,6 @@ class ReservationRoomInline(NestedTabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['room'].required = False
-        # اطمینان از وجود فیلدهای half_day_in_selected و half_day_out_selected و تنظیم ویجت
         if 'half_day_in_selected' not in formset.form.base_fields:
             formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
                 label=_('نیم‌شارژ ورود'),
@@ -712,7 +708,6 @@ class ReservationRoomInline(NestedTabularInline):
                 required=False,
                 initial=False
             )
-        # تنظیم ویجت برای رندر به‌عنوان چک‌باکس
         formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
         formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
         return formset
@@ -747,16 +742,13 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
         'created_jalali', 'updated_jalali'
     )
-
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
-
     list_filter = ('capacity_status', 'payment_status', 'check_in_date', 'check_out_date')
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
-
     readonly_fields = (
         'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali',
@@ -764,7 +756,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'final_price_fa'
     )
-
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
             'fields': (
