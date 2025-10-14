@@ -1407,8 +1407,9 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
+
 @receiver(post_save, sender=Reservationhotel)
-def notify_status_change(sender, instance, created, **kwargs):
+def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
@@ -1424,6 +1425,33 @@ def notify_status_change(sender, instance, created, **kwargs):
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
+
+    # بررسی تغییر وضعیت به پرداخت‌شده و تخصیص امتیازهای باشگاه مشتریان
+    elif instance.payment_status == 'paid' and not instance.points_assigned:
+        with transaction.atomic():
+            # قفل کردن رکورد رزرو برای جلوگیری از race condition
+            reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+            
+            # محاسبه مجموع امتیازهای اتاق‌ها
+            total_points = 0
+            for res_room in reservation.reservation_rooms.select_related('room').all():
+                room = res_room.room
+                quantity = res_room.quantity
+                points = room.customer_club_points or 0
+                total_points += points * quantity
+
+            # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
+            customer_points, created = CustomerClubPoint.objects.get_or_create(
+                user=reservation.buyer,
+                defaults={'points': 0}
+            )
+            customer_points.points += total_points
+            customer_points.save()
+            logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
+
+            # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
+            reservation.points_assigned = True
+            reservation.save(update_fields=['points_assigned'])
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:
