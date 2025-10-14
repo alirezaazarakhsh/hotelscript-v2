@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import re
+from threading import local
 import uuid
 from decimal import Decimal, ROUND_UP
 from datetime import timedelta
@@ -49,6 +50,7 @@ from django.contrib.postgres.fields import ArrayField
 from django_jalali.db import models as jmodels
 
 # 🧩 برنامه‌های داخلی پروژه
+from bashgah_moshtarian.sms.sms import send_customer_club_sms
 from config.models import UserLevel
 from icons.models import IconShortcut
 from authentication.models import BaseUser
@@ -1413,6 +1415,16 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
+# متغیر محلی برای کنترل ارسال SMS
+_thread_locals = local()
+
+def set_skip_sms(value):
+    """تنظیم فلگ برای جلوگیری از ارسال SMS در یک درخواست."""
+    setattr(_thread_locals, 'skip_sms', value)
+
+def get_skip_sms():
+    """دریافت وضعیت فلگ ارسال SMS."""
+    return getattr(_thread_locals, 'skip_sms', False)
 
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
@@ -1447,18 +1459,30 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 points = room.customer_club_points or 0
                 total_points += points * quantity
 
-            # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
-            customer_points, created = CustomerClubPoint.objects.get_or_create(
-                user=reservation.buyer,
-                defaults={'points': 0}
-            )
-            customer_points.points += total_points
-            customer_points.save()
-            logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
+            if total_points > 0:  # فقط اگر امتیازی برای تخصیص وجود دارد
+                # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
+                customer_points, created = CustomerClubPoint.objects.get_or_create(
+                    user=reservation.buyer,
+                    defaults={'points': 0}
+                )
+                customer_points.points += total_points
+                # جلوگیری از ارسال SMS توسط سیگنال CustomerClubPoint
+                set_skip_sms(True)
+                customer_points.save()
+                set_skip_sms(False)
+                logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
 
-            # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
-            reservation.points_assigned = True
-            reservation.save(update_fields=['points_assigned'])
+                # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
+                reservation.points_assigned = True
+                reservation.save(update_fields=['points_assigned'])
+
+                # ارسال SMS به صورت دستی
+                send_customer_club_sms(
+                    phone_number=reservation.buyer.phone_number,
+                    user_name=reservation.buyer.first_name or reservation.buyer.phone_number,
+                    added_points=total_points,
+                    current_points=customer_points.points
+                )
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:
