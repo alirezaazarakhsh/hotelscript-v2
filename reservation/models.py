@@ -17,6 +17,7 @@ from channels.layers import get_channel_layer
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.encoding import force_str
 from django.core.cache import cache
+from bashgah_moshtarian.models import CustomerClubPoint
 
 
 
