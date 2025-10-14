@@ -612,24 +612,15 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
- # Define ReservationhotelAdminForm first
+# Define ReservationhotelAdminForm first
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
         fields = '__all__'
-        widgets = {
-            'check_in_date': forms.DateInput(attrs={'class': 'vDateField'}),
-            'check_out_date': forms.DateInput(attrs={'class': 'vDateField'}),
-        }
 
     def clean_check_in_date(self):
         check_in = self.cleaned_data['check_in_date']
-        try:
-            today_j = jdatetime.date.today()
-            logger.debug(f"today_j type: {type(today_j)}, value: {today_j}")
-        except Exception as e:
-            logger.error(f"Error in jdatetime.date.today(): {str(e)}")
-            raise ValidationError(f"خطا در دریافت تاریخ امروز: {str(e)}")
+        today_j = jdatetime.date.today()
         if check_in < today_j:
             raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
         return check_in

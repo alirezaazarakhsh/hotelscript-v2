@@ -2704,9 +2704,27 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         reservation.capacity_status = 'confirmed' if all_auto_approved else 'pending'
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
+        
+        # ذخیره تمام مقادیر محاسبه‌شده
         reservation.total_price = total_price
         reservation.final_price = final_price
-        reservation.save(update_fields=['capacity_status', 'total_price', 'final_price'])
+        reservation.room_fixed_discount = room_fixed
+        reservation.discount = code_discount
+        reservation.half_day_in_charge = half_in
+        reservation.half_day_out_charge = half_out
+        reservation.total_half_day_charge = total_half
+        reservation.total_extra_passenger_charge = total_extra
+        reservation.save(update_fields=[
+            'capacity_status', 
+            'total_price', 
+            'final_price', 
+            'room_fixed_discount', 
+            'discount', 
+            'half_day_in_charge', 
+            'half_day_out_charge', 
+            'total_half_day_charge', 
+            'total_extra_passenger_charge'
+        ])
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
