@@ -1434,38 +1434,31 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
     # بررسی تغییر وضعیت به پرداخت‌شده و تخصیص امتیازهای باشگاه مشتریان
     elif instance.payment_status == 'paid' and not instance.points_assigned:
-        # فقط در صورتی که وضعیت پرداخت به تازگی به 'paid' تغییر کرده باشد
-        if not created:  # از تخصیص امتیاز هنگام ایجاد رزرو جلوگیری می‌کند
-            try:
-                # دریافت نسخه قبلی رزرو از دیتابیس برای مقایسه
-                previous_instance = Reservationhotel.objects.get(pk=instance.pk)
-                if previous_instance.payment_status != 'paid':  # بررسی تغییر وضعیت
-                    with transaction.atomic():
-                        # قفل کردن رکورد رزرو برای جلوگیری از race condition
-                        reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-                        
-                        # محاسبه مجموع امتیازهای اتاق‌ها
-                        total_points = 0
-                        for res_room in reservation.reservation_rooms.select_related('room').all():
-                            room = res_room.room
-                            quantity = res_room.quantity
-                            points = room.customer_club_points or 0
-                            total_points += points * quantity
+        logger.info(f"وضعیت پرداخت برای رزرو {instance.tracking_code} به 'paid' تغییر کرد. بررسی تخصیص امتیاز...")
+        with transaction.atomic():
+            # قفل کردن رکورد رزرو برای جلوگیری از race condition
+            reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+            
+            # محاسبه مجموع امتیازهای اتاق‌ها
+            total_points = 0
+            for res_room in reservation.reservation_rooms.select_related('room').all():
+                room = res_room.room
+                quantity = res_room.quantity
+                points = room.customer_club_points or 0
+                total_points += points * quantity
 
-                        # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
-                        customer_points, created = CustomerClubPoint.objects.get_or_create(
-                            user=reservation.buyer,
-                            defaults={'points': 0}
-                        )
-                        customer_points.points += total_points
-                        customer_points.save()
-                        logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
+            # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
+            customer_points, created = CustomerClubPoint.objects.get_or_create(
+                user=reservation.buyer,
+                defaults={'points': 0}
+            )
+            customer_points.points += total_points
+            customer_points.save()
+            logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
 
-                        # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
-                        reservation.points_assigned = True
-                        reservation.save(update_fields=['points_assigned'])
-            except Reservationhotel.DoesNotExist:
-                logger.error(f"رزرو با کد {instance.tracking_code} پیدا نشد.")
+            # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
+            reservation.points_assigned = True
+            reservation.save(update_fields=['points_assigned'])
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:
@@ -1482,6 +1475,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             },
         },
     )
+    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
