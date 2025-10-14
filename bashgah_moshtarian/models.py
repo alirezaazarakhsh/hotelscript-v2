@@ -1,6 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
-from reservation.models import Hotel, Room
+# from reservation.models import Hotel, Room
 from authentication.models import BaseUser
 from config.models import UserLevel
 from django_jalali.db import models as jmodels
@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 # مدل کد تخفیف باشگاه مشتری برای اتاق‌ها
 class RoomDiscountCode(models.Model):
     room = models.ForeignKey(
-        Room,
+        'reservation.Room',
         on_delete=models.CASCADE,
         related_name='discount_codes',
         verbose_name=_("اتاق")
@@ -228,7 +228,7 @@ class ShoppingCenterDiscountCode(models.Model):
 # کد تخفیف باشگاه مشتریان برای هتل‌ها
 class HotelDiscountCode(models.Model):
     hotel = models.ForeignKey(
-        Hotel,
+        'reservation.hotel',
         on_delete=models.CASCADE,
         related_name='discount_codes',
         verbose_name=_("هتل"),
