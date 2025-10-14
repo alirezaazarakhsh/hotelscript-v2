@@ -612,7 +612,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-# Define ReservationhotelAdminForm first
+# Define ReservationhotelAdminForm
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -632,6 +632,7 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
+
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 8
@@ -644,6 +645,7 @@ class ReservationRoomPassengerInline(NestedTabularInline):
         if obj and hasattr(obj, 'room') and obj.room:
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
+
 
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
@@ -722,6 +724,7 @@ class ReservationRoomInline(NestedTabularInline):
                     fields.remove('half_day_out_selected')
         return fields
 
+
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -732,7 +735,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
-        'created_jalali', 'updated_jalali'
+        'points_assigned_fa', 'created_jalali', 'updated_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
@@ -743,7 +746,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     inlines = [ReservationRoomInline]
     readonly_fields = (
         'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'created_jalali', 'updated_jalali',
+        'created_jalali', 'updated_jalali', 'points_assigned_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'final_price_fa'
@@ -762,7 +765,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
             'fields': (
                 'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-                'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status'
+                'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
+                'points_assigned_fa'
             )
         }),
         (_('اطلاعات سیستم'), {
@@ -834,6 +838,11 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description=_('قیمت نهایی'))
     def final_price_fa(self, obj):
         return "{:,}".format(obj.final_price) if obj.final_price else "-"
+
+    @admin.display(description=_('امتیازهای تخصیص داده شده'))
+    def points_assigned_fa(self, obj):
+        return '✓' if obj.points_assigned else '✗'
+    points_assigned_fa.short_description = _('امتیازهای تخصیص داده شده')
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

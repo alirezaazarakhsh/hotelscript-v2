@@ -1279,6 +1279,11 @@ class Reservationhotel(models.Model):
         verbose_name=_("کد تخفیف اعمال‌شده"),
         help_text=_("کد تخفیف اعمال‌شده به‌صورت موقت تا زمان پرداخت رزرو")
     )
+    points_assigned = models.BooleanField(
+        verbose_name=_('امتیازهای باشگاه مشتریان تخصیص داده شده'),
+        default=False,
+        help_text=_('مشخص می‌کند که آیا امتیازهای باشگاه مشتریان برای این رزرو تخصیص داده شده‌اند.')
+    )
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
@@ -1468,7 +1473,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             },
         },
     )
-    
     
     
 # ---------------- ReservationRoom ----------------
