@@ -3389,16 +3389,16 @@ class PassengerListForReservationView(generics.GenericAPIView):
     
     
 # ای پی ای کد تخفیف برای رزرو 
-logger = logging.getLogger(__name__)
+llogger = logging.getLogger(__name__)
 
-# متغیر محلی برای کنترل ارسال SMS
+# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
 
-def set_skip_sms(value):
-    setattr(_thread_locals, 'skip_sms', value)
+def set_skip_points_and_sms(value):
+    setattr(_thread_locals, 'skip_points_and_sms', value)
 
-def get_skip_sms():
-    return getattr(_thread_locals, 'skip_sms', False)
+def get_skip_points_and_sms():
+    return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -3530,9 +3530,9 @@ class ApplyDiscountCodeAPIView(APIView):
                     defaults={'points': 0}
                 )
                 customer_points.points -= discount_obj.required_points
-                set_skip_sms(True)
+                set_skip_points_and_sms(True)
                 customer_points.save()
-                set_skip_sms(False)
+                set_skip_points_and_sms(False)
                 logger.info(f"امتیاز {discount_obj.required_points} از کاربر {request.user.phone_number} برای کد تخفیف {code} کسر شد.")
                 send_customer_club_deduct_sms(
                     phone_number=request.user.phone_number,
@@ -3559,9 +3559,11 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_half_day_charge = total_half_day_charge
             reservation.total_extra_passenger_charge = total_extra
 
+            set_skip_points_and_sms(True)  # جلوگیری از اجرای سیگنال Reservationhotel
             reservation._skip_price_calculation = True
             reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
             delattr(reservation, '_skip_price_calculation')
+            set_skip_points_and_sms(False)
 
         return Response({
             "status": "ok",
@@ -3612,9 +3614,9 @@ class ApplyDiscountCodeAPIView(APIView):
                         defaults={'points': 0}
                     )
                     customer_points.points += discount_obj.required_points
-                    set_skip_sms(True)
+                    set_skip_points_and_sms(True)
                     customer_points.save()
-                    set_skip_sms(False)
+                    set_skip_points_and_sms(False)
                     logger.info(f"امتیاز {discount_obj.required_points} به کاربر {request.user.phone_number} برای حذف کد تخفیف {reservation.applied_discount_code} بازگردانده شد.")
                     send_customer_club_sms(
                         phone_number=request.user.phone_number,
@@ -3633,9 +3635,11 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_extra_passenger_charge = total_extra
             reservation.applied_discount_code = None
 
+            set_skip_points_and_sms(True)  # جلوگیری از اجرای سیگنال Reservationhotel
             reservation._skip_price_calculation = True
             reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
             delattr(reservation, '_skip_price_calculation')
+            set_skip_points_and_sms(False)
 
         return Response({
             "status": "ok",

@@ -9,14 +9,14 @@ from .sms.sms import send_customer_club_sms, send_customer_club_deduct_sms, send
 
 logger = logging.getLogger(__name__)
 
-# متغیر محلی برای کنترل ارسال SMS
+# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
 
-def set_skip_sms(value):
-    setattr(_thread_locals, 'skip_sms', value)
+def set_skip_points_and_sms(value):
+    setattr(_thread_locals, 'skip_points_and_sms', value)
 
-def get_skip_sms():
-    return getattr(_thread_locals, 'skip_sms', False)
+def get_skip_points_and_sms():
+    return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 @receiver(pre_save, sender=CustomerClubPoint)
 def store_previous_points(sender, instance, **kwargs):
@@ -31,7 +31,7 @@ def store_previous_points(sender, instance, **kwargs):
 
 @receiver(post_save, sender=CustomerClubPoint)
 def send_club_points_sms(sender, instance, created, **kwargs):
-    if get_skip_sms():
+    if get_skip_points_and_sms():
         logger.info(f"ارسال SMS برای کاربر {instance.user.phone_number} نادیده گرفته شد.")
         return
 

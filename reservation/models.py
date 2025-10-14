@@ -1415,19 +1415,24 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-# متغیر محلی برای کنترل ارسال SMS
+
+# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
 
-def set_skip_sms(value):
-    """تنظیم فلگ برای جلوگیری از ارسال SMS در یک درخواست."""
-    setattr(_thread_locals, 'skip_sms', value)
+def set_skip_points_and_sms(value):
+    """تنظیم فلگ برای جلوگیری از تخصیص امتیاز و ارسال SMS در یک درخواست."""
+    setattr(_thread_locals, 'skip_points_and_sms', value)
 
-def get_skip_sms():
-    """دریافت وضعیت فلگ ارسال SMS."""
-    return getattr(_thread_locals, 'skip_sms', False)
+def get_skip_points_and_sms():
+    """دریافت وضعیت فلگ تخصیص امتیاز و ارسال SMS."""
+    return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
+    if get_skip_points_and_sms():
+        logger.info(f"اجرای سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد.")
+        return
+
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
@@ -1467,9 +1472,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 )
                 customer_points.points += total_points
                 # جلوگیری از ارسال SMS توسط سیگنال CustomerClubPoint
-                set_skip_sms(True)
+                set_skip_points_and_sms(True)
                 customer_points.save()
-                set_skip_sms(False)
+                set_skip_points_and_sms(False)
                 logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
 
                 # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
@@ -1483,6 +1488,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     added_points=total_points,
                     current_points=customer_points.points
                 )
+            else:
+                logger.info(f"هیچ امتیازی برای رزرو {instance.tracking_code} تخصیص داده نشد (total_points=0).")
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:
