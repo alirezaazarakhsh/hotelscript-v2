@@ -18,7 +18,7 @@ import jdatetime
 from itertools import combinations
 from authentication.models import NaturalProfile
 from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
-from bashgah_moshtarian.sms.sms import send_customer_club_deduct_sms
+from bashgah_moshtarian.sms.sms import send_customer_club_deduct_sms, send_customer_club_sms
 from config.models import UserLevel
 from reservation.models import Hotel 
 from reservation.models import Reservationhotel, ReservationRoom
@@ -3386,6 +3386,7 @@ class PassengerListForReservationView(generics.GenericAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+    
     
     
 # ای پی ای کد تخفیف برای رزرو 
