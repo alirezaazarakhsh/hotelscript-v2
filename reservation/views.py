@@ -3679,7 +3679,7 @@ class WalletWithdrawAPIView(APIView):
         - `amount`: مبلغ برداشت (تومان، حداقل ۱۰,۰۰۰ تومان، حداکثر موجودی کیف پول یا قیمت نهایی رزرو)
 
         **حالات خاص:**
-        - برای حذف برداشت، مقدار `amount=0` ارسال کنید.
+        - برای حذف برداشت، مقدار `amount=0` ارسال کنید یا از متد DELETE استفاده کنید.
         - فقط برای رزروهای با وضعیت پرداخت `unpaid` قابل تنظیم است.
         - مبلغ زیر ۱۰,۰۰۰ تومان یا بیشتر از موجودی کیف پول/قیمت نهایی رزرو مجاز نیست.
 
@@ -3692,7 +3692,7 @@ class WalletWithdrawAPIView(APIView):
             properties={
                 'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ برداشت (تومان، ۰ برای حذف برداشت)'),
             },
-            required=['reservation-api']
+            required=['amount']
         ),
         responses={
             200: openapi.Response(description="برداشت تنظیم یا حذف شد."),
@@ -3763,3 +3763,48 @@ class WalletWithdrawAPIView(APIView):
         # پاسخ مناسب
         message = "برداشت از کیف پول حذف شد." if amount == 0 else "برداشت از کیف پول تنظیم شد."
         return Response({"detail": message}, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="حذف برداشت از کیف پول برای رزرو",
+        operation_description="""
+        این API به کاربر احراز هویت‌شده اجازه می‌دهد برداشت از کیف پول برای یک رزرو مشخص را حذف کند.
+        این عمل مقدار `wallet_withdrawal_amount` را به صفر و فلگ `wallet_withdrawn` را به False تنظیم می‌کند.
+
+        **حالات خاص:**
+        - فقط برای رزروهای با وضعیت پرداخت `unpaid` قابل انجام است.
+
+        **خروجی:**
+        - در صورت موفقیت: پیام تأیید حذف برداشت.
+        - در صورت خطا: پیام خطا با جزئیات.
+        """,
+        responses={
+            200: openapi.Response(description="برداشت از کیف پول حذف شد."),
+            400: openapi.Response(description="وضعیت پرداخت رزرو نامناسب است."),
+            403: openapi.Response(description="عدم دسترسی به رزرو"),
+            404: openapi.Response(description="رزرو یافت نشد."),
+        },
+        tags=["reservation-api"]
+    )
+    def delete(self, request, tracking_code):
+        # دریافت رزرو با استفاده از tracking_code
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        
+        # بررسی دسترسی کاربر
+        if reservation.buyer != request.user:
+            logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
+            return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
+
+        # بررسی وضعیت پرداخت رزرو
+        if reservation.payment_status != 'unpaid':
+            logger.warning(f"تلاش برای حذف برداشت برای رزرو {tracking_code} با وضعیت پرداخت {reservation.payment_status}.")
+            return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده یا در حال پرداخت برداشت را حذف کرد."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # حذف برداشت
+        with transaction.atomic():
+            reservation.wallet_withdrawal_amount = Decimal('0')
+            reservation.wallet_withdrawn = False
+            reservation.save(update_fields=['wallet_withdrawal_amount', 'wallet_withdrawn'])
+            logger.info(f"برداشت از کیف پول برای رزرو {tracking_code} حذف شد.")
+
+        # پاسخ مناسب
+        return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
