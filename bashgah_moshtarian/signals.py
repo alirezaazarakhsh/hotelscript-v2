@@ -1,11 +1,10 @@
-# bashgah_moshtarian/signals.py
 import logging
 from django.db.models.signals import pre_save, post_save, m2m_changed
 from django.dispatch import receiver
 from threading import local
 from authentication.models import BaseUser
 from .models import CustomerClubPoint, RoomDiscountCode, ShoppingCenterDiscountCode
-from .sms.sms import send_customer_club_sms, send_customer_club_deduct_sms, send_discount_sms
+from .sms.sms import send_customer_club_deduct_sms, send_discount_sms
 
 logger = logging.getLogger(__name__)
 
@@ -36,25 +35,17 @@ def send_club_points_sms(sender, instance, created, **kwargs):
         return
 
     added_points = instance.points - getattr(instance, '_previous_points', 0)
-    if added_points != 0:
-        logger.info(f"تغییر امتیاز برای کاربر {instance.user.phone_number}: {added_points} (امتیاز فعلی: {instance.points})")
+    if added_points < 0:  # فقط برای کاهش امتیاز SMS ارسال شود
+        logger.info(f"کاهش امتیاز برای کاربر {instance.user.phone_number}: {abs(added_points)} (امتیاز فعلی: {instance.points})")
         user_name = instance.user.first_name or instance.user.phone_number
-        if added_points > 0:
-            send_customer_club_sms(
-                phone_number=instance.user.phone_number,
-                user_name=user_name,
-                added_points=added_points,
-                current_points=instance.points
-            )
-        else:
-            send_customer_club_deduct_sms(
-                phone_number=instance.user.phone_number,
-                user_name=user_name,
-                deducted_points=abs(added_points),
-                current_points=instance.points
-            )
+        send_customer_club_deduct_sms(
+            phone_number=instance.user.phone_number,
+            user_name=user_name,
+            deducted_points=abs(added_points),
+            current_points=instance.points
+        )
     else:
-        logger.info(f"هیچ تغییری در امتیاز برای کاربر {instance.user.phone_number} رخ نداده است.")
+        logger.info(f"هیچ SMS برای افزایش امتیاز کاربر {instance.user.phone_number} ارسال نشد.")
 
 @receiver(post_save, sender=RoomDiscountCode)
 @receiver(post_save, sender=ShoppingCenterDiscountCode)

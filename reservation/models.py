@@ -1417,6 +1417,9 @@ class Reservationhotel(models.Model):
 
 
 # متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
+logger = logging.getLogger(__name__)
+
+# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
 
 def set_skip_points_and_sms(value):
@@ -1436,7 +1439,13 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
+    cache_key_points = f"points_assignment_lock_{instance.tracking_code}"
     timer = None
+
+    # بررسی قفل برای جلوگیری از تخصیص چندباره امتیاز
+    if cache.get(cache_key_points):
+        logger.info(f"Points assignment skipped for {instance.tracking_code} due to lock")
+        return
 
     # بررسی وضعیت لغو رزرو
     if instance.capacity_status == 'rejected':
@@ -1448,6 +1457,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
+        logger.debug(f"رزرو {instance.tracking_code} رد شد، تایمرها حذف شدند.")
 
     # بررسی تغییر وضعیت به پرداخت‌شده و تخصیص امتیازهای باشگاه مشتریان
     elif instance.payment_status == 'paid' and not instance.points_assigned:
@@ -1455,7 +1465,13 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         with transaction.atomic():
             # قفل کردن رکورد رزرو برای جلوگیری از race condition
             reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-            
+            if reservation.points_assigned:
+                logger.info(f"Points already assigned for {reservation.tracking_code}, skipping.")
+                return
+
+            # تنظیم قفل کش
+            cache.set(cache_key_points, True, timeout=60)
+
             # محاسبه مجموع امتیازهای اتاق‌ها
             total_points = 0
             for res_room in reservation.reservation_rooms.select_related('room').all():
@@ -1490,10 +1506,17 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 )
             else:
                 logger.info(f"هیچ امتیازی برای رزرو {instance.tracking_code} تخصیص داده نشد (total_points=0).")
+                # همچنان فلگ را تنظیم می‌کنیم تا از اجرای دوباره جلوگیری شود
+                reservation.points_assigned = True
+                reservation.save(update_fields=['points_assigned'])
+
+            # حذف قفل کش
+            cache.delete(cache_key_points)
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:
         cache.delete_many([cache_key_approval, cache_key_payment])
+        logger.debug(f"تایمرها برای رزرو {instance.tracking_code} حذف شدند.")
 
     # ارسال اعلان به‌روزرسانی وضعیت فقط برای capacity_status
     async_to_sync(channel_layer.group_send)(
@@ -1506,7 +1529,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             },
         },
     )
-    
+    logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
