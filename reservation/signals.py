@@ -12,7 +12,7 @@ from django.db import transaction
 from .models import (
     Reservationhotel, ReservationRoom, ReservationRoomPassenger, 
     RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, 
-    Passenger, RoomDatePrice, Room
+    Passenger, RoomDatePrice, Room, Wallet
 )
 from reservation.sms.sms import send_room_availability_sms
 
@@ -174,13 +174,15 @@ def update_hotel_status(sender, instance, **kwargs):
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_handle_discount(sender, instance, created, **kwargs):
     """
-    مدیریت کد تخفیف هنگام تغییر وضعیت رزرو به 'paid' و ارسال به‌روزرسانی وضعیت از طریق WebSocket.
+    مدیریت کد تخفیف و برداشت از کیف پول هنگام تغییر وضعیت رزرو به 'paid' و ارسال به‌روزرسانی وضعیت از طریق WebSocket.
     
     وظایف:
     1. اگر payment_status به 'paid' تغییر کند و کد تخفیف اعمال شده باشد، یک رکورد
        DiscountActivationRecord با reward_claimed=True ایجاد یا به‌روزرسانی می‌شود.
-    2. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود.
-    3. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
+    2. اگر payment_status به 'paid' تغییر کند و مبلغ برداشت از کیف پول وجود داشته باشد،
+       مبلغ از کیف پول کسر می‌شود.
+    3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود.
+    4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
     """
     channel_layer = get_channel_layer()
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
@@ -191,6 +193,8 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                  f"payment_status: {instance.payment_status}, "
                  f"capacity_status: {instance.capacity_status}, "
                  f"applied_discount_code: {instance.applied_discount_code}, "
+                 f"wallet_withdrawal_amount: {instance.wallet_withdrawal_amount}, "
+                 f"wallet_withdrawn: {instance.wallet_withdrawn}, "
                  f"created: {created}")
 
     # مدیریت کد تخفیف هنگام تغییر وضعیت به paid
@@ -270,8 +274,31 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                 logger.error(f"خطا در ثبت کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
                 raise  # برای rollback تراکنش
 
+    # بررسی برداشت از کیف پول هنگام تغییر وضعیت به paid
+    elif not created and instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+        logger.info(f"برداشت از کیف پول برای رزرو {instance.tracking_code} در حال انجام است...")
+        with transaction.atomic():
+            try:
+                # قفل کردن رکورد کیف پول برای جلوگیری از race condition
+                wallet = Wallet.objects.select_for_update().get(user=instance.buyer)
+                if wallet.balance < instance.wallet_withdrawal_amount:
+                    logger.error(f"موجودی کیف پول برای رزرو {instance.tracking_code} کافی نیست. برداشت لغو شد.")
+                    return
+
+                wallet.balance -= instance.wallet_withdrawal_amount
+                wallet.save()
+                instance.wallet_withdrawn = True
+                instance.save(update_fields=['wallet_withdrawn'])
+                logger.info(f"مبلغ {instance.wallet_withdrawal_amount} از کیف پول کاربر {instance.buyer.phone_number} برای رزرو {instance.tracking_code} کسر شد.")
+            except Wallet.DoesNotExist:
+                logger.error(f"کیف پول برای کاربر {instance.buyer.phone_number} یافت نشد.")
+                return
+            except Exception as e:
+                logger.error(f"خطا در برداشت از کیف پول برای رزرو {instance.tracking_code}: {str(e)}")
+                raise  # برای rollback تراکنش
+
     # بررسی وضعیت لغو رزرو
-    if instance.capacity_status == 'rejected':
+    elif instance.capacity_status == 'rejected':
         rooms = instance.reservation_rooms.all().select_related('room')
         with transaction.atomic():
             for r in rooms:

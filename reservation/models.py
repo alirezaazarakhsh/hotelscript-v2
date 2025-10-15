@@ -1270,6 +1270,19 @@ class Reservationhotel(models.Model):
     total_half_day_charge = models.DecimalField(_('مجموع نیم‌شارژها'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     total_extra_passenger_charge = models.DecimalField(_('مجموع قیمت نفرات اضافه'), max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
 
+    wallet_withdrawal_amount = models.DecimalField(
+        _('مبلغ برداشت از کیف پول'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)]
+    )
+    wallet_withdrawn = models.BooleanField(
+        _('برداشت از کیف پول انجام شده'),
+        default=False,
+        help_text=_('مشخص می‌کند که آیا مبلغ برداشت از کیف پول کسر شده است.')
+    )
+
     is_approved = models.BooleanField(_('تأیید شده'), default=False)
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
@@ -1512,6 +1525,22 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
             # حذف قفل کش
             cache.delete(cache_key_points)
+
+    # بررسی برداشت از کیف پول هنگام پرداخت نهایی
+    elif instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+        logger.info(f"برداشت از کیف پول برای رزرو {instance.tracking_code} در حال انجام است...")
+        with transaction.atomic():
+            # قفل کردن رکورد کیف پول برای جلوگیری از race condition
+            wallet = Wallet.objects.select_for_update().get(user=instance.buyer)
+            if wallet.balance < instance.wallet_withdrawal_amount:
+                logger.error(f"موجودی کیف پول برای رزرو {instance.tracking_code} کافی نیست. برداشت لغو شد.")
+                return
+
+            wallet.balance -= instance.wallet_withdrawal_amount
+            wallet.save()
+            instance.wallet_withdrawn = True
+            instance.save(update_fields=['wallet_withdrawn'])
+            logger.info(f"مبلغ {instance.wallet_withdrawal_amount} از کیف پول کاربر {instance.buyer.phone_number} برای رزرو {instance.tracking_code} کسر شد.")
 
     # حذف تایمرها در صورت تأیید یا رد ظرفیت
     elif instance.capacity_status in ['confirmed', 'rejected']:

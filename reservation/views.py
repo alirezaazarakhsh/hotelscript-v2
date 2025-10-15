@@ -1,5 +1,5 @@
 from collections import defaultdict
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import itertools
 import logging
 import random
@@ -20,6 +20,7 @@ from authentication.models import NaturalProfile
 from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
 from bashgah_moshtarian.sms.sms import send_customer_club_deduct_sms, send_customer_club_sms
 from config.models import UserLevel
+from finance.models import Wallet
 from reservation.models import Hotel 
 from reservation.models import Reservationhotel, ReservationRoom
 from rest_framework.views import APIView
@@ -2977,6 +2978,8 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
+logger = logging.getLogger(__name__)
+
 class ReservationInvoiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -2993,20 +2996,28 @@ class ReservationInvoiceAPIView(APIView):
         operation_summary="دریافت صورت‌حساب رزرو",
         operation_description="""
         مشاهده صورت‌حساب رزرو بر اساس **tracking_code**.
+
         **فیلدهای خروجی:**
         - `nights_count`: تعداد شب‌های اقامت
         - `total_price`: مجموع قیمت اتاق‌ها
         - `extra_passengers`: مجموع قیمت نفرات اضافه
-        - `half_charges`: مجموع نیم شارژها
+        - `half_charges`: مجموع نیم‌شارژها
         - `discount_on_purchase`: تخفیف ثابت اتاق‌ها
         - `discount_code`: تخفیف کد تخفیف
+        - `wallet_withdraw`: مبلغ برداشت از کیف پول
         - `final_price`: قیمت نهایی
         """,
+        responses={
+            200: openapi.Response(description="جزئیات صورت‌حساب رزرو"),
+            403: openapi.Response(description="عدم دسترسی به رزرو"),
+            404: openapi.Response(description="رزرو یافت نشد"),
+        },
         tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         if reservation.buyer != request.user:
+            logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
         # استفاده مستقیم از مقادیر ذخیره‌شده در رزرو
@@ -3017,6 +3028,7 @@ class ReservationInvoiceAPIView(APIView):
             "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
             "discount_on_purchase": int(self.parse_number(reservation.room_fixed_discount)),
             "discount_code": int(self.parse_number(reservation.discount)),
+            "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount)),
             "final_price": int(self.parse_number(reservation.final_price))
         }
 
@@ -3024,8 +3036,6 @@ class ReservationInvoiceAPIView(APIView):
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
-    
 
 # ای پی ای توضیحات تکمیلی رزرو 
 class ReservationDescriptionAPIView(APIView):
@@ -3649,3 +3659,107 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
+        
+        
+        
+        
+# ای پی ای برداشت از کیف پول 
+logger = logging.getLogger(__name__)
+
+class WalletWithdrawAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="تنظیم یا حذف برداشت از کیف پول برای رزرو",
+        operation_description="""
+        این API به کاربر احراز هویت‌شده اجازه می‌دهد مبلغ برداشت از کیف پول را برای یک رزرو مشخص تنظیم یا حذف کند.
+        مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود.
+
+        **ورودی‌ها (در body درخواست POST):**
+        - `amount`: مبلغ برداشت (تومان، حداقل ۱۰,۰۰۰ تومان، حداکثر موجودی کیف پول یا قیمت نهایی رزرو)
+
+        **حالات خاص:**
+        - برای حذف برداشت، مقدار `amount=0` ارسال کنید.
+        - فقط برای رزروهای با وضعیت پرداخت `unpaid` قابل تنظیم است.
+        - مبلغ زیر ۱۰,۰۰۰ تومان یا بیشتر از موجودی کیف پول/قیمت نهایی رزرو مجاز نیست.
+
+        **خروجی:**
+        - در صورت موفقیت: پیام تأیید تنظیم یا حذف برداشت.
+        - در صورت خطا: پیام خطا با جزئیات.
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ برداشت (تومان، ۰ برای حذف برداشت)'),
+            },
+            required=['reservation-api']
+        ),
+        responses={
+            200: openapi.Response(description="برداشت تنظیم یا حذف شد."),
+            400: openapi.Response(description="خطاهای اعتبارسنجی (مثل مبلغ نامعتبر یا وضعیت پرداخت نامناسب)."),
+            403: openapi.Response(description="عدم دسترسی به رزرو"),
+            404: openapi.Response(description="رزرو یا کیف پول یافت نشد."),
+        },
+        tags=["reservation-api"]
+    )
+    def post(self, request, tracking_code):
+        # دریافت رزرو با استفاده از tracking_code
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        
+        # بررسی دسترسی کاربر
+        if reservation.buyer != request.user:
+            logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
+            return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
+
+        # بررسی وضعیت پرداخت رزرو
+        if reservation.payment_status != 'unpaid':
+            logger.warning(f"تلاش برای تنظیم برداشت برای رزرو {tracking_code} با وضعیت پرداخت {reservation.payment_status}.")
+            return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده یا در حال پرداخت برداشت تنظیم کرد."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # دریافت و اعتبارسنجی مبلغ
+        amount_str = request.data.get('amount')
+        try:
+            amount = Decimal(str(amount_str).replace(',', '').strip())
+        except (TypeError, ValueError, InvalidOperation):
+            logger.error(f"مبلغ نامعتبر برای رزرو {tracking_code}: {amount_str}")
+            return Response({"detail": "مبلغ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # اعتبارسنجی مبلغ
+        if amount < 0:
+            logger.error(f"مبلغ منفی برای رزرو {tracking_code}: {amount}")
+            return Response({"detail": "مبلغ نمی‌تواند منفی باشد."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if amount > 0 and amount < 10000:
+            logger.error(f"مبلغ کمتر از ۱۰,۰۰۰ تومان برای رزرو {tracking_code}: {amount}")
+            return Response({"detail": "مبلغ باید حداقل ۱۰,۰۰۰ تومان باشد."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # دریافت کیف پول کاربر
+        try:
+            wallet = Wallet.objects.get(user=request.user)
+        except Wallet.DoesNotExist:
+            logger.error(f"کیف پول برای کاربر {request.user.phone_number} یافت نشد.")
+            return Response({"detail": "کیف پول یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        # بررسی موجودی کیف پول
+        if amount > wallet.balance:
+            logger.error(f"مبلغ بیشتر از موجودی کیف پول برای رزرو {tracking_code}: {amount} > {wallet.balance}")
+            return Response({"detail": "مبلغ بیشتر از موجودی کیف پول است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # بررسی قیمت نهایی رزرو
+        if amount > reservation.final_price:
+            logger.error(f"مبلغ بیشتر از قیمت نهایی رزرو {tracking_code}: {amount} > {reservation.final_price}")
+            return Response({"detail": "مبلغ بیشتر از قیمت نهایی رزرو است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # تنظیم یا حذف برداشت
+        with transaction.atomic():
+            reservation.wallet_withdrawal_amount = amount
+            if amount == 0:
+                reservation.wallet_withdrawn = False  # بازنشانی فلگ در صورت حذف برداشت
+                logger.info(f"برداشت از کیف پول برای رزرو {tracking_code} حذف شد.")
+            else:
+                logger.info(f"مبلغ برداشت {amount} برای رزرو {tracking_code} تنظیم شد.")
+            reservation.save(update_fields=['wallet_withdrawal_amount', 'wallet_withdrawn'])
+
+        # پاسخ مناسب
+        message = "برداشت از کیف پول حذف شد." if amount == 0 else "برداشت از کیف پول تنظیم شد."
+        return Response({"detail": message}, status=status.HTTP_200_OK)
