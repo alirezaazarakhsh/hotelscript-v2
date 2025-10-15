@@ -632,6 +632,13 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
         return check_out
 
+    def clean_wallet_withdrawal_amount(self):
+        amount = self.cleaned_data['wallet_withdrawal_amount']
+        if amount < 0:
+            raise ValidationError("مبلغ برداشت از کیف پول نمی‌تواند منفی باشد.")
+        if amount > 0 and amount < 10000:
+            raise ValidationError("مبلغ برداشت باید حداقل ۱۰,۰۰۰ تومان باشد.")
+        return amount
 
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
@@ -645,7 +652,6 @@ class ReservationRoomPassengerInline(NestedTabularInline):
         if obj and hasattr(obj, 'room') and obj.room:
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
-
 
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
@@ -724,7 +730,6 @@ class ReservationRoomInline(NestedTabularInline):
                     fields.remove('half_day_out_selected')
         return fields
 
-
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -734,7 +739,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
+        'room_fixed_discount_fa', 'wallet_withdrawal_amount_fa', 'wallet_withdrawn_fa',
+        'final_price_fa', 'capacity_status', 'payment_status',
         'points_assigned_fa', 'created_jalali', 'updated_jalali'
     )
     search_fields = (
@@ -749,7 +755,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'created_jalali', 'updated_jalali', 'points_assigned_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'final_price_fa'
+        'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa'
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -765,7 +771,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
             'fields': (
                 'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-                'room_fixed_discount_fa', 'final_price_fa', 'capacity_status', 'payment_status',
+                'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
+                'final_price_fa', 'capacity_status', 'payment_status',
                 'points_assigned_fa'
             )
         }),
@@ -791,7 +798,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
     def updated_jalali(self, obj):
         if obj.updated_at:
-            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
+            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
@@ -834,6 +841,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description=_('تخفیف ثابت اتاق'))
     def room_fixed_discount_fa(self, obj):
         return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
+
+    @admin.display(description=_('مبلغ برداشت از کیف پول'))
+    def wallet_withdrawal_amount_fa(self, obj):
+        return "{:,}".format(obj.wallet_withdrawal_amount) if obj.wallet_withdrawal_amount else "-"
+
+    @admin.display(description=_('وضعیت برداشت از کیف پول'))
+    def wallet_withdrawn_fa(self, obj):
+        return '✓' if obj.wallet_withdrawn else '✗'
+    wallet_withdrawn_fa.short_description = _('برداشت انجام شده')
 
     @admin.display(description=_('قیمت نهایی'))
     def final_price_fa(self, obj):

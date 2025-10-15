@@ -3670,7 +3670,7 @@ class WalletWithdrawAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="تنظیم یا حذف برداشت از کیف پول برای رزرو",
+        operation_summary="تنظیم  برداشت از کیف پول برای رزرو",
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد مبلغ برداشت از کیف پول را برای یک رزرو مشخص تنظیم یا حذف کند.
         مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود.
