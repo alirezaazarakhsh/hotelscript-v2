@@ -394,24 +394,20 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 pass
 
         # فیلتر اتاق‌ها بر اساس تاریخ و سطح کاربری
-
         rooms_qs = hotel.rooms.filter(
-            date_prices__start_date__lte=end_date_obj,
-            date_prices__end_date__gte=start_date_obj,
-            date_prices__end_date__gte=jdate.today(),  # ✅ فقط بازه‌های فعال
+            date_prices__start_date__lte=start_date_obj,
+            date_prices__end_date__gte=end_date_obj,
             date_prices__user_level=user_level,
             inventory__gt=0
         ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
 
         if not rooms_qs.exists():
             rooms_qs = hotel.rooms.filter(
-                date_prices__start_date__lte=end_date_obj,
-                date_prices__end_date__gte=start_date_obj,
-                date_prices__end_date__gte=jdate.today(),  # ✅ در fallback هم
+                date_prices__start_date__lte=start_date_obj,
+                date_prices__end_date__gte=end_date_obj,
                 date_prices__user_level__isnull=True,
                 inventory__gt=0
             ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-            
 
         if not rooms_qs.exists():
             return Response({
