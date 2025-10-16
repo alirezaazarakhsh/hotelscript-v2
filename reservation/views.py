@@ -3005,7 +3005,7 @@ class ReservationInvoiceAPIView(APIView):
         - `discount_on_purchase`: تخفیف ثابت اتاق‌ها
         - `discount_code`: تخفیف کد تخفیف
         - `wallet_withdraw`: مبلغ برداشت از کیف پول
-        - `final_price`: قیمت نهایی
+        - `final_price`: قیمت نهایی (پس از کسر تمام تخفیف‌ها و برداشت از کیف پول)
         """,
         responses={
             200: openapi.Response(description="جزئیات صورت‌حساب رزرو"),
@@ -3036,6 +3036,8 @@ class ReservationInvoiceAPIView(APIView):
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
 
         return Response(response_data, status=status.HTTP_200_OK)
+    
+    
 
 # ای پی ای توضیحات تکمیلی رزرو 
 class ReservationDescriptionAPIView(APIView):
@@ -3670,7 +3672,7 @@ class WalletWithdrawAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
-        operation_summary="تنظیم  برداشت از کیف پول برای رزرو",
+        operation_summary="تنظیم برداشت از کیف پول برای رزرو",
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد مبلغ برداشت از کیف پول را برای یک رزرو مشخص تنظیم یا حذف کند.
         مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود.
@@ -3745,9 +3747,11 @@ class WalletWithdrawAPIView(APIView):
             logger.error(f"مبلغ بیشتر از موجودی کیف پول برای رزرو {tracking_code}: {amount} > {wallet.balance}")
             return Response({"detail": "مبلغ بیشتر از موجودی کیف پول است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی قیمت نهایی رزرو
-        if amount > reservation.final_price:
-            logger.error(f"مبلغ بیشتر از قیمت نهایی رزرو {tracking_code}: {amount} > {reservation.final_price}")
+        # محاسبه قیمت پایه (بدون کسر wallet_withdrawal_amount) برای مقایسه
+        base_price = reservation.total_price + reservation.total_extra_passenger_charge + reservation.total_half_day_charge
+        temp_final_price = base_price - reservation.discount - reservation.room_fixed_discount
+        if amount > temp_final_price:
+            logger.error(f"مبلغ بیشتر از قیمت نهایی رزرو {tracking_code}: {amount} > {temp_final_price}")
             return Response({"detail": "مبلغ بیشتر از قیمت نهایی رزرو است."}, status=status.HTTP_400_BAD_REQUEST)
 
         # تنظیم یا حذف برداشت
@@ -3758,7 +3762,7 @@ class WalletWithdrawAPIView(APIView):
                 logger.info(f"برداشت از کیف پول برای رزرو {tracking_code} حذف شد.")
             else:
                 logger.info(f"مبلغ برداشت {amount} برای رزرو {tracking_code} تنظیم شد.")
-            reservation.save(update_fields=['wallet_withdrawal_amount', 'wallet_withdrawn'])
+            reservation.save()  # این کار باعث بازمحاسبه final_price می‌شود
 
         # پاسخ مناسب
         message = "برداشت از کیف پول حذف شد." if amount == 0 else "برداشت از کیف پول تنظیم شد."

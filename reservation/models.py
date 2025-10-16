@@ -52,6 +52,7 @@ from django_jalali.db import models as jmodels
 # 🧩 برنامه‌های داخلی پروژه
 from bashgah_moshtarian.sms.sms import send_customer_club_sms
 from config.models import UserLevel
+from finance.models import Wallet
 from icons.models import IconShortcut
 from authentication.models import BaseUser
 from authentication.validators import (
@@ -1402,7 +1403,8 @@ class Reservationhotel(models.Model):
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-        final_price = base_price - discount_amount - room_fixed_discount
+        final_price = base_price - discount_amount - room_fixed_discount - self.wallet_withdrawal_amount
+
         if final_price < 0:
             final_price = Decimal('0')
 
@@ -1427,10 +1429,6 @@ class Reservationhotel(models.Model):
                 self.final_price = final
 
         super().save(*args, **kwargs)
-
-
-# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
-logger = logging.getLogger(__name__)
 
 # متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
@@ -1559,6 +1557,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
+    
+    
     
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
