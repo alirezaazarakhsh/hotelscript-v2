@@ -303,16 +303,22 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                     logger.debug(f"remaining_uses به‌روزرسانی شد: {discount_obj.remaining_uses}")
 
                     # ثبت یا به‌روزرسانی DiscountActivationRecord با reward_claimed=True
+                    logger.info(f"شروع بررسی DiscountActivationRecord برای رزرو {instance.tracking_code}, user={instance.buyer.phone_number}, code={instance.applied_discount_code}")
                     activation_record, created = DiscountActivationRecord.objects.get_or_create(
                         user=instance.buyer,
                         discount_type='room' if room_discount else 'hotel',
                         **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
                         defaults={'reward_claimed': True}
                     )
+                    logger.info(f"رکورد {'ایجاد شد' if created else 'پیدا شد'}: ID={activation_record.id}, reward_claimed={activation_record.reward_claimed}, created={created}")
                     if not created and not activation_record.reward_claimed:
+                        logger.info(f"به‌روزرسانی reward_claimed به True برای رکورد {activation_record.id}")
                         activation_record.reward_claimed = True
                         activation_record.save(update_fields=['reward_claimed'])
-                    logger.debug(f"DiscountActivationRecord {'ایجاد شد' if created else 'به‌روزرسانی شد'} با reward_claimed=True: ID {activation_record.id}")
+                    else:
+                        logger.info(f"نیازی به به‌روزرسانی نیست: created={created}, reward_claimed={activation_record.reward_claimed}")
+                    logger.debug(f"DiscountActivationRecord {'ایجاد شد' if created else 'به‌روزرسانی شد یا بدون تغییر ماند'} با reward_claimed=True: ID={activation_record.id}")
+                    
 
                     # کسر امتیاز اگر لازم باشد
                     if discount_obj.required_points > 0:
