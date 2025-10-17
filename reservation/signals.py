@@ -15,9 +15,20 @@ from .models import (
     Passenger, RoomDatePrice, Room, Wallet
 )
 from reservation.sms.sms import send_room_availability_sms
+from customer_club.models import CustomerClubPoint
+from customer_club.sms.sms import send_customer_club_add_sms, send_customer_club_deduct_sms  # import برای SMS اضافه
+from threading import Timer  # برای تاخیر SMS
 
-# تنظیم لاگینگ برای دیباگ
 logger = logging.getLogger(__name__)
+
+# تابع برای ارسال SMS کسر با تاخیر 2 دقیقه
+def delayed_send_deduct_sms(phone_number, user_name, deducted_points, current_points):
+    send_customer_club_deduct_sms(
+        phone_number=phone_number,
+        user_name=user_name,
+        deducted_points=deducted_points,
+        current_points=current_points
+    )
 
 @receiver(post_save, sender=ReservationRoom)
 def update_room_inventory_on_save(sender, instance, created, **kwargs):
@@ -197,81 +208,130 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                  f"wallet_withdrawn: {instance.wallet_withdrawn}, "
                  f"created: {created}")
 
-    # مدیریت کد تخفیف هنگام تغییر وضعیت به paid
-    if not created and instance.payment_status == 'paid' and instance.applied_discount_code:
+    # مدیریت اضافه امتیاز و کد تخفیف وقتی payment_status به 'paid' تغییر می‌کنه
+    if not created and instance.payment_status == 'paid':
         with transaction.atomic():
             try:
-                logger.debug(f"شروع اعمال کد تخفیف برای رزرو {instance.tracking_code}")
-
-                # پیدا کردن کد تخفیف با case-insensitive
-                room_discount = None
-                hotel_discount = None
-                try:
-                    room_discount = RoomDiscountCode.objects.select_for_update().get(code__iexact=instance.applied_discount_code)
-                    logger.debug(f"RoomDiscountCode پیدا شد: {room_discount.code}")
-                except RoomDiscountCode.DoesNotExist:
-                    logger.debug("RoomDiscountCode پیدا نشد، جستجو برای HotelDiscountCode")
-                    try:
-                        hotel_discount = HotelDiscountCode.objects.select_for_update().get(code__iexact=instance.applied_discount_code)
-                        logger.debug(f"HotelDiscountCode پیدا شد: {hotel_discount.code}")
-                    except HotelDiscountCode.DoesNotExist:
-                        logger.error(f"کد تخفیف {instance.applied_discount_code} برای رزرو {instance.tracking_code} یافت نشد.")
-                        return
-
-                discount_obj = room_discount or hotel_discount
-
-                # بررسی اعتبار کد تخفیف برای اتاق‌ها یا هتل
-                if hotel_discount:
-                    rooms = instance.reservation_rooms.all()
-                    if not rooms.exists():
-                        logger.error(f"هیچ اتاقی برای رزرو {instance.tracking_code} یافت نشد.")
-                        return
-                    if not all(rr.room.hotel == hotel_discount.hotel for rr in rooms):
-                        logger.error(f"کد تخفیف هتل {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
-                        return
-                elif room_discount:
-                    if not any(rr.room == room_discount.room for rr in instance.reservation_rooms.all()):
-                        logger.error(f"کد تخفیف اتاق {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
-                        return
-
-                # بررسی تعداد استفاده باقی‌مانده
-                if discount_obj.remaining_uses <= 0:
-                    logger.error(f"کد تخفیف {instance.applied_discount_code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
-                    return
-
-                # بررسی اینکه کاربر قبلاً از کد استفاده نکرده باشد
-                activation_exists = DiscountActivationRecord.objects.filter(
+                # اضافه کردن امتیاز برای رزرو paid (فقط یک بار)
+                customer_points, _ = CustomerClubPoint.objects.get_or_create(
                     user=instance.buyer,
-                    discount_type='room' if room_discount else 'hotel',
-                    reward_claimed=True,
-                    **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount})
-                ).exists()
-                if activation_exists:
-                    logger.error(f"کاربر {instance.buyer} قبلاً از کد تخفیف {instance.applied_discount_code} استفاده کرده است.")
-                    return
-
-                # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
-                discount_obj.remaining_uses -= 1
-                discount_obj.activated_users.add(instance.buyer)
-                discount_obj.save(update_fields=['remaining_uses'])
-                logger.debug(f"remaining_uses به‌روزرسانی شد: {discount_obj.remaining_uses}")
-
-                # ثبت یا به‌روزرسانی DiscountActivationRecord با reward_claimed=True
-                activation_record, created = DiscountActivationRecord.objects.get_or_create(
-                    user=instance.buyer,
-                    discount_type='room' if room_discount else 'hotel',
-                    **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
-                    defaults={'reward_claimed': True}
+                    defaults={'points': 0}
                 )
-                if not created and not activation_record.reward_claimed:
-                    activation_record.reward_claimed = True
-                    activation_record.save(update_fields=['reward_claimed'])
-                logger.debug(f"DiscountActivationRecord {'ایجاد شد' if created else 'به‌روزرسانی شد'} با reward_claimed=True: ID {activation_record.id}")
+                # فرض امتیاز اضافه: 200 برای هر اتاق (تغییر بده اگر فرمول دیگه‌ای داری)
+                added_points = 200 * instance.reservation_rooms.count()
+                customer_points.points += added_points
+                customer_points.save()
+                logger.info(f"امتیاز {added_points} برای رزرو {instance.tracking_code} به کاربر {instance.buyer} اضافه شد.")
 
-                logger.info(f"کد تخفیف {instance.applied_discount_code} برای رزرو {instance.tracking_code} با موفقیت ثبت شد.")
+                # ارسال SMS اضافه امتیاز بلافاصله
+                user_name = instance.buyer.first_name or instance.buyer.phone_number
+                send_customer_club_add_sms(
+                    phone_number=instance.buyer.phone_number,
+                    user_name=user_name,
+                    added_points=added_points,
+                    current_points=customer_points.points
+                )
+
+                # اگر کد تخفیف اعمال شده باشه
+                if instance.applied_discount_code:
+                    logger.debug(f"شروع اعمال کد تخفیف برای رزرو {instance.tracking_code}")
+
+                    # پیدا کردن کد تخفیف با case-insensitive
+                    room_discount = None
+                    hotel_discount = None
+                    try:
+                        room_discount = RoomDiscountCode.objects.select_for_update().get(code__iexact=instance.applied_discount_code)
+                        logger.debug(f"RoomDiscountCode پیدا شد: {room_discount.code}")
+                    except RoomDiscountCode.DoesNotExist:
+                        logger.debug("RoomDiscountCode پیدا نشد، جستجو برای HotelDiscountCode")
+                        try:
+                            hotel_discount = HotelDiscountCode.objects.select_for_update().get(code__iexact=instance.applied_discount_code)
+                            logger.debug(f"HotelDiscountCode پیدا شد: {hotel_discount.code}")
+                        except HotelDiscountCode.DoesNotExist:
+                            logger.error(f"کد تخفیف {instance.applied_discount_code} برای رزرو {instance.tracking_code} یافت نشد.")
+                            return
+
+                    discount_obj = room_discount or hotel_discount
+
+                    # بررسی اعتبار کد تخفیف برای اتاق‌ها یا هتل
+                    if hotel_discount:
+                        rooms = instance.reservation_rooms.all()
+                        if not rooms.exists():
+                            logger.error(f"هیچ اتاقی برای رزرو {instance.tracking_code} یافت نشد.")
+                            return
+                        if not all(rr.room.hotel == hotel_discount.hotel for rr in rooms):
+                            logger.error(f"کد تخفیف هتل {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
+                            return
+                    elif room_discount:
+                        if not any(rr.room == room_discount.room for rr in instance.reservation_rooms.all()):
+                            logger.error(f"کد تخفیف اتاق {instance.applied_discount_code} برای اتاق‌های این رزرو معتبر نیست.")
+                            return
+
+                    # چک‌های اضافی (کپی از API): expires_at, users, user_level, etc.
+                    now_j = jdatetime.datetime.now().date()
+                    if discount_obj.expires_at and discount_obj.expires_at < now_j:
+                        logger.error("کد تخفیف منقضی شده است.")
+                        return
+                    if discount_obj.users.exists() and instance.buyer not in discount_obj.users.all():
+                        logger.error("این کد تخفیف برای این کاربر در دسترس نیست.")
+                        return
+                    user_level = getattr(getattr(instance.buyer, 'natural_profile', None), 'level', None)
+                    if discount_obj.user_level and discount_obj.user_level != user_level:
+                        logger.error("این کد تخفیف برای سطح کاربری این کاربر فعال نیست.")
+                        return
+
+                    # بررسی تعداد استفاده باقی‌مانده
+                    if discount_obj.remaining_uses <= 0:
+                        logger.error(f"کد تخفیف {instance.applied_discount_code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
+                        return
+
+                    # بررسی اینکه کاربر قبلاً از کد استفاده نکرده باشد
+                    activation_exists = DiscountActivationRecord.objects.filter(
+                        user=instance.buyer,
+                        discount_type='room' if room_discount else 'hotel',
+                        reward_claimed=True,
+                        **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount})
+                    ).exists()
+                    if activation_exists:
+                        logger.error(f"کاربر {instance.buyer} قبلاً از کد تخفیف {instance.applied_discount_code} استفاده کرده است.")
+                        return
+
+                    # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
+                    discount_obj.remaining_uses -= 1
+                    discount_obj.activated_users.add(instance.buyer)
+                    discount_obj.save(update_fields=['remaining_uses'])
+                    logger.debug(f"remaining_uses به‌روزرسانی شد: {discount_obj.remaining_uses}")
+
+                    # ثبت یا به‌روزرسانی DiscountActivationRecord با reward_claimed=True
+                    activation_record, created = DiscountActivationRecord.objects.get_or_create(
+                        user=instance.buyer,
+                        discount_type='room' if room_discount else 'hotel',
+                        **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
+                        defaults={'reward_claimed': True}
+                    )
+                    if not created and not activation_record.reward_claimed:
+                        activation_record.reward_claimed = True
+                        activation_record.save(update_fields=['reward_claimed'])
+                    logger.debug(f"DiscountActivationRecord {'ایجاد شد' if created else 'به‌روزرسانی شد'} با reward_claimed=True: ID {activation_record.id}")
+
+                    # کسر امتیاز اگر لازم باشد
+                    if discount_obj.required_points > 0:
+                        customer_points.points -= discount_obj.required_points
+                        customer_points.save()
+                        logger.info(f"امتیاز {discount_obj.required_points} از کاربر {instance.buyer.phone_number} برای کد تخفیف {instance.applied_discount_code} کسر شد.")
+
+                        # ارسال SMS کسر با تاخیر 2 دقیقه
+                        Timer(120, delayed_send_deduct_sms, args=(
+                            instance.buyer.phone_number,
+                            user_name,
+                            discount_obj.required_points,
+                            customer_points.points
+                        )).start()
+
+                    logger.info(f"کد تخفیف {instance.applied_discount_code} برای رزرو {instance.tracking_code} با موفقیت ثبت شد.")
 
             except Exception as e:
-                logger.error(f"خطا در ثبت کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
+                logger.error(f"خطا در ثبت کد تخفیف یا امتیاز برای رزرو {instance.tracking_code}: {str(e)}")
                 raise  # برای rollback تراکنش
 
     # بررسی برداشت از کیف پول هنگام تغییر وضعیت به paid
@@ -307,6 +367,31 @@ def notify_status_change_and_handle_discount(sender, instance, created, **kwargs
                 is_auto_approved = instance.capacity_status == 'confirmed'
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
                 logger.debug(f"Inventory reverted for room {room.id}: quantity={r.quantity}, is_auto_approved={is_auto_approved}")
+
+            # حذف رکورد موقت DiscountActivationRecord و بازگردانی امتیاز اگر اعمال شده باشد
+            if instance.applied_discount_code:
+                discount_obj = RoomDiscountCode.objects.filter(code__iexact=instance.applied_discount_code).first() or \
+                              HotelDiscountCode.objects.filter(code__iexact=instance.applied_discount_code).first()
+                if discount_obj:
+                    DiscountActivationRecord.objects.filter(
+                        user=instance.buyer,
+                        discount_type='room' if isinstance(discount_obj, RoomDiscountCode) else 'hotel',
+                        **({'room_discount_code': discount_obj} if isinstance(discount_obj, RoomDiscountCode) else {'hotel_discount_code': discount_obj}),
+                        reward_claimed=False
+                    ).delete()
+                    logger.debug(f"DiscountActivationRecord موقت برای کد تخفیف {instance.applied_discount_code} حذف شد.")
+
+                    # بازگردانی امتیاز اگر required_points > 0 (هرچند کسر در paid است، اما برای ایمنی)
+                    if discount_obj.required_points > 0:
+                        customer_points, _ = CustomerClubPoint.objects.get_or_create(
+                            user=instance.buyer,
+                            defaults={'points': 0}
+                        )
+                        customer_points.points += discount_obj.required_points
+                        customer_points.save()
+                        logger.info(f"امتیاز {discount_obj.required_points} به کاربر {instance.buyer.phone_number} برای رد رزرو {instance.tracking_code} بازگردانده شد.")
+                        # ارسال SMS اضافه امتیاز بازگردانده (اگر نیاز باشه، تابع add_sms رو فراخوانی کن)
+
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
         logger.debug(f"رزرو {instance.tracking_code} رد شد، تایمرها حذف شدند.")

@@ -106,6 +106,7 @@ from .models import (
     Passenger,
     Comment,
     SuggestedCommentItem,
+    set_skip_points_and_sms,
 )
 from .serializers import (
     CitySerializer,
@@ -3402,16 +3403,7 @@ class PassengerListForReservationView(generics.GenericAPIView):
     
     
 # ای پی ای کد تخفیف برای رزرو 
-llogger = logging.getLogger(__name__)
-
-# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
-_thread_locals = local()
-
-def set_skip_points_and_sms(value):
-    setattr(_thread_locals, 'skip_points_and_sms', value)
-
-def get_skip_points_and_sms():
-    return getattr(_thread_locals, 'skip_points_and_sms', False)
+logger = logging.getLogger(__name__)
 
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -3459,8 +3451,6 @@ class ApplyDiscountCodeAPIView(APIView):
         now_j = jdatetime.datetime.now().date()
         discount_obj = room_discount or hotel_discount
 
-        logger.debug(f"discount_obj.discount_value: {discount_obj.discount_value}")
-
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3479,12 +3469,16 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.user_level and discount_obj.user_level != user_level:
             return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی امتیاز مورد نیاز برای کد تخفیف
+        # بررسی امتیاز مورد نیاز (بدون کسر، چون کسر در paid انجام می‌شه)
         user_points = getattr(request.user, 'customer_points', None)
         if user_points and discount_obj.required_points > user_points.points:
             return Response({"error": "امتیاز کافی برای استفاده از این کد تخفیف ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # بررسی اینکه کاربر قبلاً از کد تخفیف استفاده نکرده باشد
+        # بررسی remaining_uses
+        if discount_obj.remaining_uses <= 0:
+            return Response({"error": "دفعات استفاده از این کد تخفیف به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
+
+        # بررسی استفاده قبلی توسط کاربر (با reward_claimed=True)
         if hotel_discount:
             activation_exists = DiscountActivationRecord.objects.filter(
                 user=request.user,
@@ -3504,7 +3498,7 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
-            # حذف رکورد قبلی DiscountActivationRecord اگر وجود داشته باشد و reward_claimed=False باشد
+            # حذف رکورد قبلی با reward_claimed=False
             if hotel_discount:
                 DiscountActivationRecord.objects.filter(
                     user=request.user,
@@ -3520,7 +3514,7 @@ class ApplyDiscountCodeAPIView(APIView):
                     reward_claimed=False
                 ).delete()
 
-            # ایجاد رکورد جدید DiscountActivationRecord با reward_claimed=False
+            # ایجاد رکورد جدید با reward_claimed=False (فعال‌سازی موقت برای محاسبه قیمت)
             if hotel_discount:
                 activation_record = DiscountActivationRecord.objects.create(
                     user=request.user,
@@ -3536,33 +3530,15 @@ class ApplyDiscountCodeAPIView(APIView):
                     reward_claimed=False
                 )
 
-            # کسر امتیاز اگر لازم باشد
-            if discount_obj.required_points > 0:
-                customer_points, created = CustomerClubPoint.objects.get_or_create(
-                    user=request.user,
-                    defaults={'points': 0}
-                )
-                customer_points.points -= discount_obj.required_points
-                set_skip_points_and_sms(True)
-                customer_points.save()
-                set_skip_points_and_sms(False)
-                logger.info(f"امتیاز {discount_obj.required_points} از کاربر {request.user.phone_number} برای کد تخفیف {code} کسر شد.")
-                send_customer_club_deduct_sms(
-                    phone_number=request.user.phone_number,
-                    user_name=request.user.first_name or request.user.phone_number,
-                    deducted_points=discount_obj.required_points,
-                    current_points=customer_points.points
-                )
+            # *** حذف بخش کسر امتیاز از اینجا - به سیگنال paid منتقل شد ***
 
-            # محاسبه قیمت جدید با تخفیف
+            # محاسبه قیمت جدید با تخفیف (بدون ذخیره دائمی استفاده)
             reservation.applied_discount_code = code
             discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
             total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
 
             new_total_discount = discount_value
             new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
-
-            logger.debug(f"discount_value: {discount_value}, new_total_discount: {new_total_discount}, final_without_promo: {final_without_promo}, new_final_price: {new_final_price}")
 
             reservation.discount = new_total_discount
             reservation.final_price = new_final_price
@@ -3608,7 +3584,7 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "هیچ کد تخفیفی برای حذف وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # حذف رکورد DiscountActivationRecord با reward_claimed=False
+            # حذف رکورد با reward_claimed=False
             discount_obj = RoomDiscountCode.objects.filter(code__iexact=reservation.applied_discount_code).first() or \
                           HotelDiscountCode.objects.filter(code__iexact=reservation.applied_discount_code).first()
             if discount_obj:
@@ -3620,23 +3596,7 @@ class ApplyDiscountCodeAPIView(APIView):
                 ).delete()
                 logger.debug(f"DiscountActivationRecord برای کد تخفیف {reservation.applied_discount_code} حذف شد.")
 
-                # بازگرداندن امتیاز اگر کد تخفیف نیاز به امتیاز داشته باشد
-                if discount_obj.required_points > 0:
-                    customer_points, created = CustomerClubPoint.objects.get_or_create(
-                        user=request.user,
-                        defaults={'points': 0}
-                    )
-                    customer_points.points += discount_obj.required_points
-                    set_skip_points_and_sms(True)
-                    customer_points.save()
-                    set_skip_points_and_sms(False)
-                    logger.info(f"امتیاز {discount_obj.required_points} به کاربر {request.user.phone_number} برای حذف کد تخفیف {reservation.applied_discount_code} بازگردانده شد.")
-                    send_customer_club_sms(
-                        phone_number=request.user.phone_number,
-                        user_name=request.user.first_name or request.user.phone_number,
-                        added_points=discount_obj.required_points,
-                        current_points=customer_points.points
-                    )
+                # *** حذف بخش بازگرداندن امتیاز - چون کسر در paid هست، بازگردانی هم در رد رزرو مدیریت می‌شه ***
 
             total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
             reservation.discount = Decimal('0')
@@ -3661,6 +3621,7 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
+        
         
         
         

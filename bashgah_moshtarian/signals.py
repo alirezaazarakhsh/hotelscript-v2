@@ -35,7 +35,7 @@ def send_club_points_sms(sender, instance, created, **kwargs):
         return
 
     added_points = instance.points - getattr(instance, '_previous_points', 0)
-    if added_points < 0:  # فقط برای کاهش امتیاز SMS ارسال شود
+    if added_points < 0:  # فقط برای کاهش امتیاز (تخفیف) SMS ارسال شود
         logger.info(f"کاهش امتیاز برای کاربر {instance.user.phone_number}: {abs(added_points)} (امتیاز فعلی: {instance.points})")
         user_name = instance.user.first_name or instance.user.phone_number
         send_customer_club_deduct_sms(
@@ -45,7 +45,7 @@ def send_club_points_sms(sender, instance, created, **kwargs):
             current_points=instance.points
         )
     else:
-        logger.info(f"هیچ SMS برای افزایش امتیاز کاربر {instance.user.phone_number} ارسال نشد.")
+        logger.info(f"هیچ SMS برای افزایش امتیاز کاربر {instance.user.phone_number} ارسال نشد.")  # افزایش در رزرواسیون مدیریت می‌شود
 
 @receiver(post_save, sender=RoomDiscountCode)
 @receiver(post_save, sender=ShoppingCenterDiscountCode)
