@@ -16,20 +16,10 @@ from .models import (
 )
 from reservation.sms.sms import send_room_availability_sms
 from customer_club.models import CustomerClubPoint
-from customer_club.sms.sms import send_customer_club_add_sms, send_customer_club_deduct_sms
-from threading import Timer
+from customer_club.sms.sms import send_customer_club_add_sms
 import jdatetime
 
 logger = logging.getLogger(__name__)
-
-# تابع برای ارسال SMS کسر با تاخیر 2 دقیقه
-def delayed_send_deduct_sms(phone_number, user_name, deducted_points, current_points):
-    send_customer_club_deduct_sms(
-        phone_number=phone_number,
-        user_name=user_name,
-        deducted_points=deducted_points,
-        current_points=current_points
-    )
 
 # متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
@@ -198,7 +188,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
        - تخصیص امتیازهای باشگاه مشتریان و ارسال SMS افزایش امتیاز بلافاصله.
        - اگر کد تخفیف اعمال شده باشد، reward_claimed=True تنظیم می‌شود و کاربر به activated_users اضافه می‌شود.
        - کاهش remaining_uses در مدل کد تخفیف.
-       - امتیاز در ActivateDiscountCodeView کسر شده، پس اینجا کسر نمی‌شود.
+       - امتیاز در ActivateDiscountCodeView کسر شده، پس اینجا کسر نمی‌شود و پیامک کسر امتیاز ارسال نمی‌شود.
     2. اگر wallet_withdrawal_amount > 0 باشد، مبلغ از کیف پول کسر می‌شود.
     3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود، اما رکورد DiscountActivationRecord حفظ می‌شود.
     4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
@@ -334,7 +324,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     logger.error(f"کد تخفیف {code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
                     return
 
-                # بررسی وجود رکورد فعال‌سازی قبلی
+                # بررسی یا ایجاد رکورد فعال‌سازی
                 activation_filter = {
                     'user': reservation.buyer,
                     'discount_type': discount_type,
@@ -343,13 +333,24 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
 
                 if not activation_record:
-                    logger.error(f"رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number} یافت نشد.")
-                    return
+                    logger.info(f"رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number} یافت نشد. ایجاد رکورد جدید...")
+                    try:
+                        activation_record = DiscountActivationRecord.objects.create(
+                            user=reservation.buyer,
+                            discount_type=discount_type,
+                            **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
+                            reward_claimed=False
+                        )
+                        logger.info(f"رکورد فعال‌سازی جدید ایجاد شد: ID={activation_record.id}")
+                    except Exception as e:
+                        logger.error(f"خطا در ایجاد رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number}: {str(e)}")
+                        return
+
+                # بررسی و به‌روزرسانی reward_claimed
                 if activation_record.reward_claimed:
                     logger.info(f"کد تخفیف {code} قبلاً برای کاربر {reservation.buyer.phone_number} استفاده شده است (reward_claimed=True).")
                     return
 
-                # به‌روزرسانی DiscountActivationRecord به reward_claimed=True
                 logger.info(f"به‌روزرسانی DiscountActivationRecord برای رزرو {reservation.tracking_code}, user={reservation.buyer.phone_number}, code={code}")
                 activation_record.reward_claimed = True
                 activation_record.save(update_fields=['reward_claimed'])
