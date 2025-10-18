@@ -3439,7 +3439,7 @@ class ApplyDiscountCodeAPIView(APIView):
         responses={
             200: openapi.Response(description="کد تخفیف با موفقیت اعمال شد."),
             400: openapi.Response(description="کد تخفیف نامعتبر، منقضی شده یا فعال نشده است."),
-            403: openapi.Response(description="کد قبلاً استفاده شده است، رزرو دیگری با این کد دارید یا امتیاز کافی نیست."),
+            403: openapi.Response(description="کد قبلاً به‌صورت نهایی استفاده شده است یا امتیاز کافی نیست."),
             404: openapi.Response(description="رزرو یافت نشد.")
         },
         tags=["reservation-api"]
@@ -3500,15 +3500,15 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.remaining_uses <= 0:
             return Response({"error": "دفعات استفاده از این کد تخفیف به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
 
-        # بررسی استفاده قبلی کاربر (حتی در رزروهای موقت)
+        # بررسی استفاده نهایی قبلی کاربر (فقط با reward_claimed=True)
         activation_filter = {
             'user': request.user,
             'discount_type': 'room' if room_discount else 'hotel',
+            'reward_claimed': True,
             **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
         }
-        activation_exists = DiscountActivationRecord.objects.filter(**activation_filter).exists()
-        if activation_exists:
-            return Response({"error": "شما قبلاً از این کد تخفیف در رزرو دیگری استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
+        if DiscountActivationRecord.objects.filter(**activation_filter).exists():
+            return Response({"error": "شما قبلاً از این کد تخفیف به‌صورت نهایی استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             # حذف رکورد قبلی با reward_claimed=False برای رزروهای دیگر این کاربر
@@ -3519,13 +3519,16 @@ class ApplyDiscountCodeAPIView(APIView):
                 reward_claimed=False
             ).delete()
 
-            # ایجاد رکورد جدید با reward_claimed=False
-            activation_record = DiscountActivationRecord.objects.create(
-                user=request.user,
-                discount_type='room' if room_discount else 'hotel',
+            # بررسی اینکه کد تخفیف قبلاً فعال شده است
+            activation_filter_temp = {
+                'user': request.user,
+                'discount_type': 'room' if room_discount else 'hotel',
+                'reward_claimed': False,
                 **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
-                reward_claimed=False
-            )
+            }
+            activation_record = DiscountActivationRecord.objects.filter(**activation_filter_temp).first()
+            if not activation_record:
+                return Response({"error": "لطفاً ابتدا کد تخفیف را فعال کنید."}, status=status.HTTP_400_BAD_REQUEST)
 
             # محاسبه قیمت جدید با تخفیف
             reservation.applied_discount_code = code
