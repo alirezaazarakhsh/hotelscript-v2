@@ -196,8 +196,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     وظایف:
     1. اگر payment_status به 'paid' تغییر کند:
        - تخصیص امتیازهای باشگاه مشتریان و ارسال SMS افزایش امتیاز بلافاصله.
-       - اگر کد تخفیف اعمال شده باشد، reward_claimed=True تنظیم می‌شود.
-       - کاهش remaining_uses و افزودن کاربر به activated_users.
+       - اگر کد تخفیف اعمال شده باشد، reward_claimed=True تنظیم می‌شود و کاربر به activated_users اضافه می‌شود.
+       - کاهش remaining_uses در مدل کد تخفیف.
        - امتیاز در ActivateDiscountCodeView کسر شده، پس اینجا کسر نمی‌شود.
     2. اگر wallet_withdrawal_amount > 0 باشد، مبلغ از کیف پول کسر می‌شود.
     3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود، اما رکورد DiscountActivationRecord حفظ می‌شود.
@@ -356,11 +356,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
 
                 # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
-                if discount_obj.remaining_uses > 0:
-                    discount_obj.remaining_uses -= 1
-                    discount_obj.activated_users.add(reservation.buyer)
-                    discount_obj.save(update_fields=['remaining_uses'])
-                    logger.debug(f"remaining_uses به‌روزرسانی شد: {discount_obj.remaining_uses}")
+                try:
+                    discount_obj.apply_discount(reservation.buyer)
+                    logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
+                except ValueError as e:
+                    logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
+                    return
 
             # حذف قفل کش
             cache.delete(cache_key_points)
