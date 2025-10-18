@@ -1,7 +1,7 @@
 import logging
 from django.db.models.signals import pre_save, post_save, m2m_changed
 from django.dispatch import receiver
-from threading import Timer
+from threading import Timer, local
 
 from pydantic import ValidationError
 from authentication.models import BaseUser
