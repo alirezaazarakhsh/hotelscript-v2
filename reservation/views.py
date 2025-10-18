@@ -3405,6 +3405,24 @@ class PassengerListForReservationView(generics.GenericAPIView):
 # ای پی ای کد تخفیف برای رزرو 
 logger = logging.getLogger(__name__)
 
+# تابع برای ارسال SMS کسر با تاخیر 2 دقیقه
+def delayed_send_deduct_sms(phone_number, user_name, deducted_points, current_points):
+    send_customer_club_deduct_sms(
+        phone_number=phone_number,
+        user_name=user_name,
+        deducted_points=deducted_points,
+        current_points=current_points
+    )
+
+# متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
+_thread_locals = local()
+
+def set_skip_points_and_sms(value):
+    setattr(_thread_locals, 'skip_points_and_sms', value)
+
+def get_skip_points_and_sms():
+    return getattr(_thread_locals, 'skip_points_and_sms', False)
+
 class ApplyDiscountCodeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3421,7 +3439,7 @@ class ApplyDiscountCodeAPIView(APIView):
         responses={
             200: openapi.Response(description="کد تخفیف با موفقیت اعمال شد."),
             400: openapi.Response(description="کد تخفیف نامعتبر، منقضی شده یا فعال نشده است."),
-            403: openapi.Response(description="کد قبلاً استفاده شده است یا امتیاز کافی نیست."),
+            403: openapi.Response(description="کد قبلاً استفاده شده است، رزرو دیگری با این کد دارید یا امتیاز کافی نیست."),
             404: openapi.Response(description="رزرو یافت نشد.")
         },
         tags=["reservation-api"]
@@ -3438,6 +3456,9 @@ class ApplyDiscountCodeAPIView(APIView):
         except Reservationhotel.DoesNotExist:
             return Response({"error": "رزرو با کد پیگیری وارد شده یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
+        if reservation.payment_status == 'paid' or reservation.capacity_status == 'rejected':
+            return Response({"error": "نمی‌توان روی رزرو پرداخت‌شده یا لغو‌شده تخفیف اعمال کرد."}, status=status.HTTP_400_BAD_REQUEST)
+
         room_discount = None
         hotel_discount = None
         try:
@@ -3448,28 +3469,29 @@ class ApplyDiscountCodeAPIView(APIView):
             except HotelDiscountCode.DoesNotExist:
                 return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        now_j = jdatetime.datetime.now().date()
         discount_obj = room_discount or hotel_discount
+        now_j = jdatetime.datetime.now().date()
 
+        # بررسی انقضای کد تخفیف
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # بررسی دسترسی کاربر به کد تخفیف
         if discount_obj.users.exists() and request.user not in discount_obj.users.all():
             return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # بررسی سطح کاربری
+        user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
+        if discount_obj.user_level and discount_obj.user_level != user_level:
+            return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # بررسی تطابق اتاق یا هتل
         if room_discount and not any(rr.room == room_discount.room for rr in reservation.reservation_rooms.all()):
             return Response({"error": "این کد تخفیف برای اتاق‌های این رزرو معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
         elif hotel_discount and reservation.reservation_rooms.first().room.hotel != hotel_discount.hotel:
             return Response({"error": "این کد تخفیف برای این هتل معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if reservation.payment_status == 'paid' or reservation.capacity_status == 'rejected':
-            return Response({"error": "نمی‌توان روی رزرو پرداخت‌شده یا لغو‌شده تخفیف اعمال کرد."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
-        if discount_obj.user_level and discount_obj.user_level != user_level:
-            return Response({"error": "این کد تخفیف برای سطح کاربری شما فعال نیست."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # بررسی امتیاز مورد نیاز (بدون کسر، چون کسر در paid انجام می‌شه)
+        # بررسی امتیاز مورد نیاز
         user_points = getattr(request.user, 'customer_points', None)
         if user_points and discount_obj.required_points > user_points.points:
             return Response({"error": "امتیاز کافی برای استفاده از این کد تخفیف ندارید."}, status=status.HTTP_403_FORBIDDEN)
@@ -3478,61 +3500,34 @@ class ApplyDiscountCodeAPIView(APIView):
         if discount_obj.remaining_uses <= 0:
             return Response({"error": "دفعات استفاده از این کد تخفیف به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
 
-        # بررسی استفاده قبلی توسط کاربر (با reward_claimed=True)
-        if hotel_discount:
-            activation_exists = DiscountActivationRecord.objects.filter(
-                user=request.user,
-                hotel_discount_code=hotel_discount,
-                discount_type='hotel',
-                reward_claimed=True
-            ).exists()
-        else:
-            activation_exists = DiscountActivationRecord.objects.filter(
-                user=request.user,
-                room_discount_code=room_discount,
-                discount_type='room',
-                reward_claimed=True
-            ).exists()
-
+        # بررسی استفاده قبلی کاربر (حتی در رزروهای موقت)
+        activation_filter = {
+            'user': request.user,
+            'discount_type': 'room' if room_discount else 'hotel',
+            **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
+        }
+        activation_exists = DiscountActivationRecord.objects.filter(**activation_filter).exists()
         if activation_exists:
-            return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "شما قبلاً از این کد تخفیف در رزرو دیگری استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
-            # حذف رکورد قبلی با reward_claimed=False
-            if hotel_discount:
-                DiscountActivationRecord.objects.filter(
-                    user=request.user,
-                    hotel_discount_code=hotel_discount,
-                    discount_type='hotel',
-                    reward_claimed=False
-                ).delete()
-            else:
-                DiscountActivationRecord.objects.filter(
-                    user=request.user,
-                    room_discount_code=room_discount,
-                    discount_type='room',
-                    reward_claimed=False
-                ).delete()
+            # حذف رکورد قبلی با reward_claimed=False برای رزروهای دیگر این کاربر
+            DiscountActivationRecord.objects.filter(
+                user=request.user,
+                discount_type='room' if room_discount else 'hotel',
+                **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
+                reward_claimed=False
+            ).delete()
 
-            # ایجاد رکورد جدید با reward_claimed=False (فعال‌سازی موقت برای محاسبه قیمت)
-            if hotel_discount:
-                activation_record = DiscountActivationRecord.objects.create(
-                    user=request.user,
-                    hotel_discount_code=hotel_discount,
-                    discount_type='hotel',
-                    reward_claimed=False
-                )
-            else:
-                activation_record = DiscountActivationRecord.objects.create(
-                    user=request.user,
-                    room_discount_code=room_discount,
-                    discount_type='room',
-                    reward_claimed=False
-                )
+            # ایجاد رکورد جدید با reward_claimed=False
+            activation_record = DiscountActivationRecord.objects.create(
+                user=request.user,
+                discount_type='room' if room_discount else 'hotel',
+                **({'room_discount_code': room_discount} if room_discount else {'hotel_discount_code': hotel_discount}),
+                reward_claimed=False
+            )
 
-            # *** حذف بخش کسر امتیاز از اینجا - به سیگنال paid منتقل شد ***
-
-            # محاسبه قیمت جدید با تخفیف (بدون ذخیره دائمی استفاده)
+            # محاسبه قیمت جدید با تخفیف
             reservation.applied_discount_code = code
             discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
             total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
@@ -3548,7 +3543,7 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_half_day_charge = total_half_day_charge
             reservation.total_extra_passenger_charge = total_extra
 
-            set_skip_points_and_sms(True)  # جلوگیری از اجرای سیگنال Reservationhotel
+            set_skip_points_and_sms(True)
             reservation._skip_price_calculation = True
             reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
             delattr(reservation, '_skip_price_calculation')
@@ -3584,7 +3579,6 @@ class ApplyDiscountCodeAPIView(APIView):
             return Response({"error": "هیچ کد تخفیفی برای حذف وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # حذف رکورد با reward_claimed=False
             discount_obj = RoomDiscountCode.objects.filter(code__iexact=reservation.applied_discount_code).first() or \
                           HotelDiscountCode.objects.filter(code__iexact=reservation.applied_discount_code).first()
             if discount_obj:
@@ -3596,8 +3590,6 @@ class ApplyDiscountCodeAPIView(APIView):
                 ).delete()
                 logger.debug(f"DiscountActivationRecord برای کد تخفیف {reservation.applied_discount_code} حذف شد.")
 
-                # *** حذف بخش بازگرداندن امتیاز - چون کسر در paid هست، بازگردانی هم در رد رزرو مدیریت می‌شه ***
-
             total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
             reservation.discount = Decimal('0')
             reservation.final_price = final_without_promo - room_fixed_discount
@@ -3608,7 +3600,7 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_extra_passenger_charge = total_extra
             reservation.applied_discount_code = None
 
-            set_skip_points_and_sms(True)  # جلوگیری از اجرای سیگنال Reservationhotel
+            set_skip_points_and_sms(True)
             reservation._skip_price_calculation = True
             reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])
             delattr(reservation, '_skip_price_calculation')
@@ -3621,7 +3613,6 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
-        
         
         
         
