@@ -195,10 +195,10 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     
     وظایف:
     1. اگر payment_status به 'paid' تغییر کند:
-       - تخصیص امتیازهای باشگاه مشتریان.
-       - اگر کد تخفیف اعمال شده باشد، DiscountActivationRecord با reward_claimed=True ایجاد یا به‌روزرسانی می‌شود.
+       - تخصیص امتیازهای باشگاه مشتریان و ارسال SMS افزایش امتیاز بلافاصله.
+       - اگر کد تخفیف اعمال شده باشد، فوراً DiscountActivationRecord با reward_claimed=True ایجاد یا به‌روزرسانی می‌شود.
        - کاهش remaining_uses و افزودن کاربر به activated_users.
-       - کسر امتیاز مورد نیاز کد تخفیف (اگر لازم باشد).
+       - کسر امتیاز مورد نیاز کد تخفیف (اگر لازم باشد) و ارسال SMS کسر با تاخیر 2 دقیقه پس از SMS افزایش.
     2. اگر wallet_withdrawal_amount > 0 باشد، مبلغ از کیف پول کسر می‌شود.
     3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود و رکوردهای موقت تخفیف حذف می‌شوند.
     4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
@@ -249,6 +249,13 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         customer_points.points += discount_obj.required_points
                         customer_points.save()
                         logger.info(f"امتیاز {discount_obj.required_points} به کاربر {instance.buyer.phone_number} برای رد رزرو {instance.tracking_code} بازگردانده شد.")
+                        # ارسال SMS اضافه امتیاز بازگردانده
+                        send_customer_club_add_sms(
+                            phone_number=instance.buyer.phone_number,
+                            user_name=instance.buyer.first_name or instance.buyer.phone_number,
+                            added_points=discount_obj.required_points,
+                            current_points=customer_points.points
+                        )
 
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
@@ -287,7 +294,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 set_skip_points_and_sms(False)
                 logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
 
-                # ارسال SMS اضافه امتیاز
+                # ارسال SMS افزایش امتیاز بلافاصله
                 send_customer_club_add_sms(
                     phone_number=reservation.buyer.phone_number,
                     user_name=reservation.buyer.first_name or reservation.buyer.phone_number,
@@ -391,10 +398,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         logger.error(f"امتیاز کافی برای کسر {discount_obj.required_points} از کاربر {instance.buyer.phone_number} وجود ندارد.")
                         raise ValidationError("امتیاز کافی برای استفاده از کد تخفیف نیست.")
                     customer_points.points -= discount_obj.required_points
+                    set_skip_points_and_sms(True)
                     customer_points.save()
+                    set_skip_points_and_sms(False)
                     logger.info(f"امتیاز {discount_obj.required_points} از کاربر {instance.buyer.phone_number} برای کد تخفیف {instance.applied_discount_code} کسر شد.")
 
-                    # ارسال SMS کسر با تاخیر 2 دقیقه
+                    # ارسال SMS کسر با تاخیر 2 دقیقه پس از SMS افزایش امتیاز
                     Timer(120, delayed_send_deduct_sms, args=(
                         instance.buyer.phone_number,
                         instance.buyer.first_name or instance.buyer.phone_number,
