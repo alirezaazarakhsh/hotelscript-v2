@@ -200,7 +200,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
        - کاهش remaining_uses و افزودن کاربر به activated_users.
        - امتیاز در ActivateDiscountCodeView کسر شده، پس اینجا کسر نمی‌شود.
     2. اگر wallet_withdrawal_amount > 0 باشد، مبلغ از کیف پول کسر می‌شود.
-    3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود و رکوردهای موقت تخفیف حذف می‌شوند.
+    3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود، اما رکورد DiscountActivationRecord حفظ می‌شود.
     4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
     """
     if get_skip_points_and_sms():
@@ -228,36 +228,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
                 logger.debug(f"Inventory reverted for room {room.id}: quantity={r.quantity}, is_auto_approved={is_auto_approved}")
 
-            # حذف رکورد موقت DiscountActivationRecord و بازگردانی امتیاز
+            # رکورد DiscountActivationRecord حذف نمی‌شود تا کد تخفیف در لیست جوایز باقی بماند
             if instance.applied_discount_code:
-                discount_obj = RoomDiscountCode.objects.filter(code__iexact=instance.applied_discount_code).first() or \
-                              HotelDiscountCode.objects.filter(code__iexact=instance.applied_discount_code).first()
-                if discount_obj:
-                    activation_record = DiscountActivationRecord.objects.filter(
-                        user=instance.buyer,
-                        discount_type='room' if isinstance(discount_obj, RoomDiscountCode) else 'hotel',
-                        **({'room_discount_code': discount_obj} if isinstance(discount_obj, RoomDiscountCode) else {'hotel_discount_code': discount_obj}),
-                        reward_claimed=False
-                    ).first()
-                    if activation_record:
-                        activation_record.delete()
-                        logger.debug(f"DiscountActivationRecord موقت برای کد تخفیف {instance.applied_discount_code} حذف شد.")
-
-                        # بازگردانی امتیاز اگر در زمان فعال‌سازی کسر شده باشد
-                        if discount_obj.required_points > 0:
-                            customer_points, _ = CustomerClubPoint.objects.get_or_create(
-                                user=instance.buyer,
-                                defaults={'points': 0}
-                            )
-                            customer_points.points += discount_obj.required_points
-                            customer_points.save()
-                            logger.info(f"امتیاز {discount_obj.required_points} به کاربر {instance.buyer.phone_number} برای رد رزرو {instance.tracking_code} بازگردانده شد.")
-                            send_customer_club_add_sms(
-                                phone_number=instance.buyer.phone_number,
-                                user_name=instance.buyer.first_name or instance.buyer.phone_number,
-                                added_points=discount_obj.required_points,
-                                current_points=customer_points.points
-                            )
+                logger.debug(f"رکورد DiscountActivationRecord برای کد تخفیف {instance.applied_discount_code} در زمان لغو رزرو حفظ می‌شود.")
 
         cache.delete_many([cache_key_approval, cache_key_payment])
         timer = 0
