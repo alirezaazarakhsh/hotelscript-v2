@@ -11,11 +11,12 @@ from decimal import Decimal
 from django.db import transaction
 from .models import (
     Reservationhotel, ReservationRoom, ReservationRoomPassenger, 
-    RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, 
     Passenger, RoomDatePrice, Room, Wallet
 )
+from bashgah_moshtarian.models import (
+    RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, CustomerClubPoint
+)
 from reservation.sms.sms import send_room_availability_sms
-from bashgah_moshtarian.models import CustomerClubPoint
 from bashgah_moshtarian.sms.sms import send_customer_club_add_sms
 import jdatetime
 
@@ -236,6 +237,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 logger.info(f"Points already assigned for {reservation.tracking_code}, skipping.")
                 return
 
+            # لاگ کردن applied_discount_code برای دیباگ
+            logger.debug(f"applied_discount_code برای رزرو {reservation.tracking_code}: {reservation.applied_discount_code}")
+
             # تنظیم قفل کش
             cache.set(cache_key_points, True, timeout=60)
 
@@ -275,7 +279,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             reservation.save(update_fields=['points_assigned'])
 
             # مدیریت کد تخفیف
-            if reservation.applied_discount_code:
+            if not reservation.applied_discount_code:
+                logger.warning(f"applied_discount_code برای رزرو {reservation.tracking_code} خالی است.")
+            else:
                 logger.debug(f"شروع اعمال کد تخفیف برای رزرو {reservation.tracking_code}")
                 code = reservation.applied_discount_code.upper()
                 discount_obj = None
@@ -294,32 +300,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
                         return
 
-                # بررسی اعتبار کد تخفیف برای اتاق‌ها یا هتل
-                if discount_type == 'hotel':
-                    rooms = reservation.reservation_rooms.all()
-                    if not rooms.exists():
-                        logger.error(f"هیچ اتاقی برای رزرو {reservation.tracking_code} یافت نشد.")
-                        return
-                    if not all(rr.room.hotel == discount_obj.hotel for rr in rooms):
-                        logger.error(f"کد تخفیف هتل {code} برای اتاق‌های این رزرو معتبر نیست.")
-                        return
-                elif discount_type == 'room':
-                    if not any(rr.room == discount_obj.room for rr in reservation.reservation_rooms.all()):
-                        logger.error(f"کد تخفیف اتاق {code} برای اتاق‌های این رزرو معتبر نیست.")
-                        return
-
-                # چک‌های اضافی
-                now_j = jdatetime.datetime.now().date()
-                if discount_obj.expires_at and discount_obj.expires_at < now_j:
-                    logger.error(f"کد تخفیف {code} منقضی شده است.")
-                    return
-                if discount_obj.users.exists() and reservation.buyer not in discount_obj.users.all():
-                    logger.error(f"این کد تخفیف برای کاربر {reservation.buyer.phone_number} در دسترس نیست.")
-                    return
-                user_level = getattr(getattr(reservation.buyer, 'natural_profile', None), 'level', None)
-                if discount_obj.user_level and discount_obj.user_level != user_level:
-                    logger.error(f"این کد تخفیف برای سطح کاربری کاربر {reservation.buyer.phone_number} فعال نیست.")
-                    return
+                # حداقل بررسی برای اطمینان از اعتبار کد
                 if discount_obj.remaining_uses <= 0:
                     logger.error(f"کد تخفیف {code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
                     return
@@ -339,21 +320,22 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                             user=reservation.buyer,
                             discount_type=discount_type,
                             **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-                            reward_claimed=False
+                            reward_claimed=False,
+                            activated_at=jdatetime.datetime.now()
                         )
                         logger.info(f"رکورد فعال‌سازی جدید ایجاد شد: ID={activation_record.id}")
                     except Exception as e:
                         logger.error(f"خطا در ایجاد رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number}: {str(e)}")
                         return
 
-                # به‌روزرسانی reward_claimed به True هنگام پرداخت
+                # به‌روزرسانی reward_claimed به True
                 if not activation_record.reward_claimed:
                     logger.info(f"به‌روزرسانی DiscountActivationRecord برای رزرو {reservation.tracking_code}, user={reservation.buyer.phone_number}, code={code}")
                     activation_record.reward_claimed = True
                     activation_record.save(update_fields=['reward_claimed'])
                     logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
 
-                # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
+                # افزودن کاربر به activated_users و کاهش remaining_uses
                 if reservation.buyer not in discount_obj.activated_users.all():
                     try:
                         set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
@@ -363,7 +345,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         set_skip_points_and_sms(False)
                         logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
                     except Exception as e:
-                        logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
+                        logger.error(f"خطا در افزودن کاربر به activated_users برای کد تخفیف {code}: {str(e)}")
                         return
                 else:
                     logger.warning(f"کاربر {reservation.buyer.phone_number} قبلاً در activated_users کد تخفیف {code} وجود دارد.")
