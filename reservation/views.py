@@ -3774,8 +3774,8 @@ class HotelSEOView(APIView):
                 }
             ),
             404: "هتل یا سئو پیدا نشد"
-        }
-        tags=["hotel-seo"]
+        },
+         tags=["hotel-seo"]
     )
     def get(self, request, hotel_slug):
         try:
