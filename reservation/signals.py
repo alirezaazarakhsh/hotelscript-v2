@@ -1,3 +1,4 @@
+# reservation/signals.py
 import logging
 import re
 from django.db.models.signals import post_save, post_delete
@@ -15,8 +16,8 @@ from .models import (
     Passenger, RoomDatePrice, Room, Wallet
 )
 from reservation.sms.sms import send_room_availability_sms
-from customer_club.models import CustomerClubPoint
-from customer_club.sms.sms import send_customer_club_add_sms
+from bashgah_moshtarian.models import CustomerClubPoint
+from bashgah_moshtarian.sms.sms import send_customer_club_add_sms
 import jdatetime
 
 logger = logging.getLogger(__name__)
@@ -323,6 +324,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 if discount_obj.remaining_uses <= 0:
                     logger.error(f"کد تخفیف {code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
                     return
+                if reservation.buyer in discount_obj.activated_users.all():
+                    logger.error(f"کاربر {reservation.buyer.phone_number} قبلاً از کد تخفیف {code} استفاده کرده است.")
+                    return
 
                 # بررسی یا ایجاد رکورد فعال‌سازی
                 activation_filter = {
@@ -346,19 +350,18 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         logger.error(f"خطا در ایجاد رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number}: {str(e)}")
                         return
 
-                # بررسی و به‌روزرسانی reward_claimed
-                if activation_record.reward_claimed:
-                    logger.info(f"کد تخفیف {code} قبلاً برای کاربر {reservation.buyer.phone_number} استفاده شده است (reward_claimed=True).")
-                    return
-
-                logger.info(f"به‌روزرسانی DiscountActivationRecord برای رزرو {reservation.tracking_code}, user={reservation.buyer.phone_number}, code={code}")
-                activation_record.reward_claimed = True
-                activation_record.save(update_fields=['reward_claimed'])
-                logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
+                # به‌روزرسانی reward_claimed به True هنگام پرداخت
+                if not activation_record.reward_claimed:
+                    logger.info(f"به‌روزرسانی DiscountActivationRecord برای رزرو {reservation.tracking_code}, user={reservation.buyer.phone_number}, code={code}")
+                    activation_record.reward_claimed = True
+                    activation_record.save(update_fields=['reward_claimed'])
+                    logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
 
                 # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
                 try:
+                    set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
                     discount_obj.apply_discount(reservation.buyer)
+                    set_skip_points_and_sms(False)
                     logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
                 except ValueError as e:
                     logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")

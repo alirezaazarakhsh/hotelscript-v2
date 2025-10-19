@@ -3429,7 +3429,7 @@ class ApplyDiscountCodeAPIView(APIView):
         responses={
             200: openapi.Response(description="کد تخفیف با موفقیت اعمال شد."),
             400: openapi.Response(description="کد تخفیف نامعتبر، منقضی شده یا فعال نشده است."),
-            403: openapi.Response(description="کد قبلاً به‌صورت نهایی استفاده شده است یا امتیاز کافی نیست."),
+            403: openapi.Response(description="کد قبلاً به‌صورت نهایی استفاده شده است یا امتیاز کافی نیست یا کاربر قبلاً از این کد استفاده کرده است."),
             404: openapi.Response(description="رزرو یافت نشد.")
         },
         tags=["reservation-api"]
@@ -3492,6 +3492,11 @@ class ApplyDiscountCodeAPIView(APIView):
             logger.warning(f"دفعات استفاده از کد تخفیف {code} به پایان رسیده است: remaining_uses={discount_obj.remaining_uses}")
             return Response({"error": "دفعات استفاده از این کد تخفیف به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
 
+        # چک اضافی برای جلوگیری از استفاده چندباره توسط کاربر
+        if request.user in discount_obj.activated_users.all():
+            logger.warning(f"کاربر {request.user.phone_number} قبلاً از کد تخفیف {code} استفاده کرده است.")
+            return Response({"error": "این کاربر قبلاً از این کد تخفیف استفاده کرده است."}, status=status.HTTP_403_FORBIDDEN)
+
         activation_filter = {
             'user': request.user,
             'discount_type': 'room' if room_discount else 'hotel',
@@ -3501,6 +3506,10 @@ class ApplyDiscountCodeAPIView(APIView):
         if not activation_record:
             logger.error(f"رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {request.user.phone_number} یافت نشد")
             return Response({"error": "لطفاً ابتدا کد تخفیف را فعال کنید."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if activation_record.reward_claimed:
+            logger.warning(f"رکورد فعال‌سازی برای کد تخفیف {code} قبلاً استفاده شده است: reward_claimed=True")
+            return Response({"error": "این کد تخفیف قبلاً استفاده شده است."}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             reservation.applied_discount_code = code
@@ -3583,6 +3592,7 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=status.HTTP_200_OK)
+        
         
         
 # ای پی ای برداشت از کیف پول 
