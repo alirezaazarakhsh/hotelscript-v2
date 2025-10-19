@@ -3753,7 +3753,6 @@ class HotelSEOView(APIView):
     API برای دریافت اطلاعات سئوی یک هتل
     """
     permission_classes = ()  # عمومی
-    tags = ['hotel-seo']
 
     @swagger_auto_schema(
         operation_summary="دریافت متا سئو هتل با slug",
@@ -3776,6 +3775,7 @@ class HotelSEOView(APIView):
             ),
             404: "هتل یا سئو پیدا نشد"
         }
+        tags=["hotel-seo"]
     )
     def get(self, request, hotel_slug):
         try:
