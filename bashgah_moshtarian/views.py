@@ -27,7 +27,7 @@ from .serializers import (
 
 
 # ✅ API کدهای تخفیف اتاق و هتل
-class MyDiscountCodeListView(generics.ListAPIView):
+class MyRoomDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
