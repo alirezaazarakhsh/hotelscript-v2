@@ -357,10 +357,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 if reservation.buyer not in discount_obj.activated_users.all():
                     try:
                         set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
-                        discount_obj.apply_discount(reservation.buyer)
+                        discount_obj.activated_users.add(reservation.buyer)
+                        discount_obj.remaining_uses = max(0, discount_obj.remaining_uses - 1)
+                        discount_obj.save(update_fields=['remaining_uses'])
                         set_skip_points_and_sms(False)
                         logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
-                    except ValueError as e:
+                    except Exception as e:
                         logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
                         return
                 else:
