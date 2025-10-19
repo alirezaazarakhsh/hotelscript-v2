@@ -3775,7 +3775,7 @@ class HotelSEOView(APIView):
             ),
             404: "هتل یا سئو پیدا نشد"
         },
-         tags=["hotel-seo"]
+        tags=["hotel-seo"]
     )
     def get(self, request, hotel_slug):
         try:
@@ -3788,10 +3788,11 @@ class HotelSEOView(APIView):
         except SEOMeta.DoesNotExist:
             return Response({"detail": "سئوی هتل یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        # اگر keywords رشته‌ای باشد، تبدیل به لیست کنیم
+        # تبدیل رشته keywords با "-" به لیست
         if isinstance(seo.keywords, str):
             keywords_list = [k.strip() for k in seo.keywords.split('-') if k.strip()]
         else:
+            # اگر قبلاً JSON بود، مستقیم استفاده می‌کنیم
             keywords_list = seo.keywords
 
         return Response(

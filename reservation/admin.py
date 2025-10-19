@@ -212,49 +212,28 @@ class HotelTagPublicInline(admin.TabularInline):
     verbose_name_plural = _(' تگ‌های عمومی')
 
 
+# Inline برای تگ عمومی
+class HotelTagPublicInline(admin.TabularInline):
+    model = HotelTagPublic
+    extra = 3
+    max_num = 3
+    fields = ('title',)
+    verbose_name = _('تگ عمومی')
+    verbose_name_plural = _('تگ‌های عمومی')
+
+
 # Inline برای SEOMeta
-
-# فرم سفارشی برای SEOMeta
-# فرم سفارشی برای SEOMeta
-class SEOMetaAdminForm(forms.ModelForm):
-    keywords_text = forms.CharField(
-        required=False,
-        label="کلمات کلیدی",
-        help_text='کلمات کلیدی را با - جدا کنید، مثال: هتل-رزرو هتل-هتل های تهران'
-    )
-
-    class Meta:
-        model = SEOMeta
-        fields = ('title_tag', 'description', 'keywords_text')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # مقداردهی اولیه برای نمایش در ادمین
-        if self.instance and self.instance.keywords:
-            self.fields['keywords_text'].initial = '-'.join(self.instance.keywords)
-
-    def save(self, commit=True):
-        # تبدیل رشته به لیست JSON قبل از ذخیره
-        instance = super().save(commit=False)
-        keywords_str = self.cleaned_data.get('keywords_text', '')
-        # جدا کردن با - یا , و حذف فاصله اضافی
-        instance.keywords = [k.strip() for k in re.split('[-,]', keywords_str) if k.strip()]
-        if commit:
-            instance.save()
-        return instance
-
 class SEOMetaInline(admin.StackedInline):
     model = SEOMeta
-    form = SEOMetaAdminForm
     extra = 1
     max_num = 1
     can_delete = False
     verbose_name = 'متا سئو'
-    verbose_name_plural = 'تنظیم سئوی هتل '
+    verbose_name_plural = 'تنظیم سئوی هتل'
     fields = ('title_tag', 'keywords', 'description')
     help_texts = {
         'title_tag': 'عنوان صفحه برای سئو (حداکثر 70 کاراکتر)',
-        'keywords': 'لیست کلمات کلیدی، جدا شده با کاما',
+        'keywords': 'کلمات کلیدی را با "-" جدا کنید، مثل: هتل-رزرو هتل-هتل های تهران',
         'description': 'توضیحات متا برای سئو (حداکثر 160 کاراکتر)',
     }
 
@@ -348,7 +327,6 @@ class HotelAdmin(admin.ModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
-
     
 
 class HotelGalleryImageInline(admin.TabularInline):
