@@ -9,7 +9,7 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import generics
 from drf_yasg import openapi
 from django.db.models import Count, Q, F
-from authentication.models import NaturalProfile  # ایمپورت NaturalProfile از authentication.models
+from authentication.models import NaturalProfile
 from .models import (
     CustomerClubPoint,
     DiscountActivationRecord,
@@ -21,16 +21,14 @@ from .serializers import (
     CustomerClubPointSerializer,
     DiscountActivationRecordSerializer,
     RoomDiscountCodeSerializer,
-    ShoppingCenterDiscountCodeSerializer
+    ShoppingCenterDiscountCodeSerializer,
+    HotelDiscountCodeSerializer
 )
 
 
-
-
-# ✅ API کدهای تخفیف اتاق
-class MyRoomDiscountCodeListView(generics.ListAPIView):
+# ✅ API کدهای تخفیف اتاق و هتل
+class MyDiscountCodeListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
-    serializer_class = RoomDiscountCodeSerializer
 
     def get_queryset(self):
         user = self.request.user
@@ -42,25 +40,54 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             user_level = None
 
         # لیست کدهای فعال شده توسط کاربر
-        activated_codes = DiscountActivationRecord.objects.filter(
+        activated_room_codes = DiscountActivationRecord.objects.filter(
             user=user,
             discount_type='room'
         ).values_list('room_discount_code_id', flat=True)
 
-        return RoomDiscountCode.objects.annotate(
+        activated_hotel_codes = DiscountActivationRecord.objects.filter(
+            user=user,
+            discount_type='hotel'
+        ).values_list('hotel_discount_code_id', flat=True)
+
+        # کوئری برای کدهای تخفیف اتاق
+        room_discounts = RoomDiscountCode.objects.annotate(
             activated_count=Count('activated_users', distinct=True)
         ).filter(
-            ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+            ~Q(id__in=activated_room_codes),
             Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
             Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
             Q(activated_count__lt=F('usage_limit'))
-        ).distinct()
+        )
 
+        # کوئری برای کدهای تخفیف هتل
+        hotel_discounts = HotelDiscountCode.objects.annotate(
+            activated_count=Count('activated_users', distinct=True)
+        ).filter(
+            ~Q(id__in=activated_hotel_codes),
+            Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
+            Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
+            Q(activated_count__lt=F('usage_limit'))
+        )
+
+        # ترکیب دو کوئری‌ست با استفاده از chain
+        from itertools import chain
+        return list(chain(room_discounts, hotel_discounts))
+
+    def get_serializer_class(self):
+        def serializer_class(obj):
+            if isinstance(obj, RoomDiscountCode):
+                return RoomDiscountCodeSerializer
+            elif isinstance(obj, HotelDiscountCode):
+                return HotelDiscountCodeSerializer
+            return RoomDiscountCodeSerializer  # پیش‌فرض
+
+        return serializer_class
 
     @swagger_auto_schema(
-        operation_summary="دریافت کدهای تخفیف اتاق برای کاربر",
+        operation_summary="دریافت کدهای تخفیف اتاق و هتل برای کاربر",
         operation_description="""
-        این API فقط کدهای معتبر اتاق را برمی‌گرداند که:
+        این API کدهای معتبر اتاق و هتل را برمی‌گرداند که:
         - به کاربر اختصاص داده شده یا با سطح کاربری او مطابقت دارند.
         - کاربر قبلاً آن‌ها را فعال نکرده است.
         - تاریخ انقضای آن‌ها نگذشته.
@@ -99,12 +126,10 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
         ).values_list('shopping_discount_code_id', flat=True)
 
         return ShoppingCenterDiscountCode.objects.filter(
-            ~Q(id__in=activated_codes),  # حذف کدهای فعال‌شده
+            ~Q(id__in=activated_codes),
             Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
             Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali)
         ).distinct()
-
-
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف مراکز خرید برای کاربر",
@@ -125,7 +150,6 @@ class MyShoppingCenterDiscountCodeListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 # ای پی ای فعال سازی کد تخفیف
@@ -256,7 +280,6 @@ class ActivateDiscountCodeView(APIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
 
 
 # ای پی ای جوایز دریافتی کاربران 
@@ -268,15 +291,17 @@ class DiscountActivationRecordListView(generics.ListAPIView):
         user = self.request.user
         return DiscountActivationRecord.objects.filter(user=user).select_related(
             'room_discount_code__room',
-            'shopping_discount_code'
+            'shopping_discount_code',
+            'hotel_discount_code__hotel'
         ).order_by('-activated_at')
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست جوایز فعال شده کاربر برای مرکز خرید و اتاق‌ها",
+        operation_summary="دریافت لیست جوایز فعال شده کاربر برای مرکز خرید و اتاق‌ها و هتل‌ها",
         operation_description="""
         این API لیست جوایز فعال شده توسط کاربر را بازمی‌گرداند که شامل:
         - کدهای تخفیف اتاق
         - کدهای تخفیف مرکز خرید
+        - کدهای تخفیف هتل
         - `expires_at`: تاریخ انقضای کد
         نتایج بر اساس تاریخ فعال‌سازی به ترتیب نزولی مرتب شده‌اند.
         """,
@@ -315,6 +340,21 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                             "related_info": {
                                 "shopping_center_name": "مرکز خرید پالادیوم"
                             }
+                        },
+                        {
+                            "id": 3,
+                            "user": "user@example.com",
+                            "discount_type": "hotel",
+                            "code": "HOTEL123",
+                            "discount_value": "200,000",
+                            "required_points": 1000,
+                            "activated_at": "2025-08-11T10:00:00+04:00",
+                            "expires_at": "2025-09-11T10:00:00+04:00",
+                            "reward_claimed": False,
+                            "related_info": {
+                                "hotel_id": 1,
+                                "hotel_name": "هتل پارسیان آزادی"
+                            }
                         }
                     ]
                 }
@@ -340,8 +380,6 @@ class DiscountActivationRecordListView(generics.ListAPIView):
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 
 # ✅ ای‌پی‌آی نمایش امتیاز باشگاه مشتریان کاربر

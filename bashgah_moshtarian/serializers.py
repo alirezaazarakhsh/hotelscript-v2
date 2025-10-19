@@ -1,9 +1,6 @@
-# serializers.py
-
 from rest_framework import serializers
-
-from reservation.models import Room
-from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode
+from reservation.models import Room, Hotel
+from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode, HotelDiscountCode
 from jalali_date import datetime2jalali
 
 
@@ -25,13 +22,45 @@ class RoomSerializer(serializers.ModelSerializer):
         return image
 
 
+class HotelSerializer(serializers.ModelSerializer):
+    hotel_name = serializers.CharField(source='name', read_only=True)  # نام هتل
+    main_image = serializers.SerializerMethodField(read_only=True)  # تصویر اصلی هتل
+
+    class Meta:
+        model = Hotel
+        fields = ('id', 'hotel_name', 'main_image')
+        ref_name = "BashgahHotelSerializer"
+
+    def get_main_image(self, obj):
+        request = self.context.get('request')
+        image = obj.main_image.url if obj.main_image else None
+        if image and request is not None:
+            return request.build_absolute_uri(image)
+        return image
+
 
 class RoomDiscountCodeSerializer(serializers.ModelSerializer):
     room = RoomSerializer(read_only=True)  # جایگزین نمایش فقط آیدی
+    discount_type = serializers.SerializerMethodField()
 
     class Meta:
         model = RoomDiscountCode
-        fields = '__all__'
+        fields = ['id', 'discount_type', 'room', 'discount_value', 'code', 'usage_limit', 'remaining_uses', 'required_points', 'user_level', 'created_at', 'expires_at', 'activation_rules']
+
+    def get_discount_type(self, obj):
+        return 'room'
+
+
+class HotelDiscountCodeSerializer(serializers.ModelSerializer):
+    hotel = HotelSerializer(read_only=True)  # جایگزین نمایش فقط آیدی
+    discount_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HotelDiscountCode
+        fields = ['id', 'discount_type', 'hotel', 'discount_value', 'code', 'usage_limit', 'remaining_uses', 'required_points', 'user_level', 'created_at', 'expires_at', 'activation_rules']
+
+    def get_discount_type(self, obj):
+        return 'hotel'
 
 
 class ShoppingCenterDiscountCodeSerializer(serializers.ModelSerializer):
@@ -40,13 +69,11 @@ class ShoppingCenterDiscountCodeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-
 class CustomerClubPointSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerClubPoint
         fields = ['points']
-        
-        
+
 
 class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
@@ -54,27 +81,27 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     code = serializers.SerializerMethodField()
     discount_value = serializers.SerializerMethodField()
     related_info = serializers.SerializerMethodField()
-    required_points = serializers.SerializerMethodField()  # اضافه کردن فیلد جدید
+    required_points = serializers.SerializerMethodField()
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 'activated_at', 'reward_claimed', 'related_info']  # اضافه کردن required_points به fields
+        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 'activated_at', 'reward_claimed', 'related_info']
 
     def get_code(self, obj):
-        code = obj.room_discount_code or obj.shopping_discount_code
+        code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
         return code.code if code else '—'
 
     def get_discount_value(self, obj):
-        code = obj.room_discount_code or obj.shopping_discount_code
+        code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
         if code and code.discount_value:
-            return f"{int(code.discount_value):,}"  # اضافه کردن جداکننده سه‌رقمی
+            return f"{int(code.discount_value):,}"
         return '—'
 
-    def get_required_points(self, obj):  # متد جدید برای required_points
-        code = obj.room_discount_code or obj.shopping_discount_code
+    def get_required_points(self, obj):
+        code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
         if code and code.required_points is not None:
             return code.required_points
-        return 0  # یا مقدار پیش‌فرض دیگری مثل '—' اگر امتیاز مورد نیاز وجود نداشته باشد
+        return 0
 
     def get_related_info(self, obj):
         if obj.discount_type == 'room' and obj.room_discount_code:
@@ -89,5 +116,11 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
             return {
                 'shopping_center_name': obj.shopping_discount_code.shopping_center_name or "مرکز خرید نامشخص"
+            }
+        elif obj.discount_type == 'hotel' and obj.hotel_discount_code:
+            hotel = obj.hotel_discount_code.hotel
+            return {
+                'hotel_id': hotel.id,
+                'hotel_name': hotel.name or "هتل نامشخص"
             }
         return None
