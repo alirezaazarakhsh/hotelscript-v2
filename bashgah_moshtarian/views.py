@@ -58,7 +58,7 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
             Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
             Q(activated_count__lt=F('usage_limit'))
-        )
+        ).select_related('room__hotel')
 
         # کوئری برای کدهای تخفیف هتل
         hotel_discounts = HotelDiscountCode.objects.annotate(
@@ -68,21 +68,46 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
             Q(users=user) | (Q(user_level=user_level) if user_level else Q()),
             Q(expires_at__isnull=True) | Q(expires_at__gte=today_jalali),
             Q(activated_count__lt=F('usage_limit'))
-        )
+        ).select_related('hotel')
 
         # ترکیب دو کوئری‌ست با استفاده از chain
         from itertools import chain
         return list(chain(room_discounts, hotel_discounts))
 
     def get_serializer_class(self):
-        def serializer_class(obj):
-            if isinstance(obj, RoomDiscountCode):
-                return RoomDiscountCodeSerializer
-            elif isinstance(obj, HotelDiscountCode):
-                return HotelDiscountCodeSerializer
-            return RoomDiscountCodeSerializer  # پیش‌فرض
+        # Return a default serializer for Swagger documentation
+        return RoomDiscountCodeSerializer
 
-        return serializer_class
+    def list(self, request, *args, **kwargs):
+        """
+        Custom list method to serialize each object with the appropriate serializer.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        serialized_data = []
+
+        if page is not None:
+            for obj in page:
+                if isinstance(obj, RoomDiscountCode):
+                    serializer = RoomDiscountCodeSerializer(obj, context=self.get_serializer_context())
+                elif isinstance(obj, HotelDiscountCode):
+                    serializer = HotelDiscountCodeSerializer(obj, context=self.get_serializer_context())
+                else:
+                    continue  # Skip invalid objects
+                serialized_data.append(serializer.data)
+            return self.get_paginated_response(serialized_data)
+
+        # Non-paginated response
+        for obj in queryset:
+            if isinstance(obj, RoomDiscountCode):
+                serializer = RoomDiscountCodeSerializer(obj, context=self.get_serializer_context())
+            elif isinstance(obj, HotelDiscountCode):
+                serializer = HotelDiscountCodeSerializer(obj, context=self.get_serializer_context())
+            else:
+                continue  # Skip invalid objects
+            serialized_data.append(serializer.data)
+
+        return Response(serialized_data)
 
     @swagger_auto_schema(
         operation_summary="دریافت کدهای تخفیف اتاق و هتل برای کاربر",
@@ -93,7 +118,101 @@ class MyRoomDiscountCodeListView(generics.ListAPIView):
         - تاریخ انقضای آن‌ها نگذشته.
         - تعداد استفاده‌شان به سقف نرسیده.
         """,
-        tags=['discount-crm']
+        tags=['discount-crm'],
+        responses={
+            200: openapi.Response(
+                description="لیست کدهای تخفیف",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'discount_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['room', 'hotel']),
+                            'code': openapi.Schema(type=openapi.TYPE_STRING),
+                            'discount_value': openapi.Schema(type=openapi.TYPE_STRING),
+                            'usage_limit': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'remaining_uses': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'required_points': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'user_level': openapi.Schema(type=openapi.TYPE_INTEGER, nullable=True),
+                            'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                            'expires_at': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                            'activation_rules': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                            'room': openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'title': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'hotel_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'hotel_main_image': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                },
+                                nullable=True
+                            ),
+                            'hotel': openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'hotel_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'main_image': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                },
+                                nullable=True
+                            ),
+                        }
+                    )
+                ),
+                examples={
+                    'application/json': [
+                        {
+                            'id': 1,
+                            'discount_type': 'room',
+                            'room': {
+                                'id': 1,
+                                'title': 'تویین 2',
+                                'hotel_name': 'پارسیان آزادی',
+                                'hotel_main_image': 'http://example.com/media/hotel_images/image.jpg'
+                            },
+                            'discount_value': '100000',
+                            'code': 'ABC12345',
+                            'usage_limit': 10,
+                            'remaining_uses': 8,
+                            'required_points': 500,
+                            'user_level': None,
+                            'created_at': '2025-08-13T04:40:00+04:00',
+                            'expires_at': '1404-06-22',
+                            'activation_rules': None
+                        },
+                        {
+                            'id': 2,
+                            'discount_type': 'hotel',
+                            'hotel': {
+                                'id': 1,
+                                'hotel_name': 'پارسیان آزادی',
+                                'main_image': 'http://example.com/media/hotel_images/image.jpg'
+                            },
+                            'discount_value': '200000',
+                            'code': 'HOTEL123',
+                            'usage_limit': 5,
+                            'remaining_uses': 4,
+                            'required_points': 1000,
+                            'user_level': None,
+                            'created_at': '2025-08-11T10:00:00+04:00',
+                            'expires_at': '1404-06-20',
+                            'activation_rules': None
+                        }
+                    ]
+                }
+            ),
+            500: openapi.Response(
+                description="خطای سرور داخلی",
+                examples={
+                    'application/json': {
+                        'error': 'An error occurred',
+                        'exception_type': 'Exception',
+                        'trace': 'Traceback...'
+                    }
+                }
+            )
+        }
     )
     def get(self, request, *args, **kwargs):
         try:
