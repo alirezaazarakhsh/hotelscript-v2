@@ -287,23 +287,19 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 discount_obj = None
                 discount_type = None
 
+                # بررسی وجود کد تخفیف
                 try:
                     discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
                     discount_type = 'room'
-                    logger.debug(f"RoomDiscountCode پیدا شد: {discount_obj.code}")
+                    logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
                 except RoomDiscountCode.DoesNotExist:
                     try:
                         discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
                         discount_type = 'hotel'
-                        logger.debug(f"HotelDiscountCode پیدا شد: {discount_obj.code}")
+                        logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
                     except HotelDiscountCode.DoesNotExist:
                         logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
                         return
-
-                # حداقل بررسی برای اطمینان از اعتبار کد
-                if discount_obj.remaining_uses <= 0:
-                    logger.error(f"کد تخفیف {code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
-                    return
 
                 # بررسی یا ایجاد رکورد فعال‌سازی
                 activation_filter = {
