@@ -209,7 +209,44 @@ class HotelTagPublic(models.Model):
 
 
 
-#مدل لمکانات رفاهی و تفریحی هتل 
+# مدل سئو هتل 
+class SEOMeta(models.Model):
+    hotel = models.OneToOneField(
+        'Hotel',
+        on_delete=models.CASCADE,
+        related_name='seo_meta',
+        verbose_name='هتل',
+        null=True,
+        blank=True,
+    )
+    title_tag = models.CharField(
+        max_length=70,
+        verbose_name="عنوان سئو",
+        help_text="عنوان صفحه برای سئو (حداکثر 70 کاراکتر)"
+    )
+    keywords = models.TextField(
+        verbose_name="کلمات کلیدی",
+        help_text="کلمات کلیدی را با - یا , جدا کنید. مثال: هتل-رزرو هتل-هتل های تهران",
+        blank=True,
+        default=""
+    )
+    description = models.TextField(
+        max_length=160,
+        verbose_name="توضیحات متا",
+        help_text="توضیحات متا برای سئو (حداکثر 160 کاراکتر)"
+    )
+
+    def __str__(self):
+        return f"سئو - {self.hotel.name if self.hotel else self.title_tag}"
+
+    class Meta:
+        verbose_name = "تنظیمات سئو"
+        verbose_name_plural = "تنظیمات سئو"
+
+
+
+
+#مدل امکانات رفاهی و تفریحی هتل 
 class Facilities(models.Model):
     title = models.CharField(
         verbose_name=_('عنوان'),

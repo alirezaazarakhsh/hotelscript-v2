@@ -4,7 +4,8 @@ from django.db import transaction
 from .models import BaseUser, NaturalProfile
 from config.models import UserLevel
 from bashgah_moshtarian.models import CustomerClubPoint
-from bashgah_moshtarian.sms.sms import send_registration_gift_sms  # ایمپورت تابع پیامک
+from bashgah_moshtarian.sms.sms import send_registration_gift_sms
+from icons.models import IconShortcut
 import logging
 import threading
 import time
@@ -16,12 +17,32 @@ def create_user_related_records(sender, instance, created, **kwargs):
     if not created:
         return  # فقط کاربران جدید
 
+    # ✅ جلوگیری از اجرا برای سوپر یوزر و ادمین‌ها
+    if instance.is_superuser or instance.is_staff:
+        logger.info(f"Skipping signal for admin user {instance.phone_number}")
+        return
+
     logger.info(f"Running post_save signal for user {instance.phone_number}, created={created}")
 
-    # ۱. ساخت سطح میهمان
-    guest_level, _ = UserLevel.objects.get_or_create(title='میهمان')
+    # ۱. آیکون پیش‌فرض
+    default_icon, _ = IconShortcut.objects.get_or_create(
+        order=1,
+        defaults={
+            'title_icon': 'آیکون پیش‌فرض',
+            'svg_icon': 'media/svg_icons/verify.svg'
+        }
+    )
 
-    # ۲. ساخت پروفایل حقیقی
+    # ۲. سطح میهمان
+    guest_level, _ = UserLevel.objects.get_or_create(
+        title='میهمان',
+        defaults={
+            'icon': default_icon,
+            'color': '#000000',
+        }
+    )
+
+    # ۳. پروفایل حقیقی
     profile, created_profile = NaturalProfile.objects.get_or_create(
         base_user=instance,
         defaults={
@@ -33,7 +54,7 @@ def create_user_related_records(sender, instance, created, **kwargs):
     if created_profile:
         logger.info(f"Created new profile for user {instance.phone_number}")
 
-    # ۳. ایجاد رکورد باشگاه مشتریان و اضافه کردن امتیاز اولیه
+    # ۴. امتیاز اولیه باشگاه مشتریان
     with transaction.atomic():
         customer_points, created_points = CustomerClubPoint.objects.select_for_update().get_or_create(
             user=instance,
@@ -46,7 +67,6 @@ def create_user_related_records(sender, instance, created, **kwargs):
             customer_points.save()
             logger.info(f"Added {initial_points} points for {instance.phone_number}")
 
-            # ارسال پیامک هدیه ثبت‌نام بعد از ۵ ثانیه با Threading
             def send_gift_later():
                 time.sleep(5)
                 send_registration_gift_sms(instance.phone_number, initial_points)

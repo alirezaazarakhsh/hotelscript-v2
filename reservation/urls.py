@@ -10,6 +10,7 @@ from .views import (
     CreateCommentView,
     BestSellersListView,
     HotelImageAPIView,
+    HotelSEOView,
     PassengerListForReservationView,
     ReservationCreateAPIView,
     ReservationDescriptionAPIView,
@@ -86,6 +87,9 @@ urlpatterns = [
     path('reservation/wallet/withdraw/<str:tracking_code>/', WalletWithdrawAPIView.as_view(), name='wallet-withdraw'),
 
 
+
+    # ==== hotel seo ===
+    path('hotels/<slug:hotel_slug>/seo/', HotelSEOView.as_view(), name='hotel-seo'),
 
     # ==== discount code reservation ===
     path('reservation/discount-code/<str:tracking_code>/', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),

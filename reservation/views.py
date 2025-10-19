@@ -105,6 +105,7 @@ from .models import (
     NearbyPlace,
     Passenger,
     Comment,
+    SEOMeta,
     SuggestedCommentItem,
     set_skip_points_and_sms,
 )
@@ -3742,3 +3743,62 @@ class WalletWithdrawAPIView(APIView):
 
         # پاسخ مناسب
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
+    
+    
+    
+    
+# ای پی ای سئو هتل ها 
+class HotelSEOView(APIView):
+    """
+    API برای دریافت اطلاعات سئوی یک هتل
+    """
+    permission_classes = ()  # عمومی
+    tags = ['hotel-seo']
+
+    @swagger_auto_schema(
+        operation_summary="دریافت متا سئو هتل با slug",
+        operation_description="""
+        این API اطلاعات سئو یک هتل را برمی‌گرداند، شامل:
+        - title_tag: عنوان سئو
+        - description: توضیحات متا
+        - keywords: کلمات کلیدی به صورت لیست
+        """,
+        responses={
+            200: openapi.Response(
+                description="اطلاعات سئو هتل با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "title_tag": "هتل لوکس تهران",
+                        "description": "بهترین هتل لوکس تهران با امکانات عالی",
+                        "keywords": ["هتل", "لوکس", "تهران"]
+                    }
+                }
+            ),
+            404: "هتل یا سئو پیدا نشد"
+        }
+    )
+    def get(self, request, hotel_slug):
+        try:
+            hotel = Hotel.objects.get(slug=hotel_slug)
+        except Hotel.DoesNotExist:
+            return Response({"detail": "هتل پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            seo = hotel.seo_meta
+        except SEOMeta.DoesNotExist:
+            return Response({"detail": "سئوی هتل یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+
+        # اگر keywords رشته‌ای باشد، تبدیل به لیست کنیم
+        if isinstance(seo.keywords, str):
+            keywords_list = [k.strip() for k in seo.keywords.split('-') if k.strip()]
+        else:
+            keywords_list = seo.keywords
+
+        return Response(
+            {
+                "title_tag": seo.title_tag,
+                "description": seo.description,
+                "keywords": keywords_list
+            },
+            status=status.HTTP_200_OK
+        )

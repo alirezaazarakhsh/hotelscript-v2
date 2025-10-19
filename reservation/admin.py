@@ -38,6 +38,7 @@ from .models import (
     RoomService,
     Room,
     Passenger,
+    SEOMeta,
     SuggestedCommentItem,
     ReservationRoom,
     ReservationRoomPassenger
@@ -173,19 +174,97 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+# Inline برای SEOMeta
+# فرم سفارشی برای SEOMetaInline
+class SEOMetaInlineForm(forms.ModelForm):
+    keywords_text = forms.CharField(
+        label="کلمات کلیدی",
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2}),
+        help_text="کلمات کلیدی را با کاما جدا کنید، مثل: luxury, resort, family"
+    )
+
+    class Meta:
+        model = SEOMeta
+        fields = ('title_tag', 'description', 'keywords_text')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.keywords:
+            self.fields['keywords_text'].initial = ", ".join(self.instance.keywords)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        keywords_text = self.cleaned_data.get('keywords_text', '')
+        instance.keywords = [k.strip() for k in keywords_text.split(',') if k.strip()]
+        if commit:
+            instance.save()
+        return instance
+
+
+# Inline برای تگ عمومی
 class HotelTagPublicInline(admin.TabularInline):
     model = HotelTagPublic
-    extra = 0  # No extra empty forms by default
-    max_num = 3  # Maximum of 5 tags
+    extra = 3
+    max_num = 3
     fields = ('title',)
-    verbose_name = _('تگ عمومی')
-    verbose_name_plural = _('تگ‌های عمومی')
+    verbose_name = _('تگ عمومی ')
+    verbose_name_plural = _(' تگ‌های عمومی')
 
-# Updated HotelAdmin class
+
+# Inline برای SEOMeta
+
+# فرم سفارشی برای SEOMeta
+# فرم سفارشی برای SEOMeta
+class SEOMetaAdminForm(forms.ModelForm):
+    keywords_text = forms.CharField(
+        required=False,
+        label="کلمات کلیدی",
+        help_text='کلمات کلیدی را با - جدا کنید، مثال: هتل-رزرو هتل-هتل های تهران'
+    )
+
+    class Meta:
+        model = SEOMeta
+        fields = ('title_tag', 'description', 'keywords_text')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # مقداردهی اولیه برای نمایش در ادمین
+        if self.instance and self.instance.keywords:
+            self.fields['keywords_text'].initial = '-'.join(self.instance.keywords)
+
+    def save(self, commit=True):
+        # تبدیل رشته به لیست JSON قبل از ذخیره
+        instance = super().save(commit=False)
+        keywords_str = self.cleaned_data.get('keywords_text', '')
+        # جدا کردن با - یا , و حذف فاصله اضافی
+        instance.keywords = [k.strip() for k in re.split('[-,]', keywords_str) if k.strip()]
+        if commit:
+            instance.save()
+        return instance
+
+class SEOMetaInline(admin.StackedInline):
+    model = SEOMeta
+    form = SEOMetaAdminForm
+    extra = 1
+    max_num = 1
+    can_delete = False
+    verbose_name = 'متا سئو'
+    verbose_name_plural = 'تنظیم سئوی هتل '
+    fields = ('title_tag', 'keywords', 'description')
+    help_texts = {
+        'title_tag': 'عنوان صفحه برای سئو (حداکثر 70 کاراکتر)',
+        'keywords': 'لیست کلمات کلیدی، جدا شده با کاما',
+        'description': 'توضیحات متا برای سئو (حداکثر 160 کاراکتر)',
+    }
+
+
+# Admin اصلی هتل
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
 
+    # همه فیلدهای هتل ساده نگه داشته شده
     fields = (
         'name',
         'slug',
@@ -222,6 +301,8 @@ class HotelAdmin(admin.ModelAdmin):
         'important_notes',
     )
 
+    readonly_fields = ('logo_preview',)
+
     list_display = (
         'id',
         'name',
@@ -237,15 +318,14 @@ class HotelAdmin(admin.ModelAdmin):
         'logo_preview',
         'show_public_tags',
     )
-    search_fields = (
-        'name',
-        'address',
-        'public_tags__title',  # Enable searching by public tag titles
-    )
-    autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
-    readonly_fields = ('logo_preview',)
-    inlines = [HotelTagPublicInline]  # Add the inline
 
+    search_fields = ('name', 'address', 'public_tags__title')
+    autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
+
+    # اضافه شدن inline ها
+    inlines = [HotelTagPublicInline, SEOMetaInline]
+
+    # نمایش لوگو
     def logo_preview(self, obj):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
@@ -257,8 +337,9 @@ class HotelAdmin(admin.ModelAdmin):
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
 
+    # نمایش تگ های عمومی
     def show_public_tags(self, obj):
-        qs = obj.public_tags.all()  # Access public_tags related_name
+        qs = obj.public_tags.all()
         if not qs.exists():
             return "-"
         return format_html_join(
@@ -268,6 +349,7 @@ class HotelAdmin(admin.ModelAdmin):
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
 
+    
 
 class HotelGalleryImageInline(admin.TabularInline):
     model = HotelGalleryImage
