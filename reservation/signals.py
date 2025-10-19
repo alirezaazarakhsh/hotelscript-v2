@@ -219,7 +219,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
                 logger.debug(f"Inventory reverted for room {room.id}: quantity={r.quantity}, is_auto_approved={is_auto_approved}")
 
-            # رکورد DiscountActivationRecord حذف نمی‌شود تا کد تخفیف در لیست جوایز باقی بماند
+            # رکورد DiscountActivationRecord برای کد تخفیف در زمان لغو رزرو حفظ می‌شود
             if instance.applied_discount_code:
                 logger.debug(f"رکورد DiscountActivationRecord برای کد تخفیف {instance.applied_discount_code} در زمان لغو رزرو حفظ می‌شود.")
 
