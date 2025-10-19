@@ -42,6 +42,7 @@ class HotelSerializer(serializers.ModelSerializer):
 class RoomDiscountCodeSerializer(serializers.ModelSerializer):
     room = RoomSerializer(read_only=True)  # جایگزین نمایش فقط آیدی
     discount_type = serializers.SerializerMethodField()
+    user_level = serializers.StringRelatedField(read_only=True, allow_null=True)  # نمایش نام سطح کاربری به جای آیدی
 
     class Meta:
         model = RoomDiscountCode
@@ -54,6 +55,7 @@ class RoomDiscountCodeSerializer(serializers.ModelSerializer):
 class HotelDiscountCodeSerializer(serializers.ModelSerializer):
     hotel = HotelSerializer(read_only=True)  # جایگزین نمایش فقط آیدی
     discount_type = serializers.SerializerMethodField()
+    user_level = serializers.StringRelatedField(read_only=True, allow_null=True)  # نمایش نام سطح کاربری به جای آیدی
 
     class Meta:
         model = HotelDiscountCode
@@ -64,6 +66,8 @@ class HotelDiscountCodeSerializer(serializers.ModelSerializer):
 
 
 class ShoppingCenterDiscountCodeSerializer(serializers.ModelSerializer):
+    user_level = serializers.StringRelatedField(read_only=True, allow_null=True)  # نمایش نام سطح کاربری به جای آیدی
+
     class Meta:
         model = ShoppingCenterDiscountCode
         fields = '__all__'
