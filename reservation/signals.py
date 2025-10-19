@@ -1,4 +1,3 @@
-# reservation/signals.py
 import logging
 import re
 from django.db.models.signals import post_save, post_delete
@@ -324,9 +323,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 if discount_obj.remaining_uses <= 0:
                     logger.error(f"کد تخفیف {code} دیگر قابل استفاده نیست. remaining_uses: {discount_obj.remaining_uses}")
                     return
-                if reservation.buyer in discount_obj.activated_users.all():
-                    logger.error(f"کاربر {reservation.buyer.phone_number} قبلاً از کد تخفیف {code} استفاده کرده است.")
-                    return
 
                 # بررسی یا ایجاد رکورد فعال‌سازی
                 activation_filter = {
@@ -358,14 +354,17 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
 
                 # کاهش تعداد استفاده‌های باقی‌مانده و افزودن کاربر به activated_users
-                try:
-                    set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
-                    discount_obj.apply_discount(reservation.buyer)
-                    set_skip_points_and_sms(False)
-                    logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
-                except ValueError as e:
-                    logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
-                    return
+                if reservation.buyer not in discount_obj.activated_users.all():
+                    try:
+                        set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
+                        discount_obj.apply_discount(reservation.buyer)
+                        set_skip_points_and_sms(False)
+                        logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
+                    except ValueError as e:
+                        logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
+                        return
+                else:
+                    logger.warning(f"کاربر {reservation.buyer.phone_number} قبلاً در activated_users کد تخفیف {code} وجود دارد.")
 
             # حذف قفل کش
             cache.delete(cache_key_points)
