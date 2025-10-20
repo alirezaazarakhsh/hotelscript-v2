@@ -3529,16 +3529,6 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_half_day_charge = total_half_day_charge
             reservation.total_extra_passenger_charge = total_extra
 
-            # افزودن کاربر به activated_users و کاهش remaining_uses فقط در صورتی که payment_status به 'paid' تغییر کند
-            if reservation.payment_status == 'paid':
-                if request.user not in discount_obj.activated_users.all():
-                    discount_obj.activated_users.add(request.user)
-                    discount_obj.remaining_uses = max(0, discount_obj.remaining_uses - 1)
-                    discount_obj.save(update_fields=['remaining_uses'])
-                    logger.info(f"کاربر {request.user.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
-                activation_record.reward_claimed = True
-                activation_record.save(update_fields=['reward_claimed'])
-
             set_skip_points_and_sms(True)
             reservation._skip_price_calculation = True
             reservation.save(update_fields=['applied_discount_code', 'discount', 'final_price', 'total_price', 'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge', 'total_extra_passenger_charge'])

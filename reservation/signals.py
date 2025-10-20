@@ -189,7 +189,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
        - تخصیص امتیازهای باشگاه مشتریان و ارسال SMS افزایش امتیاز بلافاصله.
        - اگر کد تخفیف اعمال شده باشد، reward_claimed=True تنظیم می‌شود و کاربر به activated_users اضافه می‌شود.
        - کاهش remaining_uses در مدل کد تخفیف.
-       - امتیاز در ActivateDiscountCodeView کسر شده، پس اینجا کسر نمی‌شود و پیامک کسر امتیاز ارسال نمی‌شود.
     2. اگر wallet_withdrawal_amount > 0 باشد، مبلغ از کیف پول کسر می‌شود.
     3. هنگام تغییر capacity_status به 'rejected'، موجودی اتاق‌ها بازگردانده می‌شود، اما رکورد DiscountActivationRecord حفظ می‌شود.
     4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
@@ -234,120 +233,95 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             # قفل کردن رکورد رزرو برای جلوگیری از race condition
             reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
             if reservation.points_assigned:
-                logger.info(f"Points already assigned for {reservation.tracking_code}, skipping.")
+                logger.warning(f"Points already assigned for {reservation.tracking_code}, skipping further processing.")
                 return
-
-            # لاگ کردن applied_discount_code برای دیباگ
-            logger.debug(f"applied_discount_code برای رزرو {reservation.tracking_code}: {reservation.applied_discount_code}")
 
             # تنظیم قفل کش
             cache.set(cache_key_points, True, timeout=60)
 
-            # محاسبه مجموع امتیازهای اتاق‌ها
-            total_points = 0
-            for res_room in reservation.reservation_rooms.select_related('room').all():
-                room = res_room.room
-                quantity = res_room.quantity
-                points = room.customer_club_points or 0
-                total_points += points * quantity
+            try:
+                # محاسبه مجموع امتیازهای اتاق‌ها
+                total_points = 0
+                for res_room in reservation.reservation_rooms.select_related('room').all():
+                    room = res_room.room
+                    quantity = res_room.quantity
+                    points = room.customer_club_points or 0
+                    total_points += points * quantity
 
-            # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
-            customer_points, created = CustomerClubPoint.objects.get_or_create(
-                user=reservation.buyer,
-                defaults={'points': 0}
-            )
-            if total_points > 0:
-                customer_points.points += total_points
-                set_skip_points_and_sms(True)
-                customer_points.save()
-                set_skip_points_and_sms(False)
-                logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
-
-                # ارسال SMS افزایش امتیاز بلافاصله
-                send_customer_club_add_sms(
-                    phone_number=reservation.buyer.phone_number,
-                    user_name=reservation.buyer.first_name or reservation.buyer.phone_number,
-                    added_points=total_points,
-                    current_points=customer_points.points
+                # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
+                customer_points, created = CustomerClubPoint.objects.get_or_create(
+                    user=reservation.buyer,
+                    defaults={'points': 0}
                 )
+                if total_points > 0:
+                    customer_points.points += total_points
+                    set_skip_points_and_sms(True)
+                    customer_points.save()
+                    set_skip_points_and_sms(False)
+                    logger.info(f"امتیازهای باشگاه مشتریان ({total_points}) به کاربر {reservation.buyer.phone_number} برای رزرو {reservation.tracking_code} اضافه شد.")
 
-            else:
-                logger.info(f"هیچ امتیازی برای رزرو {reservation.tracking_code} تخصیص داده نشد (total_points=0).")
-
-            # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
-            reservation.points_assigned = True
-            reservation.save(update_fields=['points_assigned'])
-
-            # مدیریت کد تخفیف
-            if not reservation.applied_discount_code:
-                logger.warning(f"applied_discount_code برای رزرو {reservation.tracking_code} خالی است.")
-            else:
-                logger.debug(f"شروع اعمال کد تخفیف برای رزرو {reservation.tracking_code}")
-                code = reservation.applied_discount_code.upper()
-                discount_obj = None
-                discount_type = None
-
-                # بررسی وجود کد تخفیف
-                try:
-                    discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
-                    discount_type = 'room'
-                    logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
-                except RoomDiscountCode.DoesNotExist:
-                    try:
-                        discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
-                        discount_type = 'hotel'
-                        logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
-                    except HotelDiscountCode.DoesNotExist:
-                        logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
-                        return
-
-                # بررسی یا ایجاد رکورد فعال‌سازی
-                activation_filter = {
-                    'user': reservation.buyer,
-                    'discount_type': discount_type,
-                    **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-                }
-                activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
-
-                if not activation_record:
-                    logger.info(f"رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number} یافت نشد. ایجاد رکورد جدید...")
-                    try:
-                        activation_record = DiscountActivationRecord.objects.create(
-                            user=reservation.buyer,
-                            discount_type=discount_type,
-                            **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-                            reward_claimed=False,
-                            activated_at=jdatetime.datetime.now()
-                        )
-                        logger.info(f"رکورد فعال‌سازی جدید ایجاد شد: ID={activation_record.id}")
-                    except Exception as e:
-                        logger.error(f"خطا در ایجاد رکورد فعال‌سازی برای کد تخفیف {code} و کاربر {reservation.buyer.phone_number}: {str(e)}")
-                        return
-
-                # به‌روزرسانی reward_claimed به True
-                if not activation_record.reward_claimed:
-                    logger.info(f"به‌روزرسانی DiscountActivationRecord برای رزرو {reservation.tracking_code}, user={reservation.buyer.phone_number}, code={code}")
-                    activation_record.reward_claimed = True
-                    activation_record.save(update_fields=['reward_claimed'])
-                    logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
-
-                # افزودن کاربر به activated_users و کاهش remaining_uses
-                if reservation.buyer not in discount_obj.activated_users.all():
-                    try:
-                        set_skip_points_and_sms(True)  # جلوگیری از ارسال پیامک کسر امتیاز
-                        discount_obj.activated_users.add(reservation.buyer)
-                        discount_obj.remaining_uses = max(0, discount_obj.remaining_uses - 1)
-                        discount_obj.save(update_fields=['remaining_uses'])
-                        set_skip_points_and_sms(False)
-                        logger.debug(f"کاربر {reservation.buyer.phone_number} به activated_users کد تخفیف {code} اضافه شد و remaining_uses به {discount_obj.remaining_uses} کاهش یافت.")
-                    except Exception as e:
-                        logger.error(f"خطا در افزودن کاربر به activated_users برای کد تخفیف {code}: {str(e)}")
-                        return
+                    # ارسال SMS افزایش امتیاز بلافاصله
+                    send_customer_club_add_sms(
+                        phone_number=reservation.buyer.phone_number,
+                        user_name=reservation.buyer.first_name or reservation.buyer.phone_number,
+                        added_points=total_points,
+                        current_points=customer_points.points
+                    )
                 else:
-                    logger.warning(f"کاربر {reservation.buyer.phone_number} قبلاً در activated_users کد تخفیف {code} وجود دارد.")
+                    logger.info(f"هیچ امتیازی برای رزرو {reservation.tracking_code} تخصیص داده نشد (total_points=0).")
 
-            # حذف قفل کش
-            cache.delete(cache_key_points)
+                # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
+                reservation.points_assigned = True
+                reservation.save(update_fields=['points_assigned'])
+
+                # مدیریت کد تخفیف
+                if reservation.applied_discount_code:
+                    logger.debug(f"شروع اعمال کد تخفیف برای رزرو {reservation.tracking_code}")
+                    code = reservation.applied_discount_code.upper()
+                    discount_obj = None
+                    discount_type = None
+
+                    # بررسی وجود کد تخفیف
+                    try:
+                        discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
+                        discount_type = 'room'
+                        logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
+                    except RoomDiscountCode.DoesNotExist:
+                        try:
+                            discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
+                            discount_type = 'hotel'
+                            logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
+                        except HotelDiscountCode.DoesNotExist:
+                            logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
+                            return
+
+                    # اعمال کد تخفیف با استفاده از متد apply_discount
+                    if discount_obj and reservation.buyer not in discount_obj.activated_users.all():
+                        try:
+                            discount_obj.apply_discount(reservation.buyer)
+                            logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد.")
+                        except ValueError as e:
+                            logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
+                            return
+
+                    # به‌روزرسانی reward_claimed
+                    activation_filter = {
+                        'user': reservation.buyer,
+                        'discount_type': discount_type,
+                        **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
+                    }
+                    activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
+                    if activation_record and not activation_record.reward_claimed:
+                        activation_record.reward_claimed = True
+                        activation_record.save(update_fields=['reward_claimed'])
+                        logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
+
+            except Exception as e:
+                logger.error(f"خطا در پردازش رزرو {reservation.tracking_code} در زمان پرداخت: {str(e)}")
+                raise
+            finally:
+                # حذف قفل کش در هر صورت
+                cache.delete(cache_key_points)
 
     # بررسی برداشت از کیف پول هنگام پرداخت نهایی
     elif instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
