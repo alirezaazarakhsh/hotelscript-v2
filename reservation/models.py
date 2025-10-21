@@ -1338,6 +1338,11 @@ class Reservationhotel(models.Model):
         default=False,
         help_text=_('مشخص می‌کند که آیا امتیازهای باشگاه مشتریان برای این رزرو تخصیص داده شده‌اند.')
     )
+    discount_processed = models.BooleanField(
+        verbose_name=_('پردازش کد تخفیف انجام شده'),
+        default=False,
+        help_text=_('مشخص می‌کند که آیا کد تخفیف برای این رزرو پردازش نهایی شده است (پس از پرداخت).')
+    )
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
@@ -1466,7 +1471,7 @@ class Reservationhotel(models.Model):
                 self.final_price = final
 
         super().save(*args, **kwargs)
-
+        
 # متغیر محلی برای کنترل ارسال SMS و تخصیص امتیاز
 _thread_locals = local()
 

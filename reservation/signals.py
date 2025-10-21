@@ -201,11 +201,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
     cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
     cache_key_points = f"points_assignment_lock_{instance.tracking_code}"
+    cache_key_discount = f"discount_processing_lock_{instance.tracking_code}"  # قفل جدید برای کد تخفیف
     timer = None
 
-    # بررسی قفل برای جلوگیری از تخصیص چندباره امتیاز
-    if cache.get(cache_key_points):
-        logger.info(f"Points assignment skipped for {instance.tracking_code} due to lock")
+    # بررسی قفل برای جلوگیری از پردازش چندباره
+    if cache.get(cache_key_points) or cache.get(cache_key_discount):
+        logger.info(f"Processing skipped for {instance.tracking_code} due to lock")
         return
 
     # بررسی وضعیت لغو رزرو
@@ -227,20 +228,15 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         logger.debug(f"رزرو {instance.tracking_code} رد شد، تایمرها حذف شدند.")
 
     # بررسی تغییر وضعیت به پرداخت‌شده و تخصیص امتیازها و مدیریت کد تخفیف
-    elif instance.payment_status == 'paid' and not instance.points_assigned:
+    elif instance.payment_status == 'paid':
         logger.info(f"وضعیت پرداخت برای رزرو {instance.tracking_code} به 'paid' تغییر کرد. بررسی تخصیص امتیاز و کد تخفیف...")
         with transaction.atomic():
             # قفل کردن رکورد رزرو برای جلوگیری از race condition
             reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-            if reservation.points_assigned:
-                logger.warning(f"Points already assigned for {reservation.tracking_code}, skipping further processing.")
-                return
 
-            # تنظیم قفل کش
-            cache.set(cache_key_points, True, timeout=60)
-
-            try:
-                # محاسبه مجموع امتیازهای اتاق‌ها
+            # پردازش امتیازها (اگر قبلاً انجام نشده)
+            if not reservation.points_assigned:
+                cache.set(cache_key_points, True, timeout=60)
                 total_points = 0
                 for res_room in reservation.reservation_rooms.select_related('room').all():
                     room = res_room.room
@@ -248,12 +244,11 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     points = room.customer_club_points or 0
                     total_points += points * quantity
 
-                # به‌روزرسانی یا ایجاد CustomerClubPoint برای کاربر
-                customer_points, created = CustomerClubPoint.objects.get_or_create(
-                    user=reservation.buyer,
-                    defaults={'points': 0}
-                )
                 if total_points > 0:
+                    customer_points, created = CustomerClubPoint.objects.get_or_create(
+                        user=reservation.buyer,
+                        defaults={'points': 0}
+                    )
                     customer_points.points += total_points
                     set_skip_points_and_sms(True)
                     customer_points.save()
@@ -273,58 +268,58 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 # علامت‌گذاری رزرو به‌عنوان تخصیص‌شده
                 reservation.points_assigned = True
                 reservation.save(update_fields=['points_assigned'])
-
-                # مدیریت کد تخفیف
-                if reservation.applied_discount_code:
-                    logger.debug(f"شروع اعمال کد تخفیف برای رزرو {reservation.tracking_code}")
-                    code = reservation.applied_discount_code.upper()
-                    discount_obj = None
-                    discount_type = None
-
-                    # بررسی وجود کد تخفیف
-                    try:
-                        discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
-                        discount_type = 'room'
-                        logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
-                    except RoomDiscountCode.DoesNotExist:
-                        try:
-                            discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
-                            discount_type = 'hotel'
-                            logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
-                        except HotelDiscountCode.DoesNotExist:
-                            logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
-                            return
-
-                    # اعمال کد تخفیف با استفاده از متد apply_discount
-                    if discount_obj and reservation.buyer not in discount_obj.activated_users.all():
-                        try:
-                            discount_obj.apply_discount(reservation.buyer)
-                            logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد.")
-                        except ValueError as e:
-                            logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
-                            return
-
-                    # به‌روزرسانی reward_claimed
-                    activation_filter = {
-                        'user': reservation.buyer,
-                        'discount_type': discount_type,
-                        **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-                    }
-                    activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
-                    if activation_record and not activation_record.reward_claimed:
-                        activation_record.reward_claimed = True
-                        activation_record.save(update_fields=['reward_claimed'])
-                        logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
-
-            except Exception as e:
-                logger.error(f"خطا در پردازش رزرو {reservation.tracking_code} در زمان پرداخت: {str(e)}")
-                raise
-            finally:
-                # حذف قفل کش در هر صورت
                 cache.delete(cache_key_points)
 
+            # پردازش کد تخفیف (اگر اعمال شده و قبلاً پردازش نشده)
+            if reservation.applied_discount_code and not reservation.discount_processed:
+                cache.set(cache_key_discount, True, timeout=60)
+                code = reservation.applied_discount_code.upper()
+                discount_obj = None
+                discount_type = None
+
+                # بررسی وجود کد تخفیف
+                try:
+                    discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
+                    discount_type = 'room'
+                    logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
+                except RoomDiscountCode.DoesNotExist:
+                    try:
+                        discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
+                        discount_type = 'hotel'
+                        logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
+                    except HotelDiscountCode.DoesNotExist:
+                        logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
+                        cache.delete(cache_key_discount)
+                        return
+
+                # اعمال کد تخفیف با استفاده از متد apply_discount
+                if discount_obj and reservation.buyer not in discount_obj.activated_users.all():
+                    try:
+                        discount_obj.apply_discount(reservation.buyer)
+                        logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد.")
+                    except ValueError as e:
+                        logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
+                        cache.delete(cache_key_discount)
+                        return
+
+                # به‌روزرسانی reward_claimed
+                activation_filter = {
+                    'user': reservation.buyer,
+                    'discount_type': discount_type,
+                    **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
+                }
+                activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
+                if activation_record and not activation_record.reward_claimed:
+                    activation_record.reward_claimed = True
+                    activation_record.save(update_fields=['reward_claimed'])
+                    logger.debug(f"DiscountActivationRecord به‌روزرسانی شد با reward_claimed=True: ID={activation_record.id}")
+
+                reservation.discount_processed = True
+                reservation.save(update_fields=['discount_processed'])
+                cache.delete(cache_key_discount)
+
     # بررسی برداشت از کیف پول هنگام پرداخت نهایی
-    elif instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+    if instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
         logger.info(f"برداشت از کیف پول برای رزرو {instance.tracking_code} در حال انجام است...")
         with transaction.atomic():
             try:
