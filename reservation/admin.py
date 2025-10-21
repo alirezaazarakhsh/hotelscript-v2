@@ -801,7 +801,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawal_amount_fa', 'wallet_withdrawn_fa',
         'final_price_fa', 'capacity_status', 'payment_status',
-        'points_assigned_fa', 'created_jalali', 'updated_jalali'
+        'points_assigned_fa', 'discount_processed_fa', 'created_jalali', 'updated_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
@@ -815,7 +815,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'created_jalali', 'updated_jalali', 'points_assigned_fa',
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa'
+        'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
+        'discount_processed_fa'
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -833,7 +834,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
                 'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
                 'final_price_fa', 'capacity_status', 'payment_status',
-                'points_assigned_fa'
+                'points_assigned_fa', 'discount_processed_fa'
             )
         }),
         (_('اطلاعات سیستم'), {
@@ -858,7 +859,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
     def updated_jalali(self, obj):
         if obj.updated_at:
-            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
+            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
             return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
         return '-'
 
@@ -919,6 +920,11 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def points_assigned_fa(self, obj):
         return '✓' if obj.points_assigned else '✗'
     points_assigned_fa.short_description = _('امتیازهای تخصیص داده شده')
+
+    @admin.display(description=_('پردازش کد تخفیف انجام شده'))
+    def discount_processed_fa(self, obj):
+        return '✓' if obj.discount_processed else '✗'
+    discount_processed_fa.short_description = _('پردازش کد تخفیف')
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
