@@ -194,7 +194,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     4. ارسال اعلان به‌روزرسانی وضعیت رزرو از طریق WebSocket.
     """
     if get_skip_points_and_sms():
-        logger.info(f"اجرای سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد.")
+        logger.info(f"اجرای سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد به دلیل get_skip_points_and_sms=True.")
         return
 
     channel_layer = get_channel_layer()
@@ -274,8 +274,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
             # پردازش کد تخفیف (اگر اعمال شده و قبلاً پردازش نشده)
             if reservation.applied_discount_code and not reservation.discount_processed:
-                logger.debug(f"شروع پردازش کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code}")
-                cache.set(cache_key_discount, True, timeout=60)
+                logger.info(f"شروع پردازش کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code}")
+                # cache.set(cache_key_discount, True, timeout=60)  # موقتاً غیرفعال برای تست
                 code = reservation.applied_discount_code.upper()
                 discount_obj = None
                 discount_type = None
@@ -284,15 +284,15 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 try:
                     discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=code)
                     discount_type = 'room'
-                    logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}")
+                    logger.debug(f"RoomDiscountCode پیدا شد: code={discount_obj.code}, remaining_uses={discount_obj.remaining_uses}")
                 except RoomDiscountCode.DoesNotExist:
                     try:
                         discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=code)
                         discount_type = 'hotel'
-                        logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}")
+                        logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}, remaining_uses={discount_obj.remaining_uses}")
                     except HotelDiscountCode.DoesNotExist:
                         logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
-                        cache.delete(cache_key_discount)
+                        # cache.delete(cache_key_discount)  # موقتاً غیرفعال
                         return
 
                 # اعمال کد تخفیف با استفاده از متد apply_discount
@@ -301,10 +301,10 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     if reservation.buyer not in discount_obj.activated_users.all():
                         try:
                             discount_obj.apply_discount(reservation.buyer)
-                            logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد.")
+                            logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد. remaining_uses={discount_obj.remaining_uses}")
                         except ValueError as e:
                             logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
-                            cache.delete(cache_key_discount)
+                            # cache.delete(cache_key_discount)  # موقتاً غیرفعال
                             return
                     else:
                         logger.warning(f"کاربر {reservation.buyer.phone_number} قبلاً در activated_users کد {code} وجود دارد.")
@@ -325,7 +325,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
                 reservation.discount_processed = True
                 reservation.save(update_fields=['discount_processed'])
-                cache.delete(cache_key_discount)
+                # cache.delete(cache_key_discount)  # موقتاً غیرفعال
                 logger.info(f"پردازش کد تخفیف برای رزرو {reservation.tracking_code} تکمیل شد.")
 
     # بررسی برداشت از کیف پول هنگام پرداخت نهایی
