@@ -9,6 +9,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from decimal import Decimal
 from django.db import transaction
+from threading import local
 from .models import (
     Reservationhotel, ReservationRoom, ReservationRoomPassenger, 
     Passenger, RoomDatePrice, Room, Wallet
@@ -275,7 +276,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             # پردازش کد تخفیف (اگر اعمال شده و قبلاً پردازش نشده)
             if reservation.applied_discount_code and not reservation.discount_processed:
                 logger.info(f"شروع پردازش کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code}")
-                # cache.set(cache_key_discount, True, timeout=60)  # موقتاً غیرفعال برای تست
                 code = reservation.applied_discount_code.upper()
                 discount_obj = None
                 discount_type = None
@@ -292,7 +292,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         logger.debug(f"HotelDiscountCode پیدا شد: code={discount_obj.code}, remaining_uses={discount_obj.remaining_uses}")
                     except HotelDiscountCode.DoesNotExist:
                         logger.error(f"کد تخفیف {code} برای رزرو {reservation.tracking_code} یافت نشد.")
-                        # cache.delete(cache_key_discount)  # موقتاً غیرفعال
                         return
 
                 # اعمال کد تخفیف با استفاده از متد apply_discount
@@ -304,29 +303,27 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                             logger.info(f"کاربر {reservation.buyer.phone_number} با موفقیت به activated_users کد تخفیف {code} اضافه شد. remaining_uses={discount_obj.remaining_uses}")
                         except ValueError as e:
                             logger.error(f"خطا در اعمال کد تخفیف {code} برای کاربر {reservation.buyer.phone_number}: {str(e)}")
-                            # cache.delete(cache_key_discount)  # موقتاً غیرفعال
                             return
                     else:
                         logger.warning(f"کاربر {reservation.buyer.phone_number} قبلاً در activated_users کد {code} وجود دارد.")
 
-                # به‌روزرسانی reward_claimed
-                activation_filter = {
-                    'user': reservation.buyer,
-                    'discount_type': discount_type,
-                    **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-                }
-                activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
-                if activation_record and not activation_record.reward_claimed:
-                    activation_record.reward_claimed = True
-                    activation_record.save(update_fields=['reward_claimed'])
-                    logger.info(f"reward_claimed برای رکورد {activation_record.id} به True تنظیم شد.")
-                elif activation_record:
-                    logger.debug(f"رکورد فعال‌سازی {activation_record.id} قبلاً reward_claimed=True بوده است.")
+                    # به‌روزرسانی reward_claimed
+                    activation_filter = {
+                        'user': reservation.buyer,
+                        'discount_type': discount_type,
+                        **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
+                    }
+                    activation_record = DiscountActivationRecord.objects.select_for_update().filter(**activation_filter).first()
+                    if activation_record and not activation_record.reward_claimed:
+                        activation_record.reward_claimed = True
+                        activation_record.save(update_fields=['reward_claimed'])
+                        logger.info(f"reward_claimed برای رکورد {activation_record.id} به True تنظیم شد.")
+                    elif activation_record:
+                        logger.debug(f"رکورد فعال‌سازی {activation_record.id} قبلاً reward_claimed=True بوده است.")
 
-                reservation.discount_processed = True
-                reservation.save(update_fields=['discount_processed'])
-                # cache.delete(cache_key_discount)  # موقتاً غیرفعال
-                logger.info(f"پردازش کد تخفیف برای رزرو {reservation.tracking_code} تکمیل شد.")
+                    reservation.discount_processed = True
+                    reservation.save(update_fields=['discount_processed'])
+                    logger.info(f"پردازش کد تخفیف برای رزرو {reservation.tracking_code} تکمیل شد.")
 
     # بررسی برداشت از کیف پول هنگام پرداخت نهایی
     if instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:

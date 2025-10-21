@@ -112,17 +112,19 @@ class RoomDiscountCode(models.Model):
         متد برای اعمال کد تخفیف و کاهش remaining_uses
         """
         if self.remaining_uses <= 0:
-            raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
+            raise ValueError(f"تعداد دفعات استفاده از کد {self.code} به پایان رسیده است.")
         if user in self.activated_users.all():
-            raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
+            raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
         
+        logger.debug(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
         self.remaining_uses -= 1
         self.activated_users.add(user)
         self.save()
+        logger.debug(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            self.remaining_uses = self.usage_limit
+            self.remaining_uses = self.usage_limit  # اطمینان از تنظیم اولیه
         super().save(*args, **kwargs)
 
     class Meta:
@@ -228,7 +230,7 @@ class ShoppingCenterDiscountCode(models.Model):
 # کد تخفیف باشگاه مشتریان برای هتل‌ها
 class HotelDiscountCode(models.Model):
     hotel = models.ForeignKey(
-        'reservation.hotel',
+        'reservation.Hotel',
         on_delete=models.CASCADE,
         related_name='discount_codes',
         verbose_name=_("هتل"),
@@ -331,17 +333,19 @@ class HotelDiscountCode(models.Model):
         متد برای اعمال کد تخفیف و کاهش remaining_uses
         """
         if self.remaining_uses <= 0:
-            raise ValueError("تعداد دفعات استفاده از این کد به پایان رسیده است.")
+            raise ValueError(f"تعداد دفعات استفاده از کد {self.code} به پایان رسیده است.")
         if user in self.activated_users.all():
-            raise ValueError("این کاربر قبلاً از این کد تخفیف برای رزرو استفاده کرده است.")
+            raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
         
+        logger.debug(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
         self.remaining_uses -= 1
         self.activated_users.add(user)
         self.save()
+        logger.debug(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            self.remaining_uses = self.usage_limit
+            self.remaining_uses = self.usage_limit  # اطمینان از تنظیم اولیه
         super().save(*args, **kwargs)
 
     class Meta:
