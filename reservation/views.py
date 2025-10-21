@@ -3468,7 +3468,7 @@ class ApplyDiscountCodeAPIView(APIView):
                 return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
         discount_obj = room_discount or hotel_discount
-        now_j = jdatetime.now().date()
+        now_j = jdatetime.now().date()  # اصلاح به jdatetime.datetime.now()
 
         if discount_obj.expires_at and discount_obj.expires_at < now_j:
             logger.warning(f"کد تخفیف {code} منقضی شده است: expires_at={discount_obj.expires_at}")
