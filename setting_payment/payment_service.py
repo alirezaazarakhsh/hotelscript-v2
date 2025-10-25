@@ -64,8 +64,8 @@ class PaymentGatewayService:
         else:
             raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
-        # تنظیم هدر Referer بر اساس دامنه سایت
-        referer_url = getattr(settings, 'SITE_URL', 'https://safarnameh24.com')
+        # تنظیم هدر Referer با دامنه فعلی
+        referer_url = getattr(settings, 'SITE_URL', 'https://cps.safarnameh24.com')
         headers = {
             'Content-Type': 'application/json',
             'Referer': referer_url
@@ -112,7 +112,7 @@ class PaymentGatewayService:
 
         headers = {
             'Content-Type': 'application/json',
-            'Referer': getattr(settings, 'SITE_URL', 'https://safarnameh24.com')
+            'Referer': getattr(settings, 'SITE_URL', 'https://cps.safarnameh24.com')
         }
         response = requests.post(
             verification_url,
