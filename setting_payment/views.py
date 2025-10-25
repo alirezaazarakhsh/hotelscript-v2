@@ -38,12 +38,12 @@ def get_merchant_code(active_gateway):
         gw = ZarinpalGateway.objects.first()
         if not gw:
             raise ValueError("مرچنت کد زرین‌پال تنظیم نشده است.")
-        return gw.merchant_code
+        return gw.merchant_code.strip()
     elif active_gateway == "iraniangateway":
         gw = IranianGateway.objects.first()
         if not gw:
             raise ValueError("مرچنت کد ایران‌درگاه تنظیم نشده است.")
-        return gw.merchant_code
+        return gw.merchant_code.strip()
     else:
         raise ValueError(f"درگاه ناشناخته: {active_gateway}")
 
@@ -83,13 +83,12 @@ class ReservationPaymentCheckAPIView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            final_price = int(reservation.final_price)
+            callback_url = request.build_absolute_uri(reverse('payment:payment-callback'))
+
             if active_gateway == 'zarinpal':
                 if Client is None:
                     raise RuntimeError("پکیج 'zeep' نصب نشده است (pip install zeep)")
-
-                final_price = int(reservation.final_price)
-                callback_url = request.build_absolute_uri(reverse('payment:payment-callback'))
-
                 client = Client('https://www.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentRequest(
                     MerchantID=merchant_code,
@@ -97,7 +96,6 @@ class ReservationPaymentCheckAPIView(APIView):
                     Description=f"پرداخت رزرو {reservation.tracking_code}",
                     CallbackURL=callback_url,
                 )
-
                 if getattr(result, "Status", None) == 100:
                     authority = result.Authority
                     payment_link = f"https://www.zarinpal.com/pg/StartPay/{authority}"
@@ -107,30 +105,29 @@ class ReservationPaymentCheckAPIView(APIView):
                     return Response({"detail": f"خطا در تولید لینک پرداخت (کد وضعیت {getattr(result, 'Status', None)})"}, status=status.HTTP_400_BAD_REQUEST)
 
             elif active_gateway == 'iraniangateway':
-                final_price = int(reservation.final_price)
-                callback_url = request.build_absolute_uri(reverse('payment:payment-callback'))
                 order_id = reservation.tracking_code
-
                 data = {
                     "merchantID": merchant_code,
                     "amount": final_price,
                     "callbackURL": callback_url,
-                    "orderId": order_id,
-                    "cardNumber": "1234123412341234"  # sandbox
+                    "orderId": order_id
                 }
-
-                url = "https://dargaah.ir/sandbox/payment"
-                resp = requests.post(url, json=data, headers={"Content-Type": "application/json"})
+                url = "https://dargaah.ir/payment"  # محیط واقعی
+                resp = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+                resp.raise_for_status()
                 resp_data = resp.json()
 
                 if resp_data.get("status") != 200:
                     return Response({"detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
 
                 authority = resp_data.get("authority")
-                payment_link = f"https://dargaah.ir/sandbox/ird/startpay/{authority}"
+                payment_link = f"https://dargaah.ir/ird/startpay/{authority}"
                 cache_payment_link(tracking_code, authority, payment_link)
                 return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
 
+        except requests.exceptions.RequestException as e:
+            logger.exception("خطا در اتصال به درگاه")
+            return Response({"detail": f"خطا در اتصال به درگاه: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             logger.exception("خطا در تولید لینک پرداخت")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -175,38 +172,53 @@ class PaymentVerifyAPIView(APIView):
         active_gateway = get_active_gateway()
         merchant_code = get_merchant_code(active_gateway)
 
-        if active_gateway == 'zarinpal':
-            if Client is None:
-                return Response({"detail": "پکیج zeep نصب نشده است"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            client = Client('https://www.zarinpal.com/pg/services/WebGate/wsdl')
-            result = client.service.PaymentVerification(
-                MerchantID=merchant_code,
-                Authority=authority,
-                Amount=amount
-            )
-            if getattr(result, "Status", None) in [100, 101]:
-                with transaction.atomic():
-                    reservation.payment_status = 'paid'
-                    reservation.ref_id = getattr(result, "RefID", None)
-                    reservation.save(update_fields=['payment_status', 'ref_id'])
-                    cache.delete(f"payment_link_{order_id}")
-                    cache.delete(f"payment_link_authority_{authority}")
-                return Response({"status": "success", "refId": getattr(result, "RefID", None)})
-            else:
-                return Response({"status": "failed", "detail": f"تایید تراکنش ناموفق بود: {getattr(result, 'Status', None)}"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            if active_gateway == 'zarinpal':
+                if Client is None:
+                    return Response({"detail": "پکیج zeep نصب نشده است"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                client = Client('https://www.zarinpal.com/pg/services/WebGate/wsdl')
+                result = client.service.PaymentVerification(
+                    MerchantID=merchant_code,
+                    Authority=authority,
+                    Amount=amount
+                )
+                if getattr(result, "Status", None) in [100, 101]:
+                    with transaction.atomic():
+                        reservation.payment_status = 'paid'
+                        reservation.ref_id = getattr(result, "RefID", None)
+                        reservation.save(update_fields=['payment_status', 'ref_id'])
+                        cache.delete(f"payment_link_{order_id}")
+                        cache.delete(f"payment_link_authority_{authority}")
+                    return Response({"status": "success", "refId": getattr(result, "RefID", None)})
+                else:
+                    return Response({"status": "failed", "detail": f"تایید تراکنش ناموفق بود: {getattr(result, 'Status', None)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        elif active_gateway == 'iraniangateway':
-            data = {"merchantID": merchant_code, "authority": authority, "amount": amount, "orderId": order_id}
-            url = "https://dargaah.ir/sandbox/verification"
-            resp = requests.post(url, json=data, headers={"Content-Type": "application/json"})
-            resp_data = resp.json()
-            if resp_data.get("status") in [100, 101]:
-                with transaction.atomic():
-                    reservation.payment_status = 'paid'
-                    reservation.ref_id = resp_data.get("refId")
-                    reservation.save(update_fields=['payment_status', 'ref_id'])
-                    cache.delete(f"payment_link_{order_id}")
-                    cache.delete(f"payment_link_authority_{authority}")
-                return Response({"status": "success", "refId": resp_data.get("refId")})
-            else:
-                return Response({"status": "failed", "detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
+            elif active_gateway == 'iraniangateway':
+                data = {
+                    "merchantID": merchant_code,
+                    "authority": authority,
+                    "amount": amount,
+                    "orderId": order_id
+                }
+                url = "https://dargaah.ir/verification"  # محیط واقعی
+                resp = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+                resp.raise_for_status()
+                resp_data = resp.json()
+
+                if resp_data.get("status") in [100, 101]:
+                    with transaction.atomic():
+                        reservation.payment_status = 'paid'
+                        reservation.ref_id = resp_data.get("refId")
+                        reservation.save(update_fields=['payment_status', 'ref_id'])
+                        cache.delete(f"payment_link_{order_id}")
+                        cache.delete(f"payment_link_authority_{authority}")
+                    return Response({"status": "success", "refId": resp_data.get("refId")})
+                else:
+                    return Response({"status": "failed", "detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
+
+        except requests.exceptions.RequestException as e:
+            logger.exception("خطا در اتصال به درگاه")
+            return Response({"detail": f"خطا در اتصال به درگاه: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.exception("خطا در تایید تراکنش")
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
