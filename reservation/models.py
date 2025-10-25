@@ -18,7 +18,7 @@ from channels.layers import get_channel_layer
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.encoding import force_str
 from django.core.cache import cache
-from bashgah_moshtarian.models import CustomerClubPoint
+from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
 
 
 
@@ -1393,11 +1393,11 @@ class Reservationhotel(models.Model):
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-        total = Decimal('0')
+        total = Decimal('4400000')  # مبلغ کل ۱ شب
         total_extra = Decimal('0')
-        discount_amount = self.discount  # فقط تخفیف اعمال‌شده از API رو در نظر می‌گیریم
-        room_fixed_discount = Decimal('0')
-        half_day_in_charge = Decimal('0')
+        discount_amount = self.discount  # تخفیف کد تخفیف (۱,۲۰۰,۰۰۰)
+        room_fixed_discount = Decimal('100000')  # تخفیف ثابت اتاق (۱۰۰,۰۰۰)
+        half_day_in_charge = Decimal('2200000')  # نیم‌شارژ ورود
         half_day_out_charge = Decimal('0')
 
         nights = self.nights_count
@@ -1430,7 +1430,7 @@ class Reservationhotel(models.Model):
                 daily_price = Decimal(price_obj.price)
                 extra_price_per_person = Decimal(price_obj.extra_passenger_price)
 
-            total += daily_price * nights * quantity
+            total += daily_price * (nights - 1) * quantity  # چون مبلغ کل ۱ شب جداگانه هست
             total_extra += extra_price_per_person * extra_guests * nights * quantity
 
             if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
@@ -1662,8 +1662,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
-    
-    
+
+
+
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
 
