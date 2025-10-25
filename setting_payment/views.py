@@ -1,5 +1,4 @@
-# setting_payment/views.py
-from django.shortcuts import get_object_or_404, reverse, redirect
+from django.shortcuts import get_object_or_404, reverse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -11,8 +10,6 @@ import logging
 import requests
 
 from safarname24 import settings
-
-# مدل‌ها
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
 
@@ -124,10 +121,9 @@ class ReservationPaymentCheckAPIView(APIView):
                     return Response({"detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
 
                 authority = resp_data.get("authority")
-                # لینک redirect به سرور خودتون
-                redirect_url = request.build_absolute_uri(reverse('payment:iranian-redirect', args=[authority]))
-                cache_payment_link(order_id, authority, redirect_url)
-                return Response({"payment_link": redirect_url}, status=status.HTTP_200_OK)
+                payment_link = f"https://dargaah.ir/ird/startpay/{authority}"
+                cache_payment_link(order_id, authority, payment_link)
+                return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
 
         except requests.exceptions.RequestException as e:
             logger.exception("خطا در اتصال به درگاه")
@@ -135,22 +131,6 @@ class ReservationPaymentCheckAPIView(APIView):
         except Exception as e:
             logger.exception("خطا در تولید لینک پرداخت")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# -------------------------
-# API: redirect ایران‌درگاه
-# -------------------------
-from django.views import View
-
-class IranianGatewayRedirectView(View):
-    def get(self, request, authority):
-        payment_data = cache.get(f"payment_link_authority_{authority}")
-        if not payment_data:
-            # در صورت نبود تراکنش معتبر
-            return Response({"detail": "تراکنش نامعتبر یا منقضی شده"}, status=status.HTTP_400_BAD_REQUEST)
-        # redirect مستقیم به درگاه ایران‌درگاه
-        return redirect(f"https://dargaah.ir/ird/startpay/{authority}")
-
 
 # -------------------------
 # API: callback تراکنش
@@ -176,7 +156,6 @@ class PaymentCallbackAPIView(APIView):
         if code != 100:
             return Response({"status": "failed", "detail": "پرداخت ناموفق بود"}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"status": "success", "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."})
-
 
 # -------------------------
 # API: تایید نهایی تراکنش
@@ -223,8 +202,8 @@ class PaymentVerifyAPIView(APIView):
                 }
                 url = "https://dargaah.ir/verification"
                 headers = {
-                        "Content-Type": "application/json",
-                        "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
+                    "Content-Type": "application/json",
+                    "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
                 }
                 resp = requests.post(url, json=data, headers=headers, timeout=15)
                 resp.raise_for_status()
