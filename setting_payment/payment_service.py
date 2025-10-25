@@ -1,92 +1,131 @@
 import requests
 import json
 from django.conf import settings
-from .models import IranianGateway, PaymentGatewayPreference
+from .models import ZarinpalGateway, IranianGateway, PaymentGatewayPreference
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PaymentGatewayService:
-    # آدرس‌های ایران درگاه
-    IRANIAN_SANDBOX_PAYMENT_URL = "https://dargaah.ir/sandbox/payment"
-    IRANIAN_SANDBOX_VERIFICATION_URL = "https://dargaah.ir/sandbox/verification"
+    # آدرس‌های ایران درگاه (فقط محیط تولید)
     IRANIAN_PRODUCTION_PAYMENT_URL = "https://dargaah.ir/payment"
     IRANIAN_PRODUCTION_VERIFICATION_URL = "https://dargaah.ir/verification"
-    IRANIAN_PAYMENT_URL = "https://dargaah.ir/sandbox/ird/startpay/{authority}" if settings.DEBUG else "https://dargaah.ir/ird/startpay/{authority}"
+    IRANIAN_PAYMENT_URL = "https://dargaah.ir/ird/startpay/{authority}"
+
+    # آدرس‌های زرین‌پال (محیط تولید)
+    ZARINPAL_PAYMENT_URL = "https://www.zarinpal.com/pg/StartPay/{authority}"
+    ZARINPAL_VERIFICATION_URL = "https://www.zarinpal.com/pg/rest/WebGate/PaymentVerification.json"
+    ZARINPAL_PAYMENT_GATEWAY_URL = "https://www.zarinpal.com/pg/StartPay/{authority}"
 
     @staticmethod
     def get_active_gateway():
         preference = PaymentGatewayPreference.objects.first()
-        return preference.active_gateway if preference else 'iraniangateway'  # پیش‌فرض ایران درگاه
+        return preference.active_gateway if preference else 'zarinpal'  # پیش‌فرض زرین‌پال
 
     @staticmethod
     def get_merchant_id():
-        if PaymentGatewayService.get_active_gateway() == 'iraniangateway':
+        active_gateway = PaymentGatewayService.get_active_gateway()
+        if active_gateway == 'iraniangateway':
             gateway = IranianGateway.objects.first()
-            return "TEST" if settings.DEBUG else (gateway.merchant_code if gateway else "")
+            return gateway.merchant_code if gateway else ""
+        elif active_gateway == 'zarinpal':
+            gateway = ZarinpalGateway.objects.first()
+            return gateway.merchant_code if gateway else ""
         return ""
 
     @staticmethod
-    def create_transaction(amount, callback_url, order_id, card_number="1234123412341234", mobile=None, description=None):
-        if PaymentGatewayService.get_active_gateway() != 'iraniangateway':
-            raise ValueError("درگاه فعال ایران درگاه نیست.")
-
+    def create_transaction(amount, callback_url, order_id, mobile=None, description=None):
+        active_gateway = PaymentGatewayService.get_active_gateway()
         merchant_id = PaymentGatewayService.get_merchant_id()
         if not merchant_id:
-            raise ValueError("مرچنت کد برای ایران درگاه تنظیم نشده است.")
+            raise ValueError("مرچنت کد برای درگاه فعال تنظیم نشده است.")
 
-        data = {
-            "merchantID": merchant_id,
-            "amount": amount,  # به ریال، بدون اعشار
-            "callbackURL": callback_url,
-            "orderId": order_id,
-            "cardNumber": card_number,  # برای سندباکس
-            "mobile": mobile,
-            "description": description,
-        }
+        if active_gateway == 'iraniangateway':
+            data = {
+                "merchantID": merchant_id,
+                "amount": amount,  # به ریال، بدون اعشار
+                "callbackURL": callback_url,
+                "orderId": order_id,
+                "mobile": mobile,
+                "description": description,
+            }
+            payment_url_base = PaymentGatewayService.IRANIAN_PAYMENT_URL
+            request_url = PaymentGatewayService.IRANIAN_PRODUCTION_PAYMENT_URL
+        elif active_gateway == 'zarinpal':
+            data = {
+                "merchant_id": merchant_id,
+                "amount": amount,
+                "description": description,
+                "callback_url": callback_url,
+                "metadata": {"mobile": mobile, "order_id": order_id}
+            }
+            payment_url_base = PaymentGatewayService.ZARINPAL_PAYMENT_URL
+            request_url = PaymentGatewayService.ZARINPAL_PAYMENT_GATEWAY_URL
+        else:
+            raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
         headers = {'Content-Type': 'application/json'}
         response = requests.post(
-            PaymentGatewayService.IRANIAN_SANDBOX_PAYMENT_URL if settings.DEBUG else PaymentGatewayService.IRANIAN_PRODUCTION_PAYMENT_URL,
+            request_url,
             data=json.dumps(data),
             headers=headers
         )
 
         response_data = response.json()
-        if response_data.get("status") == 200:
+        logger.info(f"Response from {active_gateway} (create): {response.text}")
+        if active_gateway == 'iraniangateway' and response_data.get("status") == 200:
             return response_data.get("authority")
+        elif active_gateway == 'zarinpal' and response_data.get("data") and response_data["data"].get("code") == 100:
+            return response_data["data"].get("authority")
         else:
-            raise ValueError(f"خطا در ایجاد تراکنش: {response_data.get('message')}")
+            raise ValueError(f"خطا در ایجاد تراکنش: {response_data.get('message', response_data.get('errors', 'خطای ناشناخته'))}")
 
     @staticmethod
     def verify_transaction(authority, amount, order_id):
-        if PaymentGatewayService.get_active_gateway() != 'iraniangateway':
-            raise ValueError("درگاه فعال ایران درگاه نیست.")
-
+        active_gateway = PaymentGatewayService.get_active_gateway()
         merchant_id = PaymentGatewayService.get_merchant_id()
         if not merchant_id:
-            raise ValueError("مرچنت کد برای ایران درگاه تنظیم نشده است.")
+            raise ValueError("مرچنت کد برای درگاه فعال تنظیم نشده است.")
 
-        data = {
-            "merchantID": merchant_id,
-            "authority": authority,
-            "amount": amount,
-            "orderId": order_id,
-        }
+        if active_gateway == 'iraniangateway':
+            data = {
+                "merchantID": merchant_id,
+                "authority": authority,
+                "amount": amount,
+                "orderId": order_id,
+            }
+            verification_url = PaymentGatewayService.IRANIAN_PRODUCTION_VERIFICATION_URL
+        elif active_gateway == 'zarinpal':
+            data = {
+                "merchant_id": merchant_id,
+                "authority": authority,
+                "amount": amount
+            }
+            verification_url = PaymentGatewayService.ZARINPAL_VERIFICATION_URL
+        else:
+            raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
         headers = {'Content-Type': 'application/json'}
         response = requests.post(
-            PaymentGatewayService.IRANIAN_SANDBOX_VERIFICATION_URL if settings.DEBUG else PaymentGatewayService.IRANIAN_PRODUCTION_VERIFICATION_URL,
+            verification_url,
             data=json.dumps(data),
             headers=headers
         )
 
         response_data = response.json()
-        if response_data.get("status") == 100:
+        logger.info(f"Response from {active_gateway} (verify): {response.text}")
+        if active_gateway == 'iraniangateway' and response_data.get("status") == 100:
             return response_data.get("refId")
+        elif active_gateway == 'zarinpal' and response_data.get("data") and response_data["data"].get("code") == 100:
+            return response_data["data"].get("ref_id")
         else:
-            raise ValueError(f"خطا در تأیید تراکنش: {response_data.get('message')}")
+            raise ValueError(f"خطا در تأیید تراکنش: {response_data.get('message', response_data.get('errors', 'خطای ناشناخته'))}")
 
     @staticmethod
     def get_payment_url(authority):
-        if PaymentGatewayService.get_active_gateway() != 'iraniangateway':
-            raise ValueError("درگاه فعال ایران درگاه نیست.")
-        return PaymentGatewayService.IRANIAN_PAYMENT_URL.format(authority=authority)
-    
+        active_gateway = PaymentGatewayService.get_active_gateway()
+        if active_gateway == 'iraniangateway':
+            return PaymentGatewayService.IRANIAN_PAYMENT_URL.format(authority=authority)
+        elif active_gateway == 'zarinpal':
+            return PaymentGatewayService.ZARINPAL_PAYMENT_URL.format(authority=authority)
+        raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
