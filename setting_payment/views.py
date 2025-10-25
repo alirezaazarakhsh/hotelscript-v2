@@ -5,7 +5,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.core.cache import cache
-from decimal import Decimal
 from datetime import datetime, timedelta
 from django.db import transaction
 import logging
@@ -112,8 +111,12 @@ class ReservationPaymentCheckAPIView(APIView):
                     "callbackURL": callback_url,
                     "orderId": order_id
                 }
-                url = "https://dargaah.ir/payment"  # محیط واقعی
-                resp = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+                url = "https://dargaah.ir/payment"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Referer": "https://safarnameh24.com"  # دامنه سایت شما
+                }
+                resp = requests.post(url, json=data, headers=headers, timeout=15)
                 resp.raise_for_status()
                 resp_data = resp.json()
 
@@ -200,8 +203,12 @@ class PaymentVerifyAPIView(APIView):
                     "amount": amount,
                     "orderId": order_id
                 }
-                url = "https://dargaah.ir/verification"  # محیط واقعی
-                resp = requests.post(url, json=data, headers={"Content-Type": "application/json"}, timeout=15)
+                url = "https://dargaah.ir/verification"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Referer": "https://safarnameh24.com"
+                }
+                resp = requests.post(url, json=data, headers=headers, timeout=15)
                 resp.raise_for_status()
                 resp_data = resp.json()
 
