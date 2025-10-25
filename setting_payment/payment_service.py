@@ -39,6 +39,9 @@ class PaymentGatewayService:
         merchant_id = PaymentGatewayService.get_merchant_id()
         if not merchant_id:
             raise ValueError("مرچنت کد برای درگاه فعال تنظیم نشده است.")
+        site_url = getattr(settings, 'SITE_URL', 'https://cps.safarnameh24.com')
+        if not callback_url or not callback_url.startswith('https://') or not callback_url.startswith(site_url):
+            raise ValueError(f"callback_url نامعتبر است. باید با {site_url} شروع شود.")
 
         if active_gateway == 'iraniangateway':
             data = {
@@ -64,19 +67,28 @@ class PaymentGatewayService:
         else:
             raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
-        # تنظیم هدر Referer با دامنه فعلی
-        referer_url = getattr(settings, 'SITE_URL', 'https://cps.safarnameh24.com')
+        referer_url = site_url
         headers = {
             'Content-Type': 'application/json',
             'Referer': referer_url
         }
-        response = requests.post(
-            request_url,
-            data=json.dumps(data),
-            headers=headers
-        )
+        logger.info(f"Attempting transaction with gateway: {active_gateway}, merchant_id: {merchant_id}, callback_url: {callback_url}")
+        try:
+            response = requests.post(
+                request_url,
+                data=json.dumps(data),
+                headers=headers,
+                timeout=10  # اضافه کردن تایم‌اوت برای جلوگیری از گیر کردن
+            )
+            response.raise_for_status()  # خطاهای HTTP رو به استثنا تبدیل می‌کنه
+            response_data = response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"خطای شبکه در ارتباط با {request_url}: {str(e)}")
+            raise ValueError(f"خطا در اتصال به درگاه: {str(e)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"پاسخ نامعتبر از {request_url}: {response.text}")
+            raise ValueError("پاسخ درگاه نامعتبر است.")
 
-        response_data = response.json()
         logger.info(f"Response from {active_gateway} (create): {response.text}")
         if active_gateway == 'iraniangateway' and response_data.get("status") == 200:
             return response_data.get("authority")
@@ -114,13 +126,22 @@ class PaymentGatewayService:
             'Content-Type': 'application/json',
             'Referer': getattr(settings, 'SITE_URL', 'https://cps.safarnameh24.com')
         }
-        response = requests.post(
-            verification_url,
-            data=json.dumps(data),
-            headers=headers
-        )
+        try:
+            response = requests.post(
+                verification_url,
+                data=json.dumps(data),
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            response_data = response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"خطای شبکه در ارتباط با {verification_url}: {str(e)}")
+            raise ValueError(f"خطا در اتصال به درگاه: {str(e)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"پاسخ نامعتبر از {verification_url}: {response.text}")
+            raise ValueError("پاسخ درگاه نامعتبر است.")
 
-        response_data = response.json()
         logger.info(f"Response from {active_gateway} (verify): {response.text}")
         if active_gateway == 'iraniangateway' and response_data.get("status") == 100:
             return response_data.get("refId")

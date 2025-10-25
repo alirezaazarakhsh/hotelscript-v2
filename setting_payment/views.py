@@ -5,9 +5,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.http import JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect
+from django.views.decorators.csrf import csrf_exempt
 from .payment_service import PaymentGatewayService
-import json
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +151,61 @@ class PaymentGatewayAPIView(APIView):
         except Exception as e:
             logger.error(f"خطای سرور در تأیید تراکنش برای سفارش {order_id}: {str(e)}")
             return Response({"detail": "خطا در اتصال به درگاه."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @csrf_exempt
+    def callback_view(request):
+        """
+        این ویو برای پردازش بازگشت کاربر از درگاه پرداخت (ایران درگاه یا زرین‌پال) طراحی شده است.
+        پس از تکمیل یا لغو تراکنش توسط کاربر، درگاه با ارسال پارامترهایی مثل Authority به این URL بازمی‌گردد.
+
+        **ورودی‌ها:**
+        - `Authority`: شناسه تراکنش که از طریق کوئری پارامتر (مثل ?Authority=12345) دریافت می‌شود.
+        - `Status`: وضعیت تراکنش (اختیاری، مثلاً OK یا NOK) که ممکن است درگاه ارسال کند.
+
+        **پردازش:**
+        - دریافت Authority و اعتبارسنجی آن.
+        - بازیابی amount و order_id از دیتابیس یا سشن بر اساس Authority (نیاز به پیاده‌سازی سفارشی دارد).
+        - فراخوانی verify_transaction برای تأیید تراکنش.
+        - ثبت نتیجه در لاگ و بازگشت پاسخ به کاربر.
+
+        **خروجی:**
+        - در صورت موفقیت: پیامی با شماره پیگیری تراکنش.
+        - در صورت خطا: پیامی با توضیح خطا.
+
+        **حالات خاص:**
+        - این ویو باید @csrf_exempt باشد، زیرا درگاه از خارج درخواست می‌فرستد.
+        - نیاز به ذخیره تراکنش‌ها در دیتابیس یا سشن برای بازیابی amount و order_id دارد.
+        """
+        logger.info(f"Callback request received: {request.GET}")
+
+        authority = request.GET.get('Authority')
+        if not authority:
+            logger.error("Authority در درخواست callback یافت نشد.")
+            return HttpResponse("خطا: شناسه تراکنش یافت نشد.", status=400)
+
+        # فرض می‌کنیم amount و order_id رو از دیتابیس یا سشن می‌خونیم
+        # این بخش باید با مدل دیتابیس یا سیستم سشن شما سفارشی بشه
+        try:
+            # مثال: فرض می‌کنیم از یه مدل Transaction استفاده می‌کنیم
+            # from .models import Transaction
+            # transaction = Transaction.objects.get(authority=authority)
+            # amount = transaction.amount
+            # order_id = transaction.order_id
+            amount = 100000  # باید از دیتابیس بخونید
+            order_id = "sasha999"  # باید از دیتابیس بخونید
+            status = request.GET.get('Status', 'NOK')  # وضعیت تراکنش از درگاه
+
+            if status == 'OK':
+                ref_id = PaymentGatewayService.verify_transaction(authority, amount, order_id)
+                logger.info(f"تراکنش با Authority {authority} با موفقیت تأیید شد. RefID: {ref_id}")
+                return HttpResponse(f"تراکنش با موفقیت انجام شد. شماره پیگیری: {ref_id}")
+            else:
+                logger.error(f"تراکنش با Authority {authority} ناموفق بود. Status: {status}")
+                return HttpResponse("تراکنش ناموفق بود. لطفاً دوباره تلاش کنید.", status=400)
+
+        except ValueError as e:
+            logger.error(f"خطا در تأیید تراکنش با Authority {authority}: {str(e)}")
+            return HttpResponse(f"خطا در تأیید تراکنش: {str(e)}", status=400)
+        except Exception as e:
+            logger.error(f"خطای سرور در پردازش callback با Authority {authority}: {str(e)}")
+            return HttpResponse("خطا در پردازش تراکنش. با پشتیبانی تماس بگیرید.", status=500)
