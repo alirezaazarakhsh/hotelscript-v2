@@ -34,7 +34,7 @@ urlpatterns = [
         path('notification/', include('notification.urls', namespace='notification')),
         path('crm/', include('bashgah_moshtarian.urls', namespace='bashgah')), 
         path('favorite/', include('favorite.urls', namespace='favorites')),
-        # path('payment/', include('setting_payment.urls', namespace='payment')),  # اضافه کردن setting_payment
+        path('payment/', include('setting_payment.urls', namespace='payment')),  # اضافه کردن setting_payment
 
     ])),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
