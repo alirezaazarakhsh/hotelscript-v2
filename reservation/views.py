@@ -3494,7 +3494,6 @@ class ApplyDiscountCodeAPIView(APIView):
             logger.warning(f"دفعات استفاده از کد تخفیف {code} به پایان رسیده است: remaining_uses={discount_obj.remaining_uses}")
             return Response({"error": "دفعات استفاده از این کد تخفیف به پایان رسیده است."}, status=HTTP_403_FORBIDDEN)
 
-        # چک اضافی برای جلوگیری از استفاده چندباره توسط کاربر
         if request.user in discount_obj.activated_users.all():
             logger.warning(f"کاربر {request.user.phone_number} قبلاً از کد تخفیف {code} استفاده کرده است.")
             return Response({"error": "این کاربر قبلاً از این کد تخفیف استفاده کرده است."}, status=HTTP_403_FORBIDDEN)
@@ -3515,11 +3514,13 @@ class ApplyDiscountCodeAPIView(APIView):
 
         with transaction.atomic():
             reservation.applied_discount_code = code
-            discount_value = min(Decimal(discount_obj.discount_value), reservation.final_price)
+            # محاسبه قیمت پایه بدون تخفیف کد
             total, total_extra, _, half_day_in_charge, half_day_out_charge, total_half_day_charge, _, final_without_promo, room_fixed_discount = reservation.calculate_total_price()
-
+            # اضافه کردن تخفیف قبلی (مثل تخفیف هنگام خرید) برای محاسبه درست
+            base_price = final_without_promo + (reservation.discount if reservation.discount else Decimal('0'))
+            discount_value = min(Decimal(discount_obj.discount_value), base_price)
             new_total_discount = discount_value
-            new_final_price = max(Decimal('0'), final_without_promo - new_total_discount - room_fixed_discount)
+            new_final_price = max(Decimal('0'), base_price - new_total_discount - room_fixed_discount)
 
             reservation.discount = new_total_discount
             reservation.final_price = new_final_price
@@ -3594,6 +3595,7 @@ class ApplyDiscountCodeAPIView(APIView):
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount)
         }, status=HTTP_200_OK)
+        
         
         
 # ای پی ای برداشت از کیف پول 
