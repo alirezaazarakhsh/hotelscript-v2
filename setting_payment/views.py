@@ -18,7 +18,7 @@ class PaymentGatewayAPIView(APIView):
         operation_summary="ایجاد تراکنش پرداخت",
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد یک تراکنش پرداخت از طریق درگاه ایران درگاه ایجاد کند.
-        تراکنش در محیط سندباکس تست می‌شود و کاربر به صفحه پرداخت هدایت می‌شود.
+        کاربر به صفحه پرداخت هدایت می‌شود.
 
         **ورودی‌ها (در body درخواست POST):**
         - `amount`: مبلغ تراکنش (ریال، حداقل ۱۰,۰۰۰ ریال)
@@ -29,10 +29,9 @@ class PaymentGatewayAPIView(APIView):
         **حالات خاص:**
         - درگاه فعال باید ایران درگاه باشد (از تنظیمات ترجیحات درگاه).
         - مرچنت کد باید در ادمین تنظیم شده باشد.
-        - برای تست، از cardNumber نمونه (1234123412341234) استفاده کنید.
 
         **خروجی:**
-        - در صورت موفقیت: URL پرداخت و شناسه تراکنش (authority).
+        - در صورت موفقیت: ریدایرکت به صفحه پرداخت.
         - در صورت خطا: پیام خطا با جزئیات.
         """,
         request_body=openapi.Schema(
@@ -46,14 +45,7 @@ class PaymentGatewayAPIView(APIView):
             required=['amount', 'order_id']
         ),
         responses={
-            200: openapi.Response(description="تراکنش ایجاد شد، URL پرداخت برگردانده شد.", 
-                                  schema=openapi.Schema(
-                                      type=openapi.TYPE_OBJECT,
-                                      properties={
-                                          'authority': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه تراکنش'),
-                                          'payment_url': openapi.Schema(type=openapi.TYPE_STRING, description='لینک پرداخت')
-                                      }
-                                  )),
+            302: openapi.Response(description="ریدایرکت به صفحه پرداخت."),
             400: openapi.Response(description="خطاهای اعتبارسنجی (مثل مبلغ نامعتبر یا تنظیمات ناقص)."),
             403: openapi.Response(description="درگاه فعال ایران درگاه نیست."),
             500: openapi.Response(description="خطای سرور یا اتصال به درگاه."),
@@ -75,8 +67,8 @@ class PaymentGatewayAPIView(APIView):
             logger.error("شناسه سفارش خالی است.")
             return Response({"detail": "شناسه سفارش الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # تنظیم callbackURL با دامنه سایت
-        callback_url = f"https://safarnameh24.com/callback/"  # دامنه واقعی
+        # تنظیم callbackURL با دامنه فعلی
+        callback_url = f"https://cps.safarnameh24.com/callback/"
 
         try:
             authority = PaymentGatewayService.create_transaction(
@@ -88,10 +80,7 @@ class PaymentGatewayAPIView(APIView):
             )
             payment_url = PaymentGatewayService.get_payment_url(authority)
             logger.info(f"تراکنش برای سفارش {order_id} با موفقیت ایجاد شد. Authority: {authority}")
-            return Response({
-                "authority": authority,
-                "payment_url": payment_url
-            }, status=status.HTTP_200_OK)
+            return HttpResponseRedirect(payment_url)  # ریدایرکت به درگاه
         except ValueError as e:
             logger.error(f"خطا در ایجاد تراکنش برای سفارش {order_id}: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
