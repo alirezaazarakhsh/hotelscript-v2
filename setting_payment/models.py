@@ -26,7 +26,6 @@ class IranianGateway(models.Model):
 
 
 
-
 # انتخاب درگاه برای فعال بودن توسط کاربر
 class PaymentGatewayPreference(models.Model):
     GATEWAY_CHOICES = (
