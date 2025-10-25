@@ -16,7 +16,6 @@ from .views import (
     ReservationDescriptionAPIView,
     ReservationDetailAPIView,
     ReservationInvoiceAPIView,
-    ReservationPaymentCheckAPIView,
     SuggesteHotelListView,
     ReservationRoomDetailAPIView,
     WalletWithdrawAPIView
