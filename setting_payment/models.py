@@ -39,8 +39,8 @@ class PaymentGatewayPreference(models.Model):
         return f"درگاه فعال: {self.get_active_gateway_display()}"
 
     class Meta:
-        verbose_name = "ترجیحات درگاه پرداخت"
-        verbose_name_plural = "ترجیحات درگاه‌های پرداخت"
+        verbose_name = "درگاه "
+        verbose_name_plural = "تنظیمات درگاه پرداخت "
 
     def save(self, *args, **kwargs):
         # اطمینان از اینکه فقط یک نمونه از این مدل وجود داشته باشد
