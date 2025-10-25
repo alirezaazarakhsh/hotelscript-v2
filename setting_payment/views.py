@@ -206,7 +206,7 @@ class PaymentVerifyAPIView(APIView):
                 url = "https://dargaah.ir/verification"
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": "https://safarnameh24.com"
+                    "Referer": "https://cps.safarnameh24.com"
                 }
                 resp = requests.post(url, json=data, headers=headers, timeout=15)
                 resp.raise_for_status()
