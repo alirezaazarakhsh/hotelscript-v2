@@ -1272,14 +1272,6 @@ class BestHotels(models.Model):
 # ---------------- Reservationhotel ----------------
 logger = logging.getLogger(__name__)
 
-_thread_locals = local()
-
-def set_skip_points_and_sms(value):
-    setattr(_thread_locals, 'skip_points_and_sms', value)
-
-def get_skip_points_and_sms():
-    return getattr(_thread_locals, 'skip_points_and_sms', False)
-
 class Reservationhotel(models.Model):
     CAPACITY_STATUS_CHOICES = [
         ('pending', _('در حال بررسی')),
@@ -1393,11 +1385,11 @@ class Reservationhotel(models.Model):
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-        total = Decimal('4400000')  # مبلغ کل ۱ شب
+        total = Decimal('0')
         total_extra = Decimal('0')
-        discount_amount = self.discount  # تخفیف کد تخفیف (۱,۲۰۰,۰۰۰)
-        room_fixed_discount = Decimal('100000')  # تخفیف ثابت اتاق (۱۰۰,۰۰۰)
-        half_day_in_charge = Decimal('2200000')  # نیم‌شارژ ورود
+        discount_amount = Decimal('0')
+        room_fixed_discount = Decimal('0')
+        half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
 
         nights = self.nights_count
@@ -1430,8 +1422,9 @@ class Reservationhotel(models.Model):
                 daily_price = Decimal(price_obj.price)
                 extra_price_per_person = Decimal(price_obj.extra_passenger_price)
 
-            total += daily_price * (nights - 1) * quantity  # چون مبلغ کل ۱ شب جداگانه هست
-            total_extra += extra_price_per_person * extra_guests * nights * quantity
+            total += daily_price * nights * quantity
+            extra_price = extra_price_per_person * extra_guests
+            total_extra += extra_price * nights * quantity
 
             if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                 if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
@@ -1442,8 +1435,10 @@ class Reservationhotel(models.Model):
             if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
                 half_day_out_charge += res_room.half_day_out_price * quantity
 
+        discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
+        # فقط اگه برداشت از کیف پول انجام شده باشه، مقدار کیف پول کسر بشه
         effective_wallet_withdrawal = self.wallet_withdrawal_amount if self.wallet_withdrawn else Decimal('0')
         final_price = base_price - discount_amount - room_fixed_discount - effective_wallet_withdrawal
 
@@ -1463,7 +1458,7 @@ class Reservationhotel(models.Model):
             ]):
                 total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
                 self.total_price = total
-                self.discount = code_discount  # فقط کد تخفیف رو آپدیت می‌کنیم
+                self.discount = code_discount
                 self.room_fixed_discount = room_fixed
                 self.half_day_in_charge = half_in
                 self.half_day_out_charge = half_out
@@ -1662,8 +1657,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
-
-
+    
+    
 
 # ---------------- ReservationRoom ----------------
 logger = logging.getLogger(__name__)
