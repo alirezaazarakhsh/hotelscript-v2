@@ -8,7 +8,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .serializers import CreateTransactionSerializer, VerifyTransactionSerializer, TransactionResponseSerializer
 from .payment_service import PaymentGatewayService
-from .models import Reservationhotel
+from reservation.models import Reservationhotel  # اصلاح import
 import logging
 
 logger = logging.getLogger(__name__)
