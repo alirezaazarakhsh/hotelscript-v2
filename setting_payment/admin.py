@@ -14,7 +14,6 @@ class ZarinpalGatewayAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        # فقط اجازه افزودن یک نمونه
         if ZarinpalGateway.objects.exists():
             messages.warning(request, "تنها یک تنظیم برای درگاه زرین‌پال مجاز است. برای تغییر، نمونه موجود را ویرایش کنید.")
         return not ZarinpalGateway.objects.exists()
@@ -34,7 +33,6 @@ class IranianGatewayAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        # فقط اجازه افزودن یک نمونه
         if IranianGateway.objects.exists():
             messages.warning(request, "تنها یک تنظیم برای درگاه ایران درگاه مجاز است. برای تغییر، نمونه موجود را ویرایش کنید.")
         return not IranianGateway.objects.exists()
@@ -53,15 +51,22 @@ class PaymentGatewayPreferenceAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        # فقط اجازه افزودن یک نمونه
         if PaymentGatewayPreference.objects.exists():
-            messages.warning(request, "تنها یک تنظیم ترجیحات درگاه پرداخت مجاز است. برای تغییر، نمونه موجود را ویرایش کنید.")
+            messages.warning(request, "تنها یک تنظیم ترجیحات درگاه پرداخت مجاز است. برای تغییر درگاه، نمونه موجود را ویرایش کنید.")
         return not PaymentGatewayPreference.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
 
     def get_readonly_fields(self, request, obj=None):
-        if obj:  # اگر شیء در حال ویرایش باشد
-            return ('active_gateway',)  # فقط active_gateway رو فقط‌خواندنی می‌کنیم
-        return ()
+        # فقط وقتی نمونه‌ای وجود نداره، readonly اعمال نشه
+        if not obj and not PaymentGatewayPreference.objects.exists():
+            return ()
+        return ()  # بعد از افزودن، هیچ فیلدی فقط‌خواندنی نمی‌شه
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        # سفارشی‌سازی صفحه ویرایش برای نمایش پیام راهنما
+        extra_context = extra_context or {}
+        extra_context['title'] = "ویرایش ترجیحات درگاه پرداخت"
+        extra_context['help_text'] = "برای تغییر درگاه فعال، گزینه موردنظر را انتخاب کنید."
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
