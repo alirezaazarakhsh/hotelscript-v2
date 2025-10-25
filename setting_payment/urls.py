@@ -1,10 +1,10 @@
 from django.urls import path
-from .views import PaymentGatewayAPIView, callback_view  # فرض می‌کنیم callback_view اضافه شده
+from .views import CreateTransactionView, VerifyTransactionView, callback_view
 
-app_name = 'payment'  # تعریف namespace برای این اپلیکیشن
+app_name = 'payment'
 
 urlpatterns = [
-    path('create/', PaymentGatewayAPIView.as_view(), name='payment_create'),  # ایجاد تراکنش
-    path('verify/', PaymentGatewayAPIView.as_view(), name='payment_verify'),  # تأیید تراکنش
-    path('callback/', callback_view, name='payment_callback'),  # اضافه کردن ویو callback
+    path('create/', CreateTransactionView.as_view(), name='payment_create'),
+    path('verify/', VerifyTransactionView.as_view(), name='payment_verify'),
+    path('callback/', callback_view, name='payment_callback'),
 ]

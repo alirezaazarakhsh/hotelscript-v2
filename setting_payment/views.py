@@ -1,210 +1,201 @@
-import logging
+from django.http import HttpResponseRedirect
+from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from rest_framework.decorators import api_view
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from django.http import HttpResponse, HttpResponseRedirect
-from django.views.decorators.csrf import csrf_exempt
+from .serializers import CreateTransactionSerializer, VerifyTransactionSerializer, TransactionResponseSerializer
 from .payment_service import PaymentGatewayService
+from .models import Reservationhotel
+import logging
 
 logger = logging.getLogger(__name__)
 
-class PaymentGatewayAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
+class CreateTransactionView(APIView):
     @swagger_auto_schema(
-        operation_summary="ایجاد تراکنش پرداخت",
+        operation_summary="ایجاد تراکنش پرداخت با ایران درگاه",
         operation_description="""
-        این API به کاربر احراز هویت‌شده اجازه می‌دهد یک تراکنش پرداخت از طریق درگاه ایران درگاه ایجاد کند.
-        کاربر به صفحه پرداخت هدایت می‌شود.
+        این API یک تراکنش پرداخت جدید با استفاده از درگاه ایران درگاه ایجاد می‌کند. 
+        پس از ایجاد موفقیت‌آمیز تراکنش، یک `authority` و لینک پرداخت (`payment_url`) برای هدایت کاربر به درگاه پرداخت بازگشت داده می‌شود.
 
         **ورودی‌ها (در body درخواست POST):**
-        - `amount`: مبلغ تراکنش (ریال، حداقل ۱۰,۰۰۰ ریال)
-        - `order_id`: شناسه سفارش (رقم یکتا برای ردیابی)
-        - `mobile`: شماره همراه (اختیاری)
+        - `amount`: مبلغ تراکنش (تومان، حداقل ۱,۰۰۰ تومان)
+        - `callback_url`: آدرس بازگشت پس از پرداخت (باید با SITE_URL تنظیم‌شده در پروژه شروع شود)
+        - `order_id`: شناسه یکتای سفارش
+        - `mobile`: شماره موبایل کاربر (اختیاری)
         - `description`: توضیحات تراکنش (اختیاری)
 
         **حالات خاص:**
-        - درگاه فعال باید ایران درگاه باشد (از تنظیمات ترجیحات درگاه).
-        - مرچنت کد باید در ادمین تنظیم شده باشد.
+        - اگر مرچنت کد درگاه تنظیم نشده باشد، خطا بازمی‌گردد.
+        - اگر `callback_url` نامعتبر باشد (مثلاً با SITE_URL شروع نشود)، خطا بازمی‌گردد.
+        - در صورت بروز خطا در اتصال به درگاه یا پاسخ نامعتبر، خطا با جزئیات بازمی‌گردد.
 
         **خروجی:**
-        - در صورت موفقیت: ریدایرکت به صفحه پرداخت.
+        - در صورت موفقیت: `authority` و `payment_url` برای هدایت به درگاه.
         - در صورت خطا: پیام خطا با جزئیات.
         """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ تراکنش (ریال، حداقل ۱۰,۰۰۰)'),
-                'order_id': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه سفارش'),
-                'mobile': openapi.Schema(type=openapi.TYPE_STRING, description='شماره همراه (اختیاری)'),
-                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات تراکنش (اختیاری)'),
-            },
-            required=['amount', 'order_id']
-        ),
+        request_body=CreateTransactionSerializer,
         responses={
-            302: openapi.Response(description="ریدایرکت به صفحه پرداخت."),
-            400: openapi.Response(description="خطاهای اعتبارسنجی (مثل مبلغ نامعتبر یا تنظیمات ناقص)."),
-            403: openapi.Response(description="درگاه فعال ایران درگاه نیست."),
-            500: openapi.Response(description="خطای سرور یا اتصال به درگاه."),
+            200: TransactionResponseSerializer,
+            400: openapi.Response(description="خطاهای اعتبارسنجی یا خطای درگاه (مثل مرچنت کد نامعتبر یا پاسخ نامعتبر)."),
         },
         tags=["payment-api"]
     )
     def post(self, request):
-        amount = request.data.get('amount')
-        order_id = request.data.get('order_id')
-        mobile = request.data.get('mobile')
-        description = request.data.get('description')
+        serializer = CreateTransactionSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # تنظیم درگاه به صورت دستی به ایران درگاه
+                PaymentGatewayService.get_active_gateway = lambda: 'iraniangateway'
+                authority = PaymentGatewayService.create_transaction(
+                    amount=serializer.validated_data['amount'],
+                    callback_url=serializer.validated_data['callback_url'],
+                    order_id=serializer.validated_data['order_id'],
+                    mobile=serializer.validated_data.get('mobile', None),
+                    description=serializer.validated_data.get('description', None)
+                )
+                payment_url = PaymentGatewayService.get_payment_url(authority)
+                response_data = {
+                    'authority': authority,
+                    'payment_url': payment_url
+                }
+                return Response(TransactionResponseSerializer(response_data).data, status=status.HTTP_200_OK)
+            except ValueError as e:
+                logger.error(f"خطا در ایجاد تراکنش: {str(e)}")
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # اعتبارسنجی ورودی‌ها
-        if not amount or not isinstance(amount, (int, float)) or amount < 10000:
-            logger.error(f"مبلغ نامعتبر برای سفارش {order_id}: {amount}")
-            return Response({"detail": "مبلغ باید حداقل ۱۰,۰۰۰ ریال باشد."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not order_id:
-            logger.error("شناسه سفارش خالی است.")
-            return Response({"detail": "شناسه سفارش الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # تنظیم callbackURL با دامنه فعلی
-        callback_url = f"https://cps.safarnameh24.com/callback/"
-
-        try:
-            authority = PaymentGatewayService.create_transaction(
-                amount=amount,
-                callback_url=callback_url,
-                order_id=order_id,
-                mobile=mobile,
-                description=description
-            )
-            payment_url = PaymentGatewayService.get_payment_url(authority)
-            logger.info(f"تراکنش برای سفارش {order_id} با موفقیت ایجاد شد. Authority: {authority}")
-            return HttpResponseRedirect(payment_url)  # ریدایرکت به درگاه
-        except ValueError as e:
-            logger.error(f"خطا در ایجاد تراکنش برای سفارش {order_id}: {str(e)}")
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"خطای سرور در ایجاد تراکنش برای سفارش {order_id}: {str(e)}")
-            return Response({"detail": "خطا در اتصال به درگاه."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+class VerifyTransactionView(APIView):
     @swagger_auto_schema(
-        operation_summary="تأیید تراکنش پرداخت",
+        operation_summary="تأیید تراکنش پرداخت با ایران درگاه",
         operation_description="""
-        این API تراکنش پرداخت را از طریق درگاه ایران درگاه تأیید می‌کند.
-        این مرحله پس از بازگشت کاربر از درگاه و دریافت اطلاعات تراکنش انجام می‌شود.
+        این API یک تراکنش پرداخت را با استفاده از درگاه ایران درگاه تأیید می‌کند. 
+        در صورت موفقیت، شناسه ارجاع (`ref_id`) تراکنش بازگشت داده می‌شود.
 
         **ورودی‌ها (در body درخواست POST):**
-        - `authority`: شناسه تراکنش دریافت‌شده از مرحله ایجاد
-        - `amount`: مبلغ تراکنش (ریال)
-        - `order_id`: شناسه سفارش
+        - `authority`: شناسه تراکنش دریافت‌شده از درخواست ایجاد تراکنش
+        - `amount`: مبلغ تراکنش (تومان، باید با مبلغ تراکنش اولیه مطابقت داشته باشد)
+        - `order_id`: شناسه یکتای سفارش
 
         **حالات خاص:**
-        - فقط برای تراکنش‌های موفق (code=100) قابل انجام است.
-        - مرچنت کد باید تنظیم شده باشد.
+        - اگر مرچنت کد درگاه تنظیم نشده باشد، خطا بازمی‌گردد.
+        - اگر `authority` یا مبلغ نامعتبر باشد، خطا بازمی‌گردد.
+        - در صورت بروز خطا در اتصال به درگاه یا پاسخ نامعتبر، خطا با جزئیات بازمی‌گردد.
 
         **خروجی:**
-        - در صورت موفقیت: شماره پیگیری (refId).
+        - در صورت موفقیت: `ref_id` تراکنش.
         - در صورت خطا: پیام خطا با جزئیات.
         """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'authority': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه تراکنش'),
-                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ تراکنش (ریال)'),
-                'order_id': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه سفارش'),
-            },
-            required=['authority', 'amount', 'order_id']
-        ),
+        request_body=VerifyTransactionSerializer,
         responses={
-            200: openapi.Response(description="تراکنش تأیید شد.", 
-                                  schema=openapi.Schema(
-                                      type=openapi.TYPE_OBJECT,
-                                      properties={
-                                          'refId': openapi.Schema(type=openapi.TYPE_STRING, description='شماره پیگیری تراکنش')
-                                      }
-                                  )),
-            400: openapi.Response(description="خطاهای اعتبارسنجی یا تراکنش ناموفق."),
-            403: openapi.Response(description="درگاه فعال ایران درگاه نیست."),
-            500: openapi.Response(description="خطای سرور یا اتصال به درگاه."),
+            200: openapi.Response(description="تأیید تراکنش با موفقیت انجام شد.", schema=openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'ref_id': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه ارجاع تراکنش')
+                }
+            )),
+            400: openapi.Response(description="خطاهای اعتبارسنجی یا خطای درگاه (مثل authority نامعتبر یا پاسخ نامعتبر)."),
         },
         tags=["payment-api"]
     )
-    def post_verify(self, request):
-        authority = request.data.get('authority')
-        amount = request.data.get('amount')
-        order_id = request.data.get('order_id')
+    def post(self, request):
+        serializer = VerifyTransactionSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                # تنظیم درگاه به صورت دستی به ایران درگاه
+                PaymentGatewayService.get_active_gateway = lambda: 'iraniangateway'
+                ref_id = PaymentGatewayService.verify_transaction(
+                    authority=serializer.validated_data['authority'],
+                    amount=serializer.validated_data['amount'],
+                    order_id=serializer.validated_data['order_id']
+                )
+                return Response({'ref_id': ref_id}, status=status.HTTP_200_OK)
+            except ValueError as e:
+                logger.error(f"خطا در تأیید تراکنش: {str(e)}")
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # اعتبارسنجی ورودی‌ها
-        if not all([authority, amount, order_id]):
-            logger.error(f"ورودی‌های ناقص برای تأیید تراکنش: {request.data}")
-            return Response({"detail": "همه فیلدهای الزامی (authority, amount, order_id) باید پر شوند."}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+@swagger_auto_schema(
+    operation_summary="مدیریت پاسخ بازگشتی (callback) از درگاه ایران درگاه",
+    operation_description="""
+    این API پاسخ بازگشتی از درگاه ایران درگاه را پس از انجام پرداخت توسط کاربر مدیریت می‌کند.
+    درگاه ایران درگاه پارامترهای `Authority` و `Status` را از طریق query string ارسال می‌کند.
+    این ویو تراکنش را تأیید می‌کند و در صورت موفقیت یا شکست، کاربر را به صفحه مناسب هدایت می‌کند.
 
-        try:
-            ref_id = PaymentGatewayService.verify_transaction(authority, amount, order_id)
-            logger.info(f"تراکنش برای سفارش {order_id} با موفقیت تأیید شد. RefID: {ref_id}")
-            return Response({"refId": ref_id}, status=status.HTTP_200_OK)
-        except ValueError as e:
-            logger.error(f"خطا در تأیید تراکنش برای سفارش {order_id}: {str(e)}")
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"خطای سرور در تأیید تراکنش برای سفارش {order_id}: {str(e)}")
-            return Response({"detail": "خطا در اتصال به درگاه."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-@csrf_exempt
-def callback_view(request):
-    """
-    این ویو برای پردازش بازگشت کاربر از درگاه پرداخت (ایران درگاه یا زرین‌پال) طراحی شده است.
-    پس از تکمیل یا لغو تراکنش توسط کاربر، درگاه با ارسال پارامترهایی مثل Authority به این URL بازمی‌گردد.
-
-    **ورودی‌ها:**
-    - `Authority`: شناسه تراکنش که از طریق کوئری پارامتر (مثل ?Authority=12345) دریافت می‌شود.
-    - `Status`: وضعیت تراکنش (اختیاری، مثلاً OK یا NOK) که ممکن است درگاه ارسال کند.
-
-    **پردازش:**
-    - دریافت Authority و اعتبارسنجی آن.
-    - بازیابی amount و order_id از دیتابیس یا سشن بر اساس Authority (نیاز به پیاده‌سازی سفارشی دارد).
-    - فراخوانی verify_transaction برای تأیید تراکنش.
-    - ثبت نتیجه در لاگ و بازگشت پاسخ به کاربر.
-
-    **خروجی:**
-    - در صورت موفقیت: پیامی با شماره پیگیری تراکنش.
-    - در صورت خطا: پیامی با توضیح خطا.
+    **پارامترهای ورودی (query string):**
+    - `Authority`: شناسه تراکنش دریافت‌شده از درگاه.
+    - `Status`: وضعیت تراکنش (مثلاً 'OK' یا 'NOK').
 
     **حالات خاص:**
-    - این ویو باید @csrf_exempt باشد، زیرا درگاه از خارج درخواست می‌فرستد.
-    - نیاز به ذخیره تراکنش‌ها در دیتابیس یا سشن برای بازیابی amount و order_id دارد.
-    """
-    logger.info(f"Callback request received: {request.GET}")
+    - اگر `Status` برابر با 'OK' باشد، تراکنش تأیید می‌شود و `ref_id` دریافت می‌شود.
+    - اگر `Status` برابر با 'NOK' یا خطایی رخ دهد، کاربر به صفحه خطا هدایت می‌شود.
+    - اگر رزرو یا تراکنش یافت نشود، خطا بازمی‌گردد.
 
+    **خروجی:**
+    - در صورت موفقیت: هدایت به صفحه موفقیت پرداخت (با `ref_id` و اطلاعات رزرو).
+    - در صورت خطا: هدایت به صفحه خطا یا پیام خطا.
+    """,
+    manual_parameters=[
+        openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
+        openapi.Parameter('Status', openapi.IN_QUERY, description="وضعیت تراکنش (OK/NOK)", type=openapi.TYPE_STRING),
+    ],
+    responses={
+        200: openapi.Response(description="پرداخت با موفقیت تأیید شد.", schema=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'ref_id': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه ارجاع تراکنش'),
+                'message': openapi.Schema(type=openapi.TYPE_STRING, description='پیام وضعیت')
+            }
+        )),
+        400: openapi.Response(description="خطا در تأیید تراکنش یا پارامترهای نامعتبر."),
+        404: openapi.Response(description="رزرو یا تراکنش یافت نشد.")
+    },
+    tags=["payment-api"]
+)
+def callback_view(request):
     authority = request.GET.get('Authority')
-    if not authority:
-        logger.error("Authority در درخواست callback یافت نشد.")
-        return HttpResponse("خطا: شناسه تراکنش یافت نشد.", status=400)
+    status_param = request.GET.get('Status')
 
-    # فرض می‌کنیم amount و order_id رو از دیتابیس یا سشن می‌خونیم
-    # این بخش باید با مدل دیتابیس یا سیستم سشن شما سفارشی بشه
+    # بررسی وجود پارامترها
+    if not authority or not status_param:
+        logger.error(f"پارامترهای نامعتبر در callback: Authority={authority}, Status={status_param}")
+        return Response({'error': 'پارامترهای بازگشتی نامعتبر هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # پیدا کردن رزرو مرتبط با authority
     try:
-        # مثال: فرض می‌کنیم از یه مدل Transaction استفاده می‌کنیم
-        # from .models import Transaction
-        # transaction = Transaction.objects.get(authority=authority)
-        # amount = transaction.amount
-        # order_id = transaction.order_id
-        amount = 100000  # باید از دیتابیس بخونید
-        order_id = "sasha999"  # باید از دیتابیس بخونید
-        status = request.GET.get('Status', 'NOK')  # وضعیت تراکنش از درگاه
+        reservation = Reservationhotel.objects.get(payment_authority=authority)
+    except Reservationhotel.DoesNotExist:
+        logger.error(f"رزرو با authority {authority} یافت نشد.")
+        return Response({'error': 'رزرو مرتبط با این تراکنش یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if status == 'OK':
-            ref_id = PaymentGatewayService.verify_transaction(authority, amount, order_id)
-            logger.info(f"تراکنش با Authority {authority} با موفقیت تأیید شد. RefID: {ref_id}")
-            return HttpResponse(f"تراکنش با موفقیت انجام شد. شماره پیگیری: {ref_id}")
-        else:
-            logger.error(f"تراکنش با Authority {authority} ناموفق بود. Status: {status}")
-            return HttpResponse("تراکنش ناموفق بود. لطفاً دوباره تلاش کنید.", status=400)
+    # بررسی وضعیت پرداخت
+    if status_param != 'OK':
+        logger.warning(f"تراکنش با authority {authority} لغو شد یا ناموفق بود: Status={status_param}")
+        reservation.payment_status = 'failed'
+        reservation.save()
+        error_url = f"{settings.SITE_URL}/payment/error/?tracking_code={reservation.tracking_code}"
+        return HttpResponseRedirect(error_url)
 
+    # تأیید تراکنش
+    try:
+        PaymentGatewayService.get_active_gateway = lambda: 'iraniangateway'
+        ref_id = PaymentGatewayService.verify_transaction(
+            authority=authority,
+            amount=reservation.final_price,
+            order_id=reservation.tracking_code
+        )
+        reservation.payment_status = 'paid'
+        reservation.payment_ref_id = ref_id
+        reservation.save()
+        logger.info(f"تراکنش با authority {authority} با موفقیت تأیید شد: ref_id={ref_id}")
+        success_url = f"{settings.SITE_URL}/payment/success/?tracking_code={reservation.tracking_code}&ref_id={ref_id}"
+        return HttpResponseRedirect(success_url)
     except ValueError as e:
-        logger.error(f"خطا در تأیید تراکنش با Authority {authority}: {str(e)}")
-        return HttpResponse(f"خطا در تأیید تراکنش: {str(e)}", status=400)
-    except Exception as e:
-        logger.error(f"خطای سرور در پردازش callback با Authority {authority}: {str(e)}")
-        return HttpResponse("خطا در پردازش تراکنش. با پشتیبانی تماس بگیرید.", status=500)
+        logger.error(f"خطا در تأیید تراکنش با authority {authority}: {str(e)}")
+        reservation.payment_status = 'failed'
+        reservation.save()
+        error_url = f"{settings.SITE_URL}/payment/error/?tracking_code={reservation.tracking_code}"
+        return HttpResponseRedirect(error_url)
