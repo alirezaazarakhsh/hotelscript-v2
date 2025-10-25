@@ -2,7 +2,6 @@ from django.urls import path
 from .views import (
     ReservationPaymentCheckAPIView,
     PaymentCallbackAPIView,
-    IranianGatewayRedirectView,
     PaymentVerifyAPIView,
 )
 
@@ -24,9 +23,5 @@ urlpatterns = [
         PaymentVerifyAPIView.as_view(),
         name='payment-verify'
     ),
-    path(
-        'iranian-redirect/<str:authority>/',
-        IranianGatewayRedirectView.as_view(),
-        name='iranian-redirect'
-    ),
+  
 ]
