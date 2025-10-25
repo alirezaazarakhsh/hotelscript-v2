@@ -43,7 +43,7 @@ class PaymentGatewayService:
         if active_gateway == 'iraniangateway':
             data = {
                 "merchantID": merchant_id,
-                "amount": amount,  # به ریال، بدون اعشار
+                "amount": amount,
                 "callbackURL": callback_url,
                 "orderId": order_id,
                 "mobile": mobile,
@@ -64,7 +64,12 @@ class PaymentGatewayService:
         else:
             raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
-        headers = {'Content-Type': 'application/json'}
+        # تنظیم هدر Referer بر اساس دامنه سایت
+        referer_url = getattr(settings, 'SITE_URL', 'https://safarnameh24.com')
+        headers = {
+            'Content-Type': 'application/json',
+            'Referer': referer_url
+        }
         response = requests.post(
             request_url,
             data=json.dumps(data),
@@ -105,7 +110,10 @@ class PaymentGatewayService:
         else:
             raise ValueError("درگاه فعال پشتیبانی نمی‌شود.")
 
-        headers = {'Content-Type': 'application/json'}
+        headers = {
+            'Content-Type': 'application/json',
+            'Referer': getattr(settings, 'SITE_URL', 'https://safarnameh24.com')
+        }
         response = requests.post(
             verification_url,
             data=json.dumps(data),
