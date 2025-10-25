@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.contrib import messages
 from .models import ZarinpalGateway, IranianGateway, PaymentGatewayPreference
 
 @admin.register(ZarinpalGateway)
@@ -14,8 +13,7 @@ class ZarinpalGatewayAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        if ZarinpalGateway.objects.exists():
-            messages.warning(request, "تنها یک تنظیم برای درگاه زرین‌پال مجاز است. برای تغییر، نمونه موجود را ویرایش کنید.")
+        # فقط اجازه افزودن یک نمونه
         return not ZarinpalGateway.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
@@ -33,8 +31,7 @@ class IranianGatewayAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        if IranianGateway.objects.exists():
-            messages.warning(request, "تنها یک تنظیم برای درگاه ایران درگاه مجاز است. برای تغییر، نمونه موجود را ویرایش کنید.")
+        # فقط اجازه افزودن یک نمونه
         return not IranianGateway.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
@@ -51,8 +48,7 @@ class PaymentGatewayPreferenceAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        if PaymentGatewayPreference.objects.exists():
-            messages.warning(request, "تنها یک تنظیم ترجیحات درگاه پرداخت مجاز است. برای تغییر درگاه، نمونه موجود را ویرایش کنید.")
+        # فقط اجازه افزودن یک نمونه
         return not PaymentGatewayPreference.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
