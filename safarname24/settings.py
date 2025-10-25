@@ -275,3 +275,6 @@ TINYMCE_DEFAULT_CONFIG = {
     "extended_valid_elements": "script[src|type], iframe[src|width|height|frameborder|allowfullscreen], video[controls|preload|width|height|src|poster|autoplay|muted|loop]",
     "content_style": "body { font-family: Arial, sans-serif; font-size: 14px }",
 }
+
+
+IRANIANGATEWAY_REFERER = "https://safarnameh24.com"

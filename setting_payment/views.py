@@ -10,6 +10,8 @@ from django.db import transaction
 import logging
 import requests
 
+from safarname24 import settings
+
 # مدل‌ها
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
@@ -221,8 +223,8 @@ class PaymentVerifyAPIView(APIView):
                 }
                 url = "https://dargaah.ir/verification"
                 headers = {
-                    "Content-Type": "application/json",
-                    "Referer": "https://safarnameh24.com"
+                        "Content-Type": "application/json",
+                        "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
                 }
                 resp = requests.post(url, json=data, headers=headers, timeout=15)
                 resp.raise_for_status()
