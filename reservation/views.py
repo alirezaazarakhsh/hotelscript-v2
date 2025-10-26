@@ -2981,6 +2981,7 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
+
 logger = logging.getLogger(__name__)
 
 class ReservationInvoiceAPIView(APIView):
@@ -3010,11 +3011,14 @@ class ReservationInvoiceAPIView(APIView):
             reservation.total_half_day_charge
         )
 
-        # تخفیف کد فقط در صورتی که پردازش شده باشد لحاظ شود
-        discount_code_amount = reservation.discount if reservation.discount_processed else Decimal('0')
+        # تخفیف کد: اگر پرداخت نشده، از فیلد discount استفاده کن، وگرنه فقط اگر discount_processed=True
+        if reservation.payment_status != 'paid':
+            discount_code_amount = reservation.discount
+        else:
+            discount_code_amount = reservation.discount if reservation.discount_processed else Decimal('0')
 
         # کیف پول: قبل از پرداخت، همیشه مبلغ تنظیم شده را نشان بده
-        wallet_amount = reservation.wallet_withdrawal_amount
+        wallet_amount = reservation.wallet_withdrawal_amount if reservation.wallet_active else Decimal('0')
 
         # محاسبه نهایی قیمت قابل پرداخت
         final_price = base_price - reservation.room_fixed_discount - discount_code_amount - wallet_amount
