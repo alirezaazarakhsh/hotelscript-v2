@@ -1286,7 +1286,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        'BaseUser',  # فرض می‌شود BaseUser تعریف شده است
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1438,7 +1438,7 @@ class Reservationhotel(models.Model):
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-        final_price = base_price - discount_amount - room_fixed_discount - self.wallet_withdrawal_amount  # شرط wallet_withdrawn حذف شد
+        final_price = base_price - discount_amount - room_fixed_discount - self.wallet_withdrawal_amount
 
         logger.debug(f"Calculation: total={total}, total_extra={total_extra}, discount={discount_amount}, room_fixed={room_fixed_discount}, wallet_withdrawal={self.wallet_withdrawal_amount}, base_price={base_price}, final_price={final_price}")
         if final_price < 0:
@@ -1461,7 +1461,6 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
 
-# سیگنال‌ها و توابع کمکی بدون تغییر باقی می‌مانند
 _thread_locals = local()
 
 def set_skip_points_and_sms(value):
@@ -1651,6 +1650,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
+    
     
 
 # ---------------- ReservationRoom ----------------

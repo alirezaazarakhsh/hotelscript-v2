@@ -3672,21 +3672,21 @@ class WalletWithdrawAPIView(APIView):
         if amount > wallet.balance:
             return Response({"detail": "مبلغ بیشتر از موجودی کیف پول است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # محاسبه مبلغ نهایی رزرو با تخفیف‌ها
+        # محاسبه قیمت پایه بدون در نظر گرفتن برداشت کیف پول
         (
             total, total_extra, discount_amount,
             half_in, half_out, total_half,
-            code_discount, final, room_fixed
+            code_discount, final_before_wallet, room_fixed
         ) = reservation.calculate_total_price()
-
-        if amount > final:
-            return Response({"detail": "مبلغ بیشتر از مبلغ نهایی رزرو است."}, status=status.HTTP_400_BAD_REQUEST)
+        base_price = total + total_extra + total_half - code_discount - room_fixed
+        if amount > base_price:
+            return Response({"detail": "مبلغ بیشتر از مبلغ نهایی رزرو (بدون برداشت کیف پول) است."}, status=status.HTTP_400_BAD_REQUEST)
 
         # به‌روزرسانی برداشت کیف پول
         with transaction.atomic():
             reservation.wallet_withdrawal_amount = amount
             reservation.wallet_withdrawn = False
-            # بازمحاسبه قیمت نهایی و سایر فیلدها
+            # بازمحاسبه تمام قیمت‌ها
             (
                 total, total_extra, discount_amount,
                 half_in, half_out, total_half,
@@ -3759,7 +3759,7 @@ class WalletWithdrawAPIView(APIView):
         with transaction.atomic():
             reservation.wallet_withdrawal_amount = Decimal('0')
             reservation.wallet_withdrawn = False
-            # بازمحاسبه قیمت نهایی و سایر فیلدها
+            # بازمحاسبه تمام قیمت‌ها
             (
                 total, total_extra, discount_amount,
                 half_in, half_out, total_half,
@@ -3781,6 +3781,7 @@ class WalletWithdrawAPIView(APIView):
             ])
 
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
+    
     
     
     
