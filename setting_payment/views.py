@@ -143,7 +143,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 data = {
                     "merchant_id": merchant_code,
                     "amount": final_price,
-                    "currency": "IRT",  # تومان
+                    "currency": "IRT",
                     "description": f"پرداخت رزرو {reservation.tracking_code}",
                     "callback_url": callback_url,
                     "metadata": {
@@ -180,7 +180,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     "Content-Type": "application/json",
                     "Referer": "https://safarnameh24.com"
                 }
-                resp = requests.post(url, json=data, headers=headers, timeout=60)  # تایم‌اوت 60 ثانیه
+                resp = requests.post(url, json=data, headers=headers, timeout=60)
                 resp.raise_for_status()
                 resp_data = resp.json()
 
@@ -210,7 +210,7 @@ class PaymentCallbackAPIView(APIView):
         operation_description="""
         این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
         - نیازی به احراز هویت ندارد.
-        - اطلاعات تراکنش (مانند Status و Authority) از QueryString دریافت شده و ذخیره می‌شود.
+        - اطلاعات تراکنش (مانند Status و Authority) از QueryString دریافت شده و در کش ذخیره می‌شود.
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
@@ -250,12 +250,21 @@ class PaymentCallbackAPIView(APIView):
 
         tracking_code = get_tracking_by_authority(authority)
         if not tracking_code:
+            logger.error(f"تراکنش نامعتبر: authority={authority} در کش یافت نشد")
             return Response({"detail": "تراکنش نامعتبر"}, status=status.HTTP_400_BAD_REQUEST)
 
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        reservation.temp_payment_code = 100 if status == "OK" else -2
-        reservation.temp_authority = authority
-        reservation.save(update_fields=['temp_payment_code', 'temp_authority'])
+        # ذخیره موقت اطلاعات callback در کش
+        cache.set(
+            f"callback_{authority}",
+            {
+                "status": status,
+                "tracking_code": tracking_code,
+                "payment_code": 100 if status == "OK" else -2,
+                "authority": authority
+            },
+            timeout=1800  # 30 دقیقه
+        )
+        logger.info(f"Callback ذخیره شد: authority={authority}, status={status}, tracking_code={tracking_code}")
 
         if status != "OK":
             return Response({"status": "failed", "detail": "پرداخت ناموفق بود"}, status=status.HTTP_400_BAD_REQUEST)
@@ -327,6 +336,16 @@ class PaymentVerifyAPIView(APIView):
         active_gateway = get_active_gateway()
         merchant_code = get_merchant_code(active_gateway)
 
+        # بررسی اطلاعات callback در کش
+        callback_data = cache.get(f"callback_{authority}")
+        if not callback_data or callback_data["tracking_code"] != order_id:
+            logger.error(f"داده‌های callback نامعتبر: authority={authority}, order_id={order_id}")
+            return Response({"detail": "داده‌های تراکنش نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if callback_data["status"] != "OK":
+            logger.error(f"تراکنش ناموفق: authority={authority}, status={callback_data['status']}")
+            return Response({"status": "failed", "detail": "پرداخت ناموفق بود"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             if active_gateway == 'zarinpal':
                 data = {
@@ -350,6 +369,7 @@ class PaymentVerifyAPIView(APIView):
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
+                        cache.delete(f"callback_{authority}")
                     return Response({"status": "success", "refId": resp_data["data"].get("ref_id")})
                 else:
                     return Response({"status": "failed", "detail": f"تایید تراکنش ناموفق بود: {resp_data.get('errors', 'Unknown error')}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -366,7 +386,7 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
                 }
-                resp = requests.post(url, json=data, headers=headers, timeout=60)  # تایم‌اوت 60 ثانیه
+                resp = requests.post(url, json=data, headers=headers, timeout=60)
                 resp.raise_for_status()
                 resp_data = resp.json()
 
@@ -377,6 +397,7 @@ class PaymentVerifyAPIView(APIView):
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
+                        cache.delete(f"callback_{authority}")
                     return Response({"status": "success", "refId": resp_data.get("refId")})
                 else:
                     return Response({"status": "failed", "detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
