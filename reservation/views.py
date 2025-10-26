@@ -3686,16 +3686,26 @@ class WalletWithdrawAPIView(APIView):
         with transaction.atomic():
             reservation.wallet_withdrawal_amount = amount
             reservation.wallet_withdrawn = False
-            reservation.save(update_fields=["wallet_withdrawal_amount", "wallet_withdrawn"])
-
-            # بازمحاسبه قیمت نهایی بعد از اعمال برداشت
+            # بازمحاسبه قیمت نهایی و سایر فیلدها
             (
                 total, total_extra, discount_amount,
                 half_in, half_out, total_half,
                 code_discount, final, room_fixed
             ) = reservation.calculate_total_price()
+            reservation.total_price = total
+            reservation.total_extra_passenger_charge = total_extra
+            reservation.discount = code_discount
+            reservation.room_fixed_discount = room_fixed
+            reservation.half_day_in_charge = half_in
+            reservation.half_day_out_charge = half_out
+            reservation.total_half_day_charge = total_half
             reservation.final_price = final
-            reservation.save(update_fields=["final_price"])
+            reservation.save(update_fields=[
+                "wallet_withdrawal_amount", "wallet_withdrawn",
+                "total_price", "total_extra_passenger_charge", "discount",
+                "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
+                "total_half_day_charge", "final_price"
+            ])
 
         # پاسخ نهایی
         message = "برداشت از کیف پول حذف شد." if amount == 0 else "برداشت از کیف پول تنظیم شد."
@@ -3749,19 +3759,28 @@ class WalletWithdrawAPIView(APIView):
         with transaction.atomic():
             reservation.wallet_withdrawal_amount = Decimal('0')
             reservation.wallet_withdrawn = False
-            reservation.save(update_fields=['wallet_withdrawal_amount', 'wallet_withdrawn'])
-
-            # بازمحاسبه قیمت نهایی
+            # بازمحاسبه قیمت نهایی و سایر فیلدها
             (
                 total, total_extra, discount_amount,
                 half_in, half_out, total_half,
                 code_discount, final, room_fixed
             ) = reservation.calculate_total_price()
+            reservation.total_price = total
+            reservation.total_extra_passenger_charge = total_extra
+            reservation.discount = code_discount
+            reservation.room_fixed_discount = room_fixed
+            reservation.half_day_in_charge = half_in
+            reservation.half_day_out_charge = half_out
+            reservation.total_half_day_charge = total_half
             reservation.final_price = final
-            reservation.save(update_fields=["final_price"])
+            reservation.save(update_fields=[
+                "wallet_withdrawal_amount", "wallet_withdrawn",
+                "total_price", "total_extra_passenger_charge", "discount",
+                "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
+                "total_half_day_charge", "final_price"
+            ])
 
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
-
     
     
     

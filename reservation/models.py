@@ -1438,11 +1438,9 @@ class Reservationhotel(models.Model):
         discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-        # فقط اگه برداشت از کیف پول انجام شده باشه، مقدار کیف پول کسر بشه
-        effective_wallet_withdrawal = self.wallet_withdrawal_amount if self.wallet_withdrawn else Decimal('0')
-        final_price = base_price - discount_amount - room_fixed_discount - effective_wallet_withdrawal
+        final_price = base_price - discount_amount - room_fixed_discount - self.wallet_withdrawal_amount  # شرط wallet_withdrawn حذف شد
 
-        logger.debug(f"Calculation: total={total}, total_extra={total_extra}, discount={discount_amount}, room_fixed={room_fixed_discount}, wallet_withdrawal={effective_wallet_withdrawal}, base_price={base_price}, final_price={final_price}")
+        logger.debug(f"Calculation: total={total}, total_extra={total_extra}, discount={discount_amount}, room_fixed={room_fixed_discount}, wallet_withdrawal={self.wallet_withdrawal_amount}, base_price={base_price}, final_price={final_price}")
         if final_price < 0:
             final_price = Decimal('0')
 
@@ -1451,23 +1449,19 @@ class Reservationhotel(models.Model):
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation', False):
-            if not self.pk or any(getattr(self, field) is None for field in [
-                'total_price', 'discount', 'room_fixed_discount', 'final_price',
-                'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge',
-                'total_extra_passenger_charge'
-            ]):
-                total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
-                self.total_price = total
-                self.discount = code_discount
-                self.room_fixed_discount = room_fixed
-                self.half_day_in_charge = half_in
-                self.half_day_out_charge = half_out
-                self.total_half_day_charge = total_half
-                self.total_extra_passenger_charge = total_extra
-                self.final_price = final
+            total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
+            self.total_price = total
+            self.total_extra_passenger_charge = total_extra
+            self.discount = code_discount
+            self.room_fixed_discount = room_fixed
+            self.half_day_in_charge = half_in
+            self.half_day_out_charge = half_out
+            self.total_half_day_charge = total_half
+            self.final_price = final
 
         super().save(*args, **kwargs)
 
+# سیگنال‌ها و توابع کمکی بدون تغییر باقی می‌مانند
 _thread_locals = local()
 
 def set_skip_points_and_sms(value):
@@ -1657,7 +1651,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
-    
     
 
 # ---------------- ReservationRoom ----------------
