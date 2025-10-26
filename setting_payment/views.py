@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from django.db import transaction
 import logging
 import requests
+import uuid
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
@@ -35,7 +36,7 @@ def get_merchant_code(active_gateway):
         gw = ZarinpalGateway.objects.first()
         if not gw:
             raise ValueError("مرچنت کد زرین‌پال تنظیم نشده است.")
-        return gw.merchant_code.strip()
+        return gw.merchant_code.strip()  # برای Sandbox، باید یک UUID دلخواه باشد
     elif active_gateway == "iraniangateway":
         gw = IranianGateway.objects.first()
         if not gw:
@@ -85,16 +86,16 @@ class ReservationPaymentCheckAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     raise RuntimeError("پکیج 'zeep' نصب نشده است (pip install zeep)")
-                client = Client('https://www.sendbox.zarinpal.com/pg/services/WebGate/wsdl')
+                client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')  # اصلاح به Sandbox
                 result = client.service.PaymentRequest(
-                    MerchantID=merchant_code,
+                    MerchantID=merchant_code,  # باید یک UUID دلخواه باشد
                     Amount=final_price,
                     Description=f"پرداخت رزرو {reservation.tracking_code}",
                     CallbackURL=callback_url,
                 )
                 if getattr(result, "Status", None) == 100:
                     authority = result.Authority
-                    payment_link = f"https://www.zarinpal.com/pg/StartPay/{authority}"
+                    payment_link = f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"  # اصلاح به Sandbox
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
                     return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
                 else:
@@ -176,9 +177,9 @@ class PaymentVerifyAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     return Response({"detail": "پکیج zeep نصب نشده است"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                client = Client('https://www.zarinpal.com/pg/services/WebGate/wsdl')
+                client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')  # اصلاح به Sandbox
                 result = client.service.PaymentVerification(
-                    MerchantID=merchant_code,
+                    MerchantID=merchant_code,  # باید یک UUID دلخواه باشد
                     Authority=authority,
                     Amount=amount
                 )
