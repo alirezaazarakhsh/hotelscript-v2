@@ -2981,6 +2981,8 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
+logger = logging.getLogger(__name__)
+
 class ReservationInvoiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -2997,25 +2999,42 @@ class ReservationInvoiceAPIView(APIView):
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+
         if reservation.buyer != request.user:
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
+
+        # محاسبه پایه قیمت قبل از کسر کیف پول و تخفیف کد
+        base_price = (
+            reservation.total_price +
+            reservation.total_extra_passenger_charge +
+            reservation.total_half_day_charge
+        )
+
+        # تخفیف کد فقط در صورتی که پردازش شده باشد لحاظ شود
+        discount_code_amount = reservation.discount if reservation.discount_processed else Decimal('0')
+
+        # کیف پول: قبل از پرداخت، همیشه مبلغ تنظیم شده را نشان بده
+        wallet_amount = reservation.wallet_withdrawal_amount
+
+        # محاسبه نهایی قیمت قابل پرداخت
+        final_price = base_price - reservation.room_fixed_discount - discount_code_amount - wallet_amount
+        if final_price < 0:
+            final_price = Decimal('0')
 
         response_data = {
             "nights_count": reservation.nights_count,
             "total_price": int(self.parse_number(reservation.total_price)),
             "extra_passengers": int(self.parse_number(reservation.total_extra_passenger_charge)),
             "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
-            "room_fixed_discount": int(self.parse_number(reservation.room_fixed_discount)),  # تخفیف ثابت اتاق
-            "discount_code_amount": int(self.parse_number(reservation.discount if reservation.discount_processed else 0)),  # تخفیف کد تخفیف بعد از پرداخت
-            "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount if reservation.wallet_withdrawn else 0)),
-            "final_price": int(self.parse_number(reservation.final_price))
+            "room_fixed_discount": int(self.parse_number(reservation.room_fixed_discount)),
+            "discount_code_amount": int(self.parse_number(discount_code_amount)),
+            "wallet_withdraw": int(self.parse_number(wallet_amount)),
+            "final_price": int(self.parse_number(final_price)),
         }
-
-
 
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
         return Response(response_data, status=status.HTTP_200_OK)
-
+    
     
 
 # ای پی ای توضیحات تکمیلی رزرو 
