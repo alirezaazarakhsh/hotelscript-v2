@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404, reverse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status  # وارد کردن ماژول status
 from django.core.cache import cache
 from datetime import datetime, timedelta
 from django.db import transaction
@@ -245,7 +245,7 @@ class PaymentCallbackAPIView(APIView):
         tags=["reservation-api"]
     )
     def get(self, request):
-        status = request.query_params.get("Status")
+        payment_status = request.query_params.get("Status")  # تغییر نام متغیر از status به payment_status
         authority = request.query_params.get("Authority")
 
         tracking_code = get_tracking_by_authority(authority)
@@ -257,18 +257,18 @@ class PaymentCallbackAPIView(APIView):
         cache.set(
             f"callback_{authority}",
             {
-                "status": status,
+                "status": payment_status,
                 "tracking_code": tracking_code,
-                "payment_code": 100 if status == "OK" else -2,
+                "payment_code": 100 if payment_status == "OK" else -2,
                 "authority": authority
             },
             timeout=1800  # 30 دقیقه
         )
-        logger.info(f"Callback ذخیره شد: authority={authority}, status={status}, tracking_code={tracking_code}")
+        logger.info(f"Callback ذخیره شد: authority={authority}, status={payment_status}, tracking_code={tracking_code}")
 
-        if status != "OK":
+        if payment_status != "OK":
             return Response({"status": "failed", "detail": "پرداخت ناموفق بود"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"status": "success", "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."})
+        return Response({"status": "success", "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."}, status=status.HTTP_200_OK)
 
 # -------------------------
 # API: تایید نهایی تراکنش
@@ -370,7 +370,7 @@ class PaymentVerifyAPIView(APIView):
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
-                    return Response({"status": "success", "refId": resp_data["data"].get("ref_id")})
+                    return Response({"status": "success", "refId": resp_data["data"].get("ref_id")}, status=status.HTTP_200_OK)
                 else:
                     return Response({"status": "failed", "detail": f"تایید تراکنش ناموفق بود: {resp_data.get('errors', 'Unknown error')}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -398,7 +398,7 @@ class PaymentVerifyAPIView(APIView):
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
-                    return Response({"status": "success", "refId": resp_data.get("refId")})
+                    return Response({"status": "success", "refId": resp_data.get("refId")}, status=status.HTTP_200_OK)
                 else:
                     return Response({"status": "failed", "detail": resp_data.get("message")}, status=status.HTTP_400_BAD_REQUEST)
 
