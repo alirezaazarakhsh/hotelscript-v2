@@ -1,8 +1,9 @@
 from django.shortcuts import get_object_or_404, reverse
+from django.http import HttpResponseRedirect  # برای ریدایرکت
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status  # وارد کردن ماژول status
+from rest_framework import status
 from django.core.cache import cache
 from datetime import datetime, timedelta
 from django.db import transaction
@@ -78,13 +79,15 @@ class ReservationPaymentCheckAPIView(APIView):
         - کد رهگیری (tracking_code) از URL دریافت می‌شود.
         - اگر رزرو معتبر باشد و لینک پرداخت در کش موجود باشد، همان لینک بازگشت داده می‌شود.
         - در غیر این صورت، لینک پرداخت جدید از درگاه فعال (زرین‌پال یا ایران‌درگاه) تولید می‌شود.
+        - پاسخ شامل پراپرتی `ok` است که نشان‌دهنده وضعیت معتبر بودن لینک پرداخت است.
         """,
         responses={
             200: openapi.Response(
                 description="لینک پرداخت با موفقیت بازگشت داده شد",
                 examples={
                     "application/json": {
-                        "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/S123456789"
+                        "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/S123456789",
+                        "ok": True
                     }
                 }
             ),
@@ -123,11 +126,11 @@ class ReservationPaymentCheckAPIView(APIView):
         if reservation.capacity_status != 'confirmed':
             return Response({"detail": "رزرو تایید نشده است."}, status=status.HTTP_400_BAD_REQUEST)
         if reservation.final_price <= 0:
-            return Response({"payment_link": None}, status=status.HTTP_200_OK)
+            return Response({"payment_link": None, "ok": False}, status=status.HTTP_200_OK)
 
         payment_data = cache.get(f"payment_link_{tracking_code}")
         if payment_data and payment_data.get("expires_at", 0) > datetime.now().timestamp():
-            return Response({"payment_link": payment_data["link"]}, status=status.HTTP_200_OK)
+            return Response({"payment_link": payment_data["link"], "ok": True}, status=status.HTTP_200_OK)
 
         try:
             active_gateway = get_active_gateway()
@@ -163,7 +166,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     authority = resp_data["data"]["authority"]
                     payment_link = f"{getattr(settings, 'ZARINPAL_SANDBOX_PAYMENT_URL', 'https://sandbox.zarinpal.com/pg/StartPay')}/{authority}"
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
-                    return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
+                    return Response({"payment_link": payment_link, "ok": True}, status=status.HTTP_200_OK)
                 else:
                     return Response({"detail": f"خطا در تولید لینک پرداخت: {resp_data.get('errors', 'Unknown error')}"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -190,7 +193,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 authority = resp_data.get("authority")
                 payment_link = f"https://dargaah.ir/ird/startpay/{authority}"
                 cache_payment_link(order_id, authority, payment_link)
-                return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
+                return Response({"payment_link": payment_link, "ok": True}, status=status.HTTP_200_OK)
 
         except requests.exceptions.RequestException as e:
             logger.exception(f"خطا در اتصال به درگاه: {str(e)}")
@@ -211,41 +214,29 @@ class PaymentCallbackAPIView(APIView):
         این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
         - نیازی به احراز هویت ندارد.
         - اطلاعات تراکنش (مانند Status و Authority) از QueryString دریافت شده و در کش ذخیره می‌شود.
+        - کاربر به https://safarnameh24.com/payment/watcher-info ریدایرکت می‌شود.
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
             openapi.Parameter('Status', openapi.IN_QUERY, description="وضعیت تراکنش (OK/NOK)", type=openapi.TYPE_STRING),
         ],
         responses={
-            200: openapi.Response(
-                description="نتیجه تراکنش با موفقیت دریافت شد",
-                examples={
-                    "application/json": {
-                        "status": "success",
-                        "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."
-                    }
-                }
+            302: openapi.Response(
+                description="ریدایرکت به صفحه https://safarnameh24.com/payment/watcher-info",
             ),
             400: openapi.Response(
                 description="تراکنش ناموفق یا نامعتبر",
                 examples={
                     "application/json": {
-                        "status": "failed",
-                        "detail": "پرداخت ناموفق بود"
+                        "detail": "تراکنش نامعتبر"
                     }
-                }
-            ),
-            404: openapi.Response(
-                description="رزرو یا تراکنش یافت نشد",
-                examples={
-                    "application/json": {"detail": "تراکنش نامعتبر"}
                 }
             )
         },
         tags=["reservation-api"]
     )
     def get(self, request):
-        payment_status = request.query_params.get("Status")  # تغییر نام متغیر از status به payment_status
+        payment_status = request.query_params.get("Status")
         authority = request.query_params.get("Authority")
 
         tracking_code = get_tracking_by_authority(authority)
@@ -266,9 +257,9 @@ class PaymentCallbackAPIView(APIView):
         )
         logger.info(f"Callback ذخیره شد: authority={authority}, status={payment_status}, tracking_code={tracking_code}")
 
-        if payment_status != "OK":
-            return Response({"status": "failed", "detail": "پرداخت ناموفق بود"}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"status": "success", "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."}, status=status.HTTP_200_OK)
+        # ریدایرکت به صفحه فرانت‌اند
+        redirect_url = f"https://safarnameh24.com/payment/watcher-info?Authority={authority}&Status={payment_status}"
+        return HttpResponseRedirect(redirect_url)
 
 # -------------------------
 # API: تایید نهایی تراکنش
