@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404, reverse
-from django.http import HttpResponseRedirect  # برای ریدایرکت
+from django.http import HttpResponseRedirect
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +13,7 @@ import uuid
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from urllib.parse import urlencode  # برای ساخت query string
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
@@ -214,7 +215,7 @@ class PaymentCallbackAPIView(APIView):
         این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
         - نیازی به احراز هویت ندارد.
         - اطلاعات تراکنش (مانند Status و Authority) از QueryString دریافت شده و در کش ذخیره می‌شود.
-        - کاربر به https://safarnameh24.com/payment/watcher-info ریدایرکت می‌شود.
+        - کاربر به /payment/watcher-info ریدایرکت می‌شود با پارامترهای Authority، Status و tracking-code.
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
@@ -222,7 +223,12 @@ class PaymentCallbackAPIView(APIView):
         ],
         responses={
             302: openapi.Response(
-                description="ریدایرکت به صفحه https://safarnameh24.com/payment/watcher-info",
+                description="ریدایرکت به صفحه /payment/watcher-info با پارامترهای Authority، Status و tracking-code",
+                examples={
+                    "application/json": {
+                        "redirect_url": "/payment/watcher-info?Authority=S123456789&Status=OK&tracking-code=sfa6476289129"
+                    }
+                }
             ),
             400: openapi.Response(
                 description="تراکنش ناموفق یا نامعتبر",
@@ -257,8 +263,14 @@ class PaymentCallbackAPIView(APIView):
         )
         logger.info(f"Callback ذخیره شد: authority={authority}, status={payment_status}, tracking_code={tracking_code}")
 
-        # ریدایرکت به صفحه فرانت‌اند
-        redirect_url = f"https://safarnameh24.com/payment/watcher-info?Authority={authority}&Status={payment_status}"
+        # ساخت URL ریدایرکت به صورت پویا
+        base_url = request.build_absolute_uri('/payment/watcher-info')
+        query_params = {
+            'Authority': authority,
+            'Status': payment_status,
+            'tracking-code': tracking_code
+        }
+        redirect_url = f"{base_url}?{urlencode(query_params)}"
         return HttpResponseRedirect(redirect_url)
 
 # -------------------------
