@@ -10,7 +10,6 @@ import logging
 import requests
 import uuid
 
-from drf_spectacular.utils import extend_schema, OpenApiParameter
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
@@ -36,8 +35,9 @@ def get_merchant_code(active_gateway):
     if active_gateway == "zarinpal":
         gw = ZarinpalGateway.objects.first()
         if not gw:
-            raise ValueError("مرچنت کد زرین‌پال تنظیم نشده است.")
-        return gw.merchant_code.strip()  # برای Sandbox، باید یک UUID دلخواه باشد
+            # برای Sandbox، یک UUID دلخواه به‌عنوان مرچنت‌کد
+            return str(uuid.uuid4())  # مثال: '123e4567-e89b-12d3-a456-426614174000'
+        return gw.merchant_code.strip()
     elif active_gateway == "iraniangateway":
         gw = IranianGateway.objects.first()
         if not gw:
@@ -60,29 +60,7 @@ def get_tracking_by_authority(authority: str):
 class ReservationPaymentCheckAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=['reservation-api'],
-        request={
-            'application/json': {
-                'type': 'object',
-                'properties': {
-                    'tracking_code': {'type': 'string', 'description': 'کد رهگیری رزرو'}
-                },
-                'required': ['tracking_code']
-            }
-        },
-        responses={
-            200: {'description': 'لینک پرداخت با موفقیت تولید شد', 'example': {'payment_link': 'https://sandbox.zarinpal.com/pg/StartPay/...'}},
-            400: {'description': 'خطا در درخواست'},
-            403: {'description': 'عدم دسترسی'},
-            500: {'description': 'خطای سرور'}
-        }
-    )
-    def post(self, request):
-        tracking_code = request.data.get('tracking_code')
-        if not tracking_code:
-            return Response({"detail": "کد رهگیری الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
-
+    def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
         if reservation.buyer != request.user:
@@ -109,6 +87,7 @@ class ReservationPaymentCheckAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     raise RuntimeError("پکیج 'zeep' نصب نشده است (pip install zeep)")
+                # استفاده از آدرس Sandbox برای زرین‌پال
                 client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentRequest(
                     MerchantID=merchant_code,
@@ -117,7 +96,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     CallbackURL=callback_url,
                 )
                 if getattr(result, "Status", None) == 100:
-                    authority = result.Authority
+                    authority = result.Authority  # در Sandbox با S شروع می‌شود
                     payment_link = f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
                     return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
@@ -162,13 +141,6 @@ class ReservationPaymentCheckAPIView(APIView):
 class PaymentCallbackAPIView(APIView):
     permission_classes = []
 
-    @extend_schema(
-        tags=['reservation-api'],
-        responses={
-            200: {'description': 'وضعیت پرداخت دریافت شد'},
-            400: {'description': 'تراکنش نامعتبر یا ناموفق'}
-        }
-    )
     def post(self, request):
         code = int(request.data.get("code", -2))
         authority = request.data.get("authority")
@@ -194,14 +166,6 @@ class PaymentCallbackAPIView(APIView):
 class PaymentVerifyAPIView(APIView):
     permission_classes = []
 
-    @extend_schema(
-        tags=['reservation-api'],
-        responses={
-            200: {'description': 'تراکنش با موفقیت تایید شد'},
-            400: {'description': 'تایید تراکنش ناموفق بود'},
-            500: {'description': 'خطای سرور'}
-        }
-    )
     def post(self, request):
         authority = request.data.get("authority")
         order_id = request.data.get("orderId")
@@ -215,6 +179,7 @@ class PaymentVerifyAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     return Response({"detail": "پکیج zeep نصب نشده است"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                # استفاده از آدرس Sandbox برای تایید تراکنش
                 client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentVerification(
                     MerchantID=merchant_code,
