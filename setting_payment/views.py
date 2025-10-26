@@ -9,6 +9,8 @@ from django.db import transaction
 import logging
 import requests
 import uuid
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
@@ -35,8 +37,7 @@ def get_merchant_code(active_gateway):
     if active_gateway == "zarinpal":
         gw = ZarinpalGateway.objects.first()
         if not gw:
-            # برای Sandbox، یک UUID دلخواه به‌عنوان مرچنت‌کد
-            return str(uuid.uuid4())  # مثال: '123e4567-e89b-12d3-a456-426614174000'
+            return str(uuid.uuid4())  # UUID تصادفی برای Sandbox
         return gw.merchant_code.strip()
     elif active_gateway == "iraniangateway":
         gw = IranianGateway.objects.first()
@@ -60,7 +61,52 @@ def get_tracking_by_authority(authority: str):
 class ReservationPaymentCheckAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, tracking_code):
+    @swagger_auto_schema(
+        operation_summary="دریافت لینک پرداخت برای رزرو هتل",
+        operation_description="""
+        این API لینک پرداخت برای رزرو هتل با کد رهگیری مشخص را برمی‌گرداند.
+        - نیاز به احراز هویت دارد.
+        - کد رهگیری (tracking_code) از URL دریافت می‌شود.
+        - اگر رزرو معتبر باشد و لینک پرداخت در کش موجود باشد، همان لینک بازگشت داده می‌شود.
+        - در غیر این صورت، لینک پرداخت جدید از درگاه فعال (زرین‌پال یا ایران‌درگاه) تولید می‌شود.
+        """,
+        responses={
+            200: openapi.Response(
+                description="لینک پرداخت با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/S123456789"
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="خطا در درخواست، مانند رزرو نامعتبر یا درگاه ناشناخته",
+                examples={
+                    "application/json": {"detail": "رزرو تایید نشده است."}
+                }
+            ),
+            403: openapi.Response(
+                description="عدم دسترسی کاربر به رزرو",
+                examples={
+                    "application/json": {"detail": "شما به این رزرو دسترسی ندارید."}
+                }
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                examples={
+                    "application/json": {"detail": "رزرو پیدا نشد."}
+                }
+            ),
+            500: openapi.Response(
+                description="خطای سرور، مانند مشکل در اتصال به درگاه",
+                examples={
+                    "application/json": {"detail": "خطا در اتصال به درگاه"}
+                }
+            )
+        },
+        tags=["reservation-api"]
+    )
+    def post(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
         if reservation.buyer != request.user:
@@ -87,7 +133,6 @@ class ReservationPaymentCheckAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     raise RuntimeError("پکیج 'zeep' نصب نشده است (pip install zeep)")
-                # استفاده از آدرس Sandbox برای زرین‌پال
                 client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentRequest(
                     MerchantID=merchant_code,
@@ -96,7 +141,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     CallbackURL=callback_url,
                 )
                 if getattr(result, "Status", None) == 100:
-                    authority = result.Authority  # در Sandbox با S شروع می‌شود
+                    authority = result.Authority
                     payment_link = f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
                     return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
@@ -141,6 +186,50 @@ class ReservationPaymentCheckAPIView(APIView):
 class PaymentCallbackAPIView(APIView):
     permission_classes = []
 
+    @swagger_auto_schema(
+        operation_summary="دریافت callback تراکنش پرداخت",
+        operation_description="""
+        این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
+        - نیازی به احراز هویت ندارد.
+        - اطلاعات تراکنش (مانند کد وضعیت و authority) ذخیره شده و نتیجه پرداخت اعلام می‌شود.
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'code': openapi.Schema(type=openapi.TYPE_INTEGER, description='کد وضعیت تراکنش'),
+                'authority': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه تراکنش'),
+                'orderId': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه سفارش (tracking_code رزرو)'),
+                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ تراکنش')
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="نتیجه تراکنش با موفقیت دریافت شد",
+                examples={
+                    "application/json": {
+                        "status": "success",
+                        "detail": "پرداخت موفق، برای تایید نهایی درخواست verification را ارسال کنید."
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="تراکنش ناموفق یا نامعتبر",
+                examples={
+                    "application/json": {
+                        "status": "failed",
+                        "detail": "پرداخت ناموفق بود"
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="رزرو یا تراکنش یافت نشد",
+                examples={
+                    "application/json": {"detail": "تراکنش نامعتبر"}
+                }
+            )
+        },
+        tags=["reservation-api"]
+    )
     def post(self, request):
         code = int(request.data.get("code", -2))
         authority = request.data.get("authority")
@@ -166,6 +255,57 @@ class PaymentCallbackAPIView(APIView):
 class PaymentVerifyAPIView(APIView):
     permission_classes = []
 
+    @swagger_auto_schema(
+        operation_summary="تایید نهایی تراکنش پرداخت",
+        operation_description="""
+        این API برای تایید نهایی تراکنش پرداخت استفاده می‌شود.
+        - نیازی به احراز هویت ندارد.
+        - اطلاعات تراکنش (مانند authority و orderId) از بدنه درخواست دریافت شده و وضعیت پرداخت بررسی می‌شود.
+        - در صورت موفقیت، وضعیت رزرو به 'paid' تغییر کرده و اطلاعات تراکنش ذخیره می‌شود.
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'authority': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه تراکنش'),
+                'orderId': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه سفارش (tracking_code رزرو)'),
+                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ تراکنش')
+            },
+            required=['authority', 'orderId', 'amount']
+        ),
+        responses={
+            200: openapi.Response(
+                description="تراکنش با موفقیت تایید شد",
+                examples={
+                    "application/json": {
+                        "status": "success",
+                        "refId": "123456789"
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="تایید تراکنش ناموفق یا داده‌های نامعتبر",
+                examples={
+                    "application/json": {
+                        "status": "failed",
+                        "detail": "تایید تراکنش ناموفق بود: -1"
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                examples={
+                    "application/json": {"detail": "رزرو پیدا نشد."}
+                }
+            ),
+            500: openapi.Response(
+                description="خطای سرور، مانند مشکل در اتصال به درگاه",
+                examples={
+                    "application/json": {"detail": "خطا در اتصال به درگاه"}
+                }
+            )
+        },
+        tags=["reservation-api"]
+    )
     def post(self, request):
         authority = request.data.get("authority")
         order_id = request.data.get("orderId")
@@ -179,7 +319,6 @@ class PaymentVerifyAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     return Response({"detail": "پکیج zeep نصب نشده است"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                # استفاده از آدرس Sandbox برای تایید تراکنش
                 client = Client('https://sandbox.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentVerification(
                     MerchantID=merchant_code,
