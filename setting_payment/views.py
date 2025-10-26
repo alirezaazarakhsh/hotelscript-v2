@@ -85,7 +85,7 @@ class ReservationPaymentCheckAPIView(APIView):
             if active_gateway == 'zarinpal':
                 if Client is None:
                     raise RuntimeError("پکیج 'zeep' نصب نشده است (pip install zeep)")
-                client = Client('https://www.zarinpal.com/pg/services/WebGate/wsdl')
+                client = Client('https://www.sendbox.zarinpal.com/pg/services/WebGate/wsdl')
                 result = client.service.PaymentRequest(
                     MerchantID=merchant_code,
                     Amount=final_price,
