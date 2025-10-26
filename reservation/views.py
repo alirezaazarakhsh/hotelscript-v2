@@ -2981,62 +2981,63 @@ class HotelImageAPIView(APIView):
 
 
 # ای پی ای جزئیات صورت حساب رزرو و ویرایش صورتحساب 
-
 logger = logging.getLogger(__name__)
 
 class ReservationInvoiceAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def parse_number(self, value):
+        """
+        تبدیل رشته یا عدد با یا بدون ویرگول به Decimal.
+        اگر مقدار None باشد، مقدار 0 برمی‌گردد.
+        """
         if value is None:
             return Decimal('0')
         return Decimal(str(value).replace(',', '').strip())
 
     @swagger_auto_schema(
         operation_summary="دریافت صورت‌حساب رزرو",
-        operation_description="مشاهده صورت‌حساب رزرو بر اساس tracking_code.",
-        responses={200: openapi.Response(description="جزئیات صورت‌حساب رزرو")},
+        operation_description="""
+        مشاهده صورت‌حساب رزرو بر اساس **tracking_code**.
+
+        **فیلدهای خروجی:**
+        - `nights_count`: تعداد شب‌های اقامت
+        - `total_price`: مجموع قیمت اتاق‌ها
+        - `extra_passengers`: مجموع قیمت نفرات اضافه
+        - `half_charges`: مجموع نیم‌شارژها
+        - `discount_on_purchase`: تخفیف ثابت اتاق‌ها
+        - `discount_code`: تخفیف کد تخفیف
+        - `wallet_withdraw`: مبلغ برداشت از کیف پول
+        - `final_price`: قیمت نهایی (پس از کسر تمام تخفیف‌ها و برداشت از کیف پول)
+        """,
+        responses={
+            200: openapi.Response(description="جزئیات صورت‌حساب رزرو"),
+            403: openapi.Response(description="عدم دسترسی به رزرو"),
+            404: openapi.Response(description="رزرو یافت نشد"),
+        },
         tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-
         if reservation.buyer != request.user:
+            logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        # محاسبه پایه قیمت قبل از کسر کیف پول و تخفیف کد
-        base_price = (
-            reservation.total_price +
-            reservation.total_extra_passenger_charge +
-            reservation.total_half_day_charge
-        )
-
-        # تخفیف کد: اگر پرداخت نشده، از فیلد discount استفاده کن، وگرنه فقط اگر discount_processed=True
-        if reservation.payment_status != 'paid':
-            discount_code_amount = reservation.discount
-        else:
-            discount_code_amount = reservation.discount if reservation.discount_processed else Decimal('0')
-
-        # کیف پول: قبل از پرداخت، همیشه مبلغ تنظیم شده را نشان بده
-        wallet_amount = reservation.wallet_withdrawal_amount if reservation.wallet_active else Decimal('0')
-
-        # محاسبه نهایی قیمت قابل پرداخت
-        final_price = base_price - reservation.room_fixed_discount - discount_code_amount - wallet_amount
-        if final_price < 0:
-            final_price = Decimal('0')
-
+        # استفاده مستقیم از مقادیر ذخیره‌شده در رزرو
         response_data = {
             "nights_count": reservation.nights_count,
             "total_price": int(self.parse_number(reservation.total_price)),
             "extra_passengers": int(self.parse_number(reservation.total_extra_passenger_charge)),
             "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
-            "room_fixed_discount": int(self.parse_number(reservation.room_fixed_discount)),
-            "discount_code_amount": int(self.parse_number(discount_code_amount)),
-            "wallet_withdraw": int(self.parse_number(wallet_amount)),
-            "final_price": int(self.parse_number(final_price)),
+            "discount_on_purchase": int(self.parse_number(reservation.room_fixed_discount)),
+            "discount_code": int(self.parse_number(reservation.discount)),
+            "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount)),
+            "final_price": int(self.parse_number(reservation.final_price))
         }
 
+        # لاگ کردن مقادیر برای دیباگ
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
+
         return Response(response_data, status=status.HTTP_200_OK)
     
     
