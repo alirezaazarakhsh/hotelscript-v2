@@ -215,7 +215,7 @@ class PaymentCallbackAPIView(APIView):
         این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
         - نیازی به احراز هویت ندارد.
         - اطلاعات تراکنش (مانند Status و Authority) از QueryString دریافت شده و در کش ذخیره می‌شود.
-        - کاربر به /payment/watcher-info ریدایرکت می‌شود با پارامترهای Authority، Status و tracking-code.
+        - کاربر به https://safarnameh24.com/payment/watcher-info ریدایرکت می‌شود با پارامترهای Authority، Status و tracking-code.
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
@@ -223,10 +223,10 @@ class PaymentCallbackAPIView(APIView):
         ],
         responses={
             302: openapi.Response(
-                description="ریدایرکت به صفحه /payment/watcher-info با پارامترهای Authority، Status و tracking-code",
+                description="ریدایرکت به صفحه https://safarnameh24.com/payment/watcher-info با پارامترهای Authority، Status و tracking-code",
                 examples={
                     "application/json": {
-                        "redirect_url": "/payment/watcher-info?Authority=S123456789&Status=OK&tracking-code=sfa6476289129"
+                        "redirect_url": "https://safarnameh24.com/payment/watcher-info?Authority=S123456789&Status=OK&tracking-code=sfa6476289129"
                     }
                 }
             ),
@@ -263,13 +263,13 @@ class PaymentCallbackAPIView(APIView):
         )
         logger.info(f"Callback ذخیره شد: authority={authority}, status={payment_status}, tracking_code={tracking_code}")
 
-        # ریدایرکت به مسیر نسبی با پارامترها
+        # ریدایرکت به دامنه اصلی فرانت‌اند با پارامترها
         query_params = {
             'Authority': authority,
             'Status': payment_status,
             'tracking-code': tracking_code
         }
-        redirect_url = f"/payment/watcher-info?{urlencode(query_params)}"
+        redirect_url = f"https://safarnameh24.com/payment/watcher-info?{urlencode(query_params)}"
         return HttpResponseRedirect(redirect_url)
 
 # -------------------------
