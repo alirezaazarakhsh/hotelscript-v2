@@ -1270,6 +1270,8 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
+logger = logging.getLogger(__name__)
+
 class Reservationhotel(models.Model):
     CAPACITY_STATUS_CHOICES = [
         ('pending', _('در حال بررسی')),
@@ -1312,11 +1314,6 @@ class Reservationhotel(models.Model):
         decimal_places=0,
         default=0,
         validators=[MinValueValidator(0)]
-    )
-    wallet_active = models.BooleanField(
-        _('فعال بودن برداشت از کیف پول'),
-        default=False,
-        help_text=_('مشخص می‌کند که کاربر می‌خواهد از کیف پول استفاده کند یا نه.')
     )
     wallet_withdrawn = models.BooleanField(
         _('برداشت از کیف پول انجام شده'),
@@ -1384,17 +1381,22 @@ class Reservationhotel(models.Model):
         if not self.pk or not self.reservation_rooms.exists():
             return (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
 
+        hotel = self.reservation_rooms.first().room.hotel
+        if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
+            raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
+
         total = Decimal('0')
         total_extra = Decimal('0')
-        discount_amount = self.discount
-        room_fixed_discount = self.room_fixed_discount
+        discount_amount = Decimal('0')
+        room_fixed_discount = Decimal('0')
         half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
 
         nights = self.nights_count
         if nights <= 0:
-            return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), discount_amount, Decimal('0'), room_fixed_discount)
+            return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
 
+        user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
         check_in_date_std = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
 
         for res_room in self.reservation_rooms.all():
@@ -1404,25 +1406,43 @@ class Reservationhotel(models.Model):
 
             price_obj = room.date_prices.filter(
                 start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std
+                end_date__gte=check_in_date_std,
+                user_level=user_level
+            ).first() or room.date_prices.filter(
+                start_date__lte=check_in_date_std,
+                end_date__gte=check_in_date_std,
+                user_level__isnull=True
             ).first()
 
-            daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
-            extra_price = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
+            if not price_obj:
+                logger.warning(f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد.")
+                daily_price = Decimal('0')
+                extra_price_per_person = Decimal('0')
+            else:
+                daily_price = Decimal(price_obj.price)
+                extra_price_per_person = Decimal(price_obj.extra_passenger_price)
 
             total += daily_price * nights * quantity
-            total_extra += extra_price * extra_guests * nights * quantity
+            extra_price = extra_price_per_person * extra_guests
+            total_extra += extra_price * nights * quantity
 
-            if res_room.half_day_in_selected and getattr(room.hotel, 'has_check_in_half_day_charge', False):
-                half_day_in_charge += getattr(res_room, 'half_day_in_price', 0) * quantity
-            if res_room.half_day_out_selected and getattr(room.hotel, 'has_check_out_half_day_charge', False):
-                half_day_out_charge += getattr(res_room, 'half_day_out_price', 0) * quantity
+            if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
+                    room_fixed_discount += Decimal(price_obj.discount_value) * quantity
 
+            if res_room.half_day_in_selected and hotel.has_check_in_half_day_charge:
+                half_day_in_charge += res_room.half_day_in_price * quantity
+            if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
+                half_day_out_charge += res_room.half_day_out_price * quantity
+
+        discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-        effective_wallet = self.wallet_withdrawal_amount if self.wallet_active else Decimal('0')
-        final_price = base_price - discount_amount - room_fixed_discount - effective_wallet
+        # فقط اگه برداشت از کیف پول انجام شده باشه، مقدار کیف پول کسر بشه
+        effective_wallet_withdrawal = self.wallet_withdrawal_amount if self.wallet_withdrawn else Decimal('0')
+        final_price = base_price - discount_amount - room_fixed_discount - effective_wallet_withdrawal
 
+        logger.debug(f"Calculation: total={total}, total_extra={total_extra}, discount={discount_amount}, room_fixed={room_fixed_discount}, wallet_withdrawal={effective_wallet_withdrawal}, base_price={base_price}, final_price={final_price}")
         if final_price < 0:
             final_price = Decimal('0')
 
@@ -1431,17 +1451,22 @@ class Reservationhotel(models.Model):
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation', False):
-            total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
-            self.total_price = total
-            self.total_extra_passenger_charge = total_extra
-            self.discount = code_discount
-            self.room_fixed_discount = room_fixed
-            self.half_day_in_charge = half_in
-            self.half_day_out_charge = half_out
-            self.total_half_day_charge = total_half
-            self.final_price = final
-        super().save(*args, **kwargs)
+            if not self.pk or any(getattr(self, field) is None for field in [
+                'total_price', 'discount', 'room_fixed_discount', 'final_price',
+                'half_day_in_charge', 'half_day_out_charge', 'total_half_day_charge',
+                'total_extra_passenger_charge'
+            ]):
+                total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
+                self.total_price = total
+                self.discount = code_discount
+                self.room_fixed_discount = room_fixed
+                self.half_day_in_charge = half_in
+                self.half_day_out_charge = half_out
+                self.total_half_day_charge = total_half
+                self.total_extra_passenger_charge = total_extra
+                self.final_price = final
 
+        super().save(*args, **kwargs)
 
 _thread_locals = local()
 
