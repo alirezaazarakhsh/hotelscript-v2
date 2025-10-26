@@ -1270,26 +1270,6 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
-import logging
-from decimal import Decimal
-from threading import local
-from django.db import models, transaction
-from django.db.models import Sum
-from django.core.cache import cache
-from django.core.validators import MinValueValidator
-from django.utils.functional import cached_property
-from django.dispatch import receiver
-from django.db.models.signals import post_save
-from rest_framework.exceptions import ValidationError
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-import jdatetime
-from jalali_date import models as jmodels
-
-logger = logging.getLogger(__name__)
-_thread_locals = local()
-
-
 class Reservationhotel(models.Model):
     CAPACITY_STATUS_CHOICES = [
         ('pending', _('در حال بررسی')),
@@ -1304,7 +1284,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        'BaseUser',
+        BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
