@@ -11,6 +11,7 @@ import requests
 import uuid
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
@@ -48,6 +49,20 @@ def cache_payment_link(tracking_code: str, authority: str, link: str, ttl_second
 
 def get_tracking_by_authority(authority: str):
     return cache.get(f"payment_link_authority_{authority}")
+
+# -------------------------
+# Retry-enabled request function
+# -------------------------
+@retry(
+    stop=stop_after_attempt(3),  # حداکثر 3 تلاش
+    wait=wait_fixed(5),  # 5 ثانیه فاصله بین تلاش‌ها
+    retry=retry_if_exception_type(requests.exceptions.RequestException)  # فقط برای خطاهای شبکه‌ای retry شود
+)
+def make_zarinpal_request(url, data, headers):
+    logger.info(f"ارسال درخواست به زرین‌پال: {url}, داده‌ها: {data}")
+    resp = requests.post(url, json=data, headers=headers, timeout=60)  # تایم‌اوت 60 ثانیه
+    resp.raise_for_status()
+    return resp
 
 # -------------------------
 # API: ایجاد لینک پرداخت رزرو
@@ -139,16 +154,14 @@ class ReservationPaymentCheckAPIView(APIView):
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
-                url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
-                logger.info(f"درخواست به زرین‌پال: {data}")
-                resp = requests.post(url, json=data, headers=headers, timeout=15)
-                resp.raise_for_status()
+                url = getattr(settings, "ZARINPAL_SANDBOX_REQUEST_URL", "https://sandbox.zarinpal.com/pg/v4/payment/request.json")
+                resp = make_zarinpal_request(url, data, headers)
                 resp_data = resp.json()
 
                 logger.info(f"پاسخ زرین‌پال: {resp_data}")
                 if resp_data.get("data", {}).get("code") == 100:
                     authority = resp_data["data"]["authority"]
-                    payment_link = f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"
+                    payment_link = f"{getattr(settings, 'ZARINPAL_SANDBOX_PAYMENT_URL', 'https://sandbox.zarinpal.com/pg/StartPay')}/{authority}"
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
                     return Response({"payment_link": payment_link}, status=status.HTTP_200_OK)
                 else:
@@ -167,7 +180,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     "Content-Type": "application/json",
                     "Referer": "https://safarnameh24.com"
                 }
-                resp = requests.post(url, json=data, headers=headers, timeout=15)
+                resp = requests.post(url, json=data, headers=headers, timeout=60)  # تایم‌اوت 60 ثانیه
                 resp.raise_for_status()
                 resp_data = resp.json()
 
@@ -325,10 +338,8 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
-                url = "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
-                logger.info(f"درخواست تأیید به زرین‌پال: {data}")
-                resp = requests.post(url, json=data, headers=headers, timeout=15)
-                resp.raise_for_status()
+                url = getattr(settings, "ZARINPAL_SANDBOX_VERIFY_URL", "https://sandbox.zarinpal.com/pg/v4/payment/verify.json")
+                resp = make_zarinpal_request(url, data, headers)
                 resp_data = resp.json()
 
                 logger.info(f"پاسخ تأیید زرین‌پال: {resp_data}")
@@ -355,7 +366,7 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
                 }
-                resp = requests.post(url, json=data, headers=headers, timeout=15)
+                resp = requests.post(url, json=data, headers=headers, timeout=60)  # تایم‌اوت 60 ثانیه
                 resp.raise_for_status()
                 resp_data = resp.json()
 

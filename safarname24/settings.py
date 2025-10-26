@@ -278,3 +278,8 @@ TINYMCE_DEFAULT_CONFIG = {
 
 
 IRANIANGATEWAY_REFERER = "https://safarnameh24.com"
+
+# safarname24/settings.py
+ZARINPAL_SANDBOX_REQUEST_URL = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
+ZARINPAL_SANDBOX_VERIFY_URL = "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
+ZARINPAL_SANDBOX_PAYMENT_URL = "https://sandbox.zarinpal.com/pg/StartPay"
