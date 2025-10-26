@@ -3007,9 +3007,10 @@ class ReservationInvoiceAPIView(APIView):
             "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
             "discount_on_purchase": int(self.parse_number(reservation.room_fixed_discount)),
             "discount_code": int(self.parse_number(reservation.discount)),
-            "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount if reservation.wallet_active else 0)),
-            "final_price": int(self.parse_number(reservation.computed_final_price))
+            "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount if reservation.wallet_withdrawn else 0)),
+            "final_price": int(self.parse_number(reservation.final_price))
         }
+
 
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
         return Response(response_data, status=status.HTTP_200_OK)
