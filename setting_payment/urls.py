@@ -3,6 +3,7 @@ from .views import (
     ReservationPaymentCheckAPIView,
     PaymentCallbackAPIView,
     PaymentVerifyAPIView,
+    ReservationPaymentStatusAPIView,  
 )
 
 app_name = "payment"
@@ -23,5 +24,9 @@ urlpatterns = [
         PaymentVerifyAPIView.as_view(),
         name='payment-verify'
     ),
-  
+    path(
+        'payment-status/<str:tracking_code>/',
+        ReservationPaymentStatusAPIView.as_view(),
+        name='reservation-payment-status'
+    ),
 ]

@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404, reverse
 from django.http import HttpResponseRedirect
+from pydantic import ValidationError
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -410,3 +411,62 @@ class PaymentVerifyAPIView(APIView):
         except Exception as e:
             logger.exception(f"خطا در تایید تراکنش: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        
+        
+        
+#وضعیت پرداخت یک رزرو 
+logger = logging.getLogger(__name__)
+
+class ReservationPaymentStatusAPIView(APIView):
+    """
+    API برای دریافت وضعیت پرداخت رزرو
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت وضعیت پرداخت رزرو با tracking_code",
+        operation_description="""
+        این API وضعیت پرداخت رزرو را بر اساس **tracking_code** که در URL ارائه می‌شود، برمی‌گرداند.  
+        فقط کاربر مالک رزرو می‌تواند به این اطلاعات دسترسی داشته باشد.
+
+        **پارامتر ورودی:**
+        - `tracking_code`: کد پیگیری رزرو (در مسیر URL)
+
+        **فیلد خروجی:**
+        - `payment_status`: وضعیت پرداخت رزرو (یکی از مقادیر: 'paid', 'unpaid', 'pending')
+
+        **حالات خاص:**
+        - اگر رزرو یافت نشود، خطای 404 برگردانده می‌شود.
+        - اگر کاربر مالک رزرو نباشد، خطای 403 برگردانده می‌شود.
+        """,
+        responses={
+            200: openapi.Response(
+                description="وضعیت پرداخت رزرو با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "payment_status": "paid"
+                    }
+                }
+            ),
+            403: openapi.Response(description="عدم دسترسی به رزرو"),
+            404: openapi.Response(description="رزرو یافت نشد")
+        },
+        tags=["reservation-api"]
+    )
+    def get(self, request, tracking_code):
+        # دریافت رزرو
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+
+        # بررسی دسترسی
+        if reservation.buyer != request.user:
+            logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
+            raise ValidationError("شما به این رزرو دسترسی ندارید.")
+
+        # پاسخ با وضعیت پرداخت
+        response_data = {
+            "payment_status": reservation.payment_status
+        }
+
+        logger.debug(f"ReservationPaymentStatusAPIView response: {response_data}")
+        return Response(response_data, status=status.HTTP_200_OK)
