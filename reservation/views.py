@@ -3005,11 +3005,12 @@ class ReservationInvoiceAPIView(APIView):
             "total_price": int(self.parse_number(reservation.total_price)),
             "extra_passengers": int(self.parse_number(reservation.total_extra_passenger_charge)),
             "half_charges": int(self.parse_number(reservation.total_half_day_charge)),
-            "discount_on_purchase": int(self.parse_number(reservation.room_fixed_discount)),
-            "discount_code": int(self.parse_number(reservation.discount)),
+            "room_fixed_discount": int(self.parse_number(reservation.room_fixed_discount)),  # تخفیف ثابت اتاق
+            "discount_code_amount": int(self.parse_number(reservation.discount if reservation.discount_processed else 0)),  # تخفیف کد تخفیف بعد از پرداخت
             "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount if reservation.wallet_withdrawn else 0)),
             "final_price": int(self.parse_number(reservation.final_price))
         }
+
 
 
         logger.debug(f"ReservationInvoiceAPIView response: {response_data}")
