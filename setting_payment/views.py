@@ -13,7 +13,7 @@ import uuid
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from urllib.parse import urlencode  # برای ساخت query string
+from urllib.parse import urlencode
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
@@ -263,14 +263,13 @@ class PaymentCallbackAPIView(APIView):
         )
         logger.info(f"Callback ذخیره شد: authority={authority}, status={payment_status}, tracking_code={tracking_code}")
 
-        # ساخت URL ریدایرکت به صورت پویا
-        base_url = request.build_absolute_uri('/payment/watcher-info')
+        # ریدایرکت به مسیر نسبی با پارامترها
         query_params = {
             'Authority': authority,
             'Status': payment_status,
             'tracking-code': tracking_code
         }
-        redirect_url = f"{base_url}?{urlencode(query_params)}"
+        redirect_url = f"/payment/watcher-info?{urlencode(query_params)}"
         return HttpResponseRedirect(redirect_url)
 
 # -------------------------
