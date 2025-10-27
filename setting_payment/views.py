@@ -395,14 +395,14 @@ class PaymentCallbackAPIView(APIView):
             logger.info(f"Callback ذخیره شد: {cache_data}")
 
             query_params = {
-                'Authority': authority,
-                'Status': payment_status if active_gateway == 'zarinpal' else payment_code,
-                'tracking-code': tracking_code,
-                'refId': ref_id if ref_id else ''
+            "Authority": authority,
+            "Status": payment_status if active_gateway == "zarinpal" else payment_code,
+            "tracking-code": tracking_code,
             }
-            redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
-            logger.info(f"ریدایرکت به: {redirect_url}")
+            redirect_url = f"https://safarnameh24.com/payment/watcher-info?{urlencode(query_params)}"
+            logger.info(f"ریدایرکت نهایی به: {redirect_url}")
             return HttpResponseRedirect(redirect_url)
+
 
         except Exception as e:
             logger.exception(f"خطا در پردازش callback برای authority={authority}: {str(e)}")
