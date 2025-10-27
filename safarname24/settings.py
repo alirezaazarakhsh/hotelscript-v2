@@ -279,17 +279,19 @@ TINYMCE_DEFAULT_CONFIG = {
 
 
 
+# safarnameh24/settings.py
+
 # مشخص کردن محیط (local یا production)
-# ENVIRONMENT = 'local'  # برای محیط لوکال
 ENVIRONMENT = 'production'  # برای محیط پروداکشن
+# ENVIRONMENT = 'local'  # برای محیط لوکال (برای تست لوکال این را فعال کنید)
 
 # تنظیم URL پایه برای ریدایرکت callback
-if ENVIRONMENT == 'production':
+if ENVIRONMENT == 'local':
     CALLBACK_REDIRECT_BASE_URL = 'http://localhost:3000'
 else:
     CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
 
-# تنظیمات درگاه زرین‌پال (برای سندباکس)
+# تنظیمات درگاه زرین‌پال (فقط سندباکس)
 ZARINPAL_SANDBOX_REQUEST_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
 ZARINPAL_SANDBOX_PAYMENT_URL = 'https://sandbox.zarinpal.com/pg/StartPay'
 ZARINPAL_SANDBOX_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
@@ -297,7 +299,7 @@ ZARINPAL_SANDBOX_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify
 # تنظیمات درگاه ایران‌درگاه
 IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
 
-# # تنظیمات درگاه زرین‌پال (برای پروداکشن)
+# # تنظیمات درگاه زرین‌پال (برای پروداکشن - کامنت شده)
 # ZARINPAL_REQUEST_URL = 'https://payment.zarinpal.com/pg/v4/payment/request.json'
 # ZARINPAL_PAYMENT_URL = 'https://payment.zarinpal.com/pg/StartPay'
 # ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
