@@ -86,6 +86,9 @@ urlpatterns = [
     path('reservation/passengers/', PassengerListForReservationView.as_view(), name='reservation-passenger-list'),
     path('reservation/wallet/withdraw/<str:tracking_code>/', WalletWithdrawAPIView.as_view(), name='wallet-withdraw'),
     
+    # ==== list reserve user ===
+    path('reservation/user-reservations/', views.UserReservationListAPIView.as_view(), name='user-reservations'),
+
     
     # ==== hotel seo ===
     path('hotels/<slug:hotel_slug>/seo/', HotelSEOView.as_view(), name='hotel-seo'),

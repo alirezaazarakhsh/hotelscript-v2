@@ -3843,3 +3843,70 @@ class HotelSEOView(APIView):
         )
         
         
+
+
+#ای پی ای لیست رزرو های کاربران در داشبورد 
+class UserReservationListAPIView(APIView):
+    """
+    API برای دریافت لیست رزروهای کاربر
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست رزروهای کاربر",
+        operation_description="""
+        این API لیست رزروهای کاربر احراز هویت‌شده را برمی‌گرداند.  
+        شامل اطلاعات زیر برای هر رزرو:
+        - tracking_code: کد پیگیری رزرو  
+        - hotel_name: نام هتل رزرو‌شده  
+        - check_in_date: تاریخ ورود  
+        - check_out_date: تاریخ خروج  
+        - total_guests: تعداد مسافران رزرو  
+        - payment_status: وضعیت پرداخت  
+        """,
+        responses={
+            200: openapi.Response(
+                description="لیست رزروهای کاربر با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "reservations": [
+                            {
+                                "tracking_code": "RSV123456",
+                                "hotel_name": "هتل آزادی تهران",
+                                "check_in_date": "1403-07-01",
+                                "check_out_date": "1403-07-05",
+                                "total_guests": 4,
+                                "payment_status": "paid"
+                            }
+                        ]
+                    }
+                }
+            ),
+            401: "کاربر احراز هویت نشده است."
+        },
+        tags=["reservedashboard-api"]
+    )
+    def get(self, request):
+        user = request.user
+        reservations = Reservationhotel.objects.filter(buyer=user).select_related(
+            'buyer'
+        ).prefetch_related(
+            'reservation_rooms__room__hotel'
+        ).order_by('-created_at')
+
+        data = []
+        for r in reservations:
+            # پیدا کردن نام هتل از اولین اتاق رزرو
+            first_room = r.reservation_rooms.first()
+            hotel_name = first_room.room.hotel.name if first_room and first_room.room and first_room.room.hotel else "نامشخص"
+
+            data.append({
+                "tracking_code": r.tracking_code,
+                "hotel_name": hotel_name,
+                "check_in_date": str(r.check_in_date),
+                "check_out_date": str(r.check_out_date),
+                "total_guests": r.total_guests,
+                "payment_status": r.payment_status,
+            })
+
+        return Response({"reservations": data}, status=status.HTTP_200_OK)
