@@ -283,3 +283,13 @@ IRANIANGATEWAY_REFERER = "https://safarnameh24.com"
 ZARINPAL_SANDBOX_REQUEST_URL = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
 ZARINPAL_SANDBOX_VERIFY_URL = "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
 ZARINPAL_SANDBOX_PAYMENT_URL = "https://sandbox.zarinpal.com/pg/StartPay"
+
+# مشخص کردن محیط (local یا production)
+ENVIRONMENT = 'local'  # برای محیط لوکال
+# ENVIRONMENT = 'production'  # برای محیط پروداکشن
+
+# تنظیم URL پایه برای ریدایرکت callback
+if ENVIRONMENT == 'local':
+    CALLBACK_REDIRECT_BASE_URL = 'http://localhost:3000'
+else:
+    CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
