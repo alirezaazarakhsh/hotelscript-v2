@@ -17,7 +17,7 @@ from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from urllib.parse import urlencode
 
-from safarnameh24 import settings
+from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
 
