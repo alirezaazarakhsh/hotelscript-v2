@@ -12,12 +12,12 @@ import logging
 import requests
 import uuid
 import json
-from drf_yasg.utils import swagger_auto_schema
+from drf_yasg.utils import swagger_auto_schemaucing
 from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from urllib.parse import urlencode
 
-from safarname24 import settings
+from safarnameh24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
 
@@ -43,10 +43,18 @@ def get_merchant_code(active_gateway):
                 'https://sandbox.zarinpal.com/pg/v4/payment/request.json',
                 'https://sandbox.zarinpal.com/pg/StartPay',
                 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json',
-                'sandbox'
+                'sandbox',
+                'https://safarnameh24.com/payment/watcher-info'  # URL پیش‌فرض ریدایرکت
             )
         logger.info(f"مرچنت‌کد زرین‌پال: {gw.merchant_code}, حالت: {gw.mode}")
-        return gw.merchant_code.strip(), gw.request_url, gw.payment_url, gw.verify_url, gw.mode
+        return (
+            gw.merchant_code.strip(),
+            gw.request_url,
+            gw.payment_url,
+            gw.verify_url,
+            gw.mode,
+            gw.callback_redirect_url
+        )
     elif active_gateway == "iraniangateway":
         gw = IranianGateway.objects.first()
         if not gw:
@@ -56,10 +64,18 @@ def get_merchant_code(active_gateway):
                 'https://dargaah.ir/sandbox/payment',
                 'https://dargaah.ir/sandbox/ird/startpay',
                 'https://dargaah.ir/sandbox/verification',
-                None
+                None,
+                'https://safarnameh24.com/payment/watcher-info'  # URL پیش‌فرض ریدایرکت
             )
         logger.info(f"مرچنت‌کد ایران‌درگاه: {gw.merchant_code}")
-        return gw.merchant_code.strip(), gw.request_url, gw.payment_url, gw.verify_url, None
+        return (
+            gw.merchant_code.strip(),
+            gw.request_url,
+            gw.payment_url,
+            gw.verify_url,
+            None,
+            gw.callback_redirect_url
+        )
     else:
         raise ValueError(f"درگاه ناشناخته: {active_gateway}")
 
@@ -148,7 +164,7 @@ class ReservationPaymentCheckAPIView(APIView):
 
         try:
             active_gateway = get_active_gateway()
-            merchant_code, request_url, payment_url, verify_url, mode = get_merchant_code(active_gateway)
+            merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
         except ValueError as e:
             logger.error(f"خطا در دریافت درگاه یا مرچنت‌کد: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -322,6 +338,7 @@ class PaymentCallbackAPIView(APIView):
     )
     def get(self, request):
         active_gateway = get_active_gateway()
+        merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
         authority = request.query_params.get("Authority")
         tracking_code = get_tracking_by_authority(authority)
         if not tracking_code:
@@ -383,7 +400,7 @@ class PaymentCallbackAPIView(APIView):
                 'tracking-code': tracking_code,
                 'refId': ref_id if ref_id else ''
             }
-            redirect_url = f"{settings.CALLBACK_REDIRECT_BASE_URL}/payment/watcher-info?{urlencode(query_params)}"
+            redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
             logger.info(f"ریدایرکت به: {redirect_url}")
             return HttpResponseRedirect(redirect_url)
 
@@ -443,7 +460,7 @@ class PaymentVerifyAPIView(APIView):
             )
 
         active_gateway = get_active_gateway()
-        merchant_code, request_url, payment_url, verify_url, mode = get_merchant_code(active_gateway)
+        merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
 
         callback_data = cache.get(f"callback_{authority}")
         logger.info(f"داده‌های کش برای authority={authority}: {callback_data}")

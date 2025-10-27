@@ -7,7 +7,7 @@ from django.core.validators import URLValidator
 class ZarinpalGateway(models.Model):
     """
     مدل تنظیمات درگاه زرین‌پال.
-    این مدل برای ذخیره مرچنت‌کد، حالت درگاه (سندباکس یا پروداکشن) و URLهای مربوط به درخواست، پرداخت و تأیید استفاده می‌شود.
+    این مدل برای ذخیره مرچنت‌کد، حالت درگاه (سندباکس یا پروداکشن)، URLهای مربوط به درخواست، پرداخت و تأیید، و URL ریدایرکت استفاده می‌شود.
     **توجه**: در حالت پروداکشن، URLها باید به جای 'sandbox' از 'payment' استفاده کنند.
     مثال:
     - سندباکس: https://sandbox.zarinpal.com/pg/v4/payment/request.json
@@ -50,6 +50,12 @@ class ZarinpalGateway(models.Model):
         validators=[URLValidator()],
         help_text="URL تأیید پرداخت زرین‌پال. برای پروداکشن از 'https://payment.zarinpal.com/pg/v4/payment/verify.json' استفاده کنید."
     )
+    callback_redirect_url = models.URLField(
+        default='https://safarnameh24.com/payment/watcher-info',
+        verbose_name="URL ریدایرکت callback",
+        validators=[URLValidator()],
+        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info"
+    )
 
     def __str__(self):
         return f"زرین‌پال - {self.merchant_code} ({self.get_mode_display()})"
@@ -66,8 +72,14 @@ class ZarinpalGateway(models.Model):
                     "لطفاً از URLهای پروداکشن استفاده کنید، مانند: "
                     "https://payment.zarinpal.com/pg/v4/payment/request.json"
                 )
-        else:
-            if 'payment' in self.request_url or 'payment' in self.payment_url or 'payment' in self.verify_url:
+            if 'payment' not in self.request_url or 'payment' not in self.payment_url or 'payment' not in self.verify_url:
+                raise ValidationError(
+                    "در حالت پروداکشن، URLها باید شامل 'payment' باشند. "
+                    "لطفاً از URLهای پروداکشن استفاده کنید، مانند: "
+                    "https://payment.zarinpal.com/pg/v4/payment/request.json"
+                )
+        else:  # حالت سندباکس
+            if 'sandbox' not in self.request_url or 'sandbox' not in self.payment_url or 'sandbox' not in self.verify_url:
                 raise ValidationError(
                     "در حالت سندباکس، URLها باید شامل 'sandbox' باشند. "
                     "لطفاً از URLهای سندباکس استفاده کنید، مانند: "
@@ -78,15 +90,13 @@ class ZarinpalGateway(models.Model):
     class Meta:
         verbose_name = "تنظیمات درگاه زرین‌پال"
         verbose_name_plural = "تنظیمات درگاه زرین‌پال"
-        # توضیحات برای ادمین
-    
 
 
 # درگاه پرداخت ایران‌درگاه
 class IranianGateway(models.Model):
     """
     مدل تنظیمات درگاه ایران‌درگاه.
-    این مدل برای ذخیره مرچنت‌کد و URLهای مربوط به درخواست، پرداخت و تأیید استفاده می‌شود.
+    این مدل برای ذخیره مرچنت‌کد، URLهای مربوط به درخواست، پرداخت و تأیید، و URL ریدایرکت استفاده می‌شود.
     **توجه**: URLهای پیش‌فرض برای ایران‌درگاه مناسب هستند، اما در صورت نیاز می‌توانید آن‌ها را تغییر دهید.
     مثال:
     - درخواست: https://dargaah.ir/payment
@@ -118,6 +128,12 @@ class IranianGateway(models.Model):
         validators=[URLValidator()],
         help_text="URL تأیید پرداخت ایران‌درگاه. معمولاً نیازی به تغییر ندارد."
     )
+    callback_redirect_url = models.URLField(
+        default='https://safarnameh24.com/payment/watcher-info',
+        verbose_name="URL ریدایرکت callback",
+        validators=[URLValidator()],
+        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info"
+    )
 
     def __str__(self):
         return f"ایران‌درگاه - {self.merchant_code}"
@@ -138,8 +154,6 @@ class PaymentGatewayPreference(models.Model):
     """
     مدل تنظیم درگاه فعال.
     این مدل مشخص می‌کند که کدام درگاه (زرین‌پال یا ایران‌درگاه) به عنوان درگاه فعال استفاده شود.
-    **توجه**: برای استفاده از درگاه زرین‌پال در حالت پروداکشن، اطمینان حاصل کنید که URLهای درگاه در مدل ZarinpalGateway
-    به جای 'sandbox' از 'payment' استفاده کنند.
     """
 
     GATEWAY_CHOICES = (
@@ -151,7 +165,7 @@ class PaymentGatewayPreference(models.Model):
         choices=GATEWAY_CHOICES,
         default='zarinpal',
         verbose_name="تنظیمات تغییر درگاه پرداخت",
-        help_text="درگاه فعال را انتخاب کنید. برای زرین‌پال در حالت پروداکشن، URLها باید شامل 'payment' باشند."
+        help_text="درگاه فعال را انتخاب کنید."
     )
 
     def __str__(self):
@@ -164,6 +178,4 @@ class PaymentGatewayPreference(models.Model):
 
     class Meta:
         verbose_name = "درگاه"
-        verbose_name_plural = (
-            "تنظیمات درگاه پرداخت"
-        )
+        verbose_name_plural = "تنظیمات درگاه پرداخت"

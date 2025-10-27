@@ -4,20 +4,22 @@ from .models import ZarinpalGateway, IranianGateway, PaymentGatewayPreference
 
 @admin.register(ZarinpalGateway)
 class ZarinpalGatewayAdmin(admin.ModelAdmin):
-    list_display = ('merchant_code', 'mode', 'request_url', 'payment_url', 'verify_url')
+    list_display = ('merchant_code', 'mode', 'request_url', 'payment_url', 'verify_url', 'callback_redirect_url')
     list_display_links = ('merchant_code',)
     search_fields = ('merchant_code',)
     fieldsets = (
         (None, {
-            'fields': ('merchant_code', 'mode', 'request_url', 'payment_url', 'verify_url'),
+            'fields': ('merchant_code', 'mode', 'request_url', 'payment_url', 'verify_url', 'callback_redirect_url'),
             'description': (
                 '<p style="color: red; font-weight: bold;">'
-                'توجه: در حالت پروداکشن، URLها باید به جای "sandbox" از "payment" استفاده کنند. '
+                'توجه: در حالت پروداکشن، URLهای درگاه باید به جای "sandbox" از "payment" استفاده کنند. '
                 'مثال برای پروداکشن:<br>'
                 '- URL درخواست: https://payment.zarinpal.com/pg/v4/payment/request.json<br>'
                 '- URL پرداخت: https://payment.zarinpal.com/pg/StartPay<br>'
                 '- URL تأیید: https://payment.zarinpal.com/pg/v4/payment/verify.json<br>'
-                'در حالت سندباکس، URLها باید شامل "sandbox" باشند.'
+                'در حالت سندباکس، URLهای درگاه باید شامل "sandbox" باشند.<br>'
+                'URL ریدایرکت callback برای هدایت کاربر پس از پرداخت استفاده می‌شود. '
+                'مثال: https://safarnameh24.com/payment/watcher-info'
                 '</p>'
             )
         }),
@@ -37,19 +39,20 @@ class ZarinpalGatewayAdmin(admin.ModelAdmin):
         extra_context['title'] = "ویرایش تنظیمات درگاه زرین‌پال"
         extra_context['help_text'] = (
             "لطفاً مرچند کد معتبر و URLهای مناسب را وارد کنید. "
-            "برای پروداکشن از 'payment' و برای سندباکس از 'sandbox' در URLها استفاده کنید."
+            "برای پروداکشن از 'payment' و برای سندباکس از 'sandbox' در URLهای درگاه استفاده کنید. "
+            "URL ریدایرکت callback باید معتبر باشد و به صفحه‌ای اشاره کند که نتیجه پرداخت را نمایش می‌دهد."
         )
         return super().change_view(request, object_id, form_url, extra_context)
 
 
 @admin.register(IranianGateway)
 class IranianGatewayAdmin(admin.ModelAdmin):
-    list_display = ('merchant_code', 'request_url', 'payment_url', 'verify_url')
+    list_display = ('merchant_code', 'request_url', 'payment_url', 'verify_url', 'callback_redirect_url')
     list_display_links = ('merchant_code',)
     search_fields = ('merchant_code',)
     fieldsets = (
         (None, {
-            'fields': ('merchant_code', 'request_url', 'payment_url', 'verify_url'),
+            'fields': ('merchant_code', 'request_url', 'payment_url', 'verify_url', 'callback_redirect_url'),
             'description': (
                 '<p style="color: blue; font-weight: bold;">'
                 'توجه: URLهای پیش‌فرض ایران‌درگاه معمولاً نیازی به تغییر ندارند. '
@@ -57,7 +60,9 @@ class IranianGatewayAdmin(admin.ModelAdmin):
                 'مثال:<br>'
                 '- URL درخواست: https://dargaah.ir/payment<br>'
                 '- URL پرداخت: https://dargaah.ir/ird/startpay<br>'
-                '- URL تأیید: https://dargaah.ir/verification'
+                '- URL تأیید: https://dargaah.ir/verification<br>'
+                'URL ریدایرکت callback برای هدایت کاربر پس از پرداخت استفاده می‌شود. '
+                'مثال: https://safarnameh24.com/payment/watcher-info'
                 '</p>'
             )
         }),
@@ -77,7 +82,8 @@ class IranianGatewayAdmin(admin.ModelAdmin):
         extra_context['title'] = "ویرایش تنظیمات درگاه ایران‌درگاه"
         extra_context['help_text'] = (
             "لطفاً مرچند کد معتبر و URLهای مناسب را وارد کنید. "
-            "URLهای پیش‌فرض معمولاً نیازی به تغییر ندارند."
+            "URLهای پیش‌فرض معمولاً نیازی به تغییر ندارند. "
+            "URL ریدایرکت callback باید معتبر باشد و به صفحه‌ای اشاره کند که نتیجه پرداخت را نمایش می‌دهد."
         )
         return super().change_view(request, object_id, form_url, extra_context)
 
@@ -92,8 +98,9 @@ class PaymentGatewayPreferenceAdmin(admin.ModelAdmin):
             'description': (
                 '<p style="color: green; font-weight: bold;">'
                 'توجه: برای استفاده از درگاه زرین‌پال در حالت پروداکشن، اطمینان حاصل کنید که در تنظیمات '
-                'ZarinpalGateway، URLها به جای "sandbox" از "payment" استفاده کنند. '
-                'مثال: https://payment.zarinpal.com/pg/v4/payment/request.json'
+                'ZarinpalGateway، URLهای درگاه به جای "sandbox" از "payment" استفاده کنند. '
+                'مثال: https://payment.zarinpal.com/pg/v4/payment/request.json<br>'
+                'برای هر دو درگاه، URL ریدایرکت callback باید به درستی تنظیم شده باشد تا کاربران پس از پرداخت به صفحه مناسب هدایت شوند.'
                 '</p>'
             )
         }),
@@ -113,7 +120,8 @@ class PaymentGatewayPreferenceAdmin(admin.ModelAdmin):
         extra_context['title'] = "ویرایش ترجیحات درگاه پرداخت"
         extra_context['help_text'] = (
             "برای تغییر درگاه فعال، گزینه موردنظر را انتخاب کنید. "
-            "برای زرین‌پال در پروداکشن، اطمینان حاصل کنید که URLها شامل 'payment' باشند."
+            "برای زرین‌پال در پروداکشن، اطمینان حاصل کنید که URLهای درگاه شامل 'payment' باشند. "
+            "URL ریدایرکت callback باید در تنظیمات درگاه مربوطه به درستی تنظیم شده باشد."
         )
         return super().change_view(request, object_id, form_url, extra_context)
 
