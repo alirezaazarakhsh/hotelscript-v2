@@ -109,6 +109,7 @@ from .models import (
     Comment,
     SEOMeta,
     SuggestedCommentItem,
+    UserCancellation,
     set_skip_points_and_sms,
 )
 from .serializers import (
@@ -3965,7 +3966,7 @@ class UserCancellationCreateAPIView(APIView):
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد درخواست کنسلی یک رزرو را ثبت کند.  
         فیلدها:
-        - reservation_id: شناسه رزرو (required)
+        - reservation_id: کد پیگیری رزرو (tracking_code) (required)
         - reasons: لیست شناسه دلایل کنسلی (required)
         - description: توضیحات اختیاری
         وضعیت اولیه روی 'انتظار' قرار می‌گیرد.
@@ -3974,7 +3975,7 @@ class UserCancellationCreateAPIView(APIView):
             type=openapi.TYPE_OBJECT,
             required=['reservation_id', 'reasons'],
             properties={
-                'reservation_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه رزرو'),
+                'reservation_id': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری رزرو'),
                 'reasons': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_INTEGER),
@@ -3986,24 +3987,25 @@ class UserCancellationCreateAPIView(APIView):
         responses={
             201: openapi.Response(description="درخواست کنسلی با موفقیت ثبت شد."),
             400: "درخواست نامعتبر",
-            401: "کاربر احراز هویت نشده"
+            401: "کاربر احراز هویت نشده",
+            404: "رزرو یافت نشد"
         },
         tags=["reservedashboard-api"]
     )
     def post(self, request):
         user = request.user
-        reservation_id = request.data.get('reservation_id')
+        tracking_code = request.data.get('reservation_id')
         reasons_ids = request.data.get('reasons', [])
         description = request.data.get('description', '')
 
-        if not reservation_id or not reasons_ids:
+        if not tracking_code or not reasons_ids:
             return Response(
                 {"detail": "reservation_id و reasons الزامی هستند."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            reservation = Reservationhotel.objects.get(id=reservation_id, buyer=user)
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code, buyer=user)
         except Reservationhotel.DoesNotExist:
             return Response(
                 {"detail": "رزرو موردنظر یافت نشد یا به کاربر تعلق ندارد."},
@@ -4020,7 +4022,7 @@ class UserCancellationCreateAPIView(APIView):
         cancellation = UserCancellation.objects.create(
             reservation=reservation,
             description=description,
-            status='waiting'  # وضعیت اولیه
+            status='waiting'
         )
         cancellation.reasons.set(reasons_qs)
         cancellation.save()
