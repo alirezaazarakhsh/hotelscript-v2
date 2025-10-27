@@ -239,7 +239,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 data = {
                     "merchantID": merchant_code,
                     "amount": final_price,
-                    "callbackURL": urlencode({'url': callback_url})['url'],
+                    "callbackURL": callback_url,
                     "orderId": order_id,
                     "cardNumber": "1234123412341234" if mode is None and merchant_code == "TEST" else None,
                     "description": f"پرداخت رزرو {tracking_code}"
