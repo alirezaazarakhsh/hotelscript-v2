@@ -2,7 +2,6 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 
-
 # درگاه پرداخت زرین‌پال
 class ZarinpalGateway(models.Model):
     """
@@ -91,7 +90,6 @@ class ZarinpalGateway(models.Model):
         verbose_name = "تنظیمات درگاه زرین‌پال"
         verbose_name_plural = "تنظیمات درگاه زرین‌پال"
 
-
 # درگاه پرداخت ایران‌درگاه
 class IranianGateway(models.Model):
     """
@@ -147,7 +145,6 @@ class IranianGateway(models.Model):
     class Meta:
         verbose_name = "تنظیمات درگاه ایران‌درگاه"
         verbose_name_plural = "تنظیمات درگاه ایران‌درگاه"
-
 
 # انتخاب درگاه برای فعال بودن توسط کاربر
 class PaymentGatewayPreference(models.Model):

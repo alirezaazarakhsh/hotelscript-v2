@@ -12,7 +12,7 @@ import logging
 import requests
 import uuid
 import json
-from drf_yasg.utils import swagger_auto_schema  # اصلاح نام واردشده
+from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from urllib.parse import urlencode
