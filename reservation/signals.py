@@ -366,10 +366,37 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
     
     
-    @receiver(post_save, sender=UserCancellation)
-    def update_reservation_on_cancellation(sender, instance, **kwargs):
-            if instance.status == 'approved':
-                reservation = instance.reservation
-                reservation.capacity_status = 'rejected'  # وضعیت رزرو لغو شد
-                reservation.payment_status = 'unpaid'    # وضعیت پرداخت لغو شد
-                reservation.save()
+    
+    
+logger = logging.getLogger(__name__)
+
+@receiver(post_save, sender=UserCancellation)
+def handle_user_cancellation(sender, instance, created, **kwargs):
+    """
+    وقتی ادمین وضعیت کنسلی رو تایید کرد، رزرو لغو بشه و مبلغ پرداختی به کیف پول برگرده.
+    """
+    if not created and instance.status == 'approved':  # فقط وقتی تایید شد
+        reservation = instance.reservation
+
+        # جلوگیری از اعمال چندباره
+        if getattr(instance, '_processed', False):
+            return
+
+        try:
+            with transaction.atomic():
+                # به رزرو حالت لغو بده
+                reservation.capacity_status = 'rejected'
+                reservation.payment_status = 'unpaid'
+                reservation.save(update_fields=['capacity_status', 'payment_status'])
+
+                # مبلغ پرداخت شده رو به کیف پول اضافه کن
+                if reservation.final_price > 0:
+                    wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
+                    wallet.balance += int(reservation.final_price)
+                    wallet.save(update_fields=['balance'])
+                    logger.info(f"مبلغ {reservation.final_price} رزرو {reservation.tracking_code} به کیف پول {reservation.buyer.phone_number} برگشت داده شد.")
+
+                # علامت پردازش شده برای جلوگیری از چندبار اجرا
+                instance._processed = True
+        except Exception as e:
+            logger.error(f"خطا هنگام لغو رزرو {reservation.tracking_code}: {str(e)}")
