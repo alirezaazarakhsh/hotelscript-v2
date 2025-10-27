@@ -16,7 +16,7 @@ from drf_yasg import openapi
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from urllib.parse import urlencode
 
-from safarname24 import settings
+from safarnameh24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel
 
@@ -35,6 +35,8 @@ def get_merchant_code(active_gateway):
     if active_gateway == "zarinpal":
         gw = ZarinpalGateway.objects.first()
         if not gw:
+            if settings.ENVIRONMENT == 'production':
+                raise ValueError("مرچنت‌کد زرین‌پال برای پروداکشن تنظیم نشده است.")
             return str(uuid.uuid4())  # UUID تصادفی برای Sandbox
         return gw.merchant_code.strip()
     elif active_gateway == "iraniangateway":
@@ -89,7 +91,11 @@ class ReservationPaymentCheckAPIView(APIView):
                 description="لینک پرداخت با موفقیت بازگشت داده شد",
                 examples={
                     "application/json": {
-                        "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/S123456789",
+                        "payment_link": (
+                            "https://sandbox.zarinpal.com/pg/StartPay/S123456789"
+                            if settings.ENVIRONMENT == 'local'
+                            else "https://payment.zarinpal.com/pg/StartPay/123456789"
+                        ),
                         "ok": True
                     }
                 }
@@ -175,14 +181,24 @@ class ReservationPaymentCheckAPIView(APIView):
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
-                url = getattr(settings, "ZARINPAL_SANDBOX_REQUEST_URL", "https://sandbox.zarinpal.com/pg/v4/payment/request.json")
+                # انتخاب URL بر اساس محیط
+                url = (
+                    getattr(settings, "ZARINPAL_REQUEST_URL", "https://payment.zarinpal.com/pg/v4/payment/request.json")
+                    if settings.ENVIRONMENT == 'production'
+                    else getattr(settings, "ZARINPAL_SANDBOX_REQUEST_URL", "https://sandbox.zarinpal.com/pg/v4/payment/request.json")
+                )
                 resp = make_zarinpal_request(url, data, headers)
                 resp_data = resp.json()
 
                 logger.info(f"پاسخ زرین‌پال: {resp_data}")
                 if resp_data.get("data", {}).get("code") == 100:
                     authority = resp_data["data"]["authority"]
-                    payment_link = f"{getattr(settings, 'ZARINPAL_SANDBOX_PAYMENT_URL', 'https://sandbox.zarinpal.com/pg/StartPay')}/{authority}"
+                    payment_url = (
+                        getattr(settings, "ZARINPAL_PAYMENT_URL", "https://payment.zarinpal.com/pg/StartPay")
+                        if settings.ENVIRONMENT == 'production'
+                        else getattr(settings, "ZARINPAL_SANDBOX_PAYMENT_URL", "https://sandbox.zarinpal.com/pg/StartPay")
+                    )
+                    payment_link = f"{payment_url}/{authority}"
                     cache_payment_link(reservation.tracking_code, authority, payment_link)
                     return Response({"payment_link": payment_link, "ok": True}, status=status.HTTP_200_OK)
                 else:
@@ -203,7 +219,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 url = "https://dargaah.ir/payment"
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": "https://safarnameh24.com"
+                    "Referer": getattr(settings, "IRANIANGATEWAY_REFERER", "https://safarnameh24.com")
                 }
                 resp = requests.post(url, json=data, headers=headers, timeout=60)
                 resp.raise_for_status()
@@ -260,7 +276,11 @@ class PaymentCallbackAPIView(APIView):
                 description="ریدایرکت به صفحه مناسب با پارامترهای Authority، Status و tracking-code",
                 examples={
                     "application/json": {
-                        "redirect_url": "http://localhost:3000/payment/watcher-info?Authority=S123456789&Status=OK&tracking-code=sfa6476289129"
+                        "redirect_url": (
+                            "http://localhost:3000/payment/watcher-info?Authority=S123456789&Status=OK&tracking-code=sfa6476289129"
+                            if settings.ENVIRONMENT == 'local'
+                            else "https://safarnameh24.com/payment/watcher-info?Authority=123456789&Status=OK&tracking-code=sfa6476289129"
+                        )
                     }
                 }
             ),
@@ -416,7 +436,12 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
-                url = getattr(settings, "ZARINPAL_SANDBOX_VERIFY_URL", "https://sandbox.zarinpal.com/pg/v4/payment/verify.json")
+                # انتخاب URL بر اساس محیط
+                url = (
+                    getattr(settings, "ZARINPAL_VERIFY_URL", "https://payment.zarinpal.com/pg/v4/payment/verify.json")
+                    if settings.ENVIRONMENT == 'production'
+                    else getattr(settings, "ZARINPAL_SANDBOX_VERIFY_URL", "https://sandbox.zarinpal.com/pg/v4/payment/verify.json")
+                )
                 resp = make_zarinpal_request(url, data, headers)
                 resp_data = resp.json()
 
@@ -486,8 +511,6 @@ class PaymentVerifyAPIView(APIView):
             logger.exception(f"خطا در تایید تراکنش: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
 # -------------------------
 # API: وضعیت پرداخت رزرو
 # -------------------------
@@ -537,8 +560,6 @@ class ReservationPaymentStatusAPIView(APIView):
 
         logger.debug(f"ReservationPaymentStatusAPIView response: {response_data}")
         return Response(response_data, status=status.HTTP_200_OK)
-    
-    
 
 # -------------------------
 # Celery Task: بررسی لینک‌های پرداخت منقضی‌شده
