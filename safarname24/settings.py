@@ -280,8 +280,8 @@ TINYMCE_DEFAULT_CONFIG = {
 
 
 # مشخص کردن محیط (local یا production)
-ENVIRONMENT = 'production'  # برای محیط لوکال
-# ENVIRONMENT = 'production'  # برای محیط پروداکشن
+# ENVIRONMENT = 'local'  # برای محیط لوکال
+ENVIRONMENT = 'production'  # برای محیط پروداکشن
 
 # تنظیم URL پایه برای ریدایرکت callback
 if ENVIRONMENT == 'production':
