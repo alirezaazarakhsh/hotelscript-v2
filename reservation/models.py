@@ -2004,3 +2004,23 @@ class ReservationRoomPassenger(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'
+    
+    
+    
+#دلایل کنسلی رزرو 
+class CancellationReason(models.Model):
+    title = models.CharField(
+        max_length=255, 
+        unique=True, 
+        verbose_name="عنوان کنسلی",
+        help_text="عنوانی که برای دلیل کنسلی استفاده می‌شود."
+    )
+
+    class Meta:
+        verbose_name = "دلیل کنسلی"
+        verbose_name_plural = "دلایل کنسلی"
+
+    def __str__(self):
+        return self.title
+
+

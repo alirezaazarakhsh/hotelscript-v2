@@ -3910,3 +3910,40 @@ class UserReservationListAPIView(APIView):
             })
 
         return Response({"reservations": data}, status=status.HTTP_200_OK)
+
+
+
+# ای پی ای دلایل کنسلی 
+class CancellationReasonListAPIView(APIView):
+    """
+    API برای دریافت لیست دلایل کنسلی
+    """
+    permission_classes = [AllowAny]  # هر کاربری می‌تواند مشاهده کند
+
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست دلایل کنسلی",
+        operation_description="""
+        این API لیست تمام دلایل کنسلی رزرو را برمی‌گرداند.
+        هر دلیل شامل موارد زیر است:
+        - id: شناسه دلیل کنسلی
+        - title: عنوان دلیل کنسلی
+        """,
+        responses={
+            200: openapi.Response(
+                description="لیست دلایل کنسلی با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "cancellation_reasons": [
+                            {"id": 1, "title": "لغو توسط کاربر"},
+                            {"id": 2, "title": "عدم حضور مهمان"}
+                        ]
+                    }
+                }
+            )
+        },
+        tags=["reservedashboard-api"]
+    )
+    def get(self, request):
+        reasons = CancellationReason.objects.all()
+        data = [{"id": r.id, "title": r.title} for r in reasons]
+        return Response({"cancellation_reasons": data}, status=status.HTTP_200_OK)

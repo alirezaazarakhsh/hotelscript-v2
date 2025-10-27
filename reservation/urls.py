@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from .views import (
     AmazingHotelsListView,
+    CancellationReasonListAPIView,
     CommentPointsAndSuggestionsView,
     GetPriceRangeAPI,
     HomeHotelByHotelSlugView,
@@ -88,6 +89,8 @@ urlpatterns = [
     
     # ==== list reserve user ===
     path('reservation/user-reservations/', views.UserReservationListAPIView.as_view(), name='user-reservations'),
+    path('cancellation-reasons/', CancellationReasonListAPIView.as_view(), name='cancellation-reasons-list'),
+
 
     
     # ==== hotel seo ===

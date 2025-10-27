@@ -16,6 +16,7 @@ from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
+    CancellationReason,
     ClosedDate,
     HotelTagPublic,
     Province,
@@ -967,3 +968,17 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     res_room.calculate_half_day_prices()
                     res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
         return form
+    
+    
+    
+    
+    @admin.register(CancellationReason)
+    class CancellationReasonAdmin(admin.ModelAdmin):
+        list_display = ('title',)
+        search_fields = ('title',)
+
+        # محدودیت اضافه کردن تا ۵ آیتم
+        def has_add_permission(self, request):
+            if CancellationReason.objects.count() >= 5:
+                return False
+            return super().has_add_permission(request)
