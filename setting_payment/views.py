@@ -230,7 +230,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 }
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": callback_url
+                    "Referer": "https://safarnameh24.com"  # تطابق با دامنه وب‌سایت
                 }
                 logger.info(f"ارسال درخواست به ایران‌درگاه: {request_url}, داده‌ها: {data}")
                 resp = make_payment_request(request_url, data, headers)
@@ -369,10 +369,10 @@ class PaymentCallbackAPIView(APIView):
                 "tracking_code": tracking_code,
                 "payment_code": int(payment_code) if active_gateway == 'iraniangateway' and payment_code and payment_code.isdigit() else (100 if payment_status == "OK" else -2),
                 "authority": authority,
-                "amount": request.query_params.get("amount"),
+                "amount": amount,
                 "orderId": request.query_params.get("orderId"),
                 "ref_id": ref_id,
-                "message": request.query_params.get("message") if active_gateway == 'iraniangateway' else None
+                "message": message
             }
             cache.set(f"callback_{authority}", cache_data, timeout=1800)
             logger.info(f"Callback ذخیره شد: {cache_data}")
@@ -534,7 +534,7 @@ class PaymentVerifyAPIView(APIView):
                 }
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": settings.CALLBACK_REDIRECT_BASE_URL
+                    "Referer": "https://safarnameh24.com"  # تطابق با دامنه وب‌سایت
                 }
                 logger.info(f"ارسال درخواست تأیید به ایران‌درگاه: {verify_url}, داده‌ها: {data}")
                 resp = make_payment_request(verify_url, data, headers)
