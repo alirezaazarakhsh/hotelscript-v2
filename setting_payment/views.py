@@ -317,100 +317,99 @@ class PaymentCallbackAPIView(APIView):
         operation_description="""
         این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
         - نیازی به احراز هویت ندارد.
-        - برای ایران‌درگاه، اگر code=100 باشد، وضعیت به paid تنظیم می‌شود.
-        - در صورت انصراف یا ناموفق بودن پرداخت، وضعیت به unpaid تنظیم می‌شود.
-        - اطلاعات تراکنش در کش ذخیره شده و کاربر به آدرس مناسب ریدایرکت می‌شود.
+        - درگاه زرین‌پال: اگر Status=OK باشد، پرداخت موفق است.
+        - درگاه ایران‌درگاه: اگر code=100 باشد، پرداخت موفق است.
+        - در هر حالت (موفق یا ناموفق)، کاربر به آدرس فرانت ریدایرکت می‌شود.
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
             openapi.Parameter('Status', openapi.IN_QUERY, description="وضعیت تراکنش زرین‌پال (OK/NOK)", type=openapi.TYPE_STRING),
             openapi.Parameter('code', openapi.IN_QUERY, description="کد وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
             openapi.Parameter('message', openapi.IN_QUERY, description="پیام وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
-            openapi.Parameter('amount', openapi.IN_QUERY, description="مبلغ تراکنش به ریال", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('amount', openapi.IN_QUERY, description="مبلغ تراکنش", type=openapi.TYPE_INTEGER),
             openapi.Parameter('orderId', openapi.IN_QUERY, description="شناسه سفارش", type=openapi.TYPE_STRING),
-            openapi.Parameter('refId', openapi.IN_QUERY, description="شناسه ارجاع تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
+            openapi.Parameter('refId', openapi.IN_QUERY, description="شناسه ارجاع", type=openapi.TYPE_STRING),
         ],
-        responses={
-            302: openapi.Response(description="ریدایرکت به صفحه مناسب"),
-            400: openapi.Response(description="تراکنش ناموفق یا نامعتبر")
-        },
+        responses={302: "ریدایرکت به صفحه مناسب"},
         tags=["reservation-api"]
     )
     def get(self, request):
-        active_gateway = get_active_gateway()
-        merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
-        authority = request.query_params.get("Authority")
-        tracking_code = get_tracking_by_authority(authority)
-        if not tracking_code:
-            logger.error(f"تراکنش نامعتبر: authority={authority} در کش یافت نشد")
-            return Response({"detail": "تراکنش نامعتبر"}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
+            # مرحله ۱: شناسایی درگاه فعال و دریافت تنظیمات
+            active_gateway = get_active_gateway()
+            merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
+
+            # مرحله ۲: استخراج اطلاعات callback
+            authority = request.query_params.get("Authority")
+            payment_status = request.query_params.get("Status")
+            payment_code = request.query_params.get("code")
+            ref_id = request.query_params.get("refId")
+            amount = request.query_params.get("amount")
+            message = request.query_params.get("message", "")
+            order_id = request.query_params.get("orderId")
+
+            # مرحله ۳: یافتن tracking_code از کش
+            tracking_code = get_tracking_by_authority(authority)
+            if not tracking_code:
+                logger.error(f"❌ تراکنش نامعتبر: authority={authority} در کش یافت نشد")
+                return Response({"detail": "تراکنش نامعتبر"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # مرحله ۴: بازیابی رزرو
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-            payment_status = None
-            payment_code = None
-            ref_id = None
 
-            if active_gateway == 'zarinpal':
-                payment_status = request.query_params.get("Status")
-                ref_id = request.query_params.get("ref_id")
+            # مرحله ۵: بررسی وضعیت بر اساس درگاه
+            if active_gateway == "zarinpal":
                 if payment_status == "OK":
-                    logger.info(f"پرداخت زرین‌پال برای رزرو {tracking_code} موفق بود (Status=OK). انتظار برای تأیید نهایی.")
+                    logger.info(f"✅ پرداخت زرین‌پال برای رزرو {tracking_code} موفق بود (Status=OK).")
+                    reservation.payment_status = "paid"
                 else:
-                    with transaction.atomic():
-                        reservation.payment_status = 'unpaid'
-                        reservation.save(update_fields=['payment_status'])
-                        logger.info(f"پرداخت زرین‌پال برای رزرو {tracking_code} ناموفق بود یا انصراف داده شد (Status={payment_status}). وضعیت به unpaid تغییر کرد.")
+                    logger.info(f"❌ پرداخت زرین‌پال برای رزرو {tracking_code} ناموفق بود (Status={payment_status}).")
+                    reservation.payment_status = "unpaid"
 
-            elif active_gateway == 'iraniangateway':
-                payment_code = request.query_params.get("code")
-                ref_id = request.query_params.get("refId")
-                amount = request.query_params.get("amount")
-                message = request.query_params.get("message", "No message provided")
-                logger.info(f"Callback ایران‌درگاه: authority={authority}, code={payment_code}, refId={ref_id}, amount={amount}, message={message}")
-
+            elif active_gateway == "iraniangateway":
                 if payment_code == "100":
-                    with transaction.atomic():
-                        reservation.payment_status = 'paid'
-                        reservation.ref_id = ref_id if ref_id else f"iraniangateway_{authority}"
-                        reservation.save(update_fields=['payment_status', 'ref_id'])
-                        logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100). وضعیت به paid تغییر کرد.")
+                    logger.info(f"✅ پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100).")
+                    reservation.payment_status = "paid"
+                    reservation.ref_id = ref_id or f"iraniangateway_{authority}"
                 else:
-                    with transaction.atomic():
-                        reservation.payment_status = 'unpaid'
-                        reservation.save(update_fields=['payment_status'])
-                        logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} ناموفق بود یا انصراف داده شد (code={payment_code}, message={message}). وضعیت به unpaid تغییر کرد.")
+                    logger.info(f"❌ پرداخت ایران‌درگاه برای رزرو {tracking_code} ناموفق بود (code={payment_code}).")
+                    reservation.payment_status = "unpaid"
 
+            with transaction.atomic():
+                reservation.save(update_fields=["payment_status", "ref_id"] if ref_id else ["payment_status"])
+
+            # مرحله ۶: ذخیره در کش برای بررسی‌های بعدی
             cache_data = {
-                "status": payment_code if active_gateway == 'iraniangateway' else payment_status,
+                "status": payment_status or payment_code,
                 "tracking_code": tracking_code,
-                "payment_code": int(payment_code) if active_gateway == 'iraniangateway' and payment_code and payment_code.isdigit() else (100 if payment_status == "OK" else -2),
                 "authority": authority,
                 "amount": amount,
-                "orderId": request.query_params.get("orderId"),
+                "order_id": order_id,
                 "ref_id": ref_id,
-                "message": message
+                "message": message,
             }
             cache.set(f"callback_{authority}", cache_data, timeout=1800)
-            logger.info(f"Callback ذخیره شد: {cache_data}")
+            logger.info(f"💾 داده callback ذخیره شد: {cache_data}")
 
+            # مرحله ۷: ساخت URL نهایی برای ریدایرکت به فرانت
             query_params = {
-            "Authority": authority,
-            "Status": payment_status if active_gateway == "zarinpal" else payment_code,
-            "tracking-code": tracking_code,
+                "Authority": authority,
+                "Status": payment_status if active_gateway == "zarinpal" else payment_code,
+                "tracking-code": tracking_code,
             }
-            redirect_url = f"https://safarnameh24.com/payment/watcher-info?{urlencode(query_params)}"
-            logger.info(f"ریدایرکت نهایی به: {redirect_url}")
+            redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
+
+            logger.info(f"➡️ ریدایرکت نهایی به فرانت: {redirect_url}")
             return HttpResponseRedirect(redirect_url)
 
-
         except Exception as e:
-            logger.exception(f"خطا در پردازش callback برای authority={authority}: {str(e)}")
-            with transaction.atomic():
-                reservation.payment_status = 'unpaid'
-                reservation.save(update_fields=['payment_status'])
-            logger.info(f"خطا در پردازش callback برای رزرو {tracking_code}. وضعیت به unpaid تغییر کرد.")
+            logger.exception(f"💥 خطا در پردازش callback برای authority={request.query_params.get('Authority')}: {e}")
+            if 'reservation' in locals():
+                with transaction.atomic():
+                    reservation.payment_status = 'unpaid'
+                    reservation.save(update_fields=['payment_status'])
             return Response({"detail": "خطا در پردازش تراکنش"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 # -------------------------
 # API: تأیید نهایی تراکنش (اختیاری)
