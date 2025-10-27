@@ -3988,7 +3988,7 @@ class UserCancellationCreateAPIView(APIView):
             400: "درخواست نامعتبر",
             401: "کاربر احراز هویت نشده"
         },
-        tags=["reservation-cancellation-api"]
+        tags=["reservedashboard-api"]
     )
     def post(self, request):
         user = request.user
