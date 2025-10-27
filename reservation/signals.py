@@ -368,14 +368,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     
     
     
-logger = logging.getLogger(__name__)
-
 @receiver(post_save, sender=UserCancellation)
 def handle_user_cancellation(sender, instance, created, **kwargs):
     """
-    وقتی ادمین وضعیت کنسلی رو تایید کرد، رزرو لغو بشه و مبلغ پرداختی به کیف پول برگرده.
+    وقتی ادمین وضعیت کنسلی را تایید کرد، رزرو لغو شود و مبلغ پرداختی به کیف پول برگردد.
     """
-    if not created and instance.status == 'approved':  # فقط وقتی تایید شد
+    if not created and instance.status == UserCancellation.Status.APPROVED:  # فقط وقتی تایید شد
         reservation = instance.reservation
 
         # جلوگیری از اعمال چندباره
@@ -384,19 +382,19 @@ def handle_user_cancellation(sender, instance, created, **kwargs):
 
         try:
             with transaction.atomic():
-                # به رزرو حالت لغو بده
+                # رزرو را رد کن و وضعیت پرداخت را پرداخت نشده بگذار
                 reservation.capacity_status = 'rejected'
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['capacity_status', 'payment_status'])
 
-                # مبلغ پرداخت شده رو به کیف پول اضافه کن
+                # مبلغ رزرو را به کیف پول اضافه کن
                 if reservation.final_price > 0:
                     wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
-                    wallet.balance += int(reservation.final_price)
+                    wallet.balance += int(reservation.final_price)  # یا Decimal(reservation.final_price)
                     wallet.save(update_fields=['balance'])
                     logger.info(f"مبلغ {reservation.final_price} رزرو {reservation.tracking_code} به کیف پول {reservation.buyer.phone_number} برگشت داده شد.")
 
-                # علامت پردازش شده برای جلوگیری از چندبار اجرا
+                # علامت پردازش شده
                 instance._processed = True
         except Exception as e:
             logger.error(f"خطا هنگام لغو رزرو {reservation.tracking_code}: {str(e)}")
