@@ -280,11 +280,11 @@ TINYMCE_DEFAULT_CONFIG = {
 
 
 # مشخص کردن محیط (local یا production)
-ENVIRONMENT = 'local'  # برای محیط لوکال
+ENVIRONMENT = 'production'  # برای محیط لوکال
 # ENVIRONMENT = 'production'  # برای محیط پروداکشن
 
 # تنظیم URL پایه برای ریدایرکت callback
-if ENVIRONMENT == 'local':
+if ENVIRONMENT == 'production':
     CALLBACK_REDIRECT_BASE_URL = 'http://localhost:3000'
 else:
     CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
