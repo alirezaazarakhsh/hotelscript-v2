@@ -1343,6 +1343,14 @@ class Reservationhotel(models.Model):
         default=False,
         help_text=_('مشخص می‌کند که آیا کد تخفیف برای این رزرو پردازش نهایی شده است (پس از پرداخت).')
     )
+    
+    ref_id = models.CharField(  # فیلد جدید
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name=_('شناسه ارجاع تراکنش'),
+        help_text=_('شناسه ارجاع تراکنش پرداخت از درگاه (مثل ref_id زرین‌پال یا ایران‌درگاه).')
+    )
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)

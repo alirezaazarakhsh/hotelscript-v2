@@ -816,7 +816,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
-        'discount_processed_fa'
+        'discount_processed_fa','ref_id'
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -834,7 +834,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
                 'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
                 'final_price_fa', 'capacity_status', 'payment_status',
-                'points_assigned_fa', 'discount_processed_fa'
+                'points_assigned_fa', 'discount_processed_fa','ref_id'
             )
         }),
         (_('اطلاعات سیستم'), {
