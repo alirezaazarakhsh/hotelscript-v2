@@ -2022,5 +2022,45 @@ class CancellationReason(models.Model):
 
     def __str__(self):
         return self.title
+    
+    
+    
+#مدل کنسلی رزرو توسط کاربر
+class UserCancellation(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', _('در انتظار بررسی')
+        APPROVED = 'approved', _('تایید شده')
+        REJECTED = 'rejected', _('عدم تایید')
+
+    reservation = models.ForeignKey(
+        Reservationhotel,
+        on_delete=models.CASCADE,
+        related_name='cancellations',
+        verbose_name=_('رزرو مرتبط')
+    )
+    reasons = models.ManyToManyField(
+        CancellationReason,
+        verbose_name=_('دلایل کنسلی')
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name=_('توضیحات')
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name=_('وضعیت')
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('تاریخ ایجاد'))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('تاریخ بروزرسانی'))
+
+    def __str__(self):
+        return f"{self.reservation.tracking_code} - {self.status}"
+
+    class Meta:
+        verbose_name = _('کنسل رزرو کاربر')
+        verbose_name_plural = _('کنسل رزروهای کاربران')
 
 

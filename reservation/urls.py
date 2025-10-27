@@ -19,6 +19,7 @@ from .views import (
     ReservationInvoiceAPIView,
     SuggesteHotelListView,
     ReservationRoomDetailAPIView,
+    UserCancellationCreateAPIView,
     WalletWithdrawAPIView
     
 )
@@ -90,6 +91,9 @@ urlpatterns = [
     # ==== list reserve user ===
     path('reservation/user-reservations/', views.UserReservationListAPIView.as_view(), name='user-reservations'),
     path('cancellation-reasons/', CancellationReasonListAPIView.as_view(), name='cancellation-reasons-list'),
+    
+    # ==== User Cancellations ====
+    path('reservation/cancellations/create/', UserCancellationCreateAPIView.as_view(),  name='user-cancellation-create'),
 
 
     

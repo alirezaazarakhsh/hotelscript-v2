@@ -982,3 +982,43 @@ class ReservationhotelAdmin(NestedModelAdmin):
             if CancellationReason.objects.count() >= 5:
                 return False
             return super().has_add_permission(request)
+        
+        
+    class UserCancellationAdmin(admin.ModelAdmin):
+        list_display = (
+            'id',
+            'reservation_tracking_code',
+            'show_reasons',
+            'status',
+            'created_at',
+            'updated_at',
+        )
+        list_filter = ('status', 'created_at', 'updated_at')
+        search_fields = ('reservation__tracking_code', 'reasons__title', 'description')
+        autocomplete_fields = ('reservation',)
+        filter_horizontal = ('reasons',)
+        readonly_fields = ('created_at', 'updated_at')
+
+        fieldsets = (
+            (None, {
+                'fields': ('reservation', 'reasons', 'description', 'status')
+            }),
+            ('تاریخ‌ها', {
+                'fields': ('created_at', 'updated_at')
+            }),
+        )
+
+        def reservation_tracking_code(self, obj):
+            return obj.reservation.tracking_code if obj.reservation else '-'
+        reservation_tracking_code.short_description = 'کد پیگیری رزرو'
+
+        def show_reasons(self, obj):
+            qs = obj.reasons.all()
+            if not qs.exists():
+                return "-"
+            return format_html_join(
+                mark_safe('<br>'),
+                '{}',
+                ((r.title,) for r in qs)
+            )
+        show_reasons.short_description = 'دلایل کنسلی'
