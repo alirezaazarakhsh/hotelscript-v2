@@ -12,7 +12,7 @@ from django.db import transaction
 from threading import local
 from .models import (
     Reservationhotel, ReservationRoom, ReservationRoomPassenger, 
-    Passenger, RoomDatePrice, Room, Wallet
+    Passenger, RoomDatePrice, Room, UserCancellation, Wallet
 )
 from bashgah_moshtarian.models import (
     RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, CustomerClubPoint
@@ -364,3 +364,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
+    
+    
+    @receiver(post_save, sender=UserCancellation)
+    def update_reservation_on_cancellation(sender, instance, **kwargs):
+            if instance.status == 'approved':
+                reservation = instance.reservation
+                reservation.capacity_status = 'rejected'  # وضعیت رزرو لغو شد
+                reservation.payment_status = 'unpaid'    # وضعیت پرداخت لغو شد
+                reservation.save()
