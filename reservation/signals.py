@@ -368,33 +368,34 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     
     
     
-@receiver(post_save, sender=UserCancellation)
-def handle_user_cancellation(sender, instance, created, **kwargs):
-    """
-    وقتی ادمین وضعیت کنسلی را تایید کرد، رزرو لغو شود و مبلغ پرداختی به کیف پول برگردد.
-    """
-    if not created and instance.status == UserCancellation.Status.APPROVED:  # فقط وقتی تایید شد
-        reservation = instance.reservation
+@receiver(pre_save, sender=UserCancellation)
+def handle_user_cancellation(sender, instance, **kwargs):
+    # فقط اگر قبلاً ساخته شده باشد و وضعیت از pending به approved تغییر کند
+    if not instance.pk:
+        return
 
-        # جلوگیری از اعمال چندباره
-        if getattr(instance, '_processed', False):
-            return
+    previous = UserCancellation.objects.filter(pk=instance.pk).first()
+    if not previous:
+        return
+
+    # اگر وضعیت از pending یا rejected به approved تغییر کرد
+    if previous.status != UserCancellation.Status.APPROVED and instance.status == UserCancellation.Status.APPROVED:
+        reservation = instance.reservation
 
         try:
             with transaction.atomic():
-                # رزرو را رد کن و وضعیت پرداخت را پرداخت نشده بگذار
+                # تغییر وضعیت رزرو
                 reservation.capacity_status = 'rejected'
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['capacity_status', 'payment_status'])
 
-                # مبلغ رزرو را به کیف پول اضافه کن
+                # بازگشت مبلغ
                 if reservation.final_price > 0:
                     wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
-                    wallet.balance += int(reservation.final_price)  # یا Decimal(reservation.final_price)
+                    wallet.balance += int(reservation.final_price)
                     wallet.save(update_fields=['balance'])
+
                     logger.info(f"مبلغ {reservation.final_price} رزرو {reservation.tracking_code} به کیف پول {reservation.buyer.phone_number} برگشت داده شد.")
 
-                # علامت پردازش شده
-                instance._processed = True
         except Exception as e:
             logger.error(f"خطا هنگام لغو رزرو {reservation.tracking_code}: {str(e)}")
