@@ -3848,39 +3848,80 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
-class UserReservationListAPIView(APIView):
+# تنظیمات صفحه‌بندی: 10 آیتم در هر صفحه
+class ReservationPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+class UserReservationListAPIView(generics.ListAPIView):
     """
-    API برای دریافت لیست رزروهای کاربر
+    API برای دریافت لیست رزروهای کاربر با صفحه‌بندی (10 آیتم در هر صفحه)
     """
     permission_classes = [IsAuthenticated]
+    pagination_class = ReservationPagination
+
+    def get_queryset(self):
+        return Reservationhotel.objects.filter(buyer=self.request.user).select_related(
+            'buyer'
+        ).prefetch_related(
+            'reservation_rooms__room__hotel'
+        ).order_by('-created_at')
 
     @swagger_auto_schema(
-        operation_summary="دریافت لیست رزروهای کاربر",
+        operation_summary="دریافت لیست رزروهای کاربر با صفحه‌بندی",
         operation_description="""
-        این API لیست رزروهای کاربر احراز هویت‌شده را برمی‌گرداند.  
+        این API لیست رزروهای کاربر احراز هویت‌شده را با صفحه‌بندی (10 آیتم در هر صفحه) برمی‌گرداند.  
         شامل اطلاعات زیر برای هر رزرو:
         - tracking_code: کد پیگیری رزرو  
         - hotel_name: نام هتل رزرو‌شده  
-        - check_in_date: تاریخ ورود  
-        - check_out_date: تاریخ خروج  
+        - check_in_date: تاریخ ورود (جلالی)  
+        - check_out_date: تاریخ خروج (جلالی)  
         - total_guests: تعداد مسافران رزرو  
         - payment_status: وضعیت پرداخت  
+        - created_at: تاریخ و ساعت دقیق ایجاد رزرو (جلالی، مثلاً 1403/07/01 14:30:25)
+
+        **پارامترهای صفحه‌بندی:**
+        - `page`: شماره صفحه (مثال: `?page=2`)
+        - `page_size`: اختیاری، حداکثر 100 (مثال: `?page_size=20`)
         """,
+        manual_parameters=[
+            openapi.Parameter(
+                'page',
+                openapi.IN_QUERY,
+                description="شماره صفحه",
+                type=openapi.TYPE_INTEGER,
+                default=1
+            ),
+            openapi.Parameter(
+                'page_size',
+                openapi.IN_QUERY,
+                description="تعداد آیتم در هر صفحه (حداکثر 100)",
+                type=openapi.TYPE_INTEGER,
+                default=10
+            ),
+        ],
         responses={
             200: openapi.Response(
-                description="لیست رزروهای کاربر با موفقیت بازگشت داده شد",
+                description="لیست رزروها با صفحه‌بندی",
                 examples={
                     "application/json": {
-                        "reservations": [
-                            {
-                                "tracking_code": "RSV123456",
-                                "hotel_name": "هتل آزادی تهران",
-                                "check_in_date": "1403-07-01",
-                                "check_out_date": "1403-07-05",
-                                "total_guests": 4,
-                                "payment_status": "paid"
-                            }
-                        ]
+                        "count": 23,
+                        "next": "http://api.example.com/reservations/?page=3",
+                        "previous": "http://api.example.com/reservations/?page=1",
+                        "results": {
+                            "reservations": [
+                                {
+                                    "tracking_code": "RSV123456",
+                                    "hotel_name": "هتل آزادی تهران",
+                                    "check_in_date": "1403-07-01",
+                                    "check_out_date": "1403-07-05",
+                                    "total_guests": 4,
+                                    "payment_status": "paid",
+                                    "created_at": "1403/07/01 14:30:25"
+                                }
+                            ]
+                        }
                     }
                 }
             ),
@@ -3888,19 +3929,29 @@ class UserReservationListAPIView(APIView):
         },
         tags=["reservedashboard-api"]
     )
-    def get(self, request):
-        user = request.user
-        reservations = Reservationhotel.objects.filter(buyer=user).select_related(
-            'buyer'
-        ).prefetch_related(
-            'reservation_rooms__room__hotel'
-        ).order_by('-created_at')
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
 
+        if page is not None:
+            data = self._serialize_reservations(page)
+            return self.get_paginated_response({
+                "reservations": data
+            })
+
+        # اگر صفحه‌بندی غیرفعال بود
+        data = self._serialize_reservations(queryset)
+        return Response({"reservations": data}, status=status.HTTP_200_OK)
+
+    def _serialize_reservations(self, reservations):
+        """تبدیل رزروها به فرمت خروجی"""
         data = []
         for r in reservations:
-            # پیدا کردن نام هتل از اولین اتاق رزرو
             first_room = r.reservation_rooms.first()
             hotel_name = first_room.room.hotel.name if first_room and first_room.room and first_room.room.hotel else "نامشخص"
+
+            # تبدیل created_at به جلالی با ساعت
+            created_at_jalali = jdatetime.datetime.fromgregorian(datetime=r.created_at).strftime('%Y/%m/%d %H:%M:%S')
 
             data.append({
                 "tracking_code": r.tracking_code,
@@ -3909,10 +3960,9 @@ class UserReservationListAPIView(APIView):
                 "check_out_date": str(r.check_out_date),
                 "total_guests": r.total_guests,
                 "payment_status": r.payment_status,
+                "created_at": created_at_jalali,
             })
-
-        return Response({"reservations": data}, status=status.HTTP_200_OK)
-
+        return data
 
 
 # ای پی ای دلایل کنسلی 
