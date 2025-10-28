@@ -3911,17 +3911,17 @@ class UserReservationListAPIView(APIView):
 
         # دریافت پارامترهای صفحه‌بندی
         page = request.query_params.get('p', 1)
-        page_size = request.query_params.get('page_size', 10)
+        page_size = request.query_params.get('page_size', 18)
 
         # اعتبارسنجی page_size
         try:
             page_size = int(page_size)
             if page_size < 1:
-                page_size = 10
+                page_size = 18
             elif page_size > 100:
                 page_size = 100
         except (TypeError, ValueError):
-            page_size = 10
+            page_size = 18
 
         # پجینیشن با Django Paginator
         paginator = DjangoPaginator(queryset, page_size)
