@@ -86,6 +86,8 @@ def cache_payment_link(tracking_code: str, authority: str, link: str, ttl_second
     logger.info(f"لینک پرداخت در کش ذخیره شد: tracking_code={tracking_code}, authority={authority}")
 
 def get_tracking_by_authority(authority: str):
+    if not authority:
+        return None
     tracking_code = cache.get(f"payment_link_authority_{authority}")
     logger.info(f"جستجوی tracking_code برای authority={authority}: {tracking_code}")
     return tracking_code
@@ -264,7 +266,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     )
 
                 if isinstance(resp_data, dict) and resp_data.get("status") == 200:
-                    authority = resp_data.get("authority")
+                    authority = resp_data.get("authority") or resp_data.get("Authority")
                     if not authority:
                         logger.error(f"پاسخ ایران‌درگاه فاقد authority است: {resp_data}")
                         with transaction.atomic():
@@ -306,6 +308,7 @@ class ReservationPaymentCheckAPIView(APIView):
             logger.exception(f"خطا در تولید لینک پرداخت: {str(e)}")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 # -------------------------
 # API: callback تراکنش
 # -------------------------
@@ -323,6 +326,7 @@ class PaymentCallbackAPIView(APIView):
         """,
         manual_parameters=[
             openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش", type=openapi.TYPE_STRING),
+            openapi.Parameter('authority', openapi.IN_QUERY, description="شناسه تراکنش (حرف کوچک)", type=openapi.TYPE_STRING),
             openapi.Parameter('Status', openapi.IN_QUERY, description="وضعیت تراکنش زرین‌پال (OK/NOK)", type=openapi.TYPE_STRING),
             openapi.Parameter('code', openapi.IN_QUERY, description="کد وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
             openapi.Parameter('message', openapi.IN_QUERY, description="پیام وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
@@ -335,50 +339,53 @@ class PaymentCallbackAPIView(APIView):
     )
     def get(self, request):
         try:
-            # مرحله ۱: شناسایی درگاه فعال و دریافت تنظیمات
             active_gateway = get_active_gateway()
             merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
 
-            # مرحله ۲: استخراج اطلاعات callback
-            authority = request.query_params.get("Authority")
+            authority = request.query_params.get("Authority") or request.query_params.get("authority")
             payment_status = request.query_params.get("Status")
             payment_code = request.query_params.get("code")
-            ref_id = request.query_params.get("refId")
+            ref_id = request.query_params.get("refId") or request.query_params.get("refid")
             amount = request.query_params.get("amount")
             message = request.query_params.get("message", "")
             order_id = request.query_params.get("orderId")
 
-            # مرحله ۳: یافتن tracking_code از کش
+            logger.info(f"Callback دریافت شد: authority={authority}, Status={payment_status}, code={payment_code}, orderId={order_id}")
+
+            if not authority:
+                logger.error("Authority در callback وجود ندارد.")
+                return Response({"detail": "تراکنش نامعتبر: authority وجود ندارد"}, status=status.HTTP_400_BAD_REQUEST)
+
             tracking_code = get_tracking_by_authority(authority)
             if not tracking_code:
-                logger.error(f"❌ تراکنش نامعتبر: authority={authority} در کش یافت نشد")
+                logger.error(f"تراکنش نامعتبر: authority={authority} در کش یافت نشد")
                 return Response({"detail": "تراکنش نامعتبر"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # مرحله ۴: بازیابی رزرو
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-            # مرحله ۵: بررسی وضعیت بر اساس درگاه
             if active_gateway == "zarinpal":
                 if payment_status == "OK":
-                    logger.info(f"✅ پرداخت زرین‌پال برای رزرو {tracking_code} موفق بود (Status=OK).")
+                    logger.info(f"پرداخت زرین‌پال برای رزرو {tracking_code} موفق بود (Status=OK).")
                     reservation.payment_status = "paid"
                 else:
-                    logger.info(f"❌ پرداخت زرین‌پال برای رزرو {tracking_code} ناموفق بود (Status={payment_status}).")
+                    logger.info(f"پرداخت زرین‌پال برای رزرو {tracking_code} ناموفق بود (Status={payment_status}).")
                     reservation.payment_status = "unpaid"
 
             elif active_gateway == "iraniangateway":
                 if payment_code == "100":
-                    logger.info(f"✅ پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100).")
+                    logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100).")
                     reservation.payment_status = "paid"
                     reservation.ref_id = ref_id or f"iraniangateway_{authority}"
                 else:
-                    logger.info(f"❌ پرداخت ایران‌درگاه برای رزرو {tracking_code} ناموفق بود (code={payment_code}).")
+                    logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} ناموفق بود (code={payment_code}).")
                     reservation.payment_status = "unpaid"
 
             with transaction.atomic():
-                reservation.save(update_fields=["payment_status", "ref_id"] if ref_id else ["payment_status"])
+                update_fields = ["payment_status"]
+                if hasattr(reservation, 'ref_id') and reservation.ref_id:
+                    update_fields.append("ref_id")
+                reservation.save(update_fields=update_fields)
 
-            # مرحله ۶: ذخیره در کش برای بررسی‌های بعدی
             cache_data = {
                 "status": payment_status or payment_code,
                 "tracking_code": tracking_code,
@@ -389,27 +396,31 @@ class PaymentCallbackAPIView(APIView):
                 "message": message,
             }
             cache.set(f"callback_{authority}", cache_data, timeout=1800)
-            logger.info(f"💾 داده callback ذخیره شد: {cache_data}")
+            logger.info(f"داده callback ذخیره شد: {cache_data}")
 
-            # مرحله ۷: ساخت URL نهایی برای ریدایرکت به فرانت
             query_params = {
                 "Authority": authority,
-                "Status": payment_status if active_gateway == "zarinpal" else payment_code,
+                "Status": payment_status if active_gateway == "zarinpal" else (payment_code or "NOK"),
                 "tracking-code": tracking_code,
             }
-            redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
 
-            logger.info(f"➡️ ریدایرکت نهایی به فرانت: {redirect_url}")
+            if active_gateway == "iraniangateway":
+                query_params["message"] = message
+                if ref_id:
+                    query_params["refId"] = ref_id
+
+            redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
+            logger.info(f"ریدایرکت نهایی به فرانت: {redirect_url}")
             return HttpResponseRedirect(redirect_url)
 
         except Exception as e:
-            logger.exception(f"💥 خطا در پردازش callback برای authority={request.query_params.get('Authority')}: {e}")
+            logger.exception(f"خطا در پردازش callback: {e}")
             if 'reservation' in locals():
                 with transaction.atomic():
                     reservation.payment_status = 'unpaid'
                     reservation.save(update_fields=['payment_status'])
             return Response({"detail": "خطا در پردازش تراکنش"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
 
 # -------------------------
 # API: تأیید نهایی تراکنش (اختیاری)
@@ -452,7 +463,7 @@ class PaymentVerifyAPIView(APIView):
 
         reservation = get_object_or_404(Reservationhotel, tracking_code=order_id)
         if reservation.payment_status == 'paid':
-            logger.info(f"رزرو {order_id} قبلاً به paid تنظیم شده است. تأیید اضافی لازم نیست.")
+            logger.info(f"رزرو {order_id} قبلاً به paid تنظیم شده است.")
             return Response(
                 {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                 status=status.HTTP_200_OK
@@ -464,7 +475,7 @@ class PaymentVerifyAPIView(APIView):
         callback_data = cache.get(f"callback_{authority}")
         logger.info(f"داده‌های کش برای authority={authority}: {callback_data}")
         if not callback_data or not isinstance(callback_data, dict) or callback_data.get("tracking_code") != order_id:
-            logger.error(f"داده‌های callback نامعتبر: authority={authority}, order_id={order_id}, callback_data={callback_data}")
+            logger.error(f"داده‌های callback نامعتبر: authority={authority}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -474,7 +485,7 @@ class PaymentVerifyAPIView(APIView):
             )
 
         if active_gateway == 'zarinpal' and callback_data.get("status") != "OK":
-            logger.error(f"تراکنش زرین‌پال ناموفق: authority={authority}, status={callback_data.get('status')}")
+            logger.error(f"تراکنش زرین‌پال ناموفق: status={callback_data.get('status')}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -482,8 +493,8 @@ class PaymentVerifyAPIView(APIView):
                 {"status": "failed", "detail": f"پرداخت ناموفق بود: {callback_data.get('status')}", "payment_status": "unpaid"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        elif active_gateway == 'iraniangateway' and callback_data.get("status") != "100":
-            logger.error(f"تراکنش ایران‌درگاه ناموفق: authority={authority}, code={callback_data.get('status')}, message={callback_data.get('message')}")
+        elif active_gateway == 'iraniangateway' and callback_data.get("status") not in ["100", "101"]:
+            logger.error(f"تراکنش ایران‌درگاه ناموفق: code={callback_data.get('status')}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -503,7 +514,6 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 }
-                logger.info(f"ارسال درخواست تأیید به زرین‌پال (حالت: {mode}): {verify_url}")
                 resp = make_payment_request(verify_url, data, headers)
                 try:
                     resp_data = resp.json()
@@ -521,18 +531,16 @@ class PaymentVerifyAPIView(APIView):
                 if isinstance(resp_data, dict) and resp_data.get("data", {}).get("code") in [100, 101]:
                     with transaction.atomic():
                         reservation.payment_status = 'paid'
-                        reservation.ref_id = resp_data["data"].get("ref_id", callback_data.get("ref_id", f"zarinpal_{authority}"))
+                        reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
-                        logger.info(f"پرداخت برای رزرو {order_id} با موفقیت تأیید شد. وضعیت به paid تغییر کرد.")
                     return Response(
                         {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                         status=status.HTTP_200_OK
                     )
                 else:
-                    logger.error(f"تأیید تراکنش زرین‌پال ناموفق: {resp_data}")
                     with transaction.atomic():
                         reservation.payment_status = 'unpaid'
                         reservation.save(update_fields=['payment_status'])
@@ -552,7 +560,6 @@ class PaymentVerifyAPIView(APIView):
                     "Content-Type": "application/json",
                     "Referer": "https://safarnameh24.com"
                 }
-                logger.info(f"ارسال درخواست تأیید به ایران‌درگاه: {verify_url}, داده‌ها: {data}")
                 resp = make_payment_request(verify_url, data, headers)
                 try:
                     resp_data = resp.json()
@@ -570,18 +577,16 @@ class PaymentVerifyAPIView(APIView):
                 if isinstance(resp_data, dict) and resp_data.get("status") in [100, 101]:
                     with transaction.atomic():
                         reservation.payment_status = 'paid'
-                        reservation.ref_id = resp_data.get("refId", callback_data.get("ref_id", f"iraniangateway_{authority}"))
+                        reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
-                        logger.info(f"پرداخت برای رزرو {order_id} با موفقیت تأیید شد. وضعیت به paid تغییر کرد.")
                     return Response(
                         {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                         status=status.HTTP_200_OK
                     )
                 else:
-                    logger.error(f"تأیید تراکنش ایران‌درگاه ناموفق: {resp_data}")
                     with transaction.atomic():
                         reservation.payment_status = 'unpaid'
                         reservation.save(update_fields=['payment_status'])
@@ -594,7 +599,6 @@ class PaymentVerifyAPIView(APIView):
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
-            logger.info(f"خطا در اتصال به درگاه برای رزرو {order_id}. وضعیت به unpaid تغییر کرد.")
             logger.exception(f"خطا در اتصال به درگاه: {str(e)}")
             return Response(
                 {"status": "failed", "detail": f"خطا در اتصال به درگاه: {str(e)}", "payment_status": "unpaid"},
@@ -604,12 +608,12 @@ class PaymentVerifyAPIView(APIView):
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
-            logger.info(f"خطا در تأیید تراکنش برای رزرو {order_id}. وضعیت به unpaid تغییر کرد.")
             logger.exception(f"خطا در تأیید تراکنش: {str(e)}")
             return Response(
                 {"status": "failed", "detail": str(e), "payment_status": "unpaid"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 # -------------------------
 # API: وضعیت پرداخت رزرو
@@ -640,6 +644,7 @@ class ReservationPaymentStatusAPIView(APIView):
         }
         logger.debug(f"ReservationPaymentStatusAPIView response: {response_data}")
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 # -------------------------
 # Celery Task: بررسی لینک‌های پرداخت منقضی‌شده
