@@ -3849,17 +3849,18 @@ class HotelSEOView(APIView):
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
 # تنظیمات صفحه‌بندی
+# تنظیمات صفحه‌بندی
 class ReservationPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
-class UserReservationListAPIView(ListAPIView):
+class UserReservationListAPIView(generics.ListAPIView):
     """
     API کامل برای دریافت لیست رزروهای کاربر با صفحه‌بندی و تاریخ جلالی دقیق
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = ReservationPagination
 
     def get_queryset(self):
@@ -3870,7 +3871,8 @@ class UserReservationListAPIView(ListAPIView):
             .order_by('-created_at')
 
     def _serialize_reservation(self, reservation):
-        """تبدیل یک رزرو به فرمت خروجی"""
+        """تبدیل یک رزرو به فرمت خروجی با تاریخ جلالی ایمن"""
+        # نام هتل
         first_room = reservation.reservation_rooms.first()
         hotel_name = (
             first_room.room.hotel.name
@@ -3878,13 +3880,21 @@ class UserReservationListAPIView(ListAPIView):
             else "نامشخص"
         )
 
+        # تبدیل created_at به جلالی با ایمنی کامل
         created_at = reservation.created_at
-        if created_at.tzinfo:
-            created_at = created_at.replace(tzinfo=None)
+        if not created_at:
+            created_at_jalali = "نامشخص"
+        else:
+            # تبدیل timezone-aware به naive
+            if timezone.is_aware(created_at):
+                created_at = timezone.make_naive(created_at)
 
-        created_at_jalali = jdatetime.datetime.fromgregorian(
-            datetime=created_at
-        ).strftime('%Y/%m/%d %H:%M:%S')
+            # تبدیل به جلالی
+            try:
+                jalali_dt = jdatetime.datetime.fromgregorian(datetime=created_at)
+                created_at_jalali = jalali_dt.strftime('%Y/%m/%d %H:%M:%S')
+            except Exception as e:
+                created_at_jalali = "خطا در تبدیل تاریخ"
 
         return {
             "tracking_code": reservation.tracking_code,
@@ -3908,8 +3918,20 @@ class UserReservationListAPIView(ListAPIView):
         """,
         tags=['reservedashboard-api'],
         manual_parameters=[
-            openapi.Parameter('page', openapi.IN_QUERY, description="شماره صفحه", type=openapi.TYPE_INTEGER, default=1),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد آیتم در هر صفحه (حداکثر 100)", type=openapi.TYPE_INTEGER, default=10),
+            openapi.Parameter(
+                'page',
+                openapi.IN_QUERY,
+                description="شماره صفحه",
+                type=openapi.TYPE_INTEGER,
+                default=1
+            ),
+            openapi.Parameter(
+                'page_size',
+                openapi.IN_QUERY,
+                description="تعداد آیتم در هر صفحه (حداکثر 100)",
+                type=openapi.TYPE_INTEGER,
+                default=10
+            ),
         ],
         responses={
             200: openapi.Response(
@@ -3930,8 +3952,8 @@ class UserReservationListAPIView(ListAPIView):
                                         properties={
                                             'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری'),
                                             'hotel_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام هتل'),
-                                            'check_in_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ ورود (جلالی)'),
-                                            'check_out_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ خروج (جلالی)'),
+                                            'check_in_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ ورود'),
+                                            'check_out_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ خروج'),
                                             'total_guests': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل مسافران'),
                                             'payment_status': openapi.Schema(type=openapi.TYPE_STRING, description='وضعیت پرداخت: paid, unpaid, pending'),
                                             'created_at': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ و ساعت ایجاد رزرو (جلالی)'),
@@ -3975,8 +3997,9 @@ class UserReservationListAPIView(ListAPIView):
             reservations_data = [self._serialize_reservation(r) for r in page]
             return self.get_paginated_response({"reservations": reservations_data})
 
+        # بدون صفحه‌بندی (اگر غیرفعال بود)
         reservations_data = [self._serialize_reservation(r) for r in queryset]
-        return Response({"reservations": reservations_data})
+        return Response.Response({"reservations": reservations_data})
     
 
 # ای پی ای دلایل کنسلی 
