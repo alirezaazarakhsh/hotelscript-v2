@@ -3909,7 +3909,7 @@ class UserReservationListAPIView(APIView):
         - `page`: شماره صفحه (مثال: `?page=2`)
         - `page_size`: تعداد آیتم در هر صفحه (حداکثر 100، پیش‌فرض 10)
         """,
-        tags=['reservationdashboard-api'],
+        tags=['reservedashboard-api'],
         manual_parameters=[
             openapi.Parameter(
                 'page',
