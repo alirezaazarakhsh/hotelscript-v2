@@ -16,6 +16,7 @@ from authentication.models import BaseUser
 from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
 from .models import (
     BestHotels,
+    CancellationPenalty,
     CancellationReason,
     ClosedDate,
     HotelTagPublic,
@@ -674,7 +675,7 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
     
     
     
-# Define ReservationhotelAdminForm
+# --- فرم اعتبارسنجی ---
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -702,6 +703,8 @@ class ReservationhotelAdminForm(forms.ModelForm):
             raise ValidationError("مبلغ برداشت باید حداقل ۱۰,۰۰۰ تومان باشد.")
         return amount
 
+
+# --- اینلاین مسافران ---
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 8
@@ -715,28 +718,20 @@ class ReservationRoomPassengerInline(NestedTabularInline):
             return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
         return self.max_num
 
+
+# --- اینلاین اتاق‌ها ---
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 3
     max_num = 3
     fields = (
-        'room',
-        'price_per_night',
-        'extra_passenger_price',
-        'fixed_discount',
-        'subtotal',
-        'primary_passengers_count',
-        'extra_passengers_count',
-        'half_day_in_selected',
-        'half_day_out_selected',
-        'half_day_in_price',
-        'half_day_out_price',
+        'room', 'price_per_night', 'extra_passenger_price', 'fixed_discount', 'subtotal',
+        'primary_passengers_count', 'extra_passengers_count',
+        'half_day_in_selected', 'half_day_out_selected', 'half_day_in_price', 'half_day_out_price',
     )
     readonly_fields = (
-        'primary_passengers_count',
-        'extra_passengers_count',
-        'half_day_in_price',
-        'half_day_out_price',
+        'primary_passengers_count', 'extra_passengers_count',
+        'half_day_in_price', 'half_day_out_price',
     )
     show_change_link = False
     can_delete = True
@@ -792,6 +787,8 @@ class ReservationRoomInline(NestedTabularInline):
                     fields.remove('half_day_out_selected')
         return fields
 
+
+# --- ادمین اصلی رزرو ---
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -802,14 +799,21 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawal_amount_fa', 'wallet_withdrawn_fa',
-        'final_price_fa', 'capacity_status', 'payment_status',
-        'points_assigned_fa', 'discount_processed_fa', 'created_jalali', 'updated_jalali'
+        'final_price_fa',
+        'cancellation_penalty_fa',      # جدید: جریمه
+        'cancellation_refunded_fa',     # جدید: برگشتی
+        'cancellation_requested_fa',    # جدید: درخواست
+        'capacity_status_colored', 'payment_status_colored',
+        'points_assigned_fa', 'discount_processed_fa', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
-    list_filter = ('capacity_status', 'payment_status', 'check_in_date', 'check_out_date')
+    list_filter = (
+        'capacity_status', 'payment_status', 'check_in_date', 'check_out_date',
+        'cancellation_requested'  # جدید: فیلتر کنسلی
+    )
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
     readonly_fields = (
@@ -818,7 +822,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
-        'discount_processed_fa','ref_id'
+        'discount_processed_fa', 'ref_id',
+        'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa'  # جدید
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -836,8 +841,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
                 'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
                 'final_price_fa', 'capacity_status', 'payment_status',
-                'points_assigned_fa', 'discount_processed_fa','ref_id'
+                'points_assigned_fa', 'discount_processed_fa', 'ref_id'
             )
+        }),
+        (_('کنسلی'), {  # جدید: بخش کنسلی
+            'fields': (
+                'cancellation_penalty_fa',
+                'cancellation_refunded_fa',
+                'cancellation_requested_fa',
+            ),
         }),
         (_('اطلاعات سیستم'), {
             'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
@@ -845,6 +857,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # --- نمایش‌ها ---
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
         if obj.buyer:
@@ -928,6 +941,43 @@ class ReservationhotelAdmin(NestedModelAdmin):
         return '✓' if obj.discount_processed else '✗'
     discount_processed_fa.short_description = _('پردازش کد تخفیف')
 
+    # --- جدید: نمایش کنسلی ---
+    @admin.display(description='جریمه کنسلی')
+    def cancellation_penalty_fa(self, obj):
+        if obj.cancellation_penalty_applied > 0:
+            return format_html('<span style="color: red; font-weight: bold;">{:,}</span>', obj.cancellation_penalty_applied)
+        return "-"
+
+    @admin.display(description='مبلغ برگشتی')
+    def cancellation_refunded_fa(self, obj):
+        if obj.cancellation_refunded_amount > 0:
+            return format_html('<span style="color: green; font-weight: bold;">{:,}</span>', obj.cancellation_refunded_amount)
+        return "-"
+
+    @admin.display(description='درخواست کنسلی', boolean=True)
+    def cancellation_requested_fa(self, obj):
+        return obj.cancellation_requested
+
+    # --- رنگی کردن وضعیت ---
+    @admin.display(description='وضعیت ظرفیت')
+    def capacity_status_colored(self, obj):
+        colors = {'confirmed': 'green', 'rejected': 'red', 'pending': 'orange'}
+        color = colors.get(obj.capacity_status, 'gray')
+        return format_html(
+            '<span style="color: white; background: {}; padding: 2px 6px; border-radius: 4px; font-weight: bold;">{}</span>',
+            color, obj.get_capacity_status_display()
+        )
+
+    @admin.display(description='وضعیت پرداخت')
+    def payment_status_colored(self, obj):
+        colors = {'paid': 'green', 'unpaid': 'red', 'pending': 'orange'}
+        color = colors.get(obj.payment_status, 'gray')
+        return format_html(
+            '<span style="color: white; background: {}; padding: 2px 6px; border-radius: 4px; font-weight: bold;">{}</span>',
+            color, obj.get_payment_status_display()
+        )
+
+    # --- ذخیره و محاسبه ---
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
@@ -969,6 +1019,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     res_room.calculate_half_day_prices()
                     res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
         return form
+    
     
     
     
@@ -1025,3 +1076,114 @@ class UserCancellationAdmin(admin.ModelAdmin):
             ((r.title,) for r in qs)
         )
     show_reasons.short_description = 'دلایل کنسلی'
+    
+    
+    
+    
+    
+    
+    # فرم اختصاصی برای CancellationPenalty
+class CancellationPenaltyForm(forms.ModelForm):
+    class Meta:
+        model = CancellationPenalty
+        fields = ['hotel', 'penalty_percentage']
+
+    def clean_penalty_percentage(self):
+        percentage = self.cleaned_data['penalty_percentage']
+        if percentage > 100:
+            raise ValidationError(_('درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.'))
+        return percentage
+
+    def clean(self):
+        cleaned_data = super().clean()
+        hotel = cleaned_data.get('hotel')
+        if hotel:
+            # بررسی اینکه قبلاً جریمه‌ای برای این هتل وجود نداشته باشد
+            existing = CancellationPenalty.objects.filter(hotel=hotel)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise ValidationError(_('برای این هتل قبلاً درصد جریمه ثبت شده است.'))
+        return cleaned_data
+
+
+
+
+# فرم اعتبارسنجی برای جلوگیری از تکرار هتل
+class CancellationPenaltyForm(forms.ModelForm):
+    class Meta:
+        model = CancellationPenalty
+        fields = ['hotel', 'penalty_percentage']
+
+    def clean_penalty_percentage(self):
+        percentage = self.cleaned_data['penalty_percentage']
+        if percentage > 100:
+            raise ValidationError(_('درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.'))
+        return percentage
+
+    def clean_hotel(self):
+        hotel = self.cleaned_data['hotel']
+        if hotel:
+            existing = CancellationPenalty.objects.filter(hotel=hotel)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise ValidationError(_('برای این هتل قبلاً درصد جریمه تنظیم شده است.'))
+        return hotel
+
+
+# فرم اعتبارسنجی
+class CancellationPenaltyForm(forms.ModelForm):
+    class Meta:
+        model = CancellationPenalty
+        fields = ['hotel', 'penalty_percentage']
+
+    def clean_penalty_percentage(self):
+        value = self.cleaned_data.get('penalty_percentage')
+        if value and value > 100:
+            raise ValidationError("درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.")
+        return value
+
+    def clean_hotel(self):
+        hotel = self.cleaned_data.get('hotel')
+        if hotel:
+            existing = CancellationPenalty.objects.filter(hotel=hotel)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise ValidationError("برای این هتل قبلاً جریمه ثبت شده است.")
+        return hotel
+
+
+# --- ادمین اصلی ---
+@admin.register(CancellationPenalty)
+class CancellationPenaltyAdmin(admin.ModelAdmin):
+    form = CancellationPenaltyForm
+    list_display = ('hotel_link', 'penalty_percentage', 'hotel_city')
+    list_filter = ('penalty_percentage',)
+    search_fields = ('hotel__title', 'hotel__city__name')
+    autocomplete_fields = ('hotel',)
+
+    # فقط فیلدهای واقعی در فرم
+    fieldsets = (
+        (None, {
+            'fields': ('hotel', 'penalty_percentage')
+        }),
+    )
+
+    # نمایش لینک به هتل
+    @admin.display(description='هتل')
+    def hotel_link(self, obj):
+        if obj.hotel:
+            url = reverse("admin:hotels_hotel_change", args=[obj.hotel.pk])
+            return format_html('<a href="{}">{}</a>', url, obj.hotel.title)
+        return "-"
+
+    # نمایش شهر هتل
+    @admin.display(description='شهر')
+    def hotel_city(self, obj):
+        return obj.hotel.city.name if obj.hotel and obj.hotel.city else "-"
+
+    # بهینه‌سازی کوئری
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('hotel', 'hotel__city')

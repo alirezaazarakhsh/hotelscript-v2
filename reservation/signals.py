@@ -367,35 +367,67 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     
     
     
-    
-@receiver(pre_save, sender=UserCancellation)
-def handle_user_cancellation(sender, instance, **kwargs):
-    # فقط اگر قبلاً ساخته شده باشد و وضعیت از pending به approved تغییر کند
-    if not instance.pk:
+@receiver(post_save, sender=UserCancellation)
+def handle_user_cancellation_approval(sender, instance, created, **kwargs):
+    if created:
+        return  # فقط برای ویرایش
+
+    # فقط وقتی به approved تغییر کرد
+    if instance.status != UserCancellation.Status.APPROVED:
         return
 
-    previous = UserCancellation.objects.filter(pk=instance.pk).first()
-    if not previous:
+    # از کش برای جلوگیری از تکرار استفاده کن
+    cache_key = f"cancellation_processed_{instance.pk}"
+    if cache.get(cache_key):
+        logger.info(f"کنسلی {instance.pk} قبلاً پردازش شده است.")
         return
 
-    # اگر وضعیت از pending یا rejected به approved تغییر کرد
-    if previous.status != UserCancellation.Status.APPROVED and instance.status == UserCancellation.Status.APPROVED:
-        reservation = instance.reservation
+    try:
+        # فقط یک بار پردازش شود
+        with transaction.atomic():
+            # قفل کردن رزرو و کنسلی
+            cancellation = UserCancellation.objects.select_for_update().get(pk=instance.pk)
+            reservation = Reservationhotel.objects.select_for_update().get(pk=cancellation.reservation.pk)
 
-        try:
-            with transaction.atomic():
-                # تغییر وضعیت رزرو
-                reservation.capacity_status = 'rejected'
-                reservation.payment_status = 'unpaid'
-                reservation.save(update_fields=['capacity_status', 'payment_status'])
+            # چک کنیم قبلاً پردازش نشده باشه
+            if getattr(reservation, 'cancellation_refunded_amount', 0) > 0:
+                logger.info(f"رزرو {reservation.tracking_code} قبلاً کنسل و برگشت داده شده.")
+                cache.set(cache_key, True, timeout=86400)  # 24 ساعت
+                return
 
-                # بازگشت مبلغ
-                if reservation.final_price > 0:
-                    wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
-                    wallet.balance += int(reservation.final_price)
-                    wallet.save(update_fields=['balance'])
+            # تغییر وضعیت رزرو
+            reservation.capacity_status = 'rejected'
+            reservation.payment_status = 'unpaid'
+            reservation.cancellation_requested = True  # مهم!
 
-                    logger.info(f"مبلغ {reservation.final_price} رزرو {reservation.tracking_code} به کیف پول {reservation.buyer.phone_number} برگشت داده شد.")
+            # محاسبه جریمه
+            penalty_amount, refund_amount = reservation.calculate_cancellation_refund()
 
-        except Exception as e:
-            logger.error(f"خطا هنگام لغو رزرو {reservation.tracking_code}: {str(e)}")
+            # اعمال مقادیر
+            reservation.cancellation_penalty_applied = penalty_amount
+            reservation.cancellation_refunded_amount = refund_amount
+
+            # برگشت پول به کیف پول
+            if refund_amount > 0:
+                wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
+                wallet.balance += int(refund_amount)
+                wallet.save(update_fields=['balance'])
+
+            # ذخیره رزرو
+            reservation.save(update_fields=[
+                'capacity_status', 'payment_status',
+                'cancellation_penalty_applied', 'cancellation_refunded_amount',
+                'cancellation_requested'
+            ])
+
+            # علامت‌گذاری که پردازش شد
+            cache.set(cache_key, True, timeout=86400)
+
+            logger.info(
+                f"کنسلی تأیید شد: {reservation.tracking_code} | "
+                f"جریمه: {penalty_amount:,} | برگشتی: {refund_amount:,} به {reservation.buyer.phone_number}"
+            )
+
+    except Exception as e:
+        logger.error(f"خطا در پردازش کنسلی {instance.pk}: {str(e)}", exc_info=True)
+        # در صورت خطا، کش رو پاک نکن تا دوباره امتحان نشه

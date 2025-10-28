@@ -1270,8 +1270,6 @@ class BestHotels(models.Model):
 
 #مدل رزرو های کاربران سایت 
 # ---------------- Reservationhotel ----------------
-logger = logging.getLogger(__name__)
-
 class Reservationhotel(models.Model):
     CAPACITY_STATUS_CHOICES = [
         ('pending', _('در حال بررسی')),
@@ -1286,7 +1284,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,  
+        BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1315,41 +1313,39 @@ class Reservationhotel(models.Model):
         default=0,
         validators=[MinValueValidator(0)]
     )
-    wallet_withdrawn = models.BooleanField(
-        _('برداشت از کیف پول انجام شده'),
-        default=False,
-        help_text=_('مشخص می‌کند که آیا مبلغ برداشت از کیف پول کسر شده است.')
-    )
+    wallet_withdrawn = models.BooleanField(_('برداشت از کیف پول انجام شده'), default=False)
 
     is_approved = models.BooleanField(_('تأیید شده'), default=False)
     tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     capacity_status = models.CharField(_('وضعیت ظرفیت'), max_length=20, choices=CAPACITY_STATUS_CHOICES, default='pending')
     payment_status = models.CharField(_('وضعیت پرداخت'), max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
-    applied_discount_code = models.CharField(
-        max_length=8,
-        blank=True,
-        null=True,
-        verbose_name=_("کد تخفیف اعمال‌شده"),
-        help_text=_("کد تخفیف اعمال‌شده به‌صورت موقت تا زمان پرداخت رزرو")
+    applied_discount_code = models.CharField(max_length=8, blank=True, null=True, verbose_name=_("کد تخفیف اعمال‌شده"))
+    points_assigned = models.BooleanField(_('امتیازهای باشگاه مشتریان تخصیص داده شده'), default=False)
+    discount_processed = models.BooleanField(_('پردازش کد تخفیف انجام شده'), default=False)
+    ref_id = models.CharField(max_length=100, blank=True, null=True, verbose_name=_('شناسه ارجاع تراکنش'))
+
+    # --- فیلدهای جدید کنسلی ---
+    cancellation_penalty_applied = models.DecimalField(
+        _('مبلغ جریمه کنسلی'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text=_('مبلغی که به عنوان جریمه از مبلغ نهایی کسر شده است.')
     )
-    points_assigned = models.BooleanField(
-        verbose_name=_('امتیازهای باشگاه مشتریان تخصیص داده شده'),
+    cancellation_refunded_amount = models.DecimalField(
+        _('مبلغ برگشتی به کیف پول'),
+        max_digits=12,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text=_('مبلغ نهایی که پس از کسر جریمه به کیف پول کاربر برگشت داده شد.')
+    )
+    cancellation_requested = models.BooleanField(
+        _('درخواست کنسلی'),
         default=False,
-        help_text=_('مشخص می‌کند که آیا امتیازهای باشگاه مشتریان برای این رزرو تخصیص داده شده‌اند.')
-    )
-    discount_processed = models.BooleanField(
-        verbose_name=_('پردازش کد تخفیف انجام شده'),
-        default=False,
-        help_text=_('مشخص می‌کند که آیا کد تخفیف برای این رزرو پردازش نهایی شده است (پس از پرداخت).')
-    )
-    
-    ref_id = models.CharField(  # فیلد جدید
-        max_length=100,
-        blank=True,
-        null=True,
-        verbose_name=_('شناسه ارجاع تراکنش'),
-        help_text=_('شناسه ارجاع تراکنش پرداخت از درگاه (مثل ref_id زرین‌پال یا ایران‌درگاه).')
+        help_text=_('مشخص می‌کند که کاربر درخواست کنسلی داده است.')
     )
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
@@ -1362,6 +1358,7 @@ class Reservationhotel(models.Model):
     def __str__(self):
         return f'رزرو {self.tracking_code} توسط {self.buyer.phone_number}'
 
+    # --- متدهای کمکی ---
     @cached_property
     def nights_count(self):
         if self.check_in_date and self.check_out_date:
@@ -1385,9 +1382,38 @@ class Reservationhotel(models.Model):
                     total += (res_room.room.room_capacity + res_room.room.extra_capacity) * res_room.quantity
         return total
 
+    def get_hotel(self):
+        if hasattr(self, 'reservation_rooms') and self.reservation_rooms.exists():
+            return self.reservation_rooms.first().room.hotel
+        return None
+
+    def calculate_cancellation_refund(self):
+        hotel = self.get_hotel()
+        if not hotel or not hasattr(hotel, 'cancellation_penalty'):
+            penalty_amount = Decimal('0')
+            refund_amount = self.final_price
+        else:
+            penalty_obj = hotel.cancellation_penalty
+            penalty_percentage = Decimal(penalty_obj.penalty_percentage) / 100
+            penalty_amount = (self.final_price * penalty_percentage).quantize(Decimal('1'))
+            refund_amount = self.final_price - penalty_amount
+        return penalty_amount, refund_amount
+
+    def apply_cancellation_penalty(self):
+        penalty_amount, refund_amount = self.calculate_cancellation_refund()
+        self.cancellation_penalty_applied = penalty_amount
+        self.cancellation_refunded_amount = refund_amount
+        self.cancellation_requested = True
+        self.save(update_fields=[
+            'cancellation_penalty_applied',
+            'cancellation_refunded_amount',
+            'cancellation_requested'
+        ])
+
+    # --- محاسبه قیمت (همون قبلی) ---
     def calculate_total_price(self):
         if not self.pk or not self.reservation_rooms.exists():
-            return (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+            return (Decimal('0'),) * 9
 
         hotel = self.reservation_rooms.first().room.hotel
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
@@ -1395,14 +1421,13 @@ class Reservationhotel(models.Model):
 
         total = Decimal('0')
         total_extra = Decimal('0')
-        discount_amount = Decimal('0')
         room_fixed_discount = Decimal('0')
         half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
 
         nights = self.nights_count
         if nights <= 0:
-            return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge, Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+            return (total, total_extra, self.discount, half_day_in_charge, half_day_out_charge, Decimal('0'), self.discount, self.final_price, room_fixed_discount)
 
         user_level = getattr(getattr(self.buyer, 'natural_profile', None), 'level', None)
         check_in_date_std = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
@@ -1422,17 +1447,11 @@ class Reservationhotel(models.Model):
                 user_level__isnull=True
             ).first()
 
-            if not price_obj:
-                logger.warning(f"هیچ قیمتی برای تاریخ {check_in_date_std} در اتاق {room.title} پیدا نشد. مقدار 0 در نظر گرفته شد.")
-                daily_price = Decimal('0')
-                extra_price_per_person = Decimal('0')
-            else:
-                daily_price = Decimal(price_obj.price)
-                extra_price_per_person = Decimal(price_obj.extra_passenger_price)
+            daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
+            extra_price_per_person = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
 
             total += daily_price * nights * quantity
-            extra_price = extra_price_per_person * extra_guests
-            total_extra += extra_price * nights * quantity
+            total_extra += extra_price_per_person * extra_guests * nights * quantity
 
             if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                 if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
@@ -1443,17 +1462,14 @@ class Reservationhotel(models.Model):
             if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
                 half_day_out_charge += res_room.half_day_out_price * quantity
 
-        discount_amount = self.discount
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price = total + total_extra + total_half_day_charge
-        final_price = base_price - discount_amount - room_fixed_discount - self.wallet_withdrawal_amount
-
-        logger.debug(f"Calculation: total={total}, total_extra={total_extra}, discount={discount_amount}, room_fixed={room_fixed_discount}, wallet_withdrawal={self.wallet_withdrawal_amount}, base_price={base_price}, final_price={final_price}")
+        final_price = base_price - self.discount - room_fixed_discount - self.wallet_withdrawal_amount
         if final_price < 0:
             final_price = Decimal('0')
 
-        return (total, total_extra, discount_amount, half_day_in_charge, half_day_out_charge,
-                total_half_day_charge, discount_amount, final_price, room_fixed_discount)
+        return (total, total_extra, self.discount, half_day_in_charge, half_day_out_charge,
+                total_half_day_charge, self.discount, final_price, room_fixed_discount)
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation', False):
@@ -1468,6 +1484,7 @@ class Reservationhotel(models.Model):
             self.final_price = final
 
         super().save(*args, **kwargs)
+        
 
 _thread_locals = local()
 
@@ -2064,3 +2081,30 @@ class UserCancellation(models.Model):
         verbose_name_plural = _('کنسل رزروهای کاربران')
 
 
+
+
+# مدل جریمه کنسلی (برای هر هتل)
+class CancellationPenalty(models.Model):
+    hotel = models.OneToOneField(
+        Hotel,  # مسیر واقعی مدل Hotel را اینجا تنظیم کن
+        on_delete=models.CASCADE,
+        related_name='cancellation_penalty',
+        verbose_name=_('هتل')
+    )
+    penalty_percentage = models.PositiveSmallIntegerField(
+        _('درصد جریمه کنسلی'),
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text=_('درصد از مبلغ نهایی که به عنوان جریمه کسر می‌شود (0 تا 100)')
+    )
+
+    class Meta:
+        verbose_name = _('جریمه کنسلی هتل')
+        verbose_name_plural = _('تنظیمات جریمه هتل ها')
+
+    def __str__(self):
+        return f"{self.hotel.title} - {self.penalty_percentage}%"
+
+    def clean(self):
+        if self.penalty_percentage > 100:
+            raise ValidationError(_('درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.'))
