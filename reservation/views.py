@@ -30,7 +30,7 @@ from django.utils.dateparse import parse_date
 from jdatetime import date as jdate, datetime as jdt
 from datetime import date as gdate, datetime as gdt, timedelta
 from django.utils.translation import gettext_lazy as _
-from authentication import serializers
+from authentication import permissions, serializers
 from safarname24 import settings
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from jdatetime import datetime as jdt
