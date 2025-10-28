@@ -3848,15 +3848,14 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
-# تنظیمات صفحه‌بندی: 10 آیتم در هر صفحه
-# تنظیمات صفحه‌بندی: 10 آیتم در هر صفحه
+# تنظیمات صفحه‌بندی
 class ReservationPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
-class UserReservationListAPIView(APIView):
+class UserReservationListAPIView(ListAPIView):
     """
     API کامل برای دریافت لیست رزروهای کاربر با صفحه‌بندی و تاریخ جلالی دقیق
     """
@@ -3872,7 +3871,6 @@ class UserReservationListAPIView(APIView):
 
     def _serialize_reservation(self, reservation):
         """تبدیل یک رزرو به فرمت خروجی"""
-        # نام هتل
         first_room = reservation.reservation_rooms.first()
         hotel_name = (
             first_room.room.hotel.name
@@ -3880,10 +3878,9 @@ class UserReservationListAPIView(APIView):
             else "نامشخص"
         )
 
-        # تبدیل created_at از میلادی به جلالی با ساعت
         created_at = reservation.created_at
         if created_at.tzinfo:
-            created_at = created_at.replace(tzinfo=None)  # تبدیل به naive
+            created_at = created_at.replace(tzinfo=None)
 
         created_at_jalali = jdatetime.datetime.fromgregorian(
             datetime=created_at
@@ -3903,7 +3900,7 @@ class UserReservationListAPIView(APIView):
         operation_summary="دریافت لیست رزروهای کاربر",
         operation_description="""
         این API لیست تمام رزروهای کاربر احراز هویت‌شده را با **صفحه‌بندی (10 تایی)** برمی‌گرداند.  
-        شامل اطلاعات کامل رز768رو و **تاریخ ایجاد دقیق به صورت جلالی**.
+        شامل اطلاعات کامل رزرو و **تاریخ ایجاد دقیق به صورت جلالی**.
 
         **پارامترهای صفحه‌بندی:**
         - `page`: شماره صفحه (مثال: `?page=2`)
@@ -3911,20 +3908,8 @@ class UserReservationListAPIView(APIView):
         """,
         tags=['reservedashboard-api'],
         manual_parameters=[
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="شماره صفحه",
-                type=openapi.TYPE_INTEGER,
-                default=1
-            ),
-            openapi.Parameter(
-                'page_size',
-                openapi.IN_QUERY,
-                description="تعداد آیتم در هر صفحه (حداکثر 100)",
-                type=openapi.TYPE_INTEGER,
-                default=10
-            ),
+            openapi.Parameter('page', openapi.IN_QUERY, description="شماره صفحه", type=openapi.TYPE_INTEGER, default=1),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد آیتم در هر صفحه (حداکثر 100)", type=openapi.TYPE_INTEGER, default=10),
         ],
         responses={
             200: openapi.Response(
@@ -3982,18 +3967,16 @@ class UserReservationListAPIView(APIView):
             401: openapi.Response(description="کاربر احراز هویت نشده است.")
         }
     )
-    def get(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
 
+        page = self.paginate_queryset(queryset)
         if page is not None:
             reservations_data = [self._serialize_reservation(r) for r in page]
             return self.get_paginated_response({"reservations": reservations_data})
 
-        # بدون صفحه‌بندی (اگر pagination غیرفعال بود)
         reservations_data = [self._serialize_reservation(r) for r in queryset]
-        return Response({"reservations": reservations_data}, status=200)
-    
+        return Response({"reservations": reservations_data})
     
 
 # ای پی ای دلایل کنسلی 
