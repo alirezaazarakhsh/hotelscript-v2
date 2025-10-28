@@ -30,7 +30,7 @@ from django.utils.dateparse import parse_date
 from jdatetime import date as jdate, datetime as jdt
 from datetime import date as gdate, datetime as gdt, timedelta
 from django.utils.translation import gettext_lazy as _
-from authentication import permissions, serializers
+from authentication import serializers
 from safarname24 import settings
 from safarname24.pagination import FacilitiesPaginator, RoomFacilitiesPaginator
 from jdatetime import datetime as jdt
@@ -3848,159 +3848,116 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
-# تنظیمات صفحه‌بندی
-# تنظیمات صفحه‌بندی
-class ReservationPagination(PageNumberPagination):
-    page_size = 10
-    page_size_query_param = 'page_size'
-    max_page_size = 100
-
-
-class UserReservationListAPIView(generics.ListAPIView):
-    """
-    API کامل برای دریافت لیست رزروهای کاربر با صفحه‌بندی و تاریخ جلالی دقیق
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = ReservationPagination
-
-    def get_queryset(self):
-        """کوئری بهینه با prefetch و select_related"""
-        return Reservationhotel.objects.filter(buyer=self.request.user) \
-            .select_related('buyer') \
-            .prefetch_related('reservation_rooms__room__hotel') \
-            .order_by('-created_at')
-
-    def _serialize_reservation(self, reservation):
-        """تبدیل یک رزرو به فرمت خروجی با تاریخ جلالی ایمن"""
-        # نام هتل
-        first_room = reservation.reservation_rooms.first()
-        hotel_name = (
-            first_room.room.hotel.name
-            if first_room and first_room.room and first_room.room.hotel
-            else "نامشخص"
-        )
-
-        # تبدیل created_at به جلالی با ایمنی کامل
-        created_at = reservation.created_at
-        if not created_at:
-            created_at_jalali = "نامشخص"
-        else:
-            # تبدیل timezone-aware به naive
-            if timezone.is_aware(created_at):
-                created_at = timezone.make_naive(created_at)
-
-            # تبدیل به جلالی
-            try:
-                jalali_dt = jdatetime.datetime.fromgregorian(datetime=created_at)
-                created_at_jalali = jalali_dt.strftime('%Y/%m/%d %H:%M:%S')
-            except Exception as e:
-                created_at_jalali = "خطا در تبدیل تاریخ"
-
-        return {
-            "tracking_code": reservation.tracking_code,
-            "hotel_name": hotel_name,
-            "check_in_date": str(reservation.check_in_date),
-            "check_out_date": str(reservation.check_out_date),
-            "total_guests": reservation.total_guests,
-            "payment_status": reservation.payment_status,
-            "created_at": created_at_jalali,
-        }
+class UserReservationListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست رزروهای کاربر",
         operation_description="""
-        این API لیست تمام رزروهای کاربر احراز هویت‌شده را با **صفحه‌بندی (10 تایی)** برمی‌گرداند.  
-        شامل اطلاعات کامل رزرو و **تاریخ ایجاد دقیق به صورت جلالی**.
-
-        **پارامترهای صفحه‌بندی:**
-        - `page`: شماره صفحه (مثال: `?page=2`)
-        - `page_size`: تعداد آیتم در هر صفحه (حداکثر 100، پیش‌فرض 10)
+        لیست رزروهای کاربر احراز هویت‌شده با صفحه‌بندی سفارشی.
+        
+        پارامترها:
+        - p: شماره صفحه (مثلاً p=1)
+        - page_size: تعداد آیتم در هر صفحه (پیش‌فرض: 10، حداکثر: 100)
+        
+        فیلدهای بازگشتی:
+        - tracking_code
+        - hotel_name
+        - check_in_date (جلالی)
+        - check_out_date (جلالی)
+        - total_guests
+        - payment_status
+        - created_at (جلالی: 1403/06/15 14:30)
         """,
-        tags=['reservedashboard-api'],
         manual_parameters=[
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="شماره صفحه",
-                type=openapi.TYPE_INTEGER,
-                default=1
-            ),
-            openapi.Parameter(
-                'page_size',
-                openapi.IN_QUERY,
-                description="تعداد آیتم در هر صفحه (حداکثر 100)",
-                type=openapi.TYPE_INTEGER,
-                default=10
-            ),
+            openapi.Parameter('p', openapi.IN_QUERY, description="شماره صفحه", type=openapi.TYPE_INTEGER, example=1),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد آیتم در صفحه (حداکثر 100)", type=openapi.TYPE_INTEGER, example=10),
         ],
         responses={
             200: openapi.Response(
                 description="لیست رزروها با صفحه‌بندی",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'count': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل رزروها'),
-                        'next': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
-                        'previous': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_URI, nullable=True),
-                        'results': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'reservations': openapi.Schema(
-                                    type=openapi.TYPE_ARRAY,
-                                    items=openapi.Schema(
-                                        type=openapi.TYPE_OBJECT,
-                                        properties={
-                                            'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری'),
-                                            'hotel_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام هتل'),
-                                            'check_in_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ ورود'),
-                                            'check_out_date': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ خروج'),
-                                            'total_guests': openapi.Schema(type=openapi.TYPE_INTEGER, description='تعداد کل مسافران'),
-                                            'payment_status': openapi.Schema(type=openapi.TYPE_STRING, description='وضعیت پرداخت: paid, unpaid, pending'),
-                                            'created_at': openapi.Schema(type=openapi.TYPE_STRING, description='تاریخ و ساعت ایجاد رزرو (جلالی)'),
-                                        },
-                                        required=['tracking_code', 'hotel_name', 'created_at']
-                                    )
-                                )
-                            }
-                        )
-                    }
-                ),
                 examples={
                     "application/json": {
-                        "count": 177,
-                        "next": "http://api.example.com/api/v1/hotel/reservation/user-reservations/?page=2",
-                        "previous": None,
-                        "results": {
-                            "reservations": [
-                                {
-                                    "tracking_code": "sfa1381017372",
-                                    "hotel_name": "پارسیان آزادی",
-                                    "check_in_date": "1404-08-06",
-                                    "check_out_date": "1404-08-07",
-                                    "total_guests": 3,
-                                    "payment_status": "unpaid",
-                                    "created_at": "1404/08/06 12:51:40"
-                                }
-                            ]
-                        }
+                        "count": 23,
+                        "total_pages": 3,
+                        "current_page": 1,
+                        "results": [
+                            {
+                                "tracking_code": "RSV123456",
+                                "hotel_name": "هتل آزادی تهران",
+                                "check_in_date": "1403-07-01",
+                                "check_out_date": "1403-07-05",
+                                "total_guests": 4,
+                                "payment_status": "paid",
+                                "created_at": "1403/06/15 14:30"
+                            }
+                        ]
                     }
                 }
             ),
-            401: openapi.Response(description="کاربر احراز هویت نشده است.")
-        }
+            401: "احراز هویت لازم است."
+        },
+        tags=["reservedashboard-api"]
     )
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+    def get(self, request):
+        # کوئری‌ست اصلی
+        queryset = Reservationhotel.objects.filter(
+            buyer=request.user
+        ).select_related('buyer').prefetch_related(
+            'reservation_rooms__room__hotel'
+        ).order_by('-created_at')
 
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            reservations_data = [self._serialize_reservation(r) for r in page]
-            return self.get_paginated_response({"reservations": reservations_data})
+        # دریافت پارامترهای صفحه‌بندی
+        page = request.query_params.get('p', 1)
+        page_size = request.query_params.get('page_size', 10)
 
-        # بدون صفحه‌بندی (اگر غیرفعال بود)
-        reservations_data = [self._serialize_reservation(r) for r in queryset]
-        return Response.Response({"reservations": reservations_data})
-    
+        # اعتبارسنجی page_size
+        try:
+            page_size = int(page_size)
+            if page_size < 1:
+                page_size = 10
+            elif page_size > 100:
+                page_size = 100
+        except (TypeError, ValueError):
+            page_size = 10
+
+        # پجینیشن با Django Paginator
+        paginator = DjangoPaginator(queryset, page_size)
+        
+        try:
+            reservations_page = paginator.page(page)
+        except PageNotAnInteger:
+            reservations_page = paginator.page(1)
+        except EmptyPage:
+            reservations_page = paginator.page(paginator.num_pages)
+
+        # سریالایز کردن دستی داده‌ها
+        data = []
+        for r in reservations_page:
+            first_room = r.reservation_rooms.first()
+            hotel_name = first_room.room.hotel.name if first_room and first_room.room and first_room.room.hotel else "نامشخص"
+
+            data.append({
+                "tracking_code": r.tracking_code,
+                "hotel_name": hotel_name,
+                "check_in_date": str(r.check_in_date),
+                "check_out_date": str(r.check_out_date),
+                "total_guests": r.total_guests,
+                "payment_status": r.payment_status,
+                "created_at": r.created_at.strftime('%Y/%m/%d %H:%M') if r.created_at else None,
+            })
+
+        # استفاده از ساختار پاسخ Paginator سفارشی
+        response_data = {
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': reservations_page.number,
+            'results': data
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
 
 # ای پی ای دلایل کنسلی 
 class CancellationReasonListAPIView(APIView):

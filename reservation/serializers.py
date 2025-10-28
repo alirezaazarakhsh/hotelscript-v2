@@ -18,6 +18,7 @@ from .models import (
     HotelType,
     Hotel,
     Facilities,
+    Reservationhotel,
     Room,
     RoomDatePrice,
     RoomFacilities,
@@ -744,4 +745,25 @@ class ReservationCreateResponseSerializer(serializers.Serializer):
     
     
     
+class ReservationListSerializer(serializers.ModelSerializer):
+    hotel_name = serializers.CharField(source='reservation_rooms.first.room.hotel.name', default="نامشخص")
+    created_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Reservationhotel
+        fields = [
+            'tracking_code',
+            'hotel_name',
+            'check_in_date',
+            'check_out_date',
+            'total_guests',
+            'payment_status',
+            'created_at',
+        ]
+
+    def get_created_at(self, obj):
+        # تبدیل jDateTimeField به رشته جلالی
+        if obj.created_at:
+            return obj.created_at.strftime('%Y/%m/%d %H:%M')
+        return None
     
