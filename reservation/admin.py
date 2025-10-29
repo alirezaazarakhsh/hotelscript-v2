@@ -1162,7 +1162,7 @@ class CancellationPenaltyForm(forms.ModelForm):
 @admin.register(CancellationPenalty)
 class CancellationPenaltyAdmin(admin.ModelAdmin):
     form = CancellationPenaltyForm
-    list_display = ('hotel_link', 'penalty_percentage', 'hotel_city')
+    list_display = ('id','hotel_link', 'penalty_percentage', 'hotel_city')
     list_filter = ('hotel__city', 'penalty_percentage')  # فیلتر بر اساس شهر
     search_fields = ('hotel__name', 'hotel__city__name')  # جستجو بر اساس نام هتل و شهر
     autocomplete_fields = ('hotel',)
