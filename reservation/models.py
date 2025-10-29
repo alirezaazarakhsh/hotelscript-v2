@@ -2086,7 +2086,7 @@ class UserCancellation(models.Model):
 # مدل جریمه کنسلی (برای هر هتل)
 class CancellationPenalty(models.Model):
     hotel = models.OneToOneField(
-        Hotel,  # مسیر واقعی مدل Hotel را اینجا تنظیم کن
+        'reservation.Hotel',  
         on_delete=models.CASCADE,
         related_name='cancellation_penalty',
         verbose_name=_('هتل')
@@ -2103,7 +2103,7 @@ class CancellationPenalty(models.Model):
         verbose_name_plural = _('تنظیمات جریمه هتل ها')
 
     def __str__(self):
-        return f"{self.hotel.title} - {self.penalty_percentage}%"
+        return f"{self.hotel.name} - {self.penalty_percentage}%"
 
     def clean(self):
         if self.penalty_percentage > 100:
