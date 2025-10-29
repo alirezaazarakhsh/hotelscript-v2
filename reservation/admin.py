@@ -1133,7 +1133,9 @@ class CancellationPenaltyForm(forms.ModelForm):
         return hotel
 
 
-# فرم اعتبارسنجی
+
+
+# --- فرم اعتبارسنجی ---
 class CancellationPenaltyForm(forms.ModelForm):
     class Meta:
         model = CancellationPenalty
@@ -1161,9 +1163,10 @@ class CancellationPenaltyForm(forms.ModelForm):
 class CancellationPenaltyAdmin(admin.ModelAdmin):
     form = CancellationPenaltyForm
     list_display = ('hotel_link', 'penalty_percentage', 'hotel_city')
-    list_filter = ('penalty_percentage',)
-    search_fields = ('hotel__title', 'hotel__city__name')
+    list_filter = ('hotel__city', 'penalty_percentage')  # فیلتر بر اساس شهر
+    search_fields = ('hotel__name', 'hotel__city__name')  # جستجو بر اساس نام هتل و شهر
     autocomplete_fields = ('hotel',)
+    ordering = ('hotel__name',)
 
     # فقط فیلدهای واقعی در فرم
     fieldsets = (
@@ -1172,19 +1175,19 @@ class CancellationPenaltyAdmin(admin.ModelAdmin):
         }),
     )
 
-    # نمایش لینک به هتل
-    @admin.display(description='هتل')
+    # --- نمایش لینک به هتل ---
+    @admin.display(description='هتل', ordering='hotel__name')
     def hotel_link(self, obj):
         if obj.hotel:
-            url = reverse("admin:hotels_hotel_change", args=[obj.hotel.pk])
-            return format_html('<a href="{}">{}</a>', url, obj.hotel.title)
+            url = reverse("admin:reservation_hotel_change", args=[obj.hotel.pk])
+            return format_html('<a href="{}">{}</a>', url, obj.hotel.name)
         return "-"
 
-    # نمایش شهر هتل
+    # --- نمایش شهر هتل ---
     @admin.display(description='شهر')
     def hotel_city(self, obj):
-        return obj.hotel.city.name if obj.hotel and obj.hotel.city else "-"
+        return obj.hotel.city.name if obj.hotel and hasattr(obj.hotel, 'city') and obj.hotel.city else "-"
 
-    # بهینه‌سازی کوئری
+    # --- بهینه‌سازی کوئری ---
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('hotel', 'hotel__city')

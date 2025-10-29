@@ -2086,7 +2086,7 @@ class UserCancellation(models.Model):
 # مدل جریمه کنسلی (برای هر هتل)
 class CancellationPenalty(models.Model):
     hotel = models.OneToOneField(
-        'reservation.Hotel',  
+        Hotel,  
         on_delete=models.CASCADE,
         related_name='cancellation_penalty',
         verbose_name=_('هتل')
