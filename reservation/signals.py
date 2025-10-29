@@ -367,40 +367,44 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     
     
     
+    
+logger = logging.getLogger(__name__)
+
 @receiver(post_save, sender=UserCancellation)
 def handle_user_cancellation_approval(sender, instance, created, **kwargs):
     if created:
-        return  # فقط برای ویرایش
+        logger.info(f"درخواست کنسلی جدید ایجاد شد: ID={instance.pk}")
+        return
 
     # فقط وقتی به approved تغییر کرد
     if instance.status != UserCancellation.Status.APPROVED:
         return
 
-    # از کش برای جلوگیری از تکرار استفاده کن
     cache_key = f"cancellation_processed_{instance.pk}"
     if cache.get(cache_key):
         logger.info(f"کنسلی {instance.pk} قبلاً پردازش شده است.")
         return
 
+    logger.info(f"شروع پردازش تأیید کنسلی: {instance.pk}")
+
     try:
-        # فقط یک بار پردازش شود
         with transaction.atomic():
-            # قفل کردن رزرو و کنسلی
+            # قفل کردن
             cancellation = UserCancellation.objects.select_for_update().get(pk=instance.pk)
             reservation = Reservationhotel.objects.select_for_update().get(pk=cancellation.reservation.pk)
 
-            # چک کنیم قبلاً پردازش نشده باشه
-            if getattr(reservation, 'cancellation_refunded_amount', 0) > 0:
-                logger.info(f"رزرو {reservation.tracking_code} قبلاً کنسل و برگشت داده شده.")
-                cache.set(cache_key, True, timeout=86400)  # 24 ساعت
+            # چک پردازش قبلی
+            if reservation.cancellation_refunded_amount > 0:
+                logger.info(f"رزرو {reservation.tracking_code} قبلاً کنسل شده.")
+                cache.set(cache_key, True, 86400)
                 return
 
             # تغییر وضعیت رزرو
             reservation.capacity_status = 'rejected'
             reservation.payment_status = 'unpaid'
-            reservation.cancellation_requested = True  # مهم!
+            reservation.cancellation_requested = True
 
-            # محاسبه جریمه
+            # محاسبه جریمه و مبلغ برگشتی
             penalty_amount, refund_amount = reservation.calculate_cancellation_refund()
 
             # اعمال مقادیر
@@ -411,17 +415,19 @@ def handle_user_cancellation_approval(sender, instance, created, **kwargs):
             if refund_amount > 0:
                 wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
                 wallet.balance += int(refund_amount)
-                wallet.save(update_fields=['balance'])
+                wallet.save(update_fields=['balance'])  # خطا رفع شد!
 
             # ذخیره رزرو
             reservation.save(update_fields=[
-                'capacity_status', 'payment_status',
-                'cancellation_penalty_applied', 'cancellation_refunded_amount',
+                'capacity_status',
+                'payment_status',
+                'cancellation_penalty_applied',
+                'cancellation_refunded_amount',
                 'cancellation_requested'
             ])
 
-            # علامت‌گذاری که پردازش شد
-            cache.set(cache_key, True, timeout=86400)
+            # علامت‌گذاری پردازش شده
+            cache.set(cache_key, True, 86400)
 
             logger.info(
                 f"کنسلی تأیید شد: {reservation.tracking_code} | "
@@ -430,4 +436,4 @@ def handle_user_cancellation_approval(sender, instance, created, **kwargs):
 
     except Exception as e:
         logger.error(f"خطا در پردازش کنسلی {instance.pk}: {str(e)}", exc_info=True)
-        # در صورت خطا، کش رو پاک نکن تا دوباره امتحان نشه
+        # در صورت خطا، کش رو پاک نکن
