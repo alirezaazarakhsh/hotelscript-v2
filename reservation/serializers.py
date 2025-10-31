@@ -164,28 +164,30 @@ class HotelListSerializer(serializers.ModelSerializer):
 
     def get_original_total_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        # فقط وقتی تخفیف درصدی معتبر داریم
         if price_data and price_data.get('discount_type') == 'percentage':
             return price_data.get('original_total_price')
-        return None  # در غیر این صورت null
+        return None
 
     def get_rating(self, obj):
         return getattr(obj, 'rating', None)
 
     def get_discount_percentage(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        # فقط برای تخفیف درصدی
         if price_data and price_data.get('discount_type') == 'percentage':
             return price_data.get('discount_value')
-        return None  # تخفیف ثابت یا هیچ → null
+        return None
 
     def get_discount_expiry(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        # فقط برای تخفیف درصدی
         if price_data and price_data.get('discount_type') == 'percentage':
-            return price_data.get('discount_date')  # مثل '1404/08/15'
+            return price_data.get('discount_date')
         return None
 
+    # اضافه شده: نمایش سطح کاربر
+    def get_user_level(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return price_data.get('user_level') if price_data else "عمومی"
+    
 
 
 class FacilitiesSerializer(serializers.ModelSerializer):
