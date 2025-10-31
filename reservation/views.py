@@ -1196,7 +1196,6 @@ class BaseHotelListView(APIView):
 
 
 
-
 class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پیشنهادی",
@@ -1213,47 +1212,55 @@ class SuggesteHotelListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        today = timezone.now().date()
-
-        # فقط هتل‌هایی که پیشنهاد ویژه دارند
         hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
-
+        
+        # ایجاد نقشه هتل‌ها به قیمت‌های حداقل
         hotel_min_price_map = {}
-
+        today = jdatetime.date.today()
         for hotel in hotels:
-            # فقط اتاق‌هایی که قیمت فعال دارند
+            # فقط اتاق‌هایی که بازه فعال دارند
             active_rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=today,
                 date_prices__end_date__gte=today
             ).distinct()
-
             if not active_rooms.exists():
-                # اگر اتاق فعالی وجود نداشته باشه، هتل رو در لیست نیاور
                 continue
 
-            # کمترین قیمت از بین اتاق‌های فعال
-            min_price = RoomDatePrice.objects.filter(
-                room__in=active_rooms,
-                start_date__lte=today,
-                end_date__gte=today
-            ).order_by('price').values_list('price', flat=True).first()
+            # پیدا کردن اتاق با کمترین قیمت
+            min_room = None
+            min_price_data = None
+            for room in active_rooms:
+                date_price_qs = room.date_prices.filter(start_date__lte=today, end_date__gte=today)
+                for dp in date_price_qs:
+                    price = dp.price
+                    # اعمال تخفیف اگر وجود دارد
+                    if dp.discount_type == 'percentage':
+                        price = price * (100 - dp.discount_value) / 100
+                    elif dp.discount_type == 'fixed':
+                        price = max(price - dp.discount_value, 0)
+                    if (min_price_data is None) or (price < min_price_data['total_price']):
+                        min_room = room
+                        min_price_data = {
+                            'total_price': price,
+                            'original_total_price': dp.price,
+                            'discount_type': dp.discount_type,
+                            'discount_value': dp.discount_value,
+                            'discount_date': dp.discount_date
+                        }
 
-            if min_price:
-                hotel_min_price_map[hotel.id] = min_price
+            if min_price_data:
+                hotel_min_price_map[hotel.id] = min_price_data
 
-        # ایجاد context برای serializer
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-        # ساخت خروجی نهایی
         special_offers_data = []
         for hotel in hotels:
-            if hotel.id in hotel_min_price_map:
-                serialized = HotelListSerializer(hotel, context=context).data
-                serialized['average_score'] = self.get_average_score(hotel)
-                serialized['min_price'] = hotel_min_price_map[hotel.id]
-                special_offers_data.append(serialized)
+            serialized = HotelListSerializer(hotel, context=context).data
+            serialized['average_score'] = self.get_average_score(hotel)
+            special_offers_data.append(serialized)
 
         return Response(special_offers_data)
+
 
 
 
