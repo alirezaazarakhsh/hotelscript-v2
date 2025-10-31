@@ -1196,6 +1196,7 @@ class BaseHotelListView(APIView):
 
 
 
+
 class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پیشنهادی",
@@ -1212,16 +1213,36 @@ class SuggesteHotelListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        # دریافت هتل‌های با پیشنهاد ویژه
-        hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+        # فقط هتل‌هایی که پیشنهاد ویژه دارند
+        hotels = (
+            Hotel.objects.filter(is_special_offer=True)
+            .select_related('city', 'type')
+            .distinct()
+        )
+
+        hotel_min_price_map = {}
+
+        for hotel in hotels:
+            # فیلتر اتاق‌ها دقیقاً مطابق اتاق‌هایی که در HotelRoomsView نمایش داده می‌شوند
+            # اگر فیلتر خاصی مثل تاریخ، ظرفیت، یا وضعیت داری باید همین‌جا هم اضافه کنی
+            rooms_qs = Room.objects.filter(hotel=hotel, is_active=True)
+
+            # فقط اگر اتاقی برای نمایش وجود داره، وارد محاسبه بشه
+            if rooms_qs.exists():
+                # پیدا کردن کم‌قیمت‌ترین اتاق بین همین اتاق‌های موجود
+                cheapest_room = rooms_qs.order_by('price').first()
+                hotel_min_price_map[hotel.id] = cheapest_room.price
+
+        # ارسال context برای serializer
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
         special_offers_data = []
         for hotel in hotels:
-            serialized = HotelListSerializer(hotel, context=context).data
-            serialized['average_score'] = self.get_average_score(hotel)
-            special_offers_data.append(serialized)
+            if hotel.id in hotel_min_price_map:  # فقط هتل‌هایی که اتاق دارند
+                serialized = HotelListSerializer(hotel, context=context).data
+                serialized['average_score'] = self.get_average_score(hotel)
+                serialized['min_price'] = hotel_min_price_map[hotel.id]
+                special_offers_data.append(serialized)
 
         return Response(special_offers_data)
 
