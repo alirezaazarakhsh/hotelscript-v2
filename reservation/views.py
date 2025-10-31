@@ -1149,51 +1149,89 @@ class BaseHotelListView(APIView):
         overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
         return round(overall_average or 0, 1)
 
-    def get_hotel_min_price_map(self, hotels):
-        """محاسبه کمترین قیمت برای هر هتل بدون اعمال تخفیف ثابت"""
-        # دریافت تاریخ امروز برای بررسی قیمت‌ها و تخفیف‌ها
-        today = timezone.now().date()
+    def get_hotel_min_price_map(self, hotels, user_level=None):
+        """محاسبه کمترین قیمت برای هر هتل با فال‌بک: سطح → عمومی (بدون تخفیف ثابت)"""
+        today = jdate.today()  # تاریخ شمسی
         hotel_min_price_map = {}
-        
+
         for hotel in hotels:
-            # دریافت تمام اتاق‌های مربوط به هتل
-            rooms = Room.objects.filter(hotel=hotel)
-            min_price = None
-            min_price_data = {}
+            # مرحله ۱: اتاق‌های فعال (فقط موجودی > 0)
+            active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
+            if not active_rooms.exists():
+                continue
 
-            for room in rooms:
-                # دریافت قیمت‌های معتبر برای اتاق در تاریخ امروز
-                prices = RoomDatePrice.objects.filter(
-                    room=room,
-                    start_date__lte=today,
-                    end_date__gte=today
-                ).select_related('room')
+            # مرحله ۲: قیمت‌های امروز
+            price_qs = RoomDatePrice.objects.filter(
+                room__in=active_rooms,
+                start_date__lte=today,
+                end_date__gte=today
+            ).select_related('room', 'user_level')
 
-                for price in prices:
-                    # قیمت اصلی اتاق بدون اعمال تخفیف ثابت
-                    original_price = price.price
-                    total_price = original_price
+            # مرحله ۳: فال‌بک هوشمند: سطح → عمومی
+            if user_level:
+                level_prices = price_qs.filter(user_level=user_level)
+                final_prices = level_prices if level_prices.exists() else price_qs.filter(user_level__isnull=True)
+            else:
+                final_prices = price_qs.filter(user_level__isnull=True)
 
-                    # اعمال تخفیف درصدی (در صورت وجود و معتبر بودن تاریخ تخفیف)
-                    if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
-                        total_price = original_price * (1 - price.discount_value / 100)
-                    # تخفیف ثابت اعمال نمی‌شود، اما اطلاعات آن حفظ می‌شود
+            if not final_prices.exists():
+                continue
 
-                    # بررسی کمترین قیمت برای هتل
-                    if min_price is None or total_price < min_price:
-                        min_price = total_price
-                        min_price_data = {
-                            'total_price': int(total_price),  # قیمت نهایی بدون تخفیف ثابت
-                            'original_total_price': int(original_price),  # قیمت اصلی
-                            'discount_type': price.discount_type,  # نوع تخفیف (برای اطلاعات)
-                            'discount_value': price.discount_value,  # مقدار تخفیف (برای اطلاعات)
-                            'discount_date': price.discount_date  # تاریخ تخفیف (برای اطلاعات)
-                        }
+            min_price = float('inf')
+            min_price_data = None
+
+            for price in final_prices:
+                original_price = price.price
+                total_price = original_price
+
+                # تخفیف درصدی (فقط اگر تاریخ انقضا >= امروز)
+                if (price.discount_type == 'percentage' and
+                        price.discount_date and
+                        price.discount_date >= today):
+                    total_price = int(original_price * (100 - price.discount_value) / 100)
+                else:
+                    total_price = int(original_price)
+
+                if total_price < min_price:
+                    min_price = total_price
+                    min_price_data = {
+                        'total_price': total_price,
+                        'original_total_price': int(original_price) if price.discount_type == 'percentage' else None,
+                        'discount_type': price.discount_type,
+                        'discount_value': price.discount_value if price.discount_type == 'percentage' else 0,
+                        'discount_date': price.discount_date.strftime('%Y/%m/%d') if price.discount_date else None,
+                        'user_level': price.user_level.title if price.user_level else "عمومی",
+                    }
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
         return hotel_min_price_map
+
+    def get(self, request, *args, **kwargs):
+        # --- تعیین سطح کاربر ---
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile and profile.level:
+                    user_level = profile.level
+            except Exception as e:
+                logger.warning(f"User level fetch failed: {e}")
+
+        # --- کوئری هتل‌ها ---
+        hotels = self.get_queryset()  # یا هر کوئری که داری
+
+        # --- محاسبه قیمت با فال‌بک ---
+        hotel_min_price_map = self.get_hotel_min_price_map(hotels, user_level)
+
+        # --- سریالایز ---
+        context = {
+            'hotel_min_price_map': hotel_min_price_map,
+            'request': request
+        }
+        serializer = HotelListSerializer(hotels, many=True, context=context)
+        return Response(serializer.data)
 
 
 
