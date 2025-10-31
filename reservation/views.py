@@ -411,24 +411,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
 
-        # --- مرحله ۲: کوئری تمام قیمت‌ها برای بازه (بدون فیلتر سطح) ---
-        price_qs = RoomDatePrice.objects.filter(
-            room__in=active_rooms,
-            start_date__lte=start_date_obj,
-            end_date__gte=end_date_obj
-        )
-
-        # --- مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به میهمان) ---
-        if user_level:
-            level_prices = price_qs.filter(user_level=user_level)
-            if level_prices.exists():
-                final_prices = level_prices
-            else:
-                final_prices = price_qs.filter(user_level__isnull=True)
-        else:
-            final_prices = price_qs.filter(user_level__isnull=True)
-
-        # --- مرحله ۴: تمام اتاق‌های فعال رو نمایش بده (با قیمت سطح یا عمومی) ---
+        # --- مرحله ۲: تمام اتاق‌ها رو بگیر (بدون فیلتر قیمت) ---
         rooms_qs = active_rooms.prefetch_related('date_prices', 'services').select_related('hotel')
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -442,13 +425,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # --- مرحله ۱: تمام قیمت‌ها برای این تاریخ ---
+                # --- تمام قیمت‌ها برای این تاریخ ---
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 )
 
-                # --- مرحله ۲: انتخاب بر اساس سطح کاربر (با فال‌بک به میهمان) ---
+                # --- انتخاب بر اساس سطح کاربر (با فال‌بک به عمومی) ---
                 if user_level:
                     level_prices = price_data_qs.filter(user_level=user_level)
                     if level_prices.exists():
@@ -478,12 +461,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
-                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "میهمان",
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "عمومی",
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
 
-            # --- مرحله ۱: قیمت اولین روز (با فال‌بک) ---
+            # --- قیمت اولین روز (برای نمایش تخفیف) ---
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
@@ -506,10 +489,16 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
-            total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
+            # --- محاسبه قیمت کل از price_calendar (با فال‌بک) ---
+            total_price = sum(
+                day['price']['price'] for day in price_calendar
+                if day['status'] == "open" and day['price'] and day['price']['price'] is not None
+            )
+
             total_price_discount = sum(
-                day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
-                day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price']
+                day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None
+                else day['price']['price'] if day['status'] == "open" and day['price'] and day['price'] is not None
+                else 0 for day in price_calendar
             )
 
             room_dict[room.id] = {
@@ -532,7 +521,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_amount": discount_amount,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
-                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "میهمان",
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "عمومی",
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "night_count": night_count,
@@ -638,7 +627,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
     
     
 
