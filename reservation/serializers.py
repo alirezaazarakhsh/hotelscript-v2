@@ -129,6 +129,7 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
         discount_date = price_data.get('discount_date', None)
         return discount_date.strftime('%Y-%m-%d') if discount_date else None
 
+
 class HotelListSerializer(serializers.ModelSerializer):
     city = CitySerializer()
     type = serializers.SerializerMethodField()
@@ -158,33 +159,37 @@ class HotelListSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
 
     def get_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        return price_data.get('total_price', None)
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return price_data.get('total_price') if price_data else None
 
     def get_original_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        return price_data.get('original_total_price', None)
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return price_data.get('original_total_price') if price_data else None
 
     def get_rating(self, obj):
         return getattr(obj, 'rating', None)
 
     def get_discount_percentage(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        discount_type = price_data.get('discount_type', 'none')
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        if not price_data:
+            return None
+
+        discount_type = price_data.get('discount_type')
         discount_value = price_data.get('discount_value', 0)
+
         if discount_type == 'percentage':
             return discount_value
         elif discount_type == 'fixed':
-            original_price = price_data.get('original_total_price', 0)
-            if original_price > 0:
-                return round((discount_value / original_price) * 100, 1)
-        return 0
+            original = price_data.get('original_total_price')
+            if original and original > 0:
+                return round((discount_value / original) * 100, 1)
+        return None
 
     def get_discount_expiry(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        discount_date = price_data.get('discount_date', None)
-        return discount_date.strftime('%Y-%m-%d') if discount_date else None
-
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        if not price_data or price_data.get('discount_type') != 'percentage':
+            return None
+        return price_data.get('discount_date')  # مثل '1404/08/15'
 
 
 

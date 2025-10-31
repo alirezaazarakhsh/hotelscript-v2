@@ -1196,6 +1196,8 @@ class BaseHotelListView(APIView):
 
 
 
+
+
 class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پیشنهادی",
@@ -1218,55 +1220,67 @@ class SuggesteHotelListView(BaseHotelListView):
         hotel_min_price_map = {}
         valid_hotels = []
 
+        # تعیین سطح کاربری
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile and profile.level:
+                    user_level = profile.level
+            except Exception as e:
+                logger.warning(f"User level error: {e}")
+
         for hotel in hotels:
-            # فیلتر اتاق‌های فعال در تاریخ امروز + موجودی > 0
-            active_rooms = hotel.rooms.filter(
+            # فیلتر اتاق‌های فعال امروز + موجودی > 0
+            room_qs = hotel.rooms.filter(
                 date_prices__start_date__lte=today,
                 date_prices__end_date__gte=today,
                 inventory__gt=0
-            ).distinct().prefetch_related('date_prices')
+            ).distinct()
 
-            if not active_rooms.exists():
-                continue  # این هتل هیچ اتاق فعالی ندارد → از لیست پیشنهادی حذف شود
+            if not room_qs.exists():
+                continue  # هتل بدون اتاق فعال → حذف
 
-            min_price_data = None
-            min_room = None
+            # ابتدا سعی در گرفتن قیمت بر اساس سطح کاربر
+            price_qs = RoomDatePrice.objects.filter(
+                room__in=room_qs,
+                start_date__lte=today,
+                end_date__gte=today
+            )
+            if user_level:
+                price_qs = price_qs.filter(user_level=user_level)
 
-            for room in active_rooms:
-                # دریافت قیمت امروز برای این اتاق
-                price_data_qs = room.date_prices.filter(
+            # اگر نبود، عمومی
+            if not price_qs.exists():
+                price_qs = RoomDatePrice.objects.filter(
+                    room__in=room_qs,
                     start_date__lte=today,
-                    end_date__gte=today
+                    end_date__gte=today,
+                    user_level__isnull=True
                 )
 
-                # ابتدا سطح کاربری کاربر (اگر لاگین کرده)، سپس عمومی
-                if request.user.is_authenticated:
-                    try:
-                        user_level = request.user.natural_profile.level
-                        price_data_qs = price_data_qs.filter(user_level=user_level)
-                    except:
-                        pass
+            if not price_qs.exists():
+                continue
 
-                # fallback به عمومی
-                if not price_data_qs.exists():
-                    price_data_qs = room.date_prices.filter(
-                        start_date__lte=today,
-                        end_date__gte=today,
-                        user_level__isnull=True
-                    )
+            # کمترین قیمت با تخفیف
+            min_price = None
+            min_price_data = None
 
-                price_data = price_data_qs.first()
-                if not price_data:
-                    continue
-
-                # محاسبه قیمت با تخفیف (مثل HotelRoomsView)
+            for price_data in price_qs:
                 price = price_data.price
-                if price_data.discount_type == 'percentage' and price_data.discount_date and price_data.discount_date >= today:
+
+                # تخفیف درصدی فقط اگر تاریخش نرسیده
+                if (price_data.discount_type == 'percentage' and
+                        price_data.discount_date and
+                        price_data.discount_date >= today):
                     price = int(price * (100 - price_data.discount_value) / 100)
+
+                # تخفیف ثابت
                 elif price_data.discount_type == 'fixed':
                     price = max(price - price_data.discount_value, 0)
 
-                if min_price_data is None or price < min_price_data['total_price']:
+                if min_price is None or price < min_price:
+                    min_price = price
                     min_price_data = {
                         'total_price': price,
                         'original_total_price': price_data.price,
@@ -1275,13 +1289,12 @@ class SuggesteHotelListView(BaseHotelListView):
                         'discount_date': price_data.discount_date.strftime('%Y/%m/%d') if price_data.discount_date else None,
                         'is_fixed_discount_one_time': price_data.is_fixed_discount_one_time,
                     }
-                    min_room = room
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
                 valid_hotels.append(hotel)
 
-        # فقط هتل‌های معتبر (که اتاق فعال دارند)
+        # سریالایز فقط هتل‌های معتبر
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
         special_offers_data = []
 
