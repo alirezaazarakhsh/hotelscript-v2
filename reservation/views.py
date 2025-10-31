@@ -436,19 +436,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 )
 
                 # --- انتخاب بر اساس سطح کاربر (با فال‌بک به عمومی) ---
-                price_data = None
                 if user_level:
-                    level_prices = price_data_qs.filter(user_level=user_level)
-                    if level_prices.exists():
-                        price_data = level_prices.order_by('-id').first()
-                        logger.debug(f"Using level price for {user_level.title}: {price_data.price}")
-                    else:
-                        logger.debug(f"No price for level {user_level.title}, falling back to public")
-                if not price_data:
-                    price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
+                      price_data = price_data_qs.filter(user_level=user_level).order_by('-id').first()
+                else:
+                      price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
 
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
+
 
                 try:
                     discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
