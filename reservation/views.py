@@ -1196,7 +1196,6 @@ class BaseHotelListView(APIView):
 
 
 
-
 class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پیشنهادی",
@@ -1220,25 +1219,31 @@ class SuggesteHotelListView(BaseHotelListView):
             .distinct()
         )
 
+        # ایجاد دیکشنری از کمترین قیمت برای هر هتل بر اساس اتاق‌های موجود در لیست قابل نمایش
         hotel_min_price_map = {}
 
         for hotel in hotels:
-            # فیلتر اتاق‌ها دقیقاً مطابق اتاق‌هایی که در HotelRoomsView نمایش داده می‌شوند
-            # اگر فیلتر خاصی مثل تاریخ، ظرفیت، یا وضعیت داری باید همین‌جا هم اضافه کنی
-            rooms_qs = Room.objects.filter(hotel=hotel, is_active=True)
+            # اینجا فیلتر اتاق‌ها باید دقیقاً مطابق HotelRoomsView باشه
+            # (اگر اونجا فیلتر تاریخ یا ظرفیت داری، همینجا هم باید اضافه بشه)
+            rooms_qs = Room.objects.filter(
+                hotel=hotel,
+                is_active=True,
+            )
 
-            # فقط اگر اتاقی برای نمایش وجود داره، وارد محاسبه بشه
+            # فقط اگر اتاقی برای نمایش وجود دارد
             if rooms_qs.exists():
-                # پیدا کردن کم‌قیمت‌ترین اتاق بین همین اتاق‌های موجود
+                # انتخاب ارزان‌ترین اتاق از بین اتاق‌های فعلی
                 cheapest_room = rooms_qs.order_by('price').first()
                 hotel_min_price_map[hotel.id] = cheapest_room.price
 
-        # ارسال context برای serializer
+        # پاس دادن map به serializer
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
+        # سریال‌سازی خروجی
         special_offers_data = []
         for hotel in hotels:
-            if hotel.id in hotel_min_price_map:  # فقط هتل‌هایی که اتاق دارند
+            # فقط هتل‌هایی که اتاق قابل نمایش دارند
+            if hotel.id in hotel_min_price_map:
                 serialized = HotelListSerializer(hotel, context=context).data
                 serialized['average_score'] = self.get_average_score(hotel)
                 serialized['min_price'] = hotel_min_price_map[hotel.id]
