@@ -401,7 +401,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except NaturalProfile.DoesNotExist:
                 pass
 
-        # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح کاربری) ---
+        # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح) ---
         active_rooms = hotel.rooms.filter(
             date_prices__start_date__lte=start_date_obj,
             date_prices__end_date__gte=end_date_obj,
@@ -415,31 +415,32 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
 
-        # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
+        # --- مرحله ۲: کوئری قیمت‌ها (بدون فیلتر سطح) ---
         price_qs = RoomDatePrice.objects.filter(
             room__in=active_rooms,
             start_date__lte=start_date_obj,
             end_date__gte=end_date_obj
         )
 
+        # --- مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به میهمان) ---
         if user_level:
             level_prices = price_qs.filter(user_level=user_level)
             if level_prices.exists():
-                price_qs = level_prices
+                final_prices = level_prices
             else:
-                price_qs = price_qs.filter(user_level__isnull=True)
+                final_prices = price_qs.filter(user_level__isnull=True)
         else:
-            price_qs = price_qs.filter(user_level__isnull=True)
+            final_prices = price_qs.filter(user_level__isnull=True)
 
-        if not price_qs.exists():
+        if not final_prices.exists():
             return Response({
                 'detail': 'هیچ قیمتی برای این بازه موجود نیست.',
                 'rooms': [],
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
 
-        # --- مرحله ۳: اتاق‌های معتبر بر اساس قیمت‌های نهایی ---
-        valid_room_ids = price_qs.values_list('room_id', flat=True).distinct()
+        # --- مرحله ۴: اتاق‌های معتبر بر اساس قیمت‌های نهایی ---
+        valid_room_ids = final_prices.values_list('room_id', flat=True).distinct()
         rooms_qs = Room.objects.filter(id__in=valid_room_ids).prefetch_related('date_prices', 'services').select_related('hotel')
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
@@ -456,19 +457,17 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 # --- مرحله ۱: قیمت برای سطح کاربر ---
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
-                    end_date__gte=date,
-                    user_level=user_level
-                ).order_by('-id')
+                    end_date__gte=date
+                )
 
-                # --- مرحله ۲: فال‌بک به عمومی ---
-                if not price_data_qs.exists():
-                    price_data_qs = room.date_prices.filter(
-                        start_date__lte=date,
-                        end_date__gte=date,
-                        user_level__isnull=True
-                    ).order_by('-id')
-
-                price_data = price_data_qs.select_related('user_level').first()
+                if user_level:
+                    level_prices = price_data_qs.filter(user_level=user_level)
+                    if level_prices.exists():
+                        price_data = level_prices.order_by('-id').first()
+                    else:
+                        price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
+                else:
+                    price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
 
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
@@ -490,27 +489,26 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
-                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "عمومی",
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "میهمان",
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
 
-            # --- مرحله ۱: قیمت اولین روز برای سطح کاربر ---
+            # --- مرحله ۱: قیمت اولین روز (با فال‌بک) ---
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
-                end_date__gte=start_date_obj,
-                user_level=user_level
-            ).order_by('-id')
+                end_date__gte=start_date_obj
+            )
 
-            # --- مرحله ۲: فال‌بک به عمومی ---
-            if not first_price_data_qs.exists():
-                first_price_data_qs = room.date_prices.filter(
-                    start_date__lte=start_date_obj,
-                    end_date__gte=start_date_obj,
-                    user_level__isnull=True
-                ).order_by('-id')
+            if user_level:
+                level_prices = first_price_data_qs.filter(user_level=user_level)
+                if level_prices.exists():
+                    first_price_data = level_prices.order_by('-id').first()
+                else:
+                    first_price_data = first_price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
+            else:
+                first_price_data = first_price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
 
-            first_price_data = first_price_data_qs.select_related('user_level').first()
             if not first_price_data:
                 continue
 
@@ -545,7 +543,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_amount": discount_amount,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
-                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "عمومی",
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "میهمان",
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "night_count": night_count,
@@ -651,7 +649,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
 
 
 
@@ -1264,7 +1261,7 @@ class SuggesteHotelListView(BaseHotelListView):
         valid_hotels = []
 
         for hotel in hotels:
-            # --- مرحله ۱: فیلتر اتاق‌های فعال امروز + موجودی > 0 ---
+            # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح) ---
             active_rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=today,
                 date_prices__end_date__gte=today,
@@ -1274,30 +1271,31 @@ class SuggesteHotelListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
+            # --- مرحله ۲: کوئری قیمت‌ها (بدون فیلتر سطح) ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
                 end_date__gte=today
             )
 
+            # --- مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به میهمان) ---
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
-                    price_qs = level_prices
+                    final_prices = level_prices
                 else:
-                    price_qs = price_qs.filter(user_level__isnull=True)
+                    final_prices = price_qs.filter(user_level__isnull=True)
             else:
-                price_qs = price_qs.filter(user_level__isnull=True)
+                final_prices = price_qs.filter(user_level__isnull=True)
 
-            if not price_qs.exists():
+            if not final_prices.exists():
                 continue
 
-            # --- مرحله ۳: پیدا کردن کمترین قیمت با منطق جدید ---
+            # --- مرحله ۴: پیدا کردن کمترین قیمت با منطق جدید ---
             min_price = float('inf')
             min_price_data = None
 
-            for price_data in price_qs:
+            for price_data in final_prices:
                 base_price = price_data.price  # قیمت اصلی
 
                 # فقط تخفیف درصدی معتبر (تاریخ انقضا نگذشته)
@@ -1315,7 +1313,7 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
                 else:
@@ -1328,14 +1326,14 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
                 valid_hotels.append(hotel)
 
-        # --- مرحله ۴: سریالایز فقط هتل‌های معتبر ---
+        # --- مرحله ۵: سریالایز فقط هتل‌های معتبر ---
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
         special_offers_data = []
 
@@ -1345,6 +1343,7 @@ class SuggesteHotelListView(BaseHotelListView):
             special_offers_data.append(serialized)
 
         return Response(special_offers_data)
+    
     
     
 
@@ -1388,7 +1387,7 @@ class AmazingHotelsListView(BaseHotelListView):
         valid_hotels = []
 
         for hotel in hotels:
-            # --- مرحله ۱: فیلتر اتاق‌های فعال امروز + موجودی > 0 ---
+            # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح) ---
             active_rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=today,
                 date_prices__end_date__gte=today,
@@ -1398,30 +1397,31 @@ class AmazingHotelsListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
+            # --- مرحله ۲: کوئری قیمت‌ها (بدون فیلتر سطح) ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
                 end_date__gte=today
             )
 
+            # --- مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به میهمان) ---
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
-                    price_qs = level_prices
+                    final_prices = level_prices
                 else:
-                    price_qs = price_qs.filter(user_level__isnull=True)
+                    final_prices = price_qs.filter(user_level__isnull=True)
             else:
-                price_qs = price_qs.filter(user_level__isnull=True)
+                final_prices = price_qs.filter(user_level__isnull=True)
 
-            if not price_qs.exists():
+            if not final_prices.exists():
                 continue
 
-            # --- مرحله ۳: پیدا کردن کمترین قیمت با منطق جدید ---
+            # --- مرحله ۴: پیدا کردن کمترین قیمت با منطق جدید ---
             min_price = float('inf')
             min_price_data = None
 
-            for price_data in price_qs:
+            for price_data in final_prices:
                 base_price = price_data.price  # قیمت اصلی
 
                 # فقط تخفیف درصدی معتبر (تاریخ انقضا نگذشته)
@@ -1439,7 +1439,7 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
                 else:
@@ -1452,14 +1452,14 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
                 valid_hotels.append(hotel)
 
-        # --- مرحله ۴: سریالایز فقط هتل‌های معتبر ---
+        # --- مرحله ۵: سریالایز فقط هتل‌های معتبر ---
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
         flash_sales_data = []
 
@@ -1469,7 +1469,6 @@ class AmazingHotelsListView(BaseHotelListView):
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
-    
     
 
 
@@ -1507,13 +1506,13 @@ class BestSellersListView(BaseHotelListView):
                 if profile and profile.level:
                     user_level = profile.level
             except Exception as e:
-                logger.warning(f"User level fetch failed in BestSellersView: {e}")
+                logger.warning(f"User level fetch failed in BestSellersListView: {e}")
 
         hotel_min_price_map = {}
         valid_hotels = []
 
         for hotel in hotels:
-            # --- مرحله ۱: فیلتر اتاق‌های فعال امروز + موجودی > 0 ---
+            # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح) ---
             active_rooms = hotel.rooms.filter(
                 date_prices__start_date__lte=today,
                 date_prices__end_date__gte=today,
@@ -1523,30 +1522,31 @@ class BestSellersListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
+            # --- مرحله ۲: کوئری قیمت‌ها (بدون فیلتر سطح) ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
                 end_date__gte=today
             )
 
+            # --- مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به میهمان) ---
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
-                    price_qs = level_prices
+                    final_prices = level_prices
                 else:
-                    price_qs = price_qs.filter(user_level__isnull=True)
+                    final_prices = price_qs.filter(user_level__isnull=True)
             else:
-                price_qs = price_qs.filter(user_level__isnull=True)
+                final_prices = price_qs.filter(user_level__isnull=True)
 
-            if not price_qs.exists():
+            if not final_prices.exists():
                 continue
 
-            # --- مرحله ۳: پیدا کردن کمترین قیمت با منطق جدید ---
+            # --- مرحله ۴: پیدا کردن کمترین قیمت با منطق جدید ---
             min_price = float('inf')
             min_price_data = None
 
-            for price_data in price_qs:
+            for price_data in final_prices:
                 base_price = price_data.price  # قیمت اصلی
 
                 # فقط تخفیف درصدی معتبر (تاریخ انقضا نگذشته)
@@ -1564,7 +1564,7 @@ class BestSellersListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
                 else:
@@ -1577,14 +1577,14 @@ class BestSellersListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
-                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'user_level': price_data.user_level.title if price_data.user_level else "میهمان",
                         }
 
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
                 valid_hotels.append(hotel)
 
-        # --- مرحله ۴: سریالایز فقط هتل‌های معتبر ---
+        # --- مرحله ۵: سریالایز فقط هتل‌های معتبر ---
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
         best_sellers_data = []
 
