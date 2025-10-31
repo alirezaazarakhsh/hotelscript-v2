@@ -533,124 +533,35 @@ class ClosedDateInline(admin.TabularInline):
     ordering = ('date',)
 
 
-# --- فرم اعتبارسنجی سفارشی برای ادمین ---
-class RoomAdminForm(forms.ModelForm):
-    class Meta:
-        model = Room
-        fields = '__all__'
-
-    def clean(self):
-        cleaned_data = super().clean()
-        initial_inventory = cleaned_data.get('initial_inventory') or 0
-        count = cleaned_data.get('count') or 0
-        auto_approved_count = cleaned_data.get('auto_approved_count') or 0
-
-        total_capacity = count + auto_approved_count
-        if total_capacity > initial_inventory:
-            raise ValidationError(
-                _(f'مجموع ظرفیت‌ها ({total_capacity}) نمی‌تواند بیشتر از موجودی اولیه ({initial_inventory}) باشد.')
-            )
-        return cleaned_data
-
-
-# --- اینلاین برای قیمت‌های تاریخ (اختیاری) ---
-class RoomDateInline(admin.TabularInline):
-    model = RoomDatePrice
-    extra = 1
-    fields = ('start_date', 'end_date', 'price', 'extra_passenger_price', 'user_level')
-    autocomplete_fields = ('user_level',)
-
-
-# --- ادمین اصلی Room ---
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    form = RoomAdminForm  # فرم سفارشی با اعتبارسنجی
     list_display = (
         'id',
         'hotel',
         'title',
-        'initial_inventory',     # مهم: اول نمایش داده بشه
-        'inventory',             # موجودی فعلی (محاسبه‌شده)
+        'customer_club_points',
+        'inventory',
         'count',
         'auto_approved_count',
-        'total_capacity',        # ظرفیت کل
         'room_capacity',
         'extra_capacity',
-        'customer_club_points',
     )
-    list_filter = (
-        'hotel',
-        'room_capacity',
-        'initial_inventory',
-        'inventory',
-    )
-    search_fields = ('title', 'hotel__name', 'id')
+    search_fields = ('title',)
     autocomplete_fields = ('hotel',)
-    readonly_fields = ('inventory',)  # موجودی فعلی فقط نمایش، نه ویرایش
-    ordering = ('-initial_inventory', 'hotel', 'title')
-
-    # --- فیلدهای فرم (ترتیب مهم!) ---
-    fieldsets = (
-        (None, {
-            'fields': (
-                'hotel',
-                'title',
-                'description',
-            )
-        }),
-        ('موجودی و ظرفیت', {
-            'fields': (
-                'initial_inventory',        # اول!
-                ('count', 'auto_approved_count'),
-                'inventory',                # فقط نمایش
-            ),
-            'description': '<strong>ابتدا موجودی اولیه را وارد کنید، سپس ظرفیت‌ها را تنظیم کنید.</strong>',
-        }),
-        ('ظرفیت اتاق', {
-            'fields': (
-                'room_capacity',
-                'extra_capacity',
-            )
-        }),
-        ('امتیاز و خدمات', {
-            'fields': (
-                'customer_club_points',
-                'services',
-            )
-        }),
+    fields = (
+        'hotel',
+        'title',
+        'description',
+        'inventory',
+        'count',
+        'auto_approved_count',
+        'customer_club_points',
+        'room_capacity',
+        'extra_capacity',
+        'services',
     )
-
     inlines = [RoomDateInline]
 
-    # --- متد نمایش ظرفیت کل ---
-    def total_capacity(self, obj):
-        return (obj.count or 0) + (obj.auto_approved_count or 0)
-    total_capacity.short_description = 'ظرفیت کل'
-
-    # --- جلوگیری از ذخیره اگر initial_inventory صفر باشه و ظرفیت داشته باشه ---
-    def save_model(self, request, obj, form, change):
-        # اعتبارسنجی دوباره (حتی اگر فرم رد کرده باشه)
-        total = (obj.count or 0) + (obj.auto_approved_count or 0)
-        if total > (obj.initial_inventory or 0):
-            self.message_user(
-                request,
-                _(f"خطا: مجموع ظرفیت‌ها ({total}) نمی‌تواند بیشتر از موجودی اولیه ({obj.initial_inventory or 0}) باشد."),
-                level='error'
-            )
-            return
-        super().save_model(request, obj, form, change)
-
-    # --- پیام موفقیت ---
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        obj = form.instance
-        self.message_user(
-            request,
-            _(f"اتاق «{obj}» با موفقیت ذخیره شد. موجودی فعلی: {obj.inventory}"),
-            level='success'
-        )
-        
-        
 
 @admin.register(RoomDatePrice)
 class RoomDatePriceAdmin(admin.ModelAdmin):
