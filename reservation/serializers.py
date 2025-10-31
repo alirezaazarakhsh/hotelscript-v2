@@ -164,32 +164,27 @@ class HotelListSerializer(serializers.ModelSerializer):
 
     def get_original_total_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        return price_data.get('original_total_price') if price_data else None
+        # فقط وقتی تخفیف درصدی معتبر داریم
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('original_total_price')
+        return None  # در غیر این صورت null
 
     def get_rating(self, obj):
         return getattr(obj, 'rating', None)
 
     def get_discount_percentage(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        if not price_data:
-            return None
-
-        discount_type = price_data.get('discount_type')
-        discount_value = price_data.get('discount_value', 0)
-
-        if discount_type == 'percentage':
-            return discount_value
-        elif discount_type == 'fixed':
-            original = price_data.get('original_total_price')
-            if original and original > 0:
-                return round((discount_value / original) * 100, 1)
-        return None
+        # فقط برای تخفیف درصدی
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('discount_value')
+        return None  # تخفیف ثابت یا هیچ → null
 
     def get_discount_expiry(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        if not price_data or price_data.get('discount_type') != 'percentage':
-            return None
-        return price_data.get('discount_date')  # مثل '1404/08/15'
+        # فقط برای تخفیف درصدی
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('discount_date')  # مثل '1404/08/15'
+        return None
 
 
 
