@@ -831,13 +831,6 @@ class RoomService(models.Model):
 
 
 
-# models.py
-import logging
-from django.db import models, transaction
-from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
-from django_jalali.db import models as jmodels
-import jdatetime
 
 logger = logging.getLogger(__name__)
 
