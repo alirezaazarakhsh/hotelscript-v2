@@ -390,9 +390,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
-        default_user_level = UserLevel.objects.filter(title="میهمان").first()
 
-        user_level = default_user_level
+        # --- تعیین سطح کاربری ---
+        user_level = None  # عمومی = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
@@ -415,7 +415,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
 
-        # --- مرحله ۲: کوئری قیمت‌ها با اولویت سطح کاربری ---
+        # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
         price_qs = RoomDatePrice.objects.filter(
             room__in=active_rooms,
             start_date__lte=start_date_obj,
@@ -453,18 +453,21 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # ابتدا سطح کاربری، سپس fallback به عمومی
+                # --- مرحله ۱: قیمت برای سطح کاربر ---
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date,
                     user_level=user_level
                 ).order_by('-id')
+
+                # --- مرحله ۲: فال‌بک به عمومی ---
                 if not price_data_qs.exists():
                     price_data_qs = room.date_prices.filter(
                         start_date__lte=date,
                         end_date__gte=date,
                         user_level__isnull=True
                     ).order_by('-id')
+
                 price_data = price_data_qs.select_related('user_level').first()
 
                 closed_date = closed_dates.filter(date=date).first()
@@ -487,22 +490,26 @@ class HotelRoomsView(generics.RetrieveAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
-                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "میهمان",
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "عمومی",
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
 
+            # --- مرحله ۱: قیمت اولین روز برای سطح کاربر ---
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj,
                 user_level=user_level
             ).order_by('-id')
+
+            # --- مرحله ۲: فال‌بک به عمومی ---
             if not first_price_data_qs.exists():
                 first_price_data_qs = room.date_prices.filter(
                     start_date__lte=start_date_obj,
                     end_date__gte=start_date_obj,
                     user_level__isnull=True
                 ).order_by('-id')
+
             first_price_data = first_price_data_qs.select_related('user_level').first()
             if not first_price_data:
                 continue
@@ -538,7 +545,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     "discount_amount": discount_amount,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
-                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "میهمان",
+                    "user_level": first_price_data.user_level.title if first_price_data.user_level else "عمومی",
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "night_count": night_count,
@@ -645,7 +652,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
     
-    
+
+
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
@@ -1243,7 +1251,7 @@ class SuggesteHotelListView(BaseHotelListView):
             return Response([])
 
         # تعیین سطح کاربری
-        user_level = None
+        user_level = None  # عمومی = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
@@ -1307,6 +1315,7 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
                 else:
@@ -1319,6 +1328,7 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
             if min_price_data:
@@ -1335,8 +1345,8 @@ class SuggesteHotelListView(BaseHotelListView):
             special_offers_data.append(serialized)
 
         return Response(special_offers_data)
-
-
+    
+    
 
 class AmazingHotelsListView(BaseHotelListView):
     @swagger_auto_schema(
@@ -1365,7 +1375,7 @@ class AmazingHotelsListView(BaseHotelListView):
             return Response([])
 
         # تعیین سطح کاربری
-        user_level = None
+        user_level = None  # عمومی = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
@@ -1429,6 +1439,7 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
                 else:
@@ -1441,6 +1452,7 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
             if min_price_data:
@@ -1457,7 +1469,8 @@ class AmazingHotelsListView(BaseHotelListView):
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
-
+    
+    
 
 
 class BestSellersListView(BaseHotelListView):
@@ -1487,14 +1500,14 @@ class BestSellersListView(BaseHotelListView):
             return Response([])
 
         # تعیین سطح کاربری
-        user_level = None
+        user_level = None  # عمومی = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
                 if profile and profile.level:
                     user_level = profile.level
             except Exception as e:
-                logger.warning(f"User level fetch failed in BestSellersListView: {e}")
+                logger.warning(f"User level fetch failed in BestSellersView: {e}")
 
         hotel_min_price_map = {}
         valid_hotels = []
@@ -1551,6 +1564,7 @@ class BestSellersListView(BaseHotelListView):
                             'discount_type': 'percentage',
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
                 else:
@@ -1563,6 +1577,7 @@ class BestSellersListView(BaseHotelListView):
                             'discount_type': 'none',
                             'discount_value': 0,
                             'discount_date': None,
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
                         }
 
             if min_price_data:
@@ -1579,6 +1594,7 @@ class BestSellersListView(BaseHotelListView):
             best_sellers_data.append(serialized)
 
         return Response(best_sellers_data)
+    
     
 
 
