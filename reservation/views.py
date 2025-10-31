@@ -392,14 +392,19 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 
         # --- تعیین سطح کاربری ---
-        user_level = None  # عمومی = None
+        user_level = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
                 if profile.level:
                     user_level = profile.level
+                    logger.info(f"User level detected: {user_level.title}")
+                else:
+                    logger.info("User has no level, using public prices")
             except NaturalProfile.DoesNotExist:
-                pass
+                logger.info("No natural profile found, using public prices")
+        else:
+            logger.info("Anonymous user, using public prices")
 
         # --- مرحله ۱: تمام اتاق‌های فعال (فقط موجودی > 0) ---
         active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
@@ -425,20 +430,21 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # --- تمام قیمت‌ها برای این تاریخ ---
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 )
 
                 # --- انتخاب بر اساس سطح کاربر (با فال‌بک به عمومی) ---
+                price_data = None
                 if user_level:
                     level_prices = price_data_qs.filter(user_level=user_level)
                     if level_prices.exists():
                         price_data = level_prices.order_by('-id').first()
+                        logger.debug(f"Using level price for {user_level.title}: {price_data.price}")
                     else:
-                        price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
-                else:
+                        logger.debug(f"No price for level {user_level.title}, falling back to public")
+                if not price_data:
                     price_data = price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
 
                 closed_date = closed_dates.filter(date=date).first()
@@ -472,13 +478,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 end_date__gte=start_date_obj
             )
 
+            first_price_data = None
             if user_level:
                 level_prices = first_price_data_qs.filter(user_level=user_level)
                 if level_prices.exists():
                     first_price_data = level_prices.order_by('-id').first()
-                else:
-                    first_price_data = first_price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
-            else:
+            if not first_price_data:
                 first_price_data = first_price_data_qs.filter(user_level__isnull=True).order_by('-id').first()
 
             if not first_price_data:
@@ -489,16 +494,20 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
-            # --- محاسبه قیمت کل از price_calendar (با فال‌بک) ---
+            # --- محاسبه قیمت کل از price_calendar ---
             total_price = sum(
                 day['price']['price'] for day in price_calendar
                 if day['status'] == "open" and day['price'] and day['price']['price'] is not None
             )
 
+            # اصلاح کلیدی: همیشه از price_after_discount استفاده کن (چه تخفیف باشه چه نباشه)
             total_price_discount = sum(
-                day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None
-                else day['price']['price'] if day['status'] == "open" and day['price'] and day['price'] is not None
-                else 0 for day in price_calendar
+                day['price']['price_after_discount']
+                if day['status'] == "open" and day['price'] and day['price']['price_after_discount'] is not None
+                else day['price']['price']
+                if day['status'] == "open" and day['price'] and day['price']['price'] is not None
+                else 0
+                for day in price_calendar
             )
 
             room_dict[room.id] = {
@@ -627,8 +636,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
-    
+
+
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
