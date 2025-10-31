@@ -1212,37 +1212,40 @@ class SuggesteHotelListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        # فقط هتل‌هایی که پیشنهاد ویژه دارند
-        hotels = (
-            Hotel.objects.filter(is_special_offer=True)
-            .select_related('city', 'type')
-            .distinct()
-        )
+        today = date2jalali(timezone.now().date())
 
-        # ایجاد دیکشنری از کمترین قیمت برای هر هتل بر اساس اتاق‌های موجود در لیست قابل نمایش
+        # فقط هتل‌هایی که پیشنهاد ویژه دارند
+        hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
+
         hotel_min_price_map = {}
 
         for hotel in hotels:
-            # اینجا فیلتر اتاق‌ها باید دقیقاً مطابق HotelRoomsView باشه
-            # (اگر اونجا فیلتر تاریخ یا ظرفیت داری، همینجا هم باید اضافه بشه)
-            rooms_qs = Room.objects.filter(
-                hotel=hotel,
-                is_active=True,
-            )
+            # فقط اتاق‌هایی که قیمت فعال دارند
+            active_rooms = hotel.rooms.filter(
+                date_prices__start_date__lte=today,
+                date_prices__end_date__gte=today
+            ).distinct()
 
-            # فقط اگر اتاقی برای نمایش وجود دارد
-            if rooms_qs.exists():
-                # انتخاب ارزان‌ترین اتاق از بین اتاق‌های فعلی
-                cheapest_room = rooms_qs.order_by('price').first()
-                hotel_min_price_map[hotel.id] = cheapest_room.price
+            if not active_rooms.exists():
+                # اگر اتاق فعالی وجود نداشته باشه، هتل رو در لیست نیاور
+                continue
 
-        # پاس دادن map به serializer
+            # کمترین قیمت از بین اتاق‌های فعال
+            min_price = RoomDatePrice.objects.filter(
+                room__in=active_rooms,
+                start_date__lte=today,
+                end_date__gte=today
+            ).order_by('price').values_list('price', flat=True).first()
+
+            if min_price:
+                hotel_min_price_map[hotel.id] = min_price
+
+        # ایجاد context برای serializer
         context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-        # سریال‌سازی خروجی
+        # ساخت خروجی نهایی
         special_offers_data = []
         for hotel in hotels:
-            # فقط هتل‌هایی که اتاق قابل نمایش دارند
             if hotel.id in hotel_min_price_map:
                 serialized = HotelListSerializer(hotel, context=context).data
                 serialized['average_score'] = self.get_average_score(hotel)
