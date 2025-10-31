@@ -301,6 +301,7 @@ def validate_national_code(value):
     if not re.match(r'^\d{10}$', value):
         raise ValidationError('کد ملی باید 10 رقمی باشد')
 
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -400,28 +401,46 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except NaturalProfile.DoesNotExist:
                 pass
 
-        # فیلتر اتاق‌ها بر اساس تاریخ و سطح کاربری
-        rooms_qs = hotel.rooms.filter(
+        # --- مرحله ۱: اتاق‌های فعال (بدون فیلتر سطح کاربری) ---
+        active_rooms = hotel.rooms.filter(
             date_prices__start_date__lte=start_date_obj,
             date_prices__end_date__gte=end_date_obj,
-            date_prices__user_level=user_level,
             inventory__gt=0
-        ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
+        ).distinct()
 
-        if not rooms_qs.exists():
-            rooms_qs = hotel.rooms.filter(
-                date_prices__start_date__lte=start_date_obj,
-                date_prices__end_date__gte=end_date_obj,
-                date_prices__user_level__isnull=True,
-                inventory__gt=0
-            ).distinct().prefetch_related('date_prices', 'services').select_related('hotel')
-
-        if not rooms_qs.exists():
+        if not active_rooms.exists():
             return Response({
                 'detail': 'هیچ اتاقی برای این هتل موجود نیست.',
                 'rooms': [],
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
+
+        # --- مرحله ۲: کوئری قیمت‌ها با اولویت سطح کاربری ---
+        price_qs = RoomDatePrice.objects.filter(
+            room__in=active_rooms,
+            start_date__lte=start_date_obj,
+            end_date__gte=end_date_obj
+        )
+
+        if user_level:
+            level_prices = price_qs.filter(user_level=user_level)
+            if level_prices.exists():
+                price_qs = level_prices
+            else:
+                price_qs = price_qs.filter(user_level__isnull=True)
+        else:
+            price_qs = price_qs.filter(user_level__isnull=True)
+
+        if not price_qs.exists():
+            return Response({
+                'detail': 'هیچ قیمتی برای این بازه موجود نیست.',
+                'rooms': [],
+                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
+            }, status=200)
+
+        # --- مرحله ۳: اتاق‌های معتبر بر اساس قیمت‌های نهایی ---
+        valid_room_ids = price_qs.values_list('room_id', flat=True).distinct()
+        rooms_qs = Room.objects.filter(id__in=valid_room_ids).prefetch_related('date_prices', 'services').select_related('hotel')
 
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
@@ -625,7 +644,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
     
     
 
@@ -1248,7 +1266,7 @@ class SuggesteHotelListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها (سطح کاربر یا عمومی) ---
+            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
@@ -1256,15 +1274,13 @@ class SuggesteHotelListView(BaseHotelListView):
             )
 
             if user_level:
-                price_qs = price_qs.filter(user_level=user_level)
-
-            if not price_qs.exists():
-                price_qs = RoomDatePrice.objects.filter(
-                    room__in=active_rooms,
-                    start_date__lte=today,
-                    end_date__gte=today,
-                    user_level__isnull=True
-                )
+                level_prices = price_qs.filter(user_level=user_level)
+                if level_prices.exists():
+                    price_qs = level_prices
+                else:
+                    price_qs = price_qs.filter(user_level__isnull=True)
+            else:
+                price_qs = price_qs.filter(user_level__isnull=True)
 
             if not price_qs.exists():
                 continue
@@ -1319,8 +1335,6 @@ class SuggesteHotelListView(BaseHotelListView):
             special_offers_data.append(serialized)
 
         return Response(special_offers_data)
-    
-
 
 
 
@@ -1374,7 +1388,7 @@ class AmazingHotelsListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها (سطح کاربر یا عمومی) ---
+            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
@@ -1382,15 +1396,13 @@ class AmazingHotelsListView(BaseHotelListView):
             )
 
             if user_level:
-                price_qs = price_qs.filter(user_level=user_level)
-
-            if not price_qs.exists():
-                price_qs = RoomDatePrice.objects.filter(
-                    room__in=active_rooms,
-                    start_date__lte=today,
-                    end_date__gte=today,
-                    user_level__isnull=True
-                )
+                level_prices = price_qs.filter(user_level=user_level)
+                if level_prices.exists():
+                    price_qs = level_prices
+                else:
+                    price_qs = price_qs.filter(user_level__isnull=True)
+            else:
+                price_qs = price_qs.filter(user_level__isnull=True)
 
             if not price_qs.exists():
                 continue
@@ -1445,8 +1457,6 @@ class AmazingHotelsListView(BaseHotelListView):
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
-    
-    
 
 
 
@@ -1500,7 +1510,7 @@ class BestSellersListView(BaseHotelListView):
             if not active_rooms.exists():
                 continue  # هتل بدون اتاق فعال → حذف
 
-            # --- مرحله ۲: کوئری قیمت‌ها (سطح کاربر یا عمومی) ---
+            # --- مرحله ۲: کوئری قیمت‌ها با اولویت هوشمند ---
             price_qs = RoomDatePrice.objects.filter(
                 room__in=active_rooms,
                 start_date__lte=today,
@@ -1508,15 +1518,13 @@ class BestSellersListView(BaseHotelListView):
             )
 
             if user_level:
-                price_qs = price_qs.filter(user_level=user_level)
-
-            if not price_qs.exists():
-                price_qs = RoomDatePrice.objects.filter(
-                    room__in=active_rooms,
-                    start_date__lte=today,
-                    end_date__gte=today,
-                    user_level__isnull=True
-                )
+                level_prices = price_qs.filter(user_level=user_level)
+                if level_prices.exists():
+                    price_qs = level_prices
+                else:
+                    price_qs = price_qs.filter(user_level__isnull=True)
+            else:
+                price_qs = price_qs.filter(user_level__isnull=True)
 
             if not price_qs.exists():
                 continue
@@ -1571,7 +1579,6 @@ class BestSellersListView(BaseHotelListView):
             best_sellers_data.append(serialized)
 
         return Response(best_sellers_data)
-    
     
 
 
