@@ -19,7 +19,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.encoding import force_str
 from django.core.cache import cache
 from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
-
+from config.models import UserLevel  # 👈 
 
 
 
@@ -990,15 +990,17 @@ class RoomDatePrice(models.Model):
         verbose_name=_('اتاق'),
         related_name='date_prices',
     )
+    
     user_level = models.ForeignKey(
-        UserLevel if UserLevel else 'accounts.UserLevel',
-        on_delete=models.CASCADE,
-        verbose_name=_('سطح کاربری'),
-        related_name='room_date_prices',
-        help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود'),
-        blank=True,
-        null=True,
-    )
+    UserLevel,
+    on_delete=models.CASCADE,
+    verbose_name=_('سطح کاربری'),
+    related_name='room_date_prices',
+    help_text=_('قیمت فقط برای این سطح کاربر نمایش داده می‌شود'),
+    blank=True,
+    null=True,
+   )
+    
     start_date = jmodels.jDateField(
         verbose_name=_('تاریخ شروع بازه'),
         null=False,
