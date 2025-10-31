@@ -1196,6 +1196,7 @@ class BaseHotelListView(APIView):
 
 
 
+
 class SuggesteHotelListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پیشنهادی",
@@ -1212,7 +1213,7 @@ class SuggesteHotelListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        today = date2jalali(timezone.now().date())
+        today = timezone.now().date()
 
         # فقط هتل‌هایی که پیشنهاد ویژه دارند
         hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
