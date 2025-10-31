@@ -2970,7 +2970,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             check_out_date=check_out_date,
             buyer=request.user,
             capacity_status='pending',
-            payment_status='unpaid',
+            payment_status='pending',
             **reserver_data
         )
 
