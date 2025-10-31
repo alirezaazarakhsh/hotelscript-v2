@@ -1311,7 +1311,7 @@ class SuggesteHotelListView(BaseHotelListView):
 class AmazingHotelsListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های فروش شگفت‌انگیز",
-        operation_description="این API لیستی از هتل‌های فروش شگفت‌انگیز را بدون صفحه‌بندی باز می‌گرداند.",
+        operation_description="این API لیستی از هتل‌های فروش شگفت‌انگیز را بدون صفحه‌بندی باز می‌گرداند. فقط هتل‌هایی نمایش داده می‌شوند که امروز اتاق فعال و موجودی داشته باشند.",
         tags=['hotel-home'],
         responses={
             200: openapi.Response(
@@ -1324,25 +1324,131 @@ class AmazingHotelsListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        # دریافت هتل‌های با فروش شگفت‌انگیز
+        today = jdatetime.date.today()
         hotels = Hotel.objects.filter(is_flash_sale=True).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
-        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-        flash_sales_data = []
+        hotel_min_price_map = {}
+        valid_hotels = []
+
+        # تعیین سطح کاربری (اگر کاربر لاگین کرده)
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile and profile.level:
+                    user_level = profile.level
+            except Exception as e:
+                logger.warning(f"User level fetch error in AmazingHotels: {e}")
+
         for hotel in hotels:
+            # فیلتر اتاق‌های فعال امروز + موجودی > 0
+            active_rooms = hotel.rooms.filter(
+                date_prices__start_date__lte=today,
+                date_prices__end_date__gte=today,
+                inventory__gt=0
+            ).distinct()
+
+            if not active_rooms.exists():
+                continue  # هتل بدون اتاق فعال → حذف از لیست
+
+            # کوئری قیمت‌ها
+            price_qs = RoomDatePrice.objects.filter(
+                room__in=active_rooms,
+                start_date__lte=today,
+                end_date__gte=today
+            )
+
+            # اولویت: سطح کاربر
+            if user_level:
+                price_qs = price_qs.filter(user_level=user_level)
+
+            # fallback: عمومی
+            if not price_qs.exists():
+                price_qs = RoomDatePrice.objects.filter(
+                    room__in=active_rooms,
+                    start_date__lte=today,
+                    end_date__gte=today,
+                    user_level__isnull=True
+                )
+
+            if not price_qs.exists():
+                continue
+
+            # پیدا کردن کمترین قیمت معتبر
+            min_price = float('inf')
+            min_price_data = None
+
+            for price_data in price_qs:
+                price = price_data.price
+
+                # فقط تخفیف درصدی معتبر (تاریخ انقضا نگذشته)
+                if (price_data.discount_type == 'percentage' and
+                        price_data.discount_date and
+                        price_data.discount_date >= today):
+
+                    discounted_price = int(price * (100 - price_data.discount_value) / 100)
+
+                    if discounted_price < min_price:
+                        min_price = discounted_price
+                        min_price_data = {
+                            'total_price': discounted_price,
+                            'original_total_price': price,
+                            'discount_type': 'percentage',
+                            'discount_value': price_data.discount_value,
+                            'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
+                            'is_fixed_discount_one_time': False,
+                        }
+
+                # تخفیف ثابت → قیمت با تخفیف، اما بدون نمایش تخفیف
+                elif price_data.discount_type == 'fixed':
+                    fixed_price = max(price - price_data.discount_value, 0)
+                    if fixed_price < min_price:
+                        min_price = fixed_price
+                        min_price_data = {
+                            'total_price': fixed_price,
+                            'original_total_price': price_data.price,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'is_fixed_discount_one_time': price_data.is_fixed_discount_one_time,
+                        }
+
+                # بدون تخفیف
+                elif price_data.discount_type == 'none':
+                    if price < min_price:
+                        min_price = price
+                        min_price_data = {
+                            'total_price': price,
+                            'original_total_price': price,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'is_fixed_discount_one_time': False,
+                        }
+
+            if min_price_data and min_price != float('inf'):
+                hotel_min_price_map[hotel.id] = min_price_data
+                valid_hotels.append(hotel)
+
+        # سریالایز فقط هتل‌های معتبر
+        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
+        flash_sales_data = []
+
+        for hotel in valid_hotels:
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
+    
+    
 
 
 
 class BestSellersListView(BaseHotelListView):
     @swagger_auto_schema(
         operation_summary="دریافت لیست هتل‌های پرفروش‌ترین",
-        operation_description="این API لیستی از هتل‌های پرفروش‌ترین را بدون صفحه‌بندی باز می‌گرداند.",
+        operation_description="این API لیستی از هتل‌های پرفروش‌ترین را بدون صفحه‌بندی باز می‌گرداند. فقط هتل‌هایی نمایش داده می‌شوند که امروز اتاق فعال و موجودی داشته باشند.",
         tags=['hotel-home'],
         responses={
             200: openapi.Response(
@@ -1355,18 +1461,124 @@ class BestSellersListView(BaseHotelListView):
         }
     )
     def get(self, request, *args, **kwargs):
-        # دریافت هتل‌های پرفروش
+        today = jdatetime.date.today()
         hotels = Hotel.objects.filter(is_best_seller=True).select_related('city', 'type').distinct()
-        hotel_min_price_map = self.get_hotel_min_price_map(hotels)
-        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-        best_sellers_data = []
+        hotel_min_price_map = {}
+        valid_hotels = []
+
+        # تعیین سطح کاربری
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile and profile.level:
+                    user_level = profile.level
+            except Exception as e:
+                logger.warning(f"User level error in BestSellers: {e}")
+
         for hotel in hotels:
+            # فیلتر اتاق‌های فعال امروز + موجودی > 0
+            active_rooms = hotel.rooms.filter(
+                date_prices__start_date__lte=today,
+                date_prices__end_date__gte=today,
+                inventory__gt=0
+            ).distinct()
+
+            if not active_rooms.exists():
+                continue  # حذف هتل بدون اتاق فعال
+
+            # کوئری قیمت‌ها
+            price_qs = RoomDatePrice.objects.filter(
+                room__in=active_rooms,
+                start_date__lte=today,
+                end_date__gte=today
+            )
+
+            # اولویت: سطح کاربر
+            if user_level:
+                price_qs = price_qs.filter(user_level=user_level)
+
+            # fallback: عمومی
+            if not price_qs.exists():
+                price_qs = RoomDatePrice.objects.filter(
+                    room__in=active_rooms,
+                    start_date__lte=today,
+                    end_date__gte=today,
+                    user_level__isnull=True
+                )
+
+            if not price_qs.exists():
+                continue
+
+            # پیدا کردن کمترین قیمت
+            min_price = float('inf')
+            min_price_data = None
+
+            for price_data in price_qs:
+                price = price_data.price
+
+                # تخفیف درصدی معتبر (تاریخ نگذشته)
+                if (price_data.discount_type == 'percentage' and
+                        price_data.discount_date and
+                        price_data.discount_date >= today):
+
+                    discounted_price = int(price * (100 - price_data.discount_value) / 100)
+
+                    if discounted_price < min_price:
+                        min_price = discounted_price
+                        min_price_data = {
+                            'total_price': discounted_price,
+                            'original_total_price': price,
+                            'discount_type': 'percentage',
+                            'discount_value': price_data.discount_value,
+                            'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
+                            'is_fixed_discount_one_time': False,
+                        }
+
+                # تخفیف ثابت → قیمت با تخفیف، اما بدون نمایش تخفیف
+                elif price_data.discount_type == 'fixed':
+                    fixed_price = max(price - price_data.discount_value, 0)
+                    if fixed_price < min_price:
+                        min_price = fixed_price
+                        min_price_data = {
+                            'total_price': fixed_price,
+                            'original_total_price': price_data.price,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'is_fixed_discount_one_time': price_data.is_fixed_discount_one_time,
+                        }
+
+                # بدون تخفیف
+                elif price_data.discount_type == 'none':
+                    if price < min_price:
+                        min_price = price
+                        min_price_data = {
+                            'total_price': price,
+                            'original_total_price': price,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'is_fixed_discount_one_time': False,
+                        }
+
+            if min_price_data and min_price != float('inf'):
+                hotel_min_price_map[hotel.id] = min_price_data
+                valid_hotels.append(hotel)
+
+        # سریالایز فقط هتل‌های معتبر
+        context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
+        best_sellers_data = []
+
+        for hotel in valid_hotels:
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
             best_sellers_data.append(serialized)
 
         return Response(best_sellers_data)
+    
+    
 
 
 # ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس اسلاگ هتل 
