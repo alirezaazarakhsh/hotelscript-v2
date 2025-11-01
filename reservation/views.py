@@ -16,6 +16,7 @@ from channels.layers import get_channel_layer
 from django.core.paginator import Paginator as DjangoPaginator
 from django.core.paginator import EmptyPage, PageNotAnInteger
 from django.db.models import Subquery
+from django.db.models import OuterRef
 from asgiref.sync import async_to_sync
 import jdatetime 
 from itertools import combinations
