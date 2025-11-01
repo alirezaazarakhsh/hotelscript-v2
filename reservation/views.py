@@ -282,7 +282,7 @@ class RoomServiceListView(ListAPIView):
 
 
 
-
+#لیست اتاق ها 
 try:
     logger = logging.getLogger(__name__)
 except Exception:
@@ -2396,6 +2396,38 @@ class BestHotelspageAPI(ListAPIView):
         overall_average = CommentPoint.objects.filter(comment__in=comments).aggregate(avg=Avg("point"))["avg"]
         return round(overall_average or 0, 1)
 
+    def get_user_level(self, request):
+        """تعیین سطح کاربری مانند HotelRoomsView"""
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile.level:
+                    user_level = profile.level
+            except NaturalProfile.DoesNotExist:
+                pass
+        return user_level
+
+    def get_price_data_for_date(self, room, date, user_level):
+        """انتخاب قیمت بر اساس سطح کاربری مانند HotelRoomsView"""
+        price_data_qs = room.date_prices.filter(
+            start_date__lte=date,
+            end_date__gte=date
+        )
+
+        # اولویت اول: قیمت سطح کاربری
+        if user_level:
+            level_prices = price_data_qs.filter(user_level=user_level)
+            if level_prices.exists():
+                return level_prices.order_by('-id').first()
+        
+        # اولویت دوم: قیمت عمومی
+        public_prices = price_data_qs.filter(user_level__isnull=True)
+        if public_prices.exists():
+            return public_prices.order_by('-id').first()
+        
+        return None
+
     def calculate_discount(self, price_data, date, fixed_discount_applied=False):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
         discount_amount = 0
@@ -2427,7 +2459,7 @@ class BestHotelspageAPI(ListAPIView):
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
-    def get_room_data(self, hotel, start_date_obj, end_date_obj, passengers_list):
+    def get_room_data(self, hotel, start_date_obj, end_date_obj, passengers_list, user_level=None):
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
 
@@ -2445,7 +2477,8 @@ class BestHotelspageAPI(ListAPIView):
             has_zero_price = False
 
             for date in date_range:
-                price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).order_by('-id').select_related('user_level').first()
+                # استفاده از منطق انتخاب قیمت بر اساس سطح کاربری
+                price_data = self.get_price_data_for_date(room, date, user_level)
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
 
@@ -2467,6 +2500,7 @@ class BestHotelspageAPI(ListAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "عمومی",
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
@@ -2483,7 +2517,8 @@ class BestHotelspageAPI(ListAPIView):
             if total_price == 0 or total_price_discount == 0:
                 continue
 
-            first_price_data = room.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).order_by('-id').select_related('user_level').first()
+            # قیمت اولین روز با در نظر گرفتن سطح کاربری
+            first_price_data = self.get_price_data_for_date(room, start_date_obj, user_level)
             if not first_price_data:
                 continue
 
@@ -2503,6 +2538,7 @@ class BestHotelspageAPI(ListAPIView):
                     "discount_percentage": discount_percentage_first,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
+                    "user_level": first_price_data.user_level.title if first_price_data and first_price_data.user_level else "عمومی",
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "price_calendar": price_calendar
@@ -2520,6 +2556,7 @@ class BestHotelspageAPI(ListAPIView):
                 'total_price': min_room['price']['total_price_discount'],
                 'discount_percentage': min_room['price']['discount_percentage'],
                 'discount_date': min_room['price']['discount_date'],
+                'user_level': min_room['price']['user_level'],
             }
         else:
             # --- Single room ---
@@ -2549,6 +2586,7 @@ class BestHotelspageAPI(ListAPIView):
                     'total_price': min_room['price']['total_price_discount'],
                     'discount_percentage': min_room['price']['discount_percentage'],
                     'discount_date': min_room['price']['discount_date'],
+                    'user_level': min_room['price']['user_level'],
                 }
 
             # --- Pack rooms ---
@@ -2565,6 +2603,7 @@ class BestHotelspageAPI(ListAPIView):
                         pack_total_original = 0
                         pack_discount_percentages = set()
                         pack_discount_dates = set()
+                        pack_user_levels = set()
                         for orig_room, p in current_pack:
                             room = copy.deepcopy(orig_room)
                             if p > room['capacity']:
@@ -2585,11 +2624,13 @@ class BestHotelspageAPI(ListAPIView):
                                 pack_discount_percentages.add(room['price']['discount_percentage'])
                             if room['price']['discount_date']:
                                 pack_discount_dates.add(room['price']['discount_date'])
+                            pack_user_levels.add(room['price']['user_level'])
                         packs.append({
                             "total_price": pack_total_price,
                             "original_total_price": pack_total_original,
                             "discount_percentage": list(pack_discount_percentages)[0] if len(pack_discount_percentages) == 1 else None,
                             "discount_date": list(pack_discount_dates)[0] if len(pack_discount_dates) == 1 else None,
+                            "user_level": list(pack_user_levels)[0] if len(pack_user_levels) == 1 else "مختلط",
                         })
                         return
 
@@ -2613,6 +2654,7 @@ class BestHotelspageAPI(ListAPIView):
                     'total_price': min_pack['total_price'],
                     'discount_percentage': min_pack['discount_percentage'],
                     'discount_date': min_pack['discount_date'],
+                    'user_level': min_pack['user_level'],
                 }
 
         if min_price_data:
@@ -2660,6 +2702,9 @@ class BestHotelspageAPI(ListAPIView):
         residence_type = request.query_params.get('residence-type')
         room_facilities = request.query_params.get('room-facilities')
         hotel_facilities = request.query_params.get('hotel-facilities')
+
+        # تعیین سطح کاربری
+        user_level = self.get_user_level(request)
 
         passenger_values = []
         if passengers:
@@ -2736,7 +2781,8 @@ class BestHotelspageAPI(ListAPIView):
 
         hotel_min_price_map = {}
         for hotel in hotels_qs:
-            min_price_data = self.get_room_data(hotel, start_date_obj, end_date_obj, passenger_values)
+            # ارسال user_level به متد get_room_data
+            min_price_data = self.get_room_data(hotel, start_date_obj, end_date_obj, passenger_values, user_level)
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
@@ -2755,6 +2801,7 @@ class BestHotelspageAPI(ListAPIView):
                         'total_price': 0,
                         'discount_percentage': None,
                         'discount_date': None,
+                        'user_level': user_level.title if user_level else "عمومی",
                         'rating': hotel.rating or 0,
                         'reservation_count': hotel.reservation_count or 0,
                         'average_score': self.get_average_score(hotel),
@@ -2796,7 +2843,6 @@ class BestHotelspageAPI(ListAPIView):
 
         serializer = self.get_serializer(sorted_hotels, many=True, context=context)
         return Response(serializer.data)
-
 
 
 
