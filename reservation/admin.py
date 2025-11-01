@@ -14,7 +14,7 @@ from django.utils.translation import gettext_lazy as _
 from nested_admin import NestedModelAdmin, NestedTabularInline
 from pydantic import ValidationError
 from authentication.models import BaseUser
-from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm
+from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm, ReservationInvoiceSettingsAdminForm
 from .models import (
     BestHotels,
     CancellationPenalty,
@@ -27,6 +27,7 @@ from .models import (
     HotelTag,
     Facilities,
     ReservationApprovalDuration,
+    ReservationInvoiceSettings,
     Reservationhotel,
     RoomDatePrice,
     RoomFacilities,
@@ -1191,3 +1192,60 @@ class CancellationPenaltyAdmin(admin.ModelAdmin):
     # --- بهینه‌سازی کوئری ---
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('hotel', 'hotel__city')
+    
+    
+    
+
+
+
+@admin.register(ReservationInvoiceSettings)
+class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
+    form = ReservationInvoiceSettingsAdminForm
+    list_display = ('title', 'contact_number', 'signature_preview_list', 'edit_link')
+    search_fields = ('title', 'contact_number')
+
+    # حذف کامل readonly_fields
+    # readonly_fields = ('signature_preview',)  ← حذف شد
+
+    fieldsets = (
+        ('تنظیمات فاکتور رزرو', {
+            'fields': ('title', 'contact_number', 'signature_image')
+            # signature_preview حذف شد
+        }),
+    )
+
+    # --- پیش‌نمایش در لیست (کوچک و تمیز) ---
+    def signature_preview_list(self, obj):
+        if obj.signature_image:
+            return format_html(
+                '<img src="{}" style="max-height: 40px; border-radius: 4px; border: 1px solid #ddd;" />',
+                obj.signature_image.url
+            )
+        return format_html('<span class="text-muted">—</span>')
+    signature_preview_list.short_description = "امضا"
+
+    # --- لینک ویرایش ---
+    def edit_link(self, obj):
+        if obj.pk:
+            url = reverse('admin:reservation_reservationinvoicesettings_change', args=[obj.pk])
+            return format_html('<a class="btn btn-sm btn-primary" href="{}">ویرایش</a>', url)
+        return "-"
+    edit_link.short_description = "عملیات"
+
+    # --- Singleton: فقط یک رکورد ---
+    def has_add_permission(self, request):
+        return not ReservationInvoiceSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    # --- پیام‌های موفقیت ---
+    def response_add(self, request, obj):
+        from django.contrib import messages
+        messages.success(request, "تنظیمات فاکتور با موفقیت ایجاد شد.")
+        return super().response_add(request, obj)
+
+    def response_change(self, request, obj):
+        from django.contrib import messages
+        messages.success(request, "تنظیمات فاکتور با موفقیت به‌روزرسانی شد.")
+        return super().response_change(request, obj)

@@ -17,6 +17,8 @@ from .views import (
     ReservationDescriptionAPIView,
     ReservationDetailAPIView,
     ReservationInvoiceAPIView,
+    ReservationInvoiceDetailAPIView,
+    ReservationInvoiceSettingsAPIView,
     SuggesteHotelListView,
     ReservationRoomDetailAPIView,
     UserCancellationCreateAPIView,
@@ -94,9 +96,14 @@ urlpatterns = [
     
     # ==== User Cancellations ====
     path('reservation/cancellations/create/', UserCancellationCreateAPIView.as_view(),  name='user-cancellation-create'),
-
-
     
+    
+    # ==== Invoice Settings ====
+    path('reservation/factor/signator/',ReservationInvoiceSettingsAPIView.as_view(),name='reservation-invoice-settings' ),
+    
+    # ==== Invoice Detail ====
+    path('reservation/invoice/<str:tracking_code>/', ReservationInvoiceDetailAPIView.as_view(), name='reservation-invoice-detail'),
+
     # ==== hotel seo ===
     path('hotels/<slug:hotel_slug>/seo/', HotelSEOView.as_view(), name='hotel-seo'),
 

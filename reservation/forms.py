@@ -1,5 +1,5 @@
 from django import forms
-from .models import BestHotels, City, Hotel
+from .models import BestHotels, City, Hotel, ReservationInvoiceSettings
 from django.utils.safestring import mark_safe
 
 
@@ -64,5 +64,30 @@ class CityAdminForm(forms.ModelForm):
 
 
     
-    
-    
+class ReservationInvoiceSettingsAdminForm(forms.ModelForm):
+    class Meta:
+        model = ReservationInvoiceSettings
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            image_field = 'signature_image'
+            field_value = getattr(self.instance, image_field, None)
+            if field_value:
+                self.fields[image_field].widget = forms.FileInput(attrs={'accept': 'image/*'})
+                self.fields[image_field].help_text = mark_safe(
+                    '<div style="margin-top: 10px; text-align: center;">'
+                    '<p class="text-muted small">امضا فعلی:</p>'
+                    '<img src="{}" style="max-height: 180px; max-width: 250px; '
+                    'border: 2px solid #4CAF50; border-radius: 8px; padding: 4px; '
+                    'box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />'
+                    '<p class="text-muted small mt-2">برای تغییر، فایل جدید انتخاب کنید.</p>'
+                    '</div>'.format(field_value.url)
+                )
+            else:
+                self.fields[image_field].help_text = mark_safe(
+                    '<p class="text-muted small" style="margin-top: 10px;">'
+                    'هنوز تصویری آپلود نشده است.'
+                    '</p>'
+                )

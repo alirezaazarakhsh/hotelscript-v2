@@ -95,6 +95,7 @@ from .models import (
     HotelTag,
     HotelTagPublic,
     ReservationApprovalDuration,
+    ReservationInvoiceSettings,
     ReservationRoom,
     ReservationRoomPassenger,
     Room,
@@ -4473,6 +4474,7 @@ class UserReservationListAPIView(APIView):
         - check_out_date (جلالی)
         - total_guests
         - payment_status
+        - cancellation_status (وضعیت کنسلی: true=تایید شده, false=عدم تایید, null=بدون درخواست)
         - created_at (جلالی: 1403/06/15 14:30)
         """,
         manual_parameters=[
@@ -4495,7 +4497,28 @@ class UserReservationListAPIView(APIView):
                                 "check_out_date": "1403-07-05",
                                 "total_guests": 4,
                                 "payment_status": "paid",
+                                "cancellation_status": True,
                                 "created_at": "1403/06/15 14:30"
+                            },
+                            {
+                                "tracking_code": "RSV123457",
+                                "hotel_name": "هتل پارسیان",
+                                "check_in_date": "1403-07-10",
+                                "check_out_date": "1403-07-12",
+                                "total_guests": 2,
+                                "payment_status": "failed",
+                                "cancellation_status": False,
+                                "created_at": "1403/06/16 10:15"
+                            },
+                            {
+                                "tracking_code": "RSV123458",
+                                "hotel_name": "هتل اسپیناس",
+                                "check_in_date": "1403-07-15",
+                                "check_out_date": "1403-07-20",
+                                "total_guests": 3,
+                                "payment_status": "pending",
+                                "cancellation_status": None,
+                                "created_at": "1403/06/17 16:45"
                             }
                         ]
                     }
@@ -4506,11 +4529,24 @@ class UserReservationListAPIView(APIView):
         tags=["reservedashboard-api"]
     )
     def get(self, request):
-        # کوئری‌ست اصلی
+        # ابتدا وضعیت پرداخت رزروهای در حال انتظار را بررسی و به روز کنیم
+        self.update_expired_payments(request.user)
+
+        # زیرکوئری برای دریافت آخرین وضعیت کنسلی
+        latest_cancellation_subquery = Subquery(
+            UserCancellation.objects.filter(
+                reservation=OuterRef('pk')
+            ).order_by('-created_at').values('status')[:1]
+        )
+
+        # کوئری‌ست اصلی با annotate برای وضعیت کنسلی
         queryset = Reservationhotel.objects.filter(
             buyer=request.user
         ).select_related('buyer').prefetch_related(
-            'reservation_rooms__room__hotel'
+            'reservation_rooms__room__hotel',
+            'cancellations'
+        ).annotate(
+            latest_cancellation_status=latest_cancellation_subquery
         ).order_by('-created_at')
 
         # دریافت پارامترهای صفحه‌بندی
@@ -4527,8 +4563,16 @@ class UserReservationListAPIView(APIView):
         except (TypeError, ValueError):
             page_size = 18
 
+        # اعتبارسنجی page
+        try:
+            page = int(page)
+            if page < 1:
+                page = 1
+        except (TypeError, ValueError):
+            page = 1
+
         # پجینیشن با Django Paginator
-        paginator = DjangoPaginator(queryset, page_size)
+        paginator = Paginator(queryset, page_size)
         
         try:
             reservations_page = paginator.page(page)
@@ -4539,21 +4583,23 @@ class UserReservationListAPIView(APIView):
 
         # سریالایز کردن دستی داده‌ها
         data = []
-        for r in reservations_page:
-            first_room = r.reservation_rooms.first()
-            hotel_name = first_room.room.hotel.name if first_room and first_room.room and first_room.room.hotel else "نامشخص"
+        for reservation in reservations_page:
+            hotel_name = self.get_hotel_name(reservation)
+            cancellation_status = self.get_cancellation_status(reservation)
+            formatted_created_at = self.format_created_at(reservation.created_at)
 
             data.append({
-                "tracking_code": r.tracking_code,
+                "tracking_code": reservation.tracking_code,
                 "hotel_name": hotel_name,
-                "check_in_date": str(r.check_in_date),
-                "check_out_date": str(r.check_out_date),
-                "total_guests": r.total_guests,
-                "payment_status": r.payment_status,
-                "created_at": r.created_at.strftime('%Y/%m/%d %H:%M') if r.created_at else None,
+                "check_in_date": str(reservation.check_in_date),
+                "check_out_date": str(reservation.check_out_date),
+                "total_guests": reservation.total_guests,
+                "payment_status": reservation.payment_status,
+                "cancellation_status": cancellation_status,
+                "created_at": formatted_created_at,
             })
 
-        # استفاده از ساختار پاسخ Paginator سفارشی
+        # ساختار پاسخ Paginator سفارشی
         response_data = {
             'count': paginator.count,
             'total_pages': paginator.num_pages,
@@ -4562,6 +4608,84 @@ class UserReservationListAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+    def update_expired_payments(self, user):
+        """
+        به روزرسانی وضعیت پرداخت رزروهایی که بیش از 20 دقیقه در حالت pending مانده‌اند
+        """
+        twenty_minutes_ago = timezone.now() - timedelta(minutes=20)
+        
+        # پیدا کردن رزروهای در حال انتظار که بیش از 20 دقیقه گذشته ایجاد شده‌اند
+        expired_reservations = Reservationhotel.objects.filter(
+            buyer=user,
+            payment_status='pending',
+            created_at__lte=twenty_minutes_ago
+        )
+        
+        # به روزرسانی وضعیت به 'failed'
+        updated_count = expired_reservations.update(payment_status='failed')
+        
+        if updated_count > 0:
+            print(f"Updated {updated_count} expired reservations to 'failed' status")
+
+    def get_hotel_name(self, reservation):
+        """استخراج نام هتل از رزرو"""
+        first_room = reservation.reservation_rooms.first()
+        if first_room and first_room.room and first_room.room.hotel:
+            return first_room.room.hotel.name
+        return "نامشخص"
+
+    def get_cancellation_status(self, reservation):
+        """
+        محاسبه وضعیت کنسلی برای یک رزرو
+        
+        منطق:
+        - True: اگر آخرین درخواست کنسلی دارای وضعیت 'approved' باشد
+        - False: اگر آخرین درخواست کنسلی دارای وضعیت 'rejected' باشد  
+        - None: اگر هیچ درخواست کنسلی وجود ندارد یا وضعیت 'pending' است
+        """
+        # استفاده از فیلد annotate شده
+        if hasattr(reservation, 'latest_cancellation_status'):
+            latest_status = reservation.latest_cancellation_status
+            if latest_status == 'approved':
+                return True
+            elif latest_status == 'rejected':
+                return False
+        
+        # fallback: بررسی از طریق relation در صورت عدم وجود annotate
+        latest_cancellation = reservation.cancellations.order_by('-created_at').first()
+        if latest_cancellation:
+            if latest_cancellation.status == 'approved':
+                return True
+            elif latest_cancellation.status == 'rejected':
+                return False
+        
+        return None
+
+    def format_created_at(self, created_at):
+        """فرمت‌دهی تاریخ ایجاد به صورت جلالی"""
+        if not created_at:
+            return None
+        
+        # اگر از کتابخانه تبدیل تاریخ استفاده می‌کنید، اینجا تبدیل انجام دهید
+        # برای مثال با استفاده از jdatetime:
+        try:
+            import jdatetime
+            jalali_datetime = jdatetime.datetime.fromgregorian(
+                year=created_at.year,
+                month=created_at.month,
+                day=created_at.day,
+                hour=created_at.hour,
+                minute=created_at.minute
+            )
+            return jalali_datetime.strftime('%Y/%m/%d %H:%M')
+        except ImportError:
+            # اگر jdatetime نصب نیست، تاریخ میلادی برگردانده شود
+            return created_at.strftime('%Y/%m/%d %H:%M')
+        except Exception:
+            # در صورت بروز خطا، تاریخ میلادی برگردانده شود
+            return created_at.strftime('%Y/%m/%d %H:%M')
+        
 
 
 
@@ -4702,3 +4826,222 @@ class UserCancellationCreateAPIView(APIView):
             "reasons": [r.title for r in reasons],
             "description": description
         }, status=201)
+
+
+
+
+# ای پی ای امضا در فاکتور 
+class ReservationInvoiceSettingsAPIView(APIView):
+    """
+    API برای دریافت تنظیمات فاکتور رزرو
+    شامل عنوان فاکتور، شماره تماس و لینک کامل عکس امضا با دامنه safarnameh24.com
+    """
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت تنظیمات فاکتور رزرو",
+        operation_description="""
+        این API تنظیمات فاکتور رزرو را برمی‌گرداند که شامل:
+        - عنوان فاکتور
+        - شماره تماس
+        - لینک کامل عکس امضا (با دامنه اصلی: `https://safarnameh24.com`)
+
+        **نکته مهم**: لینک عکس همیشه با دامنه اصلی `safarnameh24.com` برگردانده می‌شود.
+        اگر تنظیماتی وجود نداشته باشد، مقدار `null` برمی‌گردد.
+        """,
+        responses={
+            200: openapi.Response(
+                description="تنظیمات فاکتور با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "invoice_settings": {
+                            "title": "فاکتور رسمی رزرو هتل",
+                            "contact_number": "021-12345678",
+                            "signature_image": "https://safarnameh24.com/media/invoice_signatures/signature.png"
+                        }
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="تنظیمات فاکتور یافت نشد",
+                examples={
+                    "application/json": {
+                        "invoice_settings": None,
+                        "detail": "تنظیمات فاکتور رزرو تعریف نشده است."
+                    }
+                }
+            )
+        },
+        tags=["reservedashboard-api"]
+    )
+    def get(self, request):
+        settings_obj = ReservationInvoiceSettings.objects.first()
+
+        if not settings_obj:
+            return Response(
+                {
+                    "invoice_settings": None,
+                    "detail": "تنظیمات فاکتور رزرو تعریف نشده است."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # ساخت لینک کامل با دامنه اصلی
+        signature_url = None
+        if settings_obj.signature_image:
+            # استفاده از MEDIA_URL و دامنه اصلی
+            base_url = "https://safarnameh24.com"
+            signature_url = f"{base_url}{settings_obj.signature_image.url}"
+
+        data = {
+            "title": settings_obj.title,
+            "contact_number": settings_obj.contact_number,
+            "signature_image": signature_url
+        }
+
+        return Response({"invoice_settings": data}, status=status.HTTP_200_OK)
+    
+    
+
+# ای پی ای فاکتور رزروها 
+class ReservationInvoiceDetailAPIView(APIView):
+    """
+    API برای دریافت اطلاعات کامل فاکتور رزرو بر اساس کد پیگیری
+    """
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت اطلاعات فاکتور رزرو",
+        operation_description="""
+        این API تمام اطلاعات لازم برای نمایش فاکتور رزرو را بر اساس **کد پیگیری** برمی‌گرداند.
+
+        شامل:
+        - اطلاعات رزرو کننده
+        - تاریخ‌ها و کد پیگیری
+        - نام و آدرس هتل
+        - جزئیات اتاق‌ها (نام، مدت اقامت، خدمات، نیم‌شارژها)
+        - لیست مسافران (نوع: اصلی / اضافه)
+        - توضیحات رزرو
+        - قوانین و مقررات هتل
+        - لینک عکس‌ها با دامنه اصلی `safarnameh24.com`
+
+        **مثال کد پیگیری**: `RES123456`
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'tracking_code',
+                openapi.IN_PATH,
+                description="کد پیگیری رزرو (مثلاً: RES123456)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="فاکتور با موفقیت بازگشت داده شد",
+                examples={
+                    "application/json": {
+                        "reservation": {
+                            "reserver_name": "علی رضایی",
+                            "reserver_phone": "09123456789",
+                            "tracking_code": "RES123456",
+                            "created_at": "1404/08/10 ساعت 14:30",
+                            "check_in_date": "1404/08/15",
+                            "check_out_date": "1404/08/18",
+                            "hotel": {
+                                "name": "هتل پارسیان کوثر",
+                                "address": "تهران، خیابان ولیعصر، پلاک ۱۲۳۴"
+                            },
+                            "rooms": [
+                                {
+                                    "room_name": "اتاق دو تخته لوکس",
+                                    "nights": 3,
+                                    "services": ["وای‌فای", "صبحانه", "پارکینگ"],
+                                    "half_day_in": True,
+                                    "half_day_out": False
+                                }
+                            ],
+                            "passengers": [
+                                {"name": "علی رضایی", "type": "اصلی"},
+                                {"name": "سارا احمدی", "type": "اضافه"}
+                            ],
+                            "additional_notes": "لطفاً اتاق با ویو شهر باشد.",
+                            "hotel_rules": "ورود از ساعت 14، خروج تا ساعت 12..."
+                        }
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                examples={"application/json": {"detail": "رزرو با این کد پیگیری یافت نشد."}}
+            )
+        },
+        tags=["reservedashboard-api"]
+    )
+    def get(self, request, tracking_code):
+        # دریافت رزرو
+        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+
+        # دریافت هتل
+        hotel = reservation.get_hotel()
+        if not hotel:
+            return Response(
+                {"detail": "هتل مرتبط با این رزرو یافت نشد."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # تبدیل تاریخ‌ها به شمسی
+        created_jalali = jdatetime.datetime.fromgregorian(datetime=reservation.created_at).strftime('%Y/%m/%d ساعت %H:%M')
+        check_in_jalali = reservation.check_in_date.strftime('%Y/%m/%d')
+        check_out_jalali = reservation.check_out_date.strftime('%Y/%m/%d')
+
+        # لیست اتاق‌ها
+        rooms_data = []
+        for res_room in reservation.reservation_rooms.select_related('room').all():
+            room = res_room.room
+            services = [service.title for service in room.services.all()] if hasattr(room, 'services') else []
+
+            rooms_data.append({
+                "room_name": room.title,
+                "nights": reservation.nights_count,
+                "services": services,
+                "half_day_in": res_room.half_day_in_selected,
+                "half_day_out": res_room.half_day_out_selected,
+            })
+
+        # لیست مسافران
+        passengers_data = []
+        for passenger in ReservationRoomPassenger.objects.filter(reservation_room__reservation=reservation):
+            type_map = {
+                'primary': 'اصلی',
+                'extra': 'اضافه',
+                'child': 'کودک',
+                'infant': 'نوزاد'
+            }
+            p_type = type_map.get(passenger.passenger_type, 'سایر')
+            passengers_data.append({
+                "name": f"{passenger.first_name} {passenger.last_name}".strip(),
+                "type": p_type
+            })
+
+        # داده نهایی
+        data = {
+            "reservation": {
+                "reserver_name": f"{reservation.reserver_first_name} {reservation.reserver_last_name}".strip(),
+                "reserver_phone": reservation.reserver_phone_number,
+                "tracking_code": reservation.tracking_code,
+                "created_at": created_jalali,
+                "check_in_date": check_in_jalali,
+                "check_out_date": check_out_jalali,
+                "hotel": {
+                    "name": hotel.name,
+                    "address": hotel.address
+                },
+                "rooms": rooms_data,
+                "passengers": passengers_data,
+                "additional_notes": reservation.additional_notes or "ندارد",
+                "hotel_rules": hotel.rules or "قوانین ثبت نشده است."
+            }
+        }
+
+        return Response(data, status=status.HTTP_200_OK)

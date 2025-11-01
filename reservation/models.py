@@ -2110,3 +2110,32 @@ class CancellationPenalty(models.Model):
     def clean(self):
         if self.penalty_percentage > 100:
             raise ValidationError(_('درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.'))
+        
+        
+
+
+# تنظیمات فاکتور رزرو 
+class ReservationInvoiceSettings(models.Model):
+    title = models.CharField(
+        max_length=200,
+        verbose_name="عنوان زیر امضا"
+    )
+    signature_image = models.ImageField(
+        upload_to='signatures/',
+        verbose_name="تصویر امضا",
+        blank=True,
+        null=True
+    )
+    contact_number = models.CharField(
+        max_length=15,
+        verbose_name="شماره تماس"
+    )
+
+    class Meta:
+        verbose_name = "تنظیمات فاکتور رزرو"
+        verbose_name_plural = "تنظیمات فاکتور رزرو"
+
+    def __str__(self):
+        return self.title
+
+
