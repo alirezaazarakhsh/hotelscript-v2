@@ -71,6 +71,7 @@ from rest_framework.exceptions import ValidationError
 from django.db import (
     OperationalError,
     DatabaseError,
+    connections,
     transaction,
 )
 from django.db.models import (
@@ -4573,6 +4574,7 @@ class UserReservationListAPIView(APIView):
     def _test_database_connection(self):
         """تست اتصال به دیتابیس"""
         try:
+            from django.db import connections
             connection = connections['default']
             if not connection.is_usable():
                 connection.close()
