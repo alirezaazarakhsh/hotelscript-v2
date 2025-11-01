@@ -69,6 +69,7 @@ from rest_framework.generics import (
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from django.db import (
+    OperationalError,
     transaction,
 )
 from django.db.models import (
