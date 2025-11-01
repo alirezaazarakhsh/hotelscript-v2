@@ -102,7 +102,7 @@ urlpatterns = [
     path('reservation/factor/signator/',ReservationInvoiceSettingsAPIView.as_view(),name='reservation-invoice-settings' ),
     
     # ==== Invoice Detail ====
-    path('reservation/invoice/<str:tracking_code>/', ReservationInvoiceDetailAPIView.as_view(), name='reservation-invoice-detail'),
+    path('reservation/invoices/<str:tracking_code>/', ReservationInvoiceDetailAPIView.as_view(), name='reservation-invoice-detail'),
 
     # ==== hotel seo ===
     path('hotels/<slug:hotel_slug>/seo/', HotelSEOView.as_view(), name='hotel-seo'),
