@@ -4568,7 +4568,7 @@ class UserReservationListAPIView(APIView):
             hotel_name = self.get_hotel_name(reservation)
             cancellation_status = self.get_cancellation_status(reservation)
             
-            # تبدیل تمام تاریخ‌ها به جلالی
+            # تبدیل تمام تاریخ‌ها به شمسی
             check_in_jalali = self.convert_to_jalali_date(reservation.check_in_date)
             check_out_jalali = self.convert_to_jalali_date(reservation.check_out_date)
             created_at_jalali = self.convert_to_jalali_datetime(reservation.created_at)
