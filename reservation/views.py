@@ -4464,7 +4464,6 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
-
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4525,14 +4524,18 @@ class UserReservationListAPIView(APIView):
         
         for attempt in range(max_retries):
             try:
+                print(f"Attempt {attempt + 1}/{max_retries} to fetch reservations...")
+                
                 # تست اتصال به دیتابیس قبل از اجرای کوئری
                 self._test_database_connection()
+                print("Database connection successful")
                 
                 # اجرای منطق اصلی
                 return self._get_reservations(request)
                 
-            except OperationalError as e:
-                print(f"Database connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+            except (OperationalError, DatabaseError) as e:
+                print(f"Database connection failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                print(f"Error type: {type(e).__name__}")
                 
                 if attempt < max_retries - 1:
                     print(f"Retrying in {retry_delay} seconds...")
@@ -4540,6 +4543,7 @@ class UserReservationListAPIView(APIView):
                     retry_delay *= 2  # exponential backoff
                 else:
                     # بعد از آخرین تلاش ناموفق
+                    print("All retry attempts failed")
                     return Response(
                         {
                             "error": "خطا در اتصال به پایگاه داده",
@@ -4550,29 +4554,43 @@ class UserReservationListAPIView(APIView):
                     )
             except Exception as e:
                 # برای سایر خطاها
-                print(f"Unexpected error: {e}")
+                print(f"Unexpected error: {str(e)}")
+                print(f"Error type: {type(e).__name__}")
+                print("Traceback:")
+                print(traceback.format_exc())
+                
                 return Response(
                     {
                         "error": "خطای سرور",
-                        "detail": "خطای غیرمنتظره رخ داده است",
-                        "code": "server_error"
+                        "detail": f"خطای غیرمنتظره رخ داده است: {str(e)}",
+                        "code": "server_error",
+                        "error_type": type(e).__name__
                     },
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
     def _test_database_connection(self):
         """تست اتصال به دیتابیس"""
-        connection = connections['default']
-        if not connection.is_usable():
-            connection.close()
-        connection.ensure_connection()
+        try:
+            connection = connections['default']
+            if not connection.is_usable():
+                connection.close()
+            connection.ensure_connection()
+            print("Database connection test passed")
+        except Exception as e:
+            print(f"Database connection test failed: {str(e)}")
+            raise
 
     def _get_reservations(self, request):
         """منطق اصلی دریافت رزروها"""
+        print("Starting to fetch reservations...")
+        
         # ابتدا وضعیت پرداخت رزروهای در حال انتظار را بررسی و به روز کنیم
+        print("Updating expired payments...")
         self.update_expired_payments(request.user)
 
         # زیرکوئری برای دریافت آخرین وضعیت کنسلی
+        print("Creating cancellation subquery...")
         latest_cancellation_subquery = Subquery(
             UserCancellation.objects.filter(
                 reservation=OuterRef('pk')
@@ -4580,6 +4598,7 @@ class UserReservationListAPIView(APIView):
         )
 
         # کوئری‌ست اصلی با annotate برای وضعیت کنسلی
+        print("Building main queryset...")
         queryset = Reservationhotel.objects.filter(
             buyer=request.user
         ).select_related('buyer').prefetch_related(
@@ -4589,9 +4608,12 @@ class UserReservationListAPIView(APIView):
             latest_cancellation_status=latest_cancellation_subquery
         ).order_by('-created_at')
 
+        print(f"Total reservations found: {queryset.count()}")
+
         # دریافت پارامترهای صفحه‌بندی
         page = request.query_params.get('p', 1)
         page_size = request.query_params.get('page_size', 18)
+        print(f"Pagination parameters - page: {page}, page_size: {page_size}")
 
         # اعتبارسنجی page_size
         try:
@@ -4611,19 +4633,28 @@ class UserReservationListAPIView(APIView):
         except (TypeError, ValueError):
             page = 1
 
+        print(f"Final pagination - page: {page}, page_size: {page_size}")
+
         # پجینیشن با Django Paginator
+        print("Creating paginator...")
         paginator = DjangoPaginator(queryset, page_size)
         
         try:
             reservations_page = paginator.page(page)
+            print(f"Page {page} retrieved successfully")
         except PageNotAnInteger:
+            print("Page not integer, using page 1")
             reservations_page = paginator.page(1)
         except EmptyPage:
+            print("Empty page, using last page")
             reservations_page = paginator.page(paginator.num_pages)
 
         # سریالایز کردن دستی داده‌ها
+        print("Serializing data...")
         data = []
-        for reservation in reservations_page:
+        for i, reservation in enumerate(reservations_page):
+            print(f"Processing reservation {i + 1}: {reservation.tracking_code}")
+            
             hotel_name = self.get_hotel_name(reservation)
             cancellation_status = self.get_cancellation_status(reservation)
             formatted_created_at = self.format_created_at(reservation.created_at)
@@ -4647,6 +4678,7 @@ class UserReservationListAPIView(APIView):
             'results': data
         }
 
+        print(f"Successfully returning {len(data)} reservations")
         return Response(response_data, status=status.HTTP_200_OK)
 
     def update_expired_payments(self, user):
@@ -4655,6 +4687,7 @@ class UserReservationListAPIView(APIView):
         """
         try:
             twenty_minutes_ago = timezone.now() - timedelta(minutes=20)
+            print(f"Looking for expired payments before: {twenty_minutes_ago}")
             
             # پیدا کردن رزروهای در حال انتظار که بیش از 20 دقیقه گذشته ایجاد شده‌اند
             expired_reservations = Reservationhotel.objects.filter(
@@ -4663,41 +4696,44 @@ class UserReservationListAPIView(APIView):
                 created_at__lte=twenty_minutes_ago
             )
             
+            expired_count = expired_reservations.count()
+            print(f"Found {expired_count} expired reservations")
+            
             # به روزرسانی وضعیت به 'failed'
             updated_count = expired_reservations.update(payment_status='failed')
             
             if updated_count > 0:
                 print(f"Updated {updated_count} expired reservations to 'failed' status")
-        except OperationalError as e:
-            print(f"Failed to update expired payments due to database error: {e}")
-            # این خطا را نادیده می‌گیریم چون ممکن است موقتی باشد
+            else:
+                print("No expired reservations to update")
+                
         except Exception as e:
-            print(f"Unexpected error in update_expired_payments: {e}")
+            print(f"Error in update_expired_payments: {str(e)}")
+            print(traceback.format_exc())
 
     def get_hotel_name(self, reservation):
         """استخراج نام هتل از رزرو"""
         try:
             first_room = reservation.reservation_rooms.first()
             if first_room and first_room.room and first_room.room.hotel:
-                return first_room.room.hotel.name
+                hotel_name = first_room.room.hotel.name
+                print(f"Hotel name found: {hotel_name}")
+                return hotel_name
+            print("Hotel name not found")
             return "نامشخص"
         except Exception as e:
-            print(f"Error getting hotel name: {e}")
+            print(f"Error getting hotel name: {str(e)}")
             return "نامشخص"
 
     def get_cancellation_status(self, reservation):
         """
         محاسبه وضعیت کنسلی برای یک رزرو
-        
-        منطق:
-        - True: اگر آخرین درخواست کنسلی دارای وضعیت 'approved' باشد
-        - False: اگر آخرین درخواست کنسلی دارای وضعیت 'rejected' باشد  
-        - None: اگر هیچ درخواست کنسلی وجود ندارد یا وضعیت 'pending' است
         """
         try:
             # استفاده از فیلد annotate شده
             if hasattr(reservation, 'latest_cancellation_status'):
                 latest_status = reservation.latest_cancellation_status
+                print(f"Latest cancellation status from annotation: {latest_status}")
                 if latest_status == 'approved':
                     return True
                 elif latest_status == 'rejected':
@@ -4706,33 +4742,44 @@ class UserReservationListAPIView(APIView):
             # fallback: بررسی از طریق relation در صورت عدم وجود annotate
             latest_cancellation = reservation.cancellations.order_by('-created_at').first()
             if latest_cancellation:
+                print(f"Latest cancellation from relation: {latest_cancellation.status}")
                 if latest_cancellation.status == 'approved':
                     return True
                 elif latest_cancellation.status == 'rejected':
                     return False
             
+            print("No cancellation found")
             return None
         except Exception as e:
-            print(f"Error getting cancellation status: {e}")
+            print(f"Error getting cancellation status: {str(e)}")
             return None
 
     def format_created_at(self, created_at):
         """فرمت‌دهی تاریخ ایجاد به صورت جلالی"""
         if not created_at:
+            print("created_at is None")
             return None
         
         try:
+            print(f"Original created_at: {created_at}, type: {type(created_at)}")
+            
             # از آنجایی که created_at از نوع jDateTimeField است، مستقیماً از آن استفاده می‌کنیم
             if hasattr(created_at, 'strftime'):
-                return created_at.strftime('%Y/%m/%d %H:%M')
+                formatted = created_at.strftime('%Y/%m/%d %H:%M')
+                print(f"Formatted created_at: {formatted}")
+                return formatted
             else:
                 # اگر رشته است یا فرمت دیگری دارد
-                return str(created_at)
+                formatted = str(created_at)
+                print(f"Created_at as string: {formatted}")
+                return formatted
                 
         except Exception as e:
             # در صورت بروز خطا، تاریخ اصلی را برگردان
-            print(f"Error formatting created_at: {e}")
+            print(f"Error formatting created_at: {str(e)}")
+            print(traceback.format_exc())
             return str(created_at) if created_at else None
+        
 
 
 
