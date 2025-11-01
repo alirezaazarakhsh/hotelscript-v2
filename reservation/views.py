@@ -5062,7 +5062,6 @@ class ReservationInvoiceDetailAPIView(APIView):
                                 {"name": "علی رضایی", "type": "اصلی"},
                                 {"name": "سارا احمدی", "type": "اضافه"}
                             ],
-                            "additional_notes": "لطفاً اتاق با ویو شهر باشد.",
                             "hotel_rules": "ورود از ساعت 14، خروج تا ساعت 12..."
                         }
                     }
@@ -5147,7 +5146,6 @@ class ReservationInvoiceDetailAPIView(APIView):
                 },
                 "rooms": rooms_data,
                 "passengers": passengers_data,
-                "additional_notes": reservation.additional_notes or "ندارد",
                 "hotel_rules": hotel.rules or "قوانین ثبت نشده است."
             }
         }
