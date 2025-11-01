@@ -4514,9 +4514,6 @@ class UserReservationListAPIView(APIView):
         self.update_expired_payments(request.user)
 
         # زیرکوئری برای دریافت آخرین وضعیت کنسلی
-        from django.db.models import OuterRef, Subquery
-        from reservation.models import UserCancellation, Reservationhotel
-        
         latest_cancellation_subquery = Subquery(
             UserCancellation.objects.filter(
                 reservation=OuterRef('pk')
@@ -4570,17 +4567,21 @@ class UserReservationListAPIView(APIView):
         for reservation in reservations_page:
             hotel_name = self.get_hotel_name(reservation)
             cancellation_status = self.get_cancellation_status(reservation)
-            formatted_created_at = self.format_created_at(reservation.created_at)
+            
+            # تبدیل تمام تاریخ‌ها به جلالی
+            check_in_jalali = self.convert_to_jalali_date(reservation.check_in_date)
+            check_out_jalali = self.convert_to_jalali_date(reservation.check_out_date)
+            created_at_jalali = self.convert_to_jalali_datetime(reservation.created_at)
 
             data.append({
                 "tracking_code": reservation.tracking_code,
                 "hotel_name": hotel_name,
-                "check_in_date": str(reservation.check_in_date),
-                "check_out_date": str(reservation.check_out_date),
+                "check_in_date": check_in_jalali,
+                "check_out_date": check_out_jalali,
                 "total_guests": reservation.total_guests,
                 "payment_status": reservation.payment_status,
                 "cancellation_status": cancellation_status,
-                "created_at": formatted_created_at,
+                "created_at": created_at_jalali,
             })
 
         # ساختار پاسخ Paginator سفارشی
@@ -4593,9 +4594,63 @@ class UserReservationListAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+    def convert_to_jalali_date(self, date_obj):
+        """تبدیل تاریخ به فرمت جلالی YYYY-MM-DD"""
+        if not date_obj:
+            return "نامشخص"
+        
+        try:
+            # اگر تاریخ رشته است، ابتدا به date تبدیل کن
+            if isinstance(date_obj, str):
+                from django.utils.dateparse import parse_date
+                date_obj = parse_date(date_obj)
+                if not date_obj:
+                    return "تاریخ نامعتبر"
+            
+            if hasattr(date_obj, 'year'):
+                # تبدیل تاریخ به جلالی
+                jalali_date = jdatetime.date.fromgregorian(date=date_obj)
+                return jalali_date.strftime('%Y-%m-%d')
+            else:
+                return str(date_obj)
+                
+        except Exception as e:
+            print(f"Error converting date to jalali: {e}")
+            # اگر تبدیل جلالی شکست خورد، تاریخ میلادی برگردان
+            try:
+                return date_obj.strftime('%Y-%m-%d')
+            except:
+                return str(date_obj)
+
+    def convert_to_jalali_datetime(self, datetime_obj):
+        """تبدیل تاریخ-زمان به فرمت جلالی YYYY/MM/DD HH:MM"""
+        if not datetime_obj:
+            return "نامشخص"
+        
+        try:
+            # اگر datetime رشته است، ابتدا به datetime تبدیل کن
+            if isinstance(datetime_obj, str):
+                from django.utils.dateparse import parse_datetime
+                datetime_obj = parse_datetime(datetime_obj)
+                if not datetime_obj:
+                    return "تاریخ نامعتبر"
+            
+            if hasattr(datetime_obj, 'year'):
+                # تبدیل تاریخ-زمان به جلالی
+                jalali_datetime = jdatetime.datetime.fromgregorian(datetime=datetime_obj)
+                return jalali_datetime.strftime('%Y/%m/%d %H:%M')
+            else:
+                return str(datetime_obj)
+                
+        except Exception as e:
+            print(f"Error converting datetime to jalali: {e}")
+            # اگر تبدیل جلالی شکست خورد، تاریخ میلادی برگردان
+            try:
+                return datetime_obj.strftime('%Y/%m/%d %H:%M')
+            except:
+                return str(datetime_obj)
+
     def update_expired_payments(self, user):
-        from django.utils import timezone
-        from datetime import timedelta
         """
         به روزرسانی وضعیت پرداخت رزروهایی که بیش از 20 دقیقه در حالت pending مانده‌اند
         """
@@ -4647,39 +4702,6 @@ class UserReservationListAPIView(APIView):
                 return False
         
         return None
-
-    def format_created_at(self, created_at):
-        """فرمت‌دهی تاریخ ایجاد به صورت جلالی"""
-        if not created_at:
-            return None
-        
-        # اگر از کتابخانه تبدیل تاریخ استفاده می‌کنید، اینجا تبدیل انجام دهید
-        # برای مثال با استفاده از jdatetime:
-        try:
-            import jdatetime
-            # روش صحیح تبدیل تاریخ
-            if isinstance(created_at, str):
-                # اگر created_at رشته است، ابتدا به datetime تبدیل کنید
-                from django.utils.dateparse import parse_datetime
-                created_at = parse_datetime(created_at)
-            
-            # تبدیل به تاریخ جلالی
-            jalali_datetime = jdatetime.datetime.fromgregorian(
-                year=created_at.year,
-                month=created_at.month,
-                day=created_at.day,
-                hour=created_at.hour,
-                minute=created_at.minute
-            )
-            return jalali_datetime.strftime('%Y/%m/%d %H:%M')
-        except ImportError:
-            # اگر jdatetime نصب نیست، تاریخ میلادی برگردانده شود
-            return created_at.strftime('%Y/%m/%d %H:%M') if hasattr(created_at, 'strftime') else str(created_at)
-        except Exception as e:
-            # در صورت بروز خطا، تاریخ میلادی برگردانده شود
-            print(f"Error converting date: {e}")
-            return created_at.strftime('%Y/%m/%d %H:%M') if hasattr(created_at, 'strftime') else str(created_at)
-
 
 
 # ای پی ای دلایل کنسلی 
