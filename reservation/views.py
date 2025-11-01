@@ -4463,7 +4463,6 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
-
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4657,35 +4656,26 @@ class UserReservationListAPIView(APIView):
             return None
         
         try:
-            # تبدیل به زمان محلی ایران (تهران)
-            if timezone.is_aware(created_at):
-                # اگر زمان آگاه است (UTC)، به وقت تهران تبدیل کن
-                tehran_tz = timezone.get_fixed_timezone(4*60 + 30)  # +4:30
-                local_created_at = timezone.localtime(created_at, tehran_tz)
+            # از آنجایی که created_at از نوع jDateTimeField است، مستقیماً از آن استفاده می‌کنیم
+            # و فقط فرمت می‌دهیم
+            if hasattr(created_at, 'year'):  # اگر شی jdatetime است
+                year = created_at.year
+                month = created_at.month
+                day = created_at.day
+                hour = created_at.hour
+                minute = created_at.minute
+                
+                # فرمت‌دهی به صورت سال/ماه/روز ساعت:دقیقه
+                formatted_date = f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}"
+                return formatted_date
             else:
-                # اگر زمان ساده است، مستقیماً استفاده کن
-                local_created_at = created_at
-            
-            # تبدیل به تاریخ جلالی
-            jalali_datetime = jdatetime.datetime.fromgregorian(
-                datetime=local_created_at,
-                locale='fa_IR'  # برای نمایش فارسی
-            )
-            return jalali_datetime.strftime('%Y/%m/%d %H:%M')
-            
-        except ImportError:
-            # اگر jdatetime نصب نیست
-            if timezone.is_aware(created_at):
-                local_created_at = timezone.localtime(created_at)
-                return local_created_at.strftime('%Y/%m/%d %H:%M')
-            return created_at.strftime('%Y/%m/%d %H:%M')
+                # اگر رشته است، مستقیماً برمی‌گردانیم
+                return str(created_at)
+                
         except Exception as e:
-            # در صورت بروز خطا، لاگ خطا و برگرداندن تاریخ میلادی
+            # در صورت بروز خطا، تاریخ اصلی را برگردان
             print(f"Error formatting created_at: {e}")
-            if timezone.is_aware(created_at):
-                local_created_at = timezone.localtime(created_at)
-                return local_created_at.strftime('%Y/%m/%d %H:%M')
-            return created_at.strftime('%Y/%m/%d %H:%M')
+            return str(created_at) if created_at else None
 
 
 
