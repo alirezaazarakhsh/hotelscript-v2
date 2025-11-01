@@ -2748,10 +2748,13 @@ class BestHotelspageAPI(ListAPIView):
         except ValueError:
             return Response({'detail': 'پارامترهای عددی معتبر نیستند.'}, status=400)
 
+        # 🔧 اصلاح: ایجاد یک queryset واحد برای date_prices
+        date_prices_queryset = RoomDatePrice.objects.select_related('room', 'user_level')
+
         hotels_qs = Hotel.objects.all().select_related('city__province', 'type').prefetch_related(
             'public_tags',
             Prefetch('rooms', queryset=Room.objects.prefetch_related(
-                Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
+                Prefetch('date_prices', queryset=date_prices_queryset)
             )),
             Prefetch('comments', queryset=Comment.objects.filter(is_approved=True))
         )
@@ -2765,14 +2768,16 @@ class BestHotelspageAPI(ListAPIView):
                 hotels_qs = hotels_qs.filter(stars__in=star_values)
             except ValueError:
                 return Response({'detail': 'مقدار star باید عدد یا لیست جدا شده با کاما باشد.'}, status=400)
+        
         if residence_type:
             try:
                 residence_ids = [int(x.strip()) for x in residence_type.split(',') if x.strip()]
                 logger.info(f"Filtering by residence_type IDs: {residence_ids}")
-                if residence_ids:  # فقط اگر لیست residence_ids خالی نباشد، فیلتر اعمال شود
+                if residence_ids:
                     hotels_qs = hotels_qs.filter(type__id__in=residence_ids)
             except ValueError:
                 return Response({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'}, status=400)
+        
         if room_facilities:
             try:
                 room_fac_ids = [int(x) for x in room_facilities.split(',') if x.strip()]
