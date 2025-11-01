@@ -13,8 +13,7 @@ import copy
 from amqp import NotFound
 from celery import shared_task
 from channels.layers import get_channel_layer
-from django.core.paginator import Paginator as DjangoPaginator
-from django.core.paginator import EmptyPage, PageNotAnInteger
+from django.core.paginator import Paginator as DjangoPaginator, EmptyPage, PageNotAnInteger
 from django.db.models import Subquery
 from django.db.models import OuterRef
 from asgiref.sync import async_to_sync
@@ -4460,6 +4459,56 @@ class HotelSEOView(APIView):
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_summary="دریافت لیست رزروهای کاربر",
+        operation_description="""
+        لیست رزروهای کاربر احراز هویت‌شده با صفحه‌بندی سفارشی.
+        
+        پارامترها:
+        - p: شماره صفحه (مثلاً p=1)
+        - page_size: تعداد آیتم در هر صفحه (پیش‌فرض: 10، حداکثر: 100)
+        
+        فیلدهای بازگشتی:
+        - tracking_code
+        - hotel_name
+        - check_in_date (جلالی)
+        - check_out_date (جلالی)
+        - total_guests
+        - payment_status
+        - cancellation_status (وضعیت کنسلی: true=تایید شده, false=عدم تایید, null=بدون درخواست)
+        - created_at (جلالی: 1403/06/15 14:30)
+        """,
+        manual_parameters=[
+            openapi.Parameter('p', openapi.IN_QUERY, description="شماره صفحه", type=openapi.TYPE_INTEGER, example=1),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد آیتم در صفحه (حداکثر 100)", type=openapi.TYPE_INTEGER, example=10),
+        ],
+        responses={
+            200: openapi.Response(
+                description="لیست رزروها با صفحه‌بندی",
+                examples={
+                    "application/json": {
+                        "count": 23,
+                        "total_pages": 3,
+                        "current_page": 1,
+                        "results": [
+                            {
+                                "tracking_code": "RSV123456",
+                                "hotel_name": "هتل آزادی تهران",
+                                "check_in_date": "1403-07-01",
+                                "check_out_date": "1403-07-05",
+                                "total_guests": 4,
+                                "payment_status": "paid",
+                                "cancellation_status": True,
+                                "created_at": "1403/06/15 14:30"
+                            }
+                        ]
+                    }
+                }
+            ),
+            401: "احراز هویت لازم است."
+        },
+        tags=["reservedashboard-api"]
+    )
     def get(self, request):
         # ابتدا وضعیت پرداخت رزروهای در حال انتظار را بررسی و به روز کنیم
         self.update_expired_payments(request.user)
@@ -4506,8 +4555,8 @@ class UserReservationListAPIView(APIView):
         except (TypeError, ValueError):
             page = 1
 
-        # پجینیشن با Django Paginator - این قسمت اصلاح شده
-        paginator = Paginator(queryset, page_size)
+        # پجینیشن با Django Paginator - استفاده از DjangoPaginator
+        paginator = DjangoPaginator(queryset, page_size)
         
         try:
             reservations_page = paginator.page(page)
@@ -4544,7 +4593,6 @@ class UserReservationListAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-    # سایر متدها بدون تغییر باقی می‌مانند...
     def update_expired_payments(self, user):
         from django.utils import timezone
         from datetime import timedelta
