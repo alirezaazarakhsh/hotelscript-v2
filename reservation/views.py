@@ -5087,8 +5087,19 @@ class ReservationInvoiceDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # تبدیل تاریخ‌ها به شمسی
-        created_jalali = jdatetime.datetime.fromgregorian(datetime=reservation.created_at).strftime('%Y/%m/%d ساعت %H:%M')
+        # تبدیل تاریخ‌ها به شمسی - اصلاح شده
+        # از آنجایی که created_at از نوع jDateTimeField است، مستقیماً فرمت می‌کنیم
+        try:
+            if hasattr(reservation.created_at, 'strftime'):
+                created_jalali = reservation.created_at.strftime('%Y/%m/%d ساعت %H:%M')
+            else:
+                # اگر created_at رشته است یا فرمت دیگری دارد
+                created_jalali = str(reservation.created_at)
+        except Exception as e:
+            print(f"Error formatting created_at: {e}")
+            created_jalali = str(reservation.created_at) if reservation.created_at else "نامشخص"
+
+        # تاریخ‌های check_in و check_out از قبل شمسی هستند
         check_in_jalali = reservation.check_in_date.strftime('%Y/%m/%d')
         check_out_jalali = reservation.check_out_date.strftime('%Y/%m/%d')
 
