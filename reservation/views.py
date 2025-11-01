@@ -4456,6 +4456,7 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
+
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4514,9 +4515,6 @@ class UserReservationListAPIView(APIView):
         self.update_expired_payments(request.user)
 
         # زیرکوئری برای دریافت آخرین وضعیت کنسلی
-        from django.db.models import OuterRef, Subquery
-        from reservation.models import UserCancellation, Reservationhotel
-        
         latest_cancellation_subquery = Subquery(
             UserCancellation.objects.filter(
                 reservation=OuterRef('pk')
@@ -4555,7 +4553,7 @@ class UserReservationListAPIView(APIView):
         except (TypeError, ValueError):
             page = 1
 
-        # پجینیشن با Django Paginator - استفاده از DjangoPaginator
+        # پجینیشن با Django Paginator
         paginator = DjangoPaginator(queryset, page_size)
         
         try:
@@ -4594,8 +4592,6 @@ class UserReservationListAPIView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
     def update_expired_payments(self, user):
-        from django.utils import timezone
-        from datetime import timedelta
         """
         به روزرسانی وضعیت پرداخت رزروهایی که بیش از 20 دقیقه در حالت pending مانده‌اند
         """
@@ -4653,19 +4649,35 @@ class UserReservationListAPIView(APIView):
         if not created_at:
             return None
         
-        # اگر از کتابخانه تبدیل تاریخ استفاده می‌کنید، اینجا تبدیل انجام دهید
-        # برای مثال با استفاده از jdatetime:
         try:
-            import jdatetime
+            # تبدیل به زمان محلی ایران (تهران)
+            if timezone.is_aware(created_at):
+                # اگر زمان آگاه است (UTC)، به وقت تهران تبدیل کن
+                tehran_tz = timezone.get_fixed_timezone(4*60 + 30)  # +4:30
+                local_created_at = timezone.localtime(created_at, tehran_tz)
+            else:
+                # اگر زمان ساده است، مستقیماً استفاده کن
+                local_created_at = created_at
+            
+            # تبدیل به تاریخ جلالی
             jalali_datetime = jdatetime.datetime.fromgregorian(
-                datetime=created_at
+                datetime=local_created_at,
+                locale='fa_IR'  # برای نمایش فارسی
             )
             return jalali_datetime.strftime('%Y/%m/%d %H:%M')
+            
         except ImportError:
-            # اگر jdatetime نصب نیست، تاریخ میلادی برگردانده شود
+            # اگر jdatetime نصب نیست
+            if timezone.is_aware(created_at):
+                local_created_at = timezone.localtime(created_at)
+                return local_created_at.strftime('%Y/%m/%d %H:%M')
             return created_at.strftime('%Y/%m/%d %H:%M')
-        except Exception:
-            # در صورت بروز خطا، تاریخ میلادی برگردانده شود
+        except Exception as e:
+            # در صورت بروز خطا، لاگ خطا و برگرداندن تاریخ میلادی
+            print(f"Error formatting created_at: {e}")
+            if timezone.is_aware(created_at):
+                local_created_at = timezone.localtime(created_at)
+                return local_created_at.strftime('%Y/%m/%d %H:%M')
             return created_at.strftime('%Y/%m/%d %H:%M')
 
 
