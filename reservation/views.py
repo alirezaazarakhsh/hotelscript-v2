@@ -4657,16 +4657,28 @@ class UserReservationListAPIView(APIView):
         # برای مثال با استفاده از jdatetime:
         try:
             import jdatetime
+            # روش صحیح تبدیل تاریخ
+            if isinstance(created_at, str):
+                # اگر created_at رشته است، ابتدا به datetime تبدیل کنید
+                from django.utils.dateparse import parse_datetime
+                created_at = parse_datetime(created_at)
+            
+            # تبدیل به تاریخ جلالی
             jalali_datetime = jdatetime.datetime.fromgregorian(
-                datetime=created_at
+                year=created_at.year,
+                month=created_at.month,
+                day=created_at.day,
+                hour=created_at.hour,
+                minute=created_at.minute
             )
             return jalali_datetime.strftime('%Y/%m/%d %H:%M')
         except ImportError:
             # اگر jdatetime نصب نیست، تاریخ میلادی برگردانده شود
-            return created_at.strftime('%Y/%m/%d %H:%M')
-        except Exception:
+            return created_at.strftime('%Y/%m/%d %H:%M') if hasattr(created_at, 'strftime') else str(created_at)
+        except Exception as e:
             # در صورت بروز خطا، تاریخ میلادی برگردانده شود
-            return created_at.strftime('%Y/%m/%d %H:%M')
+            print(f"Error converting date: {e}")
+            return created_at.strftime('%Y/%m/%d %H:%M') if hasattr(created_at, 'strftime') else str(created_at)
 
 
 
