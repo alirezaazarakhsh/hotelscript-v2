@@ -2867,6 +2867,38 @@ class GetPriceRangeAPI(generics.GenericAPIView):
     """
     permission_classes = [AllowAny]
 
+    def get_user_level(self, request):
+        """تعیین سطح کاربری"""
+        user_level = None
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.natural_profile
+                if profile.level:
+                    user_level = profile.level
+            except NaturalProfile.DoesNotExist:
+                pass
+        return user_level
+
+    def get_price_data_for_date(self, room, date, user_level):
+        """انتخاب قیمت بر اساس سطح کاربری"""
+        price_data_qs = room.date_prices.filter(
+            start_date__lte=date,
+            end_date__gte=date
+        )
+
+        # اولویت اول: قیمت سطح کاربری
+        if user_level:
+            level_prices = price_data_qs.filter(user_level=user_level)
+            if level_prices.exists():
+                return level_prices.order_by('-id').first()
+        
+        # اولویت دوم: قیمت عمومی
+        public_prices = price_data_qs.filter(user_level__isnull=True)
+        if public_prices.exists():
+            return public_prices.order_by('-id').first()
+        
+        return None
+
     def get_average_score(self, hotel):
         comments = Comment.objects.filter(hotel=hotel, is_approved=True)
         if not comments.exists():
@@ -2906,7 +2938,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
 
-    def get_room_data(self, hotel, start_date_obj, end_date_obj, passengers_list):
+    def get_room_data(self, hotel, start_date_obj, end_date_obj, passengers_list, user_level=None):
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
 
@@ -2924,7 +2956,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             has_zero_price = False
 
             for date in date_range:
-                price_data = room.date_prices.filter(start_date__lte=date, end_date__gte=date).order_by('-id').select_related('user_level').first()
+                # استفاده از منطق انتخاب قیمت بر اساس سطح کاربری
+                price_data = self.get_price_data_for_date(room, date, user_level)
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
 
@@ -2946,6 +2979,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
                         "discount_amount": discount_amount,
                         "discount_date": discount_date,
                         "is_fixed_discount_one_time": price_data.is_fixed_discount_one_time if price_data else False,
+                        "user_level": price_data.user_level.title if price_data and price_data.user_level else "عمومی",
                         "extra_capacity_price": price_data.extra_passenger_price if price_data else 0
                     } if status == "open" else None
                 })
@@ -2962,7 +2996,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             if total_price == 0 or total_price_discount == 0:
                 continue
 
-            first_price_data = room.date_prices.filter(start_date__lte=start_date_obj, end_date__gte=start_date_obj).order_by('-id').select_related('user_level').first()
+            # قیمت اولین روز با در نظر گرفتن سطح کاربری
+            first_price_data = self.get_price_data_for_date(room, start_date_obj, user_level)
             if not first_price_data:
                 continue
 
@@ -2982,6 +3017,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
                     "discount_percentage": discount_percentage_first,
                     "discount_date": discount_date_first,
                     "is_fixed_discount_one_time": first_price_data.is_fixed_discount_one_time,
+                    "user_level": first_price_data.user_level.title if first_price_data and first_price_data.user_level else "عمومی",
                     "extra_capacity_price": first_price_data.extra_passenger_price
                 },
                 "price_calendar": price_calendar
@@ -3096,6 +3132,9 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         end_date_str = request.query_params.get('end-date')
         passengers = request.query_params.get('passengers')
 
+        # تعیین سطح کاربری
+        user_level = self.get_user_level(request)
+
         # parse passengers
         try:
             if not passengers or passengers.strip() in ('', '0'):
@@ -3133,7 +3172,8 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         prices = []
 
         for hotel in hotels_qs:
-            min_price_data = self.get_room_data(hotel, start_date, end_date, passenger_list)
+            # ارسال user_level به متد get_room_data
+            min_price_data = self.get_room_data(hotel, start_date, end_date, passenger_list, user_level)
             if min_price_data:
                 total_price = min_price_data.get('total_price', 0)
                 if total_price > 0:
@@ -3146,7 +3186,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             "min_price": int(min(prices)),
             "max_price": int(max(prices)),
         })
-        
         
         
 
