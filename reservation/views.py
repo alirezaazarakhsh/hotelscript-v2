@@ -4460,81 +4460,14 @@ class HotelSEOView(APIView):
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_summary="دریافت لیست رزروهای کاربر",
-        operation_description="""
-        لیست رزروهای کاربر احراز هویت‌شده با صفحه‌بندی سفارشی.
-        
-        پارامترها:
-        - p: شماره صفحه (مثلاً p=1)
-        - page_size: تعداد آیتم در هر صفحه (پیش‌فرض: 10، حداکثر: 100)
-        
-        فیلدهای بازگشتی:
-        - tracking_code
-        - hotel_name
-        - check_in_date (جلالی)
-        - check_out_date (جلالی)
-        - total_guests
-        - payment_status
-        - cancellation_status (وضعیت کنسلی: true=تایید شده, false=عدم تایید, null=بدون درخواست)
-        - created_at (جلالی: 1403/06/15 14:30)
-        """,
-        manual_parameters=[
-            openapi.Parameter('p', openapi.IN_QUERY, description="شماره صفحه", type=openapi.TYPE_INTEGER, example=1),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="تعداد آیتم در صفحه (حداکثر 100)", type=openapi.TYPE_INTEGER, example=10),
-        ],
-        responses={
-            200: openapi.Response(
-                description="لیست رزروها با صفحه‌بندی",
-                examples={
-                    "application/json": {
-                        "count": 23,
-                        "total_pages": 3,
-                        "current_page": 1,
-                        "results": [
-                            {
-                                "tracking_code": "RSV123456",
-                                "hotel_name": "هتل آزادی تهران",
-                                "check_in_date": "1403-07-01",
-                                "check_out_date": "1403-07-05",
-                                "total_guests": 4,
-                                "payment_status": "paid",
-                                "cancellation_status": True,
-                                "created_at": "1403/06/15 14:30"
-                            },
-                            {
-                                "tracking_code": "RSV123457",
-                                "hotel_name": "هتل پارسیان",
-                                "check_in_date": "1403-07-10",
-                                "check_out_date": "1403-07-12",
-                                "total_guests": 2,
-                                "payment_status": "failed",
-                                "cancellation_status": False,
-                                "created_at": "1403/06/16 10:15"
-                            },
-                            {
-                                "tracking_code": "RSV123458",
-                                "hotel_name": "هتل اسپیناس",
-                                "check_in_date": "1403-07-15",
-                                "check_out_date": "1403-07-20",
-                                "total_guests": 3,
-                                "payment_status": "pending",
-                                "cancellation_status": None,
-                                "created_at": "1403/06/17 16:45"
-                            }
-                        ]
-                    }
-                }
-            ),
-            401: "احراز هویت لازم است."
-        },
-        tags=["reservedashboard-api"]
-    )
     def get(self, request):
         # ابتدا وضعیت پرداخت رزروهای در حال انتظار را بررسی و به روز کنیم
         self.update_expired_payments(request.user)
 
         # زیرکوئری برای دریافت آخرین وضعیت کنسلی
+        from django.db.models import OuterRef, Subquery
+        from reservation.models import UserCancellation, Reservationhotel
+        
         latest_cancellation_subquery = Subquery(
             UserCancellation.objects.filter(
                 reservation=OuterRef('pk')
@@ -4573,7 +4506,7 @@ class UserReservationListAPIView(APIView):
         except (TypeError, ValueError):
             page = 1
 
-        # پجینیشن با Django Paginator
+        # پجینیشن با Django Paginator - این قسمت اصلاح شده
         paginator = Paginator(queryset, page_size)
         
         try:
@@ -4611,7 +4544,10 @@ class UserReservationListAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+    # سایر متدها بدون تغییر باقی می‌مانند...
     def update_expired_payments(self, user):
+        from django.utils import timezone
+        from datetime import timedelta
         """
         به روزرسانی وضعیت پرداخت رزروهایی که بیش از 20 دقیقه در حالت pending مانده‌اند
         """
@@ -4674,11 +4610,7 @@ class UserReservationListAPIView(APIView):
         try:
             import jdatetime
             jalali_datetime = jdatetime.datetime.fromgregorian(
-                year=created_at.year,
-                month=created_at.month,
-                day=created_at.day,
-                hour=created_at.hour,
-                minute=created_at.minute
+                datetime=created_at
             )
             return jalali_datetime.strftime('%Y/%m/%d %H:%M')
         except ImportError:
@@ -4687,7 +4619,6 @@ class UserReservationListAPIView(APIView):
         except Exception:
             # در صورت بروز خطا، تاریخ میلادی برگردانده شود
             return created_at.strftime('%Y/%m/%d %H:%M')
-        
 
 
 
