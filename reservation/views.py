@@ -1695,6 +1695,7 @@ class BestSellersListView(BaseHotelListView):
     
 
 
+
 # ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس اسلاگ هتل 
 class HomeHotelByHotelSlugView(APIView):
     permission_classes = (AllowAny,)
@@ -1708,48 +1709,118 @@ class HomeHotelByHotelSlugView(APIView):
         overall_average = all_points.aggregate(avg=Avg("point"))["avg"]
         return round(overall_average or 0, 1)
 
-    def get_hotel_min_price_map(self, hotels):
-        """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل"""
-        today = timezone.now().date()
+    def calculate_discount_timer(self, discount_date):
+        """محاسبه زمان باقی‌مانده تا انقضای تخفیف به ثانیه"""
+        if not discount_date:
+            return 0
+        
+        today_jd = jdatetime.date.today()
+        if discount_date < today_jd:
+            return 0  # تخفیف منقضی شده
+        
+        # ترکیب تاریخ با پایان روز (23:59:59)
+        discount_datetime = jdatetime.datetime.combine(
+            discount_date, 
+            jdatetime.time(23, 59, 59)
+        )
+        
+        # تبدیل به تاریخ میلادی
+        discount_datetime_gregorian = discount_datetime.togregorian()
+        
+        # محاسبه زمان باقی‌مانده
+        now = timezone.now()
+        time_remaining = discount_datetime_gregorian - now
+        
+        return max(int(time_remaining.total_seconds()), 0)
+
+    def get_hotel_min_price_map(self, hotels, user_level=None):
+        """محاسبه کمترین قیمت و اطلاعات تخفیف برای هر هتل با در نظر گرفتن سطح کاربری"""
+        today = jdatetime.date.today()
         hotel_min_price_map = {}
 
         for hotel in hotels:
-            rooms = Room.objects.filter(hotel=hotel)
-            min_price = None
-            min_price_data = {}
+            # فقط اتاق‌های با موجودی > 0
+            active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
+            
+            if not active_rooms.exists():
+                continue  # هتل بدون اتاق فعال را نمایش نده
 
-            for room in rooms:
-                prices = RoomDatePrice.objects.filter(
+            min_price = float('inf')
+            min_price_data = None
+
+            for room in active_rooms:
+                # دریافت تمام قیمت‌های امروز برای این اتاق
+                price_qs = RoomDatePrice.objects.filter(
                     room=room,
                     start_date__lte=today,
                     end_date__gte=today
-                ).select_related('room')
+                ).select_related('room', 'user_level')
 
-                for price in prices:
-                    original_price = price.price
-                    total_price = original_price
-
-                    if price.discount_type == 'percentage' and price.discount_date and price.discount_date >= today:
-                        total_price = original_price * (1 - price.discount_value / 100)
-                        discount_percentage = price.discount_value
-                    elif price.discount_type == 'fixed' and price.is_fixed_discount_one_time:
-                        total_price = original_price - price.discount_value
-                        discount_percentage = (price.discount_value / original_price) * 100 if original_price > 0 else 0
+                # انتخاب قیمت بر اساس سطح کاربری (اولویت با سطح کاربری، سپس عمومی)
+                final_prices = None
+                if user_level:
+                    level_prices = price_qs.filter(user_level=user_level)
+                    if level_prices.exists():
+                        final_prices = level_prices
+                
+                if not final_prices:
+                    public_prices = price_qs.filter(user_level__isnull=True)
+                    if public_prices.exists():
+                        final_prices = public_prices
                     else:
-                        discount_percentage = 0.0
+                        # اگر هیچ قیمت عمومی یا سطح کاربری نبود، از هر قیمتی استفاده کن
+                        all_prices = price_qs
+                        if all_prices.exists():
+                            final_prices = all_prices
+                        else:
+                            continue  # اگر هیچ قیمتی نبود، این اتاق را نادیده بگیر
 
-                    if min_price is None or total_price < min_price:
-                        min_price = total_price
+                for price_data in final_prices:
+                    base_price = price_data.price
+                    
+                    # اگر قیمت صفر یا منفی باشد، نادیده بگیر
+                    if base_price <= 0:
+                        continue
+
+                    # محاسبه قیمت نهایی با تخفیف
+                    final_price = base_price
+                    discount_percentage = 0
+                    timer_seconds = 0
+
+                    if (price_data.discount_type == 'percentage' and
+                            price_data.discount_date and
+                            price_data.discount_date >= today):
+                        # تخفیف درصدی معتبر
+                        discount_percentage = price_data.discount_value
+                        final_price = int(base_price * (100 - discount_percentage) / 100)
+                        timer_seconds = self.calculate_discount_timer(price_data.discount_date)
+                        
+                    elif price_data.discount_type == 'fixed':
+                        # تخفیف ثابت
+                        final_price = max(base_price - price_data.discount_value, 0)
+                        if base_price > 0:
+                            discount_percentage = int((price_data.discount_value / base_price) * 100)
+                    
+                    # اگر قیمت نهایی صفر یا منفی شد، نمایش نده
+                    if final_price <= 0:
+                        continue
+
+                    if final_price < min_price:
+                        min_price = final_price
                         min_price_data = {
-                            'total_price': int(total_price),
-                            'original_total_price': int(original_price),
-                            'discount_type': price.discount_type,
-                            'discount_value': price.discount_value,
-                            'discount_date': price.discount_date,
-                            'discount_percentage': round(discount_percentage, 1)
+                            'total_price': final_price,
+                            'original_total_price': base_price,
+                            'discount_type': price_data.discount_type,
+                            'discount_value': price_data.discount_value,
+                            'discount_date': price_data.discount_date.strftime('%Y/%m/%d') if price_data.discount_date else None,
+                            'discount_percentage': discount_percentage,
+                            'timer_seconds': timer_seconds,
+                            'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
 
-            if min_price_data:
+            # فقط هتل‌هایی که قیمت معتبر دارند را نمایش بده
+            if min_price_data and min_price_data['total_price'] > 0:
                 hotel_min_price_map[hotel.id] = min_price_data
 
         return hotel_min_price_map
@@ -1803,6 +1874,7 @@ class HomeHotelByHotelSlugView(APIView):
                             'discount_expiry': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description="تاریخ انقضای تخفیف"),
                             'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد رزروها"),
                             'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description="میانگین امتیاز کاربران"),
+                            'timer_seconds': openapi.Schema(type=openapi.TYPE_INTEGER, description="زمان باقی‌مانده تا انقضای تخفیف به ثانیه"),
                         }
                     )
                 )
@@ -1823,17 +1895,39 @@ class HomeHotelByHotelSlugView(APIView):
             hotel_slug = hotel_slug.strip()
             input_hotel = Hotel.objects.get(slug=hotel_slug)
             city = input_hotel.city
+            
+            # تعیین سطح کاربری
+            user_level = None
+            if request.user.is_authenticated:
+                try:
+                    profile = request.user.natural_profile
+                    if profile and profile.level:
+                        user_level = profile.level
+                except Exception as e:
+                    logger.warning(f"User level fetch failed in HomeHotelByHotelSlugView: {e}")
+
+            # دریافت هتل‌های همان شهر (به جز هتل فعلی)
             hotels = Hotel.objects.filter(city=city).exclude(slug=hotel_slug).select_related('city', 'type').distinct()
-            hotel_min_price_map = self.get_hotel_min_price_map(hotels)
+            
+            # محاسبه قیمت‌ها با در نظر گرفتن سطح کاربری
+            hotel_min_price_map = self.get_hotel_min_price_map(hotels, user_level)
             context = {'hotel_min_price_map': hotel_min_price_map, 'request': request}
 
-            serialized_hotels = []
+            # فقط هتل‌هایی که قیمت معتبر دارند را سریالایز کن
+            valid_hotels = []
             for hotel in hotels:
-                serialized = HotelListSerializer(hotel, context=context).data
-                serialized['average_score'] = self.get_average_score(hotel)
-                serialized_hotels.append(serialized)
+                if hotel.id in hotel_min_price_map:
+                    serialized = HotelListSerializer(hotel, context=context).data
+                    serialized['average_score'] = self.get_average_score(hotel)
+                    
+                    # اضافه کردن اطلاعات قیمت
+                    price_info = hotel_min_price_map[hotel.id]
+                    serialized['price_info'] = price_info
+                    serialized['timer_seconds'] = price_info.get('timer_seconds', 0)
+                    
+                    valid_hotels.append(serialized)
 
-            return Response(serialized_hotels)
+            return Response(valid_hotels)
         except Hotel.DoesNotExist:
             return Response({'error': 'Hotel not found'}, status=404)
         
