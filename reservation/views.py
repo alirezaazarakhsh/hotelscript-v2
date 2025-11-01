@@ -4463,6 +4463,7 @@ class HotelSEOView(APIView):
 
 
 #ای پی ای لیست رزرو های کاربران در داشبورد 
+
 class UserReservationListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4512,11 +4513,61 @@ class UserReservationListAPIView(APIView):
                     }
                 }
             ),
-            401: "احراز هویت لازم است."
+            401: "احراز هویت لازم است.",
+            503: "خطا در اتصال به پایگاه داده. لطفاً稍后 تلاش کنید."
         },
         tags=["reservedashboard-api"]
     )
     def get(self, request):
+        max_retries = 3
+        retry_delay = 2  # ثانیه
+        
+        for attempt in range(max_retries):
+            try:
+                # تست اتصال به دیتابیس قبل از اجرای کوئری
+                self._test_database_connection()
+                
+                # اجرای منطق اصلی
+                return self._get_reservations(request)
+                
+            except OperationalError as e:
+                print(f"Database connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                
+                if attempt < max_retries - 1:
+                    print(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # exponential backoff
+                else:
+                    # بعد از آخرین تلاش ناموفق
+                    return Response(
+                        {
+                            "error": "خطا در اتصال به پایگاه داده",
+                            "detail": "لطفاً چند لحظه دیگر تلاش کنید",
+                            "code": "database_connection_error"
+                        },
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE
+                    )
+            except Exception as e:
+                # برای سایر خطاها
+                print(f"Unexpected error: {e}")
+                return Response(
+                    {
+                        "error": "خطای سرور",
+                        "detail": "خطای غیرمنتظره رخ داده است",
+                        "code": "server_error"
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
+    def _test_database_connection(self):
+        """تست اتصال به دیتابیس"""
+        connection = connections['default']
+        if not connection.is_usable():
+            connection.close()
+        connection.ensure_connection()
+
+    def _get_reservations(self, request):
+        """منطق اصلی دریافت رزروها"""
         # ابتدا وضعیت پرداخت رزروهای در حال انتظار را بررسی و به روز کنیم
         self.update_expired_payments(request.user)
 
@@ -4601,27 +4652,37 @@ class UserReservationListAPIView(APIView):
         """
         به روزرسانی وضعیت پرداخت رزروهایی که بیش از 20 دقیقه در حالت pending مانده‌اند
         """
-        twenty_minutes_ago = timezone.now() - timedelta(minutes=20)
-        
-        # پیدا کردن رزروهای در حال انتظار که بیش از 20 دقیقه گذشته ایجاد شده‌اند
-        expired_reservations = Reservationhotel.objects.filter(
-            buyer=user,
-            payment_status='pending',
-            created_at__lte=twenty_minutes_ago
-        )
-        
-        # به روزرسانی وضعیت به 'failed'
-        updated_count = expired_reservations.update(payment_status='failed')
-        
-        if updated_count > 0:
-            print(f"Updated {updated_count} expired reservations to 'failed' status")
+        try:
+            twenty_minutes_ago = timezone.now() - timedelta(minutes=20)
+            
+            # پیدا کردن رزروهای در حال انتظار که بیش از 20 دقیقه گذشته ایجاد شده‌اند
+            expired_reservations = Reservationhotel.objects.filter(
+                buyer=user,
+                payment_status='pending',
+                created_at__lte=twenty_minutes_ago
+            )
+            
+            # به روزرسانی وضعیت به 'failed'
+            updated_count = expired_reservations.update(payment_status='failed')
+            
+            if updated_count > 0:
+                print(f"Updated {updated_count} expired reservations to 'failed' status")
+        except OperationalError as e:
+            print(f"Failed to update expired payments due to database error: {e}")
+            # این خطا را نادیده می‌گیریم چون ممکن است موقتی باشد
+        except Exception as e:
+            print(f"Unexpected error in update_expired_payments: {e}")
 
     def get_hotel_name(self, reservation):
         """استخراج نام هتل از رزرو"""
-        first_room = reservation.reservation_rooms.first()
-        if first_room and first_room.room and first_room.room.hotel:
-            return first_room.room.hotel.name
-        return "نامشخص"
+        try:
+            first_room = reservation.reservation_rooms.first()
+            if first_room and first_room.room and first_room.room.hotel:
+                return first_room.room.hotel.name
+            return "نامشخص"
+        except Exception as e:
+            print(f"Error getting hotel name: {e}")
+            return "نامشخص"
 
     def get_cancellation_status(self, reservation):
         """
@@ -4632,23 +4693,27 @@ class UserReservationListAPIView(APIView):
         - False: اگر آخرین درخواست کنسلی دارای وضعیت 'rejected' باشد  
         - None: اگر هیچ درخواست کنسلی وجود ندارد یا وضعیت 'pending' است
         """
-        # استفاده از فیلد annotate شده
-        if hasattr(reservation, 'latest_cancellation_status'):
-            latest_status = reservation.latest_cancellation_status
-            if latest_status == 'approved':
-                return True
-            elif latest_status == 'rejected':
-                return False
-        
-        # fallback: بررسی از طریق relation در صورت عدم وجود annotate
-        latest_cancellation = reservation.cancellations.order_by('-created_at').first()
-        if latest_cancellation:
-            if latest_cancellation.status == 'approved':
-                return True
-            elif latest_cancellation.status == 'rejected':
-                return False
-        
-        return None
+        try:
+            # استفاده از فیلد annotate شده
+            if hasattr(reservation, 'latest_cancellation_status'):
+                latest_status = reservation.latest_cancellation_status
+                if latest_status == 'approved':
+                    return True
+                elif latest_status == 'rejected':
+                    return False
+            
+            # fallback: بررسی از طریق relation در صورت عدم وجود annotate
+            latest_cancellation = reservation.cancellations.order_by('-created_at').first()
+            if latest_cancellation:
+                if latest_cancellation.status == 'approved':
+                    return True
+                elif latest_cancellation.status == 'rejected':
+                    return False
+            
+            return None
+        except Exception as e:
+            print(f"Error getting cancellation status: {e}")
+            return None
 
     def format_created_at(self, created_at):
         """فرمت‌دهی تاریخ ایجاد به صورت جلالی"""
@@ -4657,19 +4722,10 @@ class UserReservationListAPIView(APIView):
         
         try:
             # از آنجایی که created_at از نوع jDateTimeField است، مستقیماً از آن استفاده می‌کنیم
-            # و فقط فرمت می‌دهیم
-            if hasattr(created_at, 'year'):  # اگر شی jdatetime است
-                year = created_at.year
-                month = created_at.month
-                day = created_at.day
-                hour = created_at.hour
-                minute = created_at.minute
-                
-                # فرمت‌دهی به صورت سال/ماه/روز ساعت:دقیقه
-                formatted_date = f"{year}/{month:02d}/{day:02d} {hour:02d}:{minute:02d}"
-                return formatted_date
+            if hasattr(created_at, 'strftime'):
+                return created_at.strftime('%Y/%m/%d %H:%M')
             else:
-                # اگر رشته است، مستقیماً برمی‌گردانیم
+                # اگر رشته است یا فرمت دیگری دارد
                 return str(created_at)
                 
         except Exception as e:
