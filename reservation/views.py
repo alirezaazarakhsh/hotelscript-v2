@@ -1758,22 +1758,29 @@ class HomeHotelByHotelSlugView(APIView):
 
                 # انتخاب قیمت بر اساس سطح کاربری (اولویت با سطح کاربری، سپس عمومی)
                 final_prices = None
+                
+                # اگر کاربر سطح دارد، اول قیمت سطح کاربری را بررسی کن
                 if user_level:
                     level_prices = price_qs.filter(user_level=user_level)
                     if level_prices.exists():
                         final_prices = level_prices
+                        logger.debug(f"Using level prices for user level: {user_level.title} in hotel {hotel.id}")
                 
+                # اگر قیمت سطح کاربری پیدا نشد یا کاربر سطح ندارد، قیمت عمومی را بررسی کن
                 if not final_prices:
                     public_prices = price_qs.filter(user_level__isnull=True)
                     if public_prices.exists():
                         final_prices = public_prices
+                        logger.debug(f"Using public prices for hotel {hotel.id}")
                     else:
-                        # اگر هیچ قیمت عمومی یا سطح کاربری نبود، از هر قیمتی استفاده کن
-                        all_prices = price_qs
-                        if all_prices.exists():
-                            final_prices = all_prices
-                        else:
-                            continue  # اگر هیچ قیمتی نبود، این اتاق را نادیده بگیر
+                        # اگر هیچ قیمت عمومی نبود، از قیمت‌های سایر سطوح استفاده نکن
+                        # چون کاربر حق دسترسی به آن سطوح را ندارد
+                        logger.debug(f"No public prices found for hotel {hotel.id}, skipping")
+                        continue
+
+                # اگر هنوز final_prices مشخص نشده، یعنی هیچ قیمتی برای کاربر موجود نیست
+                if not final_prices:
+                    continue
 
                 for price_data in final_prices:
                     base_price = price_data.price
@@ -1816,12 +1823,15 @@ class HomeHotelByHotelSlugView(APIView):
                             'discount_percentage': discount_percentage,
                             'timer_seconds': timer_seconds,
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
-                            'has_price': True
+                            'has_price': True,
+                            'is_accessible': True  # کاربر به این قیمت دسترسی دارد
                         }
 
-            # فقط هتل‌هایی که قیمت معتبر دارند را نمایش بده
+            # فقط هتل‌هایی که قیمت معتبر و قابل دسترسی دارند را نمایش بده
             if min_price_data and min_price_data['total_price'] > 0:
                 hotel_min_price_map[hotel.id] = min_price_data
+            else:
+                logger.debug(f"Hotel {hotel.id} has no accessible prices for user level: {user_level.title if user_level else 'public'}")
 
         return hotel_min_price_map
 
@@ -1875,6 +1885,7 @@ class HomeHotelByHotelSlugView(APIView):
                             'reservation_count': openapi.Schema(type=openapi.TYPE_INTEGER, description="تعداد رزروها"),
                             'average_score': openapi.Schema(type=openapi.TYPE_NUMBER, description="میانگین امتیاز کاربران"),
                             'timer_seconds': openapi.Schema(type=openapi.TYPE_INTEGER, description="زمان باقی‌مانده تا انقضای تخفیف به ثانیه"),
+                            'is_accessible': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="آیا کاربر به این قیمت دسترسی دارد"),
                         }
                     )
                 )
@@ -1903,8 +1914,15 @@ class HomeHotelByHotelSlugView(APIView):
                     profile = request.user.natural_profile
                     if profile and profile.level:
                         user_level = profile.level
+                        logger.info(f"User level detected: {user_level.title}")
+                    else:
+                        logger.info("User has no level, using public prices")
+                except NaturalProfile.DoesNotExist:
+                    logger.info("No natural profile found, using public prices")
                 except Exception as e:
                     logger.warning(f"User level fetch failed in HomeHotelByHotelSlugView: {e}")
+            else:
+                logger.info("Anonymous user, using public prices")
 
             # دریافت هتل‌های همان شهر (به جز هتل فعلی)
             hotels = Hotel.objects.filter(city=city).exclude(slug=hotel_slug).select_related('city', 'type').distinct()
@@ -1924,14 +1942,14 @@ class HomeHotelByHotelSlugView(APIView):
                     price_info = hotel_min_price_map[hotel.id]
                     serialized['price_info'] = price_info
                     serialized['timer_seconds'] = price_info.get('timer_seconds', 0)
+                    serialized['is_accessible'] = price_info.get('is_accessible', True)
                     
                     valid_hotels.append(serialized)
 
+            logger.info(f"Returning {len(valid_hotels)} accessible hotels for user level: {user_level.title if user_level else 'public'}")
             return Response(valid_hotels)
         except Hotel.DoesNotExist:
             return Response({'error': 'Hotel not found'}, status=404)
-        
-        
         
         
 
