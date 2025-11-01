@@ -4057,19 +4057,22 @@ class ApplyDiscountCodeAPIView(APIView):
             required=['discount_code'],
         ),
         responses={
-            200: openapi.Response("کد با موفقیت اعمال شد", schema=openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
-                    'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
-                    'discount_code': openapi.Schema(type=openapi.TYPE_STRING),
-                    'discount_value': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'remaining_uses': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'usage_limit': openapi.Schema(type=openapi.TYPE_INTEGER),
-                }
-            )),
+            200: openapi.Response(
+                description="کد با موفقیت اعمال شد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
+                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
+                        'discount_code': openapi.Schema(type=openapi.TYPE_STRING),
+                        'discount_value': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'remaining_uses': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'usage_limit': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    }
+                )
+            ),
             400: "خطا در ورودی یا شرایط",
             403: "دسترسی ممنوع",
             404: "رزرو یافت نشد"
@@ -4195,16 +4198,23 @@ class ApplyDiscountCodeAPIView(APIView):
         operation_summary="حذف کد تخفیف از رزرو",
         operation_description="حذف کد تخفیف اعمال‌شده از رزرو (قبل از پرداخت).",
         responses={
-            200: openapi.Response("کد با موفقیت حذف شد", schema=openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
-                    'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
-                    'discount_code': openapi.Schema(type=openapi.TYPE_NULL),
-                    'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER, example=0),
-                }
-            )),
+            200: openapi.Response(
+                description="کد با موفقیت حذف شد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
+                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
+                        'discount_code': openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            nullable=True,
+                            example=None
+                        ),
+                        'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER, example=0),
+                    }
+                )
+            ),
             400: "کد اعمال نشده یا رزرو پرداخت شده",
             404: "رزرو یافت نشد"
         },
