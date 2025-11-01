@@ -1305,18 +1305,42 @@ class SuggesteHotelListView(BaseHotelListView):
                 end_date__gte=today
             )
 
-            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به عمومی)
+            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (اولویت با سطح کاربری، سپس عمومی)
+            final_prices = None
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
                     final_prices = level_prices
+                    logger.debug(f"Using level prices for user level: {user_level.title}")
+            
+            # اگر قیمت سطح کاربری پیدا نشد، از قیمت عمومی استفاده کن
+            if not final_prices:
+                public_prices = price_qs.filter(user_level__isnull=True)
+                if public_prices.exists():
+                    final_prices = public_prices
+                    logger.debug("Using public prices as fallback")
                 else:
-                    final_prices = price_qs.filter(user_level__isnull=True)
-            else:
-                final_prices = price_qs.filter(user_level__isnull=True)
-
-            if not final_prices.exists():
-                continue
+                    # اگر هیچ قیمتی (نه سطح کاربری، نه عمومی) پیدا نشد، باز هم هتل را نمایش بده
+                    # اما با کمترین قیمت از بین تمام قیمت‌های موجود
+                    all_prices = price_qs
+                    if all_prices.exists():
+                        final_prices = all_prices
+                        logger.debug("Using any available prices (no level or public prices found)")
+                    else:
+                        # اگر اصلاً هیچ قیمتی برای امروز نبود، هتل را حذف نکن
+                        # بلکه با وضعیت بدون قیمت نمایش بده
+                        logger.debug(f"Hotel {hotel.id} has no prices for today, but keeping it in list")
+                        hotel_min_price_map[hotel.id] = {
+                            'total_price': None,
+                            'original_total_price': None,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'user_level': "بدون قیمت",
+                            'has_price': False
+                        }
+                        valid_hotels.append(hotel)
+                        continue
 
             # مرحله ۴: پیدا کردن کمترین قیمت
             min_price = float('inf')
@@ -1338,6 +1362,7 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
                 else:
                     if base_price < min_price:
@@ -1349,6 +1374,7 @@ class SuggesteHotelListView(BaseHotelListView):
                             'discount_value': 0,
                             'discount_date': None,
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
 
             if min_price_data:
@@ -1362,9 +1388,15 @@ class SuggesteHotelListView(BaseHotelListView):
         for hotel in valid_hotels:
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
+            
+            # اضافه کردن اطلاعات قیمت به صورت مستقیم
+            price_info = hotel_min_price_map.get(hotel.id, {})
+            serialized['price_info'] = price_info
+            
             special_offers_data.append(serialized)
 
         return Response(special_offers_data)
+    
     
     
 
@@ -1421,18 +1453,42 @@ class AmazingHotelsListView(BaseHotelListView):
                 end_date__gte=today
             )
 
-            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به عمومی)
+            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (اولویت با سطح کاربری، سپس عمومی)
+            final_prices = None
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
                     final_prices = level_prices
+                    logger.debug(f"Using level prices for user level: {user_level.title}")
+            
+            # اگر قیمت سطح کاربری پیدا نشد، از قیمت عمومی استفاده کن
+            if not final_prices:
+                public_prices = price_qs.filter(user_level__isnull=True)
+                if public_prices.exists():
+                    final_prices = public_prices
+                    logger.debug("Using public prices as fallback")
                 else:
-                    final_prices = price_qs.filter(user_level__isnull=True)
-            else:
-                final_prices = price_qs.filter(user_level__isnull=True)
-
-            if not final_prices.exists():
-                continue
+                    # اگر هیچ قیمتی (نه سطح کاربری، نه عمومی) پیدا نشد، باز هم هتل را نمایش بده
+                    # اما با کمترین قیمت از بین تمام قیمت‌های موجود
+                    all_prices = price_qs
+                    if all_prices.exists():
+                        final_prices = all_prices
+                        logger.debug("Using any available prices (no level or public prices found)")
+                    else:
+                        # اگر اصلاً هیچ قیمتی برای امروز نبود، هتل را حذف نکن
+                        # بلکه با وضعیت بدون قیمت نمایش بده
+                        logger.debug(f"Hotel {hotel.id} has no prices for today, but keeping it in list")
+                        hotel_min_price_map[hotel.id] = {
+                            'total_price': None,
+                            'original_total_price': None,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'user_level': "بدون قیمت",
+                            'has_price': False
+                        }
+                        valid_hotels.append(hotel)
+                        continue
 
             # مرحله ۴: پیدا کردن کمترین قیمت
             min_price = float('inf')
@@ -1454,6 +1510,7 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
                 else:
                     if base_price < min_price:
@@ -1465,6 +1522,7 @@ class AmazingHotelsListView(BaseHotelListView):
                             'discount_value': 0,
                             'discount_date': None,
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
 
             if min_price_data:
@@ -1478,9 +1536,15 @@ class AmazingHotelsListView(BaseHotelListView):
         for hotel in valid_hotels:
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
+            
+            # اضافه کردن اطلاعات قیمت به صورت مستقیم
+            price_info = hotel_min_price_map.get(hotel.id, {})
+            serialized['price_info'] = price_info
+            
             flash_sales_data.append(serialized)
 
         return Response(flash_sales_data)
+    
     
 
 
@@ -1537,18 +1601,42 @@ class BestSellersListView(BaseHotelListView):
                 end_date__gte=today
             )
 
-            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (با فال‌بک به عمومی)
+            # مرحله ۳: انتخاب قیمت بر اساس سطح کاربر (اولویت با سطح کاربری، سپس عمومی)
+            final_prices = None
             if user_level:
                 level_prices = price_qs.filter(user_level=user_level)
                 if level_prices.exists():
                     final_prices = level_prices
+                    logger.debug(f"Using level prices for user level: {user_level.title}")
+            
+            # اگر قیمت سطح کاربری پیدا نشد، از قیمت عمومی استفاده کن
+            if not final_prices:
+                public_prices = price_qs.filter(user_level__isnull=True)
+                if public_prices.exists():
+                    final_prices = public_prices
+                    logger.debug("Using public prices as fallback")
                 else:
-                    final_prices = price_qs.filter(user_level__isnull=True)
-            else:
-                final_prices = price_qs.filter(user_level__isnull=True)
-
-            if not final_prices.exists():
-                continue
+                    # اگر هیچ قیمتی (نه سطح کاربری، نه عمومی) پیدا نشد، باز هم هتل را نمایش بده
+                    # اما با کمترین قیمت از بین تمام قیمت‌های موجود
+                    all_prices = price_qs
+                    if all_prices.exists():
+                        final_prices = all_prices
+                        logger.debug("Using any available prices (no level or public prices found)")
+                    else:
+                        # اگر اصلاً هیچ قیمتی برای امروز نبود، هتل را حذف نکن
+                        # بلکه با وضعیت بدون قیمت نمایش بده
+                        logger.debug(f"Hotel {hotel.id} has no prices for today, but keeping it in list")
+                        hotel_min_price_map[hotel.id] = {
+                            'total_price': None,
+                            'original_total_price': None,
+                            'discount_type': 'none',
+                            'discount_value': 0,
+                            'discount_date': None,
+                            'user_level': "بدون قیمت",
+                            'has_price': False
+                        }
+                        valid_hotels.append(hotel)
+                        continue
 
             # مرحله ۴: پیدا کردن کمترین قیمت
             min_price = float('inf')
@@ -1570,6 +1658,7 @@ class BestSellersListView(BaseHotelListView):
                             'discount_value': price_data.discount_value,
                             'discount_date': price_data.discount_date.strftime('%Y/%m/%d'),
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
                 else:
                     if base_price < min_price:
@@ -1581,6 +1670,7 @@ class BestSellersListView(BaseHotelListView):
                             'discount_value': 0,
                             'discount_date': None,
                             'user_level': price_data.user_level.title if price_data.user_level else "عمومی",
+                            'has_price': True
                         }
 
             if min_price_data:
@@ -1594,6 +1684,11 @@ class BestSellersListView(BaseHotelListView):
         for hotel in valid_hotels:
             serialized = HotelListSerializer(hotel, context=context).data
             serialized['average_score'] = self.get_average_score(hotel)
+            
+            # اضافه کردن اطلاعات قیمت به صورت مستقیم
+            price_info = hotel_min_price_map.get(hotel.id, {})
+            serialized['price_info'] = price_info
+            
             best_sellers_data.append(serialized)
 
         return Response(best_sellers_data)
