@@ -1699,7 +1699,6 @@ class BestSellersListView(BaseHotelListView):
 
 
 # ای پی ای پیشنهاد هتل ها در صفحه داخلی هتل بر اساس اسلاگ هتل 
-
 class HomeHotelByHotelSlugView(APIView):
     permission_classes = (AllowAny,)
 
@@ -1730,13 +1729,13 @@ class HomeHotelByHotelSlugView(APIView):
         # تبدیل به تاریخ میلادی
         discount_datetime_gregorian = discount_datetime.togregorian()
         
-        # تبدیل هر دو به UTC برای مقایسه
-        utc = timezone.utc
-        discount_datetime_utc = timezone.make_aware(discount_datetime_gregorian, utc)
-        now_utc = timezone.now().astimezone(utc)
+        # اطمینان از اینکه discount_datetime_gregorian آگاه از تایم‌زون باشد
+        if timezone.is_naive(discount_datetime_gregorian):
+            discount_datetime_gregorian = timezone.make_aware(discount_datetime_gregorian)
         
         # محاسبه زمان باقی‌مانده
-        time_remaining = discount_datetime_utc - now_utc
+        now = timezone.now()
+        time_remaining = discount_datetime_gregorian - now
         
         return max(int(time_remaining.total_seconds()), 0)
 
@@ -1957,7 +1956,82 @@ class HomeHotelByHotelSlugView(APIView):
             return Response(valid_hotels)
         except Hotel.DoesNotExist:
             return Response({'error': 'Hotel not found'}, status=404)
+        except Exception as e:
+            logger.error(f"Unexpected error in HomeHotelByHotelSlugView: {str(e)}")
+            return Response({'error': 'Internal server error'}, status=500)
+        
+        
 
+#ای پی ای لیست هتل برای سرچ صفحه اول 
+class HotelSearchAPI(ListCreateAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HotelSearchSerializer
+
+    def get_queryset(self):
+        query = self.request.query_params.get('query', '').lower()
+        if query:
+            # وقتی کوئری وجود دارد، هم هتل‌ها و هم شهرها جستجو می‌شوند
+            hotels = Hotel.objects.filter(name__icontains=query).select_related('city__province')
+            cities = City.objects.filter(name__icontains=query).select_related('province')
+        else:
+            # در حالت دیفالت، فقط ۱۰ شهر اول (بر اساس ID) و هیچ هتلی
+            hotels = Hotel.objects.none()  # هیچ هتلی برنمی‌گرداند
+            cities = City.objects.all().select_related('province')[:10]  # فقط ۱۰ شهر
+        return {"hotels": hotels, "cities": cities}
+
+    def perform_create(self, serializer):
+        pass
+
+    @swagger_auto_schema(
+        operation_summary="جستجوی هتل و شهر در کادر جستجوی هتل در صفحات اول و دیگر صفحات",
+        operation_description="جستجوی هتل‌ها و شهرها بر اساس نام واردشده در پارامتر query. در حالت دیفالت (بدون کوئری)، فقط ۱۰ شهر اول نمایش داده می‌شود.",
+        tags=["hotel-home"],
+        manual_parameters=[
+            openapi.Parameter(
+                name='query',
+                in_=openapi.IN_QUERY,
+                type=openapi.TYPE_STRING,
+                description='نام هتل یا شهر برای جستجو',
+                required=False
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="نتایج جستجوی هتل‌ها و شهرها",
+                schema=HotelSearchSerializer
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        hotels_data = [
+            {
+                "id": hotel.id,
+                "name": hotel.name,
+                "city": {
+                    "id": hotel.city.id,
+                    "name": hotel.city.name,
+                    "province": {"name": hotel.city.province.name},
+                    "slug": hotel.city.slug
+                },
+                "slug": hotel.slug,
+                "stars": hotel.stars  # تغییر به مقدار واقعی stars
+            }
+            for hotel in queryset["hotels"]
+        ]
+        cities_data = [
+            {
+                "id": city.id,
+                "name": city.name,
+                "province": {"name": city.province.name},
+                "slug": city.slug,
+                "hotels_number": city.hotels.count()
+            }
+            for city in queryset["cities"]
+        ]
+        return Response({"cities": cities_data, "hotels": hotels_data})
+
+    
     
     
     
