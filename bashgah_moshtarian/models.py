@@ -1,3 +1,4 @@
+from venv import logger
 from django.db import models
 from django.core.validators import RegexValidator
 # from reservation.models import Hotel, Room
