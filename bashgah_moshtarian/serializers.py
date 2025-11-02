@@ -86,10 +86,12 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     discount_value = serializers.SerializerMethodField()
     related_info = serializers.SerializerMethodField()
     required_points = serializers.SerializerMethodField()
+    expires_at = serializers.SerializerMethodField()  # اضافه کردن فیلد expires_at
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 'activated_at', 'reward_claimed', 'related_info']
+        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 
+                 'activated_at', 'expires_at', 'reward_claimed', 'related_info']  # اضافه کردن expires_at به fields
 
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
@@ -106,6 +108,13 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
         if code and code.required_points is not None:
             return code.required_points
         return 0
+
+    def get_expires_at(self, obj):
+        """دریافت تاریخ انقضای کد تخفیف به صورت شمسی"""
+        code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
+        if code and hasattr(code, 'expires_at') and code.expires_at:
+            return code.expires_at  # برگرداندن تاریخ شمسی همانطور که هست
+        return None
 
     def get_related_info(self, obj):
         if obj.discount_type == 'room' and obj.room_discount_code:
