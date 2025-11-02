@@ -1,12 +1,14 @@
 from venv import logger
 from django.db import models
 from django.core.validators import RegexValidator
-# from reservation.models import Hotel, Room
+from django.db import transaction
 from authentication.models import BaseUser
 from config.models import UserLevel
 from django_jalali.db import models as jmodels
 from django.utils.translation import gettext_lazy as _
+import logging
 
+logger = logging.getLogger(__name__)
 
 # مدل کد تخفیف باشگاه مشتری برای اتاق‌ها
 class RoomDiscountCode(models.Model):
@@ -117,11 +119,54 @@ class RoomDiscountCode(models.Model):
         if user in self.activated_users.all():
             raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
         
-        logger.debug(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
+        logger.info(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
+        
+        # کاهش دفعات باقی‌مانده
         self.remaining_uses -= 1
+        
+        # ذخیره تغییرات
+        self.save(update_fields=['remaining_uses'])
+        
+        # افزودن کاربر به لیست استفاده‌کنندگان
         self.activated_users.add(user)
-        self.save()
-        logger.debug(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
+        
+        logger.info(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
+        return True
+
+    def consume_for_reservation(self, reservation):
+        """
+        مصرف کد تخفیف برای رزرو - نسخه بهینه‌شده
+        """
+        try:
+            with transaction.atomic():
+                # رفرش کردن آبجکت برای اطمینان از آخرین داده
+                discount_obj = RoomDiscountCode.objects.select_for_update().get(pk=self.pk)
+                
+                if discount_obj.remaining_uses <= 0:
+                    raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
+                
+                if reservation.buyer in discount_obj.activated_users.all():
+                    raise ValueError(f"کاربر {reservation.buyer.phone_number} قبلاً از این کد استفاده کرده است.")
+                
+                logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
+                
+                # کاهش دفعات باقی‌مانده
+                discount_obj.remaining_uses = models.F('remaining_uses') - 1
+                discount_obj.save(update_fields=['remaining_uses'])
+                
+                # رفرش برای گرفتن مقدار جدید
+                discount_obj.refresh_from_db()
+                
+                # افزودن کاربر به activated_users
+                discount_obj.activated_users.add(reservation.buyer)
+                
+                logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"🔴 خطا در مصرف کد تخفیف {self.code}: {str(e)}")
+            raise
 
     def save(self, *args, **kwargs):
         if not self.pk:
@@ -338,11 +383,54 @@ class HotelDiscountCode(models.Model):
         if user in self.activated_users.all():
             raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
         
-        logger.debug(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
+        logger.info(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
+        
+        # کاهش دفعات باقی‌مانده
         self.remaining_uses -= 1
+        
+        # ذخیره تغییرات
+        self.save(update_fields=['remaining_uses'])
+        
+        # افزودن کاربر به لیست استفاده‌کنندگان
         self.activated_users.add(user)
-        self.save()
-        logger.debug(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
+        
+        logger.info(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
+        return True
+
+    def consume_for_reservation(self, reservation):
+        """
+        مصرف کد تخفیف برای رزرو - نسخه بهینه‌شده
+        """
+        try:
+            with transaction.atomic():
+                # رفرش کردن آبجکت برای اطمینان از آخرین داده
+                discount_obj = HotelDiscountCode.objects.select_for_update().get(pk=self.pk)
+                
+                if discount_obj.remaining_uses <= 0:
+                    raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
+                
+                if reservation.buyer in discount_obj.activated_users.all():
+                    raise ValueError(f"کاربر {reservation.buyer.phone_number} قبلاً از این کد استفاده کرده است.")
+                
+                logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
+                
+                # کاهش دفعات باقی‌مانده با استفاده از F expression برای جلوگیری از race condition
+                discount_obj.remaining_uses = models.F('remaining_uses') - 1
+                discount_obj.save(update_fields=['remaining_uses'])
+                
+                # رفرش برای گرفتن مقدار جدید
+                discount_obj.refresh_from_db()
+                
+                # افزودن کاربر به activated_users
+                discount_obj.activated_users.add(reservation.buyer)
+                
+                logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"🔴 خطا در مصرف کد تخفیف {self.code}: {str(e)}")
+            raise
 
     def save(self, *args, **kwargs):
         if not self.pk:
@@ -444,3 +532,9 @@ class DiscountActivationRecord(models.Model):
         code = self.room_discount_code or self.shopping_discount_code or self.hotel_discount_code
         code_str = code.code if code else '—'
         return f"{self.user} - {self.get_discount_type_display()} - {code_str} - {self.activated_at}"
+
+    def mark_as_used(self):
+        """علامت‌گذاری رکورد به عنوان استفاده شده"""
+        self.reward_claimed = True
+        self.save(update_fields=['reward_claimed'])
+        logger.info(f"رکورد فعال‌سازی {self.id} به عنوان استفاده شده علامت‌گذاری شد")
