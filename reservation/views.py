@@ -5056,6 +5056,7 @@ class ReservationInvoiceSettingsAPIView(APIView):
     
     
 
+
 # ای پی ای فاکتور رزروها 
 class ReservationInvoiceDetailAPIView(APIView):
     """
@@ -5098,7 +5099,7 @@ class ReservationInvoiceDetailAPIView(APIView):
                             "reserver_name": "علی رضایی",
                             "reserver_phone": "09123456789",
                             "tracking_code": "RES123456",
-                            "created_at": "1404/08/10 ساعت 14:30",
+                            "created_at": "1403-08-10T14:30:00",
                             "check_in_date": "1404/08/15",
                             "check_out_date": "1404/08/18",
                             "hotel": {
@@ -5142,17 +5143,21 @@ class ReservationInvoiceDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # تبدیل تاریخ‌ها به شمسی - اصلاح شده
-        # از آنجایی که created_at از نوع jDateTimeField است، مستقیماً فرمت می‌کنیم
+        # تبدیل created_at به شمسی ISO string
         try:
-            if hasattr(reservation.created_at, 'strftime'):
-                created_jalali = reservation.created_at.strftime('%Y/%m/%d ساعت %H:%M')
+            if reservation.created_at:
+                # تبدیل به تاریخ شمسی
+                jalali_date = jdatetime.datetime.fromgregorian(
+                    datetime=reservation.created_at,
+                    locale='fa_IR'
+                )
+                # فرمت به صورت ISO string (شمسی)
+                created_iso = jalali_date.strftime('%Y-%m-%dT%H:%M:%S')
             else:
-                # اگر created_at رشته است یا فرمت دیگری دارد
-                created_jalali = str(reservation.created_at)
+                created_iso = None
         except Exception as e:
             print(f"Error formatting created_at: {e}")
-            created_jalali = str(reservation.created_at) if reservation.created_at else "نامشخص"
+            created_iso = str(reservation.created_at) if reservation.created_at else None
 
         # تاریخ‌های check_in و check_out از قبل شمسی هستند
         check_in_jalali = reservation.check_in_date.strftime('%Y/%m/%d')
@@ -5193,7 +5198,7 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "reserver_name": f"{reservation.reserver_first_name} {reservation.reserver_last_name}".strip(),
                 "reserver_phone": reservation.reserver_phone_number,
                 "tracking_code": reservation.tracking_code,
-                "created_at": created_jalali,
+                "created_at": created_iso,  # حالا شمسی ISO string است
                 "check_in_date": check_in_jalali,
                 "check_out_date": check_out_jalali,
                 "hotel": {
