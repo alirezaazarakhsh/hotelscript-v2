@@ -325,26 +325,32 @@ class ActivateDiscountCodeView(APIView):
 
                 # پیدا کردن کد تخفیف
                 discount_code = None
+                error_message = ""
+                
                 if discount_type == 'room':
                     try:
                         discount_code = RoomDiscountCode.objects.select_for_update().get(code=code)
                     except RoomDiscountCode.DoesNotExist:
-                        return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+                        error_message = "کد تخفیف اتاق یافت نشد"
                 
                 elif discount_type == 'shopping_center':
                     try:
                         discount_code = ShoppingCenterDiscountCode.objects.select_for_update().get(code=code)
                     except ShoppingCenterDiscountCode.DoesNotExist:
-                        return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+                        error_message = "کد تخفیف مرکز خرید یافت نشد"
                 
                 elif discount_type == 'hotel':
                     try:
                         discount_code = HotelDiscountCode.objects.select_for_update().get(code=code)
                     except HotelDiscountCode.DoesNotExist:
-                        return Response({"error": "کد تخفیف هتل یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+                        error_message = "کد تخفیف هتل یافت نشد"
                 
                 else:
                     return Response({"error": "نوع تخفیف نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
+
+                # اگر کد تخفیف پیدا نشد
+                if not discount_code and error_message:
+                    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
                 # بررسی اینکه آیا کاربر قبلاً این کد را فعال کرده است
                 activation_filter = {
@@ -412,17 +418,32 @@ class ActivateDiscountCodeView(APIView):
                 
                 logger.info(f"کد تخفیف {discount_code.code} توسط کاربر {user.phone_number} فعال شد. رکورد ID: {activation_record.id}")
 
+                # اطلاعات هتل برای پاسخ
+                hotel_info = None
+                if discount_type == 'hotel' and hasattr(discount_code, 'hotel'):
+                    hotel_info = {
+                        'hotel_id': discount_code.hotel.id,
+                        'hotel_name': discount_code.hotel.name
+                    }
+                elif discount_type == 'room' and hasattr(discount_code, 'room'):
+                    hotel_info = {
+                        'hotel_id': discount_code.room.hotel.id,
+                        'hotel_name': discount_code.room.hotel.name
+                    }
+
                 return Response({
                     "message": "کد تخفیف با موفقیت فعال شد",
                     "activation_id": activation_record.id,
                     "discount_code": discount_code.code,
+                    "discount_type": discount_type,
                     "discount_value": str(discount_code.discount_value),
                     "required_points": discount_code.required_points,
-                    "expires_at": discount_code.expires_at.strftime('%Y/%m/%d') if discount_code.expires_at else None
+                    "expires_at": discount_code.expires_at.strftime('%Y/%m/%d') if discount_code.expires_at else None,
+                    "hotel_info": hotel_info
                 }, status=status.HTTP_200_OK)
 
         except Exception as exc:
-            logger.error(f"خطا در فعال‌سازی کد تخفیف {code}: {str(exc)}")
+            logger.error(f"خطا در فعال‌سازی کد تخفیف {code} (نوع: {discount_type}): {str(exc)}")
             return Response({
                 "error": "خطا در فعال‌سازی کد تخفیف",
                 "exception_type": exc.__class__.__name__,
