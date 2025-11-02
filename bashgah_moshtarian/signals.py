@@ -102,64 +102,165 @@ def handle_manual_reward_claimed(sender, instance, **kwargs):
         except DiscountActivationRecord.DoesNotExist:
             logger.error(f"رکورد DiscountActivationRecord با ID {instance.id} یافت نشد.")
 
+def _get_discount_type(instance):
+    """تعیین نوع کد تخفیف"""
+    if isinstance(instance, RoomDiscountCode):
+        return 'room'
+    elif isinstance(instance, HotelDiscountCode):
+        return 'hotel'
+    elif isinstance(instance, ShoppingCenterDiscountCode):
+        return 'shopping_center'
+    return None
+
+def _create_or_update_activation_record(user, discount_instance):
+    """ایجاد یا به روزرسانی رکورد فعال‌سازی"""
+    discount_type = _get_discount_type(discount_instance)
+    if not discount_type:
+        logger.error(f"نوع کد تخفیف نامعتبر: {type(discount_instance)}")
+        return None
+    
+    activation_filter = {
+        'user': user,
+        'discount_type': discount_type,
+    }
+    
+    # تنظیم فیلد مناسب بر اساس نوع کد تخفیف
+    if discount_type == 'room':
+        activation_filter['room_discount_code'] = discount_instance
+    elif discount_type == 'hotel':
+        activation_filter['hotel_discount_code'] = discount_instance
+    elif discount_type == 'shopping_center':
+        activation_filter['shopping_discount_code'] = discount_instance
+    
+    try:
+        activation_record, created = DiscountActivationRecord.objects.get_or_create(
+            **activation_filter,
+            defaults={'reward_claimed': True}
+        )
+        
+        if not created and not activation_record.reward_claimed:
+            activation_record.reward_claimed = True
+            activation_record.save(update_fields=['reward_claimed'])
+        
+        logger.info(f"{'ایجاد' if created else 'به روزرسانی'} رکورد فعال‌سازی برای کاربر {user.phone_number} و کد {discount_instance.code}")
+        return activation_record
+        
+    except Exception as e:
+        logger.error(f"خطا در ایجاد/به روزرسانی رکورد فعال‌سازی: {str(e)}")
+        return None
+
+def _deduct_points_for_activation(user, discount_instance):
+    """کسر امتیاز برای فعال‌سازی کد تخفیف"""
+    if discount_instance.required_points <= 0:
+        return True
+        
+    try:
+        with transaction.atomic():
+            customer_points, _ = CustomerClubPoint.objects.get_or_create(
+                user=user,
+                defaults={'points': 0}
+            )
+            
+            if user in discount_instance.activated_users.all():
+                logger.info(f"امتیاز قبلاً برای کاربر {user.phone_number} کسر شده است. کسر مجدد نادیده گرفته شد.")
+                return True
+                
+            if customer_points.points < discount_instance.required_points:
+                logger.error(f"امتیاز کافی برای کسر {discount_instance.required_points} از کاربر {user.phone_number} وجود ندارد.")
+                return False
+                
+            customer_points.points -= discount_instance.required_points
+            set_skip_points_and_sms(True)
+            customer_points.save()
+            set_skip_points_and_sms(False)
+            
+            logger.info(f"امتیاز {discount_instance.required_points} از کاربر {user.phone_number} برای کد تخفیف {discount_instance.code} کسر شد.")
+            
+            # ارسال SMS با تاخیر
+            Timer(120, delayed_send_deduct_sms, args=(
+                user.phone_number,
+                user.first_name or user.phone_number,
+                discount_instance.required_points,
+                customer_points.points
+            )).start()
+            
+            return True
+            
+    except Exception as e:
+        logger.error(f"خطا در کسر امتیاز برای کاربر {user.phone_number}: {str(e)}")
+        return False
+
 @receiver(m2m_changed, sender=RoomDiscountCode.activated_users.through)
 @receiver(m2m_changed, sender=HotelDiscountCode.activated_users.through)
 @receiver(m2m_changed, sender=ShoppingCenterDiscountCode.activated_users.through)
-def handle_manual_activated_users(sender, instance, action, pk_set, **kwargs):
+def handle_activated_users_change(sender, instance, action, pk_set, **kwargs):
+    """مدیریت تغییرات در activated_users برای همه انواع کدهای تخفیف"""
+    logger.info(f"تغییر در activated_users کد تخفیف {instance.code}: action={action}, users={pk_set}")
+    
     if action == 'post_add':
-        logger.info(f"کاربر(ان) {pk_set} به activated_users کد تخفیف {instance.code} اضافه شدند.")
         for user_id in pk_set:
             try:
                 user = BaseUser.objects.get(pk=user_id)
-                discount_type = 'room' if isinstance(instance, RoomDiscountCode) else 'hotel' if isinstance(instance, HotelDiscountCode) else 'shopping_center'
-                activation_filter = {
-                    'user': user,
-                    'discount_type': discount_type,
-                    **({'room_discount_code': instance} if isinstance(instance, RoomDiscountCode) else {'hotel_discount_code': instance} if isinstance(instance, HotelDiscountCode) else {'shopping_discount_code': instance}),
-                }
-                activation_record = DiscountActivationRecord.objects.filter(**activation_filter).first()
+                
+                # ایجاد یا به روزرسانی رکورد فعال‌سازی
+                activation_record = _create_or_update_activation_record(user, instance)
                 if not activation_record:
-                    logger.info(f"ایجاد رکورد فعال‌سازی برای کاربر {user.phone_number} و کد تخفیف {instance.code}")
-                    kwargs = {
-                        "user": user,
-                        "discount_type": discount_type,
-                        "reward_claimed": True
-                    }
-                    if discount_type == "room":
-                        kwargs["room_discount_code"] = instance
-                    elif discount_type == "hotel":
-                        kwargs["hotel_discount_code"] = instance
-                    else:
-                        kwargs["shopping_discount_code"] = instance
-                    DiscountActivationRecord.objects.create(**kwargs)
-                elif not activation_record.reward_claimed:
-                    logger.info(f"به‌روزرسانی رکورد فعال‌سازی برای کاربر {user.phone_number}: reward_claimed=True")
-                    activation_record.reward_claimed = True
-                    activation_record.save(update_fields=['reward_claimed'])
-
-                if instance.required_points > 0:
-                    with transaction.atomic():
-                        customer_points, _ = CustomerClubPoint.objects.get_or_create(
-                            user=user,
-                            defaults={'points': 0}
-                        )
-                        if customer_points.points < instance.required_points:
-                            logger.error(f"امتیاز کافی برای کسر {instance.required_points} از کاربر {user.phone_number} وجود ندارد.")
-                            raise ValidationError("امتیاز کافی برای استفاده از کد تخفیف نیست.")
-                        customer_points.points -= instance.required_points
-                        set_skip_points_and_sms(True)
-                        customer_points.save()
-                        set_skip_points_and_sms(False)
-                        logger.info(f"امتیاز {instance.required_points} از کاربر {user.phone_number} برای کد تخفیف {instance.code} کسر شد.")
-                        Timer(120, delayed_send_deduct_sms, args=(
-                            user.phone_number,
-                            user.first_name or user.phone_number,
-                            instance.required_points,
-                            customer_points.points
-                        )).start()
+                    logger.error(f"خطا در ایجاد رکورد فعال‌سازی برای کاربر {user_id}")
+                    continue
+                
+                # کسر امتیاز در صورت نیاز
+                if not _deduct_points_for_activation(user, instance):
+                    logger.error(f"خطا در کسر امتیاز برای کاربر {user.phone_number}")
+                    # حذف کاربر از activated_users در صورت شکست
+                    instance.activated_users.remove(user)
+                    
             except BaseUser.DoesNotExist:
                 logger.error(f"کاربر با ID {user_id} یافت نشد.")
-            except ValidationError as e:
-                logger.error(f"خطای اعتبارسنجی برای کاربر {user_id}: {str(e)}")
             except Exception as e:
                 logger.error(f"خطای غیرمنتظره برای کاربر {user_id}: {str(e)}")
+
+# سیگنال جدید برای رزروهای پرداخت شده
+@receiver(post_save, sender='reservation.Reservationhotel')
+def handle_reservation_payment_for_discount(sender, instance, **kwargs):
+    """پردازش کد تخفیف پس از پرداخت موفق رزرو"""
+    from reservation.models import Reservationhotel
+    
+    if (instance.payment_status == 'paid' and 
+        instance.applied_discount_code and 
+        not instance.discount_processed):
+        
+        logger.info(f"پردازش کد تخفیف برای رزرو پرداخت شده {instance.tracking_code}")
+        
+        try:
+            with transaction.atomic():
+                reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+                if reservation.discount_processed:
+                    return
+                
+                # پیدا کردن کد تخفیف
+                discount_obj = None
+                discount_type = None
+                
+                try:
+                    discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
+                    discount_type = 'room'
+                except RoomDiscountCode.DoesNotExist:
+                    try:
+                        discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
+                        discount_type = 'hotel'
+                    except HotelDiscountCode.DoesNotExist:
+                        logger.error(f"کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code} یافت نشد")
+                        return
+                
+                # افزودن کاربر به activated_users - این باعث فعال شدن سیگنال بالا می‌شود
+                if reservation.buyer not in discount_obj.activated_users.all():
+                    discount_obj.activated_users.add(reservation.buyer)
+                    logger.info(f"کاربر {reservation.buyer.phone_number} به activated_users کد {discount_obj.code} اضافه شد")
+                
+                # علامت‌گذاری رزرو به عنوان پردازش شده
+                reservation.discount_processed = True
+                reservation.save(update_fields=['discount_processed'])
+                logger.info(f"کد تخفیف {discount_obj.code} برای رزرو {reservation.tracking_code} با موفقیت پردازش شد")
+                
+        except Exception as e:
+            logger.error(f"خطا در پردازش کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")

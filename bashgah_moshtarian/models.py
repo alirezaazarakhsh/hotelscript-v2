@@ -108,7 +108,7 @@ class RoomDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
-    # def apply_discount(self, user):
+    def apply_discount(self, user):
         """
         متد برای اعمال کد تخفیف و کاهش remaining_uses
         """
@@ -329,7 +329,7 @@ class HotelDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
-    # def apply_discount(self, user):
+    def apply_discount(self, user):
         """
         متد برای اعمال کد تخفیف و کاهش remaining_uses
         """

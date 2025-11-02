@@ -1488,6 +1488,48 @@ class Reservationhotel(models.Model):
         super().save(*args, **kwargs)
         
 
+
+# --- متد جدید برای پردازش کد تخفیف ---
+    def process_discount_after_payment(self):
+        """پردازش کد تخفیف پس از پرداخت موفق"""
+        if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):
+            return False
+
+        try:
+            from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord
+            
+            # پیدا کردن کد تخفیف
+            discount_obj = None
+            discount_type = None
+            
+            try:
+                discount_obj = RoomDiscountCode.objects.get(code__iexact=self.applied_discount_code)
+                discount_type = 'room'
+            except RoomDiscountCode.DoesNotExist:
+                try:
+                    discount_obj = HotelDiscountCode.objects.get(code__iexact=self.applied_discount_code)
+                    discount_type = 'hotel'
+                except HotelDiscountCode.DoesNotExist:
+                    logger.error(f"کد تخفیف {self.applied_discount_code} برای رزرو {self.tracking_code} یافت نشد")
+                    return False
+
+            # افزودن کاربر به activated_users
+            if self.buyer not in discount_obj.activated_users.all():
+                discount_obj.activated_users.add(self.buyer)
+                logger.info(f"کاربر {self.buyer.phone_number} به activated_users کد {discount_obj.code} اضافه شد")
+
+            # علامت‌گذاری رزرو به عنوان پردازش شده
+            self.discount_processed = True
+            self.save(update_fields=['discount_processed'])
+            
+            logger.info(f"کد تخفیف {discount_obj.code} برای رزرو {self.tracking_code} پردازش شد")
+            return True
+            
+        except Exception as e:
+            logger.error(f"خطا در پردازش کد تخفیف برای رزرو {self.tracking_code}: {e}")
+            return False
+        
+        
 _thread_locals = local()
 
 def set_skip_points_and_sms(value):
