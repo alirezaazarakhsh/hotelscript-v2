@@ -1490,6 +1490,7 @@ class Reservationhotel(models.Model):
 
 
 # --- متد جدید برای پردازش کد تخفیف ---
+# --- متد جدید برای پردازش کد تخفیف ---
 def process_discount_after_payment_v2(self):
     """پردازش کد تخفیف با استفاده از متد consume_discount_for_user موجود"""
     if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):

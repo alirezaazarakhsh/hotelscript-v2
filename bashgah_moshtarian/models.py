@@ -119,6 +119,7 @@ class RoomDiscountCode(models.Model):
                 # استفاده از select_for_update برای جلوگیری از race condition
                 discount_obj = RoomDiscountCode.objects.select_for_update().get(pk=self.pk)
                 
+                # بررسی شرایط استفاده
                 if discount_obj.remaining_uses <= 0:
                     raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
                 
@@ -127,17 +128,12 @@ class RoomDiscountCode(models.Model):
                 
                 logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
                 
-                # کاهش دفعات باقی‌مانده با استفاده از F expression
-                RoomDiscountCode.objects.filter(pk=discount_obj.pk).update(
-                    remaining_uses=models.F('remaining_uses') - 1
-                )
+                # کاهش دفعات باقی‌مانده
+                discount_obj.remaining_uses -= 1
+                discount_obj.save(update_fields=['remaining_uses'])
                 
-                # رفرش برای گرفتن مقدار جدید
-                discount_obj.refresh_from_db()
-                
-                # افزودن کاربر به activated_users (اگر از قبل نیست)
-                if user not in discount_obj.activated_users.all():
-                    discount_obj.activated_users.add(user)
+                # افزودن کاربر به activated_users
+                discount_obj.activated_users.add(user)
                 
                 logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
                 
@@ -359,8 +355,10 @@ class HotelDiscountCode(models.Model):
         """
         try:
             with transaction.atomic():
+                # استفاده از select_for_update برای جلوگیری از race condition
                 discount_obj = HotelDiscountCode.objects.select_for_update().get(pk=self.pk)
                 
+                # بررسی شرایط استفاده
                 if discount_obj.remaining_uses <= 0:
                     raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
                 
@@ -369,17 +367,12 @@ class HotelDiscountCode(models.Model):
                 
                 logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
                 
-                # کاهش دفعات باقی‌مانده با استفاده از F expression
-                HotelDiscountCode.objects.filter(pk=discount_obj.pk).update(
-                    remaining_uses=models.F('remaining_uses') - 1
-                )
+                # کاهش دفعات باقی‌مانده
+                discount_obj.remaining_uses -= 1
+                discount_obj.save(update_fields=['remaining_uses'])
                 
-                # رفرش برای گرفتن مقدار جدید
-                discount_obj.refresh_from_db()
-                
-                # افزودن کاربر به activated_users (اگر از قبل نیست)
-                if user not in discount_obj.activated_users.all():
-                    discount_obj.activated_users.add(user)
+                # افزودن کاربر به activated_users
+                discount_obj.activated_users.add(user)
                 
                 logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
                 
