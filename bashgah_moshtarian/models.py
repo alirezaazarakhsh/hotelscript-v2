@@ -110,55 +110,34 @@ class RoomDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
-    def apply_discount(self, user):
+    def consume_discount_for_user(self, user):
         """
-        متد برای اعمال کد تخفیف و کاهش remaining_uses
-        """
-        if self.remaining_uses <= 0:
-            raise ValueError(f"تعداد دفعات استفاده از کد {self.code} به پایان رسیده است.")
-        if user in self.activated_users.all():
-            raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
-        
-        logger.info(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
-        
-        # کاهش دفعات باقی‌مانده
-        self.remaining_uses -= 1
-        
-        # ذخیره تغییرات
-        self.save(update_fields=['remaining_uses'])
-        
-        # افزودن کاربر به لیست استفاده‌کنندگان
-        self.activated_users.add(user)
-        
-        logger.info(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
-        return True
-
-    def consume_for_reservation(self, reservation):
-        """
-        مصرف کد تخفیف برای رزرو - نسخه بهینه‌شده
+        متد یکپارچه برای مصرف کد تخفیف - کاهش remaining_uses و افزودن کاربر
         """
         try:
             with transaction.atomic():
-                # رفرش کردن آبجکت برای اطمینان از آخرین داده
+                # استفاده از select_for_update برای جلوگیری از race condition
                 discount_obj = RoomDiscountCode.objects.select_for_update().get(pk=self.pk)
                 
                 if discount_obj.remaining_uses <= 0:
                     raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
                 
-                if reservation.buyer in discount_obj.activated_users.all():
-                    raise ValueError(f"کاربر {reservation.buyer.phone_number} قبلاً از این کد استفاده کرده است.")
+                if user in discount_obj.activated_users.all():
+                    raise ValueError(f"کاربر {user.phone_number} قبلاً از این کد استفاده کرده است.")
                 
                 logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
                 
-                # کاهش دفعات باقی‌مانده
-                discount_obj.remaining_uses = models.F('remaining_uses') - 1
-                discount_obj.save(update_fields=['remaining_uses'])
+                # کاهش دفعات باقی‌مانده با استفاده از F expression
+                RoomDiscountCode.objects.filter(pk=discount_obj.pk).update(
+                    remaining_uses=models.F('remaining_uses') - 1
+                )
                 
                 # رفرش برای گرفتن مقدار جدید
                 discount_obj.refresh_from_db()
                 
-                # افزودن کاربر به activated_users
-                discount_obj.activated_users.add(reservation.buyer)
+                # افزودن کاربر به activated_users (اگر از قبل نیست)
+                if user not in discount_obj.activated_users.all():
+                    discount_obj.activated_users.add(user)
                 
                 logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
                 
@@ -374,55 +353,33 @@ class HotelDiscountCode(models.Model):
                 result.append(user.phone_number)
         return result
 
-    def apply_discount(self, user):
+    def consume_discount_for_user(self, user):
         """
-        متد برای اعمال کد تخفیف و کاهش remaining_uses
-        """
-        if self.remaining_uses <= 0:
-            raise ValueError(f"تعداد دفعات استفاده از کد {self.code} به پایان رسیده است.")
-        if user in self.activated_users.all():
-            raise ValueError(f"کاربر {user.phone_number} قبلاً از کد تخفیف {self.code} استفاده کرده است.")
-        
-        logger.info(f"Applying discount {self.code} for user {user.phone_number}, remaining_uses before: {self.remaining_uses}")
-        
-        # کاهش دفعات باقی‌مانده
-        self.remaining_uses -= 1
-        
-        # ذخیره تغییرات
-        self.save(update_fields=['remaining_uses'])
-        
-        # افزودن کاربر به لیست استفاده‌کنندگان
-        self.activated_users.add(user)
-        
-        logger.info(f"Discount {self.code} applied, remaining_uses after: {self.remaining_uses}")
-        return True
-
-    def consume_for_reservation(self, reservation):
-        """
-        مصرف کد تخفیف برای رزرو - نسخه بهینه‌شده
+        متد یکپارچه برای مصرف کد تخفیف - کاهش remaining_uses و افزودن کاربر
         """
         try:
             with transaction.atomic():
-                # رفرش کردن آبجکت برای اطمینان از آخرین داده
                 discount_obj = HotelDiscountCode.objects.select_for_update().get(pk=self.pk)
                 
                 if discount_obj.remaining_uses <= 0:
                     raise ValueError(f"تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
                 
-                if reservation.buyer in discount_obj.activated_users.all():
-                    raise ValueError(f"کاربر {reservation.buyer.phone_number} قبلاً از این کد استفاده کرده است.")
+                if user in discount_obj.activated_users.all():
+                    raise ValueError(f"کاربر {user.phone_number} قبلاً از این کد استفاده کرده است.")
                 
                 logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
                 
-                # کاهش دفعات باقی‌مانده با استفاده از F expression برای جلوگیری از race condition
-                discount_obj.remaining_uses = models.F('remaining_uses') - 1
-                discount_obj.save(update_fields=['remaining_uses'])
+                # کاهش دفعات باقی‌مانده با استفاده از F expression
+                HotelDiscountCode.objects.filter(pk=discount_obj.pk).update(
+                    remaining_uses=models.F('remaining_uses') - 1
+                )
                 
                 # رفرش برای گرفتن مقدار جدید
                 discount_obj.refresh_from_db()
                 
-                # افزودن کاربر به activated_users
-                discount_obj.activated_users.add(reservation.buyer)
+                # افزودن کاربر به activated_users (اگر از قبل نیست)
+                if user not in discount_obj.activated_users.all():
+                    discount_obj.activated_users.add(user)
                 
                 logger.info(f"🟢 کد تخفیف {discount_obj.code} مصرف شد - remaining_uses بعد: {discount_obj.remaining_uses}")
                 
