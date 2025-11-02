@@ -5059,9 +5059,7 @@ class ReservationInvoiceSettingsAPIView(APIView):
 
 # ای پی ای فاکتور رزروها 
 class ReservationInvoiceDetailAPIView(APIView):
-    """
-    API برای دریافت اطلاعات کامل فاکتور رزرو بر اساس کد پیگیری
-    """
+
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
@@ -5100,8 +5098,8 @@ class ReservationInvoiceDetailAPIView(APIView):
                             "reserver_phone": "09123456789",
                             "tracking_code": "RES123456",
                             "created_at": "1403-08-10T14:30:00",
-                            "check_in_date": "1404/08/15",
-                            "check_out_date": "1404/08/18",
+                            "check_in_date": "1404-08-15T00:00:00",
+                            "check_out_date": "1404-08-18T00:00:00",
                             "hotel": {
                                 "name": "هتل پارسیان کوثر",
                                 "address": "تهران، خیابان ولیعصر، پلاک ۱۲۳۴"
@@ -5146,22 +5144,68 @@ class ReservationInvoiceDetailAPIView(APIView):
         # تبدیل created_at به شمسی ISO string
         try:
             if reservation.created_at:
-                # تبدیل به تاریخ شمسی
-                jalali_date = jdatetime.datetime.fromgregorian(
-                    datetime=reservation.created_at,
-                    locale='fa_IR'
-                )
-                # فرمت به صورت ISO string (شمسی)
-                created_iso = jalali_date.strftime('%Y-%m-%dT%H:%M:%S')
+                # اگر created_at از نوع jDateTimeField است، مستقیماً فرمت می‌کنیم
+                if hasattr(reservation.created_at, 'year'):
+                    # بررسی می‌کنیم که آیا تاریخ شمسی است یا میلادی
+                    # اگر سال بزرگتر از 1500 باشد، احتمالاً میلادی است
+                    if reservation.created_at.year > 1500:
+                        # میلادی است، تبدیل به شمسی
+                        jalali_date = jdatetime.datetime.fromgregorian(
+                            datetime=reservation.created_at,
+                            locale='fa_IR'
+                        )
+                        created_iso = jalali_date.strftime('%Y-%m-%dT%H:%M:%S')
+                    else:
+                        # شمسی است، مستقیماً فرمت می‌کنیم
+                        created_iso = reservation.created_at.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    created_iso = str(reservation.created_at)
             else:
                 created_iso = None
         except Exception as e:
             print(f"Error formatting created_at: {e}")
             created_iso = str(reservation.created_at) if reservation.created_at else None
 
-        # تاریخ‌های check_in و check_out از قبل شمسی هستند
-        check_in_jalali = reservation.check_in_date.strftime('%Y/%m/%d')
-        check_out_jalali = reservation.check_out_date.strftime('%Y/%m/%d')
+        # تبدیل check_in_date و check_out_date به شمسی ISO string
+        try:
+            if reservation.check_in_date:
+                if hasattr(reservation.check_in_date, 'year'):
+                    if reservation.check_in_date.year > 1500:
+                        # میلادی است، تبدیل به شمسی
+                        jalali_check_in = jdatetime.date.fromgregorian(
+                            date=reservation.check_in_date
+                        )
+                        check_in_iso = jalali_check_in.strftime('%Y-%m-%dT%H:%M:%S')
+                    else:
+                        # شمسی است، مستقیماً فرمت می‌کنیم
+                        check_in_iso = reservation.check_in_date.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    check_in_iso = str(reservation.check_in_date)
+            else:
+                check_in_iso = None
+        except Exception as e:
+            print(f"Error formatting check_in_date: {e}")
+            check_in_iso = str(reservation.check_in_date) if reservation.check_in_date else None
+
+        try:
+            if reservation.check_out_date:
+                if hasattr(reservation.check_out_date, 'year'):
+                    if reservation.check_out_date.year > 1500:
+                        # میلادی است، تبدیل به شمسی
+                        jalali_check_out = jdatetime.date.fromgregorian(
+                            date=reservation.check_out_date
+                        )
+                        check_out_iso = jalali_check_out.strftime('%Y-%m-%dT%H:%M:%S')
+                    else:
+                        # شمسی است، مستقیماً فرمت می‌کنیم
+                        check_out_iso = reservation.check_out_date.strftime('%Y-%m-%dT%H:%M:%S')
+                else:
+                    check_out_iso = str(reservation.check_out_date)
+            else:
+                check_out_iso = None
+        except Exception as e:
+            print(f"Error formatting check_out_date: {e}")
+            check_out_iso = str(reservation.check_out_date) if reservation.check_out_date else None
 
         # لیست اتاق‌ها
         rooms_data = []
@@ -5198,9 +5242,9 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "reserver_name": f"{reservation.reserver_first_name} {reservation.reserver_last_name}".strip(),
                 "reserver_phone": reservation.reserver_phone_number,
                 "tracking_code": reservation.tracking_code,
-                "created_at": created_iso,  # حالا شمسی ISO string است
-                "check_in_date": check_in_jalali,
-                "check_out_date": check_out_jalali,
+                "created_at": created_iso,  # شمسی ISO string
+                "check_in_date": check_in_iso,  # شمسی ISO string
+                "check_out_date": check_out_iso,  # شمسی ISO string
                 "hotel": {
                     "name": hotel.name,
                     "address": hotel.address
