@@ -1,3 +1,4 @@
+from venv import logger
 from rest_framework import serializers
 from reservation.models import Room, Hotel
 from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode, HotelDiscountCode
@@ -90,8 +91,11 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DiscountActivationRecord
-        fields = ['id', 'user', 'discount_type', 'code', 'discount_value', 'required_points', 
-                 'activated_at', 'expires_at', 'reward_claimed', 'related_info']
+        fields = [
+            'id', 'user', 'discount_type', 'code', 'discount_value',
+            'required_points', 'activated_at', 'expires_at',
+            'reward_claimed', 'related_info'
+        ]
 
     def get_code(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
@@ -99,49 +103,55 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
 
     def get_discount_value(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
-        if code and code.discount_value:
+        if code and code.discount_value is not None:
             return f"{int(code.discount_value):,}"
         return '—'
 
     def get_required_points(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
-        if code and code.required_points is not None:
-            return code.required_points
-        return 0
+        return code.required_points if code and code.required_points is not None else 0
 
     def get_expires_at(self, obj):
-        """دریافت تاریخ انقضای کد تخفیف به صورت شمسی و قابل سریالایز"""
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
-        if code and hasattr(code, 'expires_at') and code.expires_at:
-            # تبدیل تاریخ شمسی به رشته برای جلوگیری از خطای JSON
-            try:
-                # اگر تاریخ شمسی است، آن را به رشته تبدیل کنید
-                if hasattr(code.expires_at, 'strftime'):
-                    return code.expires_at.strftime('%Y/%m/%d')
-                else:
-                    return str(code.expires_at)
-            except (AttributeError, ValueError):
-                return str(code.expires_at)
-        return None
+        if not code or not hasattr(code, 'expires_at') or not code.expires_at:
+            return None
+        try:
+            return code.expires_at.strftime('%Y/%m/%d')  # شمسی به صورت رشته
+        except Exception:
+            return str(code.expires_at)
 
     def get_related_info(self, obj):
-        if obj.discount_type == 'room' and obj.room_discount_code:
-            room = obj.room_discount_code.room
-            room_parts = str(room).split(" - ")
-            room_type = room_parts[0] if room_parts else "تویین 2"
-            hotel_name = room_parts[1] if len(room_parts) > 1 else "پارسیان آزادی"
-            return {
-                'room_id': room.id,
-                'room_name': f"هتل {hotel_name} - اتاق {room_type}"
-            }
-        elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
-            return {
-                'shopping_center_name': obj.shopping_discount_code.shopping_center_name or "مرکز خرید نامشخص"
-            }
-        elif obj.discount_type == 'hotel' and obj.hotel_discount_code:
-            hotel = obj.hotel_discount_code.hotel
-            return {
-                'hotel_id': hotel.id,
-                'hotel_name': hotel.name or "هتل نامشخص"
-            }
-        return None
+        try:
+            if obj.discount_type == 'room' and obj.room_discount_code and obj.room_discount_code.room:
+                room = obj.room_discount_code.room
+                room_parts = str(room).split(" - ")
+                room_type = room_parts[0].strip() if room_parts else "نامشخص"
+                hotel_name = room_parts[1].strip() if len(room_parts) > 1 else "نامشخص"
+                return {
+                    'room_id': room.id,
+                    'room_name': f"هتل {hotel_name} - اتاق {room_type}"
+                }
+
+            elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
+                sc = obj.shopping_discount_code
+                name = getattr(sc, 'shopping_center_name', None) or \
+                       getattr(sc, 'shopping_center', None)
+                if hasattr(name, 'name'):
+                    name = name.name
+                return {
+                    'shopping_center_name': name or "مرکز خرید نامشخص"
+                }
+
+            elif obj.discount_type == 'hotel' and obj.hotel_discount_code and obj.hotel_discount_code.hotel:
+                hotel = obj.hotel_discount_code.hotel
+                return {
+                    'hotel_id': hotel.id,
+                    'hotel_name': hotel.name or "هتل نامشخص"
+                }
+
+        except Exception as e:
+            logger.warning(f"Error in get_related_info for record {obj.id}: {e}")
+            # در صورت خطا، اطلاعات حداقلی برگردان
+            pass
+
+        return {}
