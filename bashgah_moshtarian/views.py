@@ -295,10 +295,10 @@ class ActivateDiscountCodeView(APIView):
             required=['code', 'discount_type']
         ),
         responses={
-            200: openapi.Response("کد تخفیف با موفقیت فعال شد"),
-            400: openapi.Response("ورودی نامعتبر یا کد تخفیف موجود نیست"),
-            403: openapi.Response("کاربر قبلاً این کد را فعال کرده یا مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد"),
-            500: openapi.Response("خطای سرور داخلی")
+            200: "کد تخفیف با موفقیت فعال شد",
+            400: "ورودی نامعتبر یا کد تخفیف موجود نیست",
+            403: "کاربر قبلاً این کد را فعال کرده یا مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد",
+            500: "خطای سرور داخلی"
         },
         tags=['discount-crm']
     )
@@ -311,14 +311,10 @@ class ActivateDiscountCodeView(APIView):
             return Response({"error": "کد تخفیف و نوع آن الزامی است"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # دریافت پروفایل و امتیاز
             natural_profile = NaturalProfile.objects.get(base_user=user)
             customer_points = CustomerClubPoint.objects.get(user=user)
-
-            # تاریخ امروز شمسی
             today_jalali = jdatetime.datetime.now().date()
 
-            # تابع ایجاد رکورد فعال‌سازی
             def create_activation_record(discount_code):
                 kwargs = {
                     "user": user,
@@ -333,7 +329,6 @@ class ActivateDiscountCodeView(APIView):
                     kwargs["hotel_discount_code"] = discount_code
                 DiscountActivationRecord.objects.create(**kwargs)
 
-            # شرط مشترک: کاربر مجاز است؟
             def check_user_permission(discount_code):
                 if (user not in discount_code.users.all() and
                     discount_code.user_level and natural_profile.level != discount_code.user_level):
