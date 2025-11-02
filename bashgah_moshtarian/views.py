@@ -280,6 +280,11 @@ class ActivateDiscountCodeView(APIView):
 
     @swagger_auto_schema(
         operation_summary="فعال‌سازی کد تخفیف",
+        operation_description="""
+        این API برای فعال‌سازی یک کد تخفیف توسط کاربر استفاده می‌شود.
+        ورودی شامل کد تخفیف و نوع آن (اتاق، مرکز خرید یا هتل) است.
+        در صورت موفقیت، رکورد فعال‌سازی در سیستم ثبت می‌شود و امتیاز مورد نیاز از حساب مشتری کسر می‌شود.
+        """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -298,143 +303,106 @@ class ActivateDiscountCodeView(APIView):
     )
     def post(self, request, *args, **kwargs):
         user = request.user
-        code = request.data.get('code', '').strip().upper()
+        code = request.data.get('code')
         discount_type = request.data.get('discount_type')
 
-        # اعتبارسنجی دستی
         if not code or not discount_type:
             return Response({"error": "کد تخفیف و نوع آن الزامی است"}, status=status.HTTP_400_BAD_REQUEST)
-        if len(code) != 8:
-            return Response({"error": "کد تخفیف باید دقیقاً ۸ کاراکتر باشد"}, status=status.HTTP_400_BAD_REQUEST)
-        if discount_type not in ['room', 'shopping_center', 'hotel']:
-            return Response({"error": "نوع تخفیف نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            with transaction.atomic():
-                # پروفایل کاربری
-                try:
-                    natural_profile = NaturalProfile.objects.get(base_user=user)
-                except NaturalProfile.DoesNotExist:
-                    return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
+            try:
+                natural_profile = NaturalProfile.objects.get(base_user=user)
+            except NaturalProfile.DoesNotExist:
+                return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
 
-                # امتیاز باشگاه مشتریان
-                customer_points, _ = CustomerClubPoint.objects.get_or_create(user=user, defaults={'points': 0})
+            try:
+                customer_points = CustomerClubPoint.objects.get(user=user)
+            except CustomerClubPoint.DoesNotExist:
+                return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
-                # پیدا کردن کد تخفیف
-                discount_code = None
-                error_message = ""
-                if discount_type == 'room':
-                    try:
-                        discount_code = RoomDiscountCode.objects.select_for_update().get(code=code)
-                    except RoomDiscountCode.DoesNotExist:
-                        error_message = "کد تخفیف اتاق یافت نشد"
-                elif discount_type == 'shopping_center':
-                    try:
-                        discount_code = ShoppingCenterDiscountCode.objects.select_for_update().get(code=code)
-                    except ShoppingCenterDiscountCode.DoesNotExist:
-                        error_message = "کد تخفیف مرکز خرید یافت نشد"
-                elif discount_type == 'hotel':
-                    try:
-                        discount_code = HotelDiscountCode.objects.select_for_update().get(code=code)
-                    except HotelDiscountCode.DoesNotExist:
-                        error_message = "کد تخفیف هتل یافت نشد"
-
-                if not discount_code:
-                    return Response({"error": error_message or "کد تخفیف یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-
-                # بررسی فعال‌سازی قبلی
-                if discount_type == 'room':
-                    existing_activation = DiscountActivationRecord.objects.filter(user=user, room_discount_code=discount_code).first()
-                elif discount_type == 'shopping_center':
-                    existing_activation = DiscountActivationRecord.objects.filter(user=user, shopping_discount_code=discount_code).first()
-                else:
-                    existing_activation = DiscountActivationRecord.objects.filter(user=user, hotel_discount_code=discount_code).first()
-
-                if existing_activation:
-                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
-                                    status=status.HTTP_403_FORBIDDEN)
-
-                # بررسی مجوز کاربر
-                if hasattr(discount_code, "users") and discount_code.users.exists():
-                    if not discount_code.users.filter(id=user.id).exists():
-                        return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
-
-                # بررسی سطح کاربری
-                if getattr(discount_code, "user_level", None):
-                    if natural_profile.level != discount_code.user_level:
-                        return Response({"error": "سطح کاربری شما با این کد تخفیف مطابقت ندارد"}, status=status.HTTP_403_FORBIDDEN)
-
-                # بررسی تاریخ انقضا
-                today_jalali = jdatetime.datetime.now().date()
-                if getattr(discount_code, "expires_at", None) and today_jalali > discount_code.expires_at:
-                    return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
-
-                # بررسی دفعات باقی‌مانده
-                if hasattr(discount_code, 'remaining_uses') and discount_code.remaining_uses is not None:
-                    if discount_code.remaining_uses <= 0:
-                        return Response({"error": "دفعات استفاده از این کد به پایان رسیده است"}, status=status.HTTP_400_BAD_REQUEST)
-
-                # امتیاز لازم
-                required_points = getattr(discount_code, "required_points", 0) or 0
-                if required_points > 0:
-                    if customer_points.points < required_points:
-                        return Response(
-                            {"error": f"امتیاز کافی برای فعال‌سازی ندارید. امتیاز مورد نیاز: {required_points}, امتیاز شما: {customer_points.points}"},
-                            status=status.HTTP_403_FORBIDDEN
-                        )
-                    customer_points.points -= required_points
-                    customer_points.save(update_fields=['points'])
-
-                # ایجاد رکورد فعال‌سازی
-                activation_data = {
+            def create_activation_record(discount_code):
+                kwargs = {
                     "user": user,
                     "discount_type": discount_type,
                     "reward_claimed": False
                 }
                 if discount_type == "room":
-                    activation_data["room_discount_code"] = discount_code
+                    kwargs["room_discount_code"] = discount_code
                 elif discount_type == "shopping_center":
-                    activation_data["shopping_discount_code"] = discount_code
-                else:
-                    activation_data["hotel_discount_code"] = discount_code
+                    kwargs["shopping_discount_code"] = discount_code
+                elif discount_type == "hotel":
+                    kwargs["hotel_discount_code"] = discount_code
+                DiscountActivationRecord.objects.create(**kwargs)
 
-                activation_record = DiscountActivationRecord.objects.create(**activation_data)
+            if discount_type == 'room':
+                discount_code = RoomDiscountCode.objects.get(code=code)
+                if DiscountActivationRecord.objects.filter(user=user, room_discount_code=discount_code).exists():
+                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                                  status=status.HTTP_403_FORBIDDEN)
+                if (user not in discount_code.users.all() and 
+                    (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
+                    return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
+                    return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
+                    return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
+                if discount_code.required_points > 0:
+                    customer_points.points -= discount_code.required_points
+                    customer_points.save()
+                create_activation_record(discount_code)
 
-                # اطلاعات هتل برای پاسخ
-                hotel_info = None
-                if discount_type == 'hotel' and hasattr(discount_code, 'hotel') and discount_code.hotel:
-                    hotel_info = {
-                        'hotel_id': discount_code.hotel.id,
-                        'hotel_name': discount_code.hotel.name
-                    }
-                elif discount_type == 'room' and hasattr(discount_code, 'room') and discount_code.room:
-                    hotel_info = {
-                        'hotel_id': discount_code.room.hotel.id,
-                        'hotel_name': discount_code.room.hotel.name
-                    }
+            elif discount_type == 'shopping_center':
+                discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+                if DiscountActivationRecord.objects.filter(user=user, shopping_discount_code=discount_code).exists():
+                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                                  status=status.HTTP_403_FORBIDDEN)
+                if (user not in discount_code.users.all() and 
+                    (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
+                    return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
+                    return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
+                    return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
+                if discount_code.required_points > 0:
+                    customer_points.points -= discount_code.required_points
+                    customer_points.save()
+                create_activation_record(discount_code)
 
-                resp = {
-                    "message": "کد تخفیف با موفقیت فعال شد",
-                    "activation_id": activation_record.id,
-                    "discount_code": discount_code.code,
-                    "discount_type": discount_type,
-                    "discount_value": str(getattr(discount_code, "discount_value", "")),
-                    "required_points": required_points,
-                    "expires_at": discount_code.expires_at.strftime('%Y/%m/%d') if getattr(discount_code, "expires_at", None) else None,
-                    "hotel_info": hotel_info,
-                    "remaining_uses": getattr(discount_code, 'remaining_uses', None)
-                }
-                return Response(resp, status=status.HTTP_200_OK)
+            elif discount_type == 'hotel':
+                discount_code = HotelDiscountCode.objects.get(code=code)
+                if DiscountActivationRecord.objects.filter(user=user, hotel_discount_code=discount_code).exists():
+                    return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
+                                  status=status.HTTP_403_FORBIDDEN)
+                if (user not in discount_code.users.all() and 
+                    (not discount_code.user_level or natural_profile.level != discount_code.user_level)):
+                    return Response({"error": "شما مجاز به فعال‌سازی این کد نیستید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.required_points > 0 and customer_points.points < discount_code.required_points:
+                    return Response({"error": "امتیاز کافی برای فعال‌سازی ندارید"}, status=status.HTTP_403_FORBIDDEN)
+                if discount_code.expires_at and jdatetime.datetime.now().date() > discount_code.expires_at:
+                    return Response({"error": "این کد منقضی شده است"}, status=status.HTTP_400_BAD_REQUEST)
+                if discount_code.required_points > 0:
+                    customer_points.points -= discount_code.required_points
+                    customer_points.save()
+                create_activation_record(discount_code)
 
+            else:
+                return Response({"error": "نوع تخفیف نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({"message": "کد تخفیف با موفقیت فعال شد"}, status=status.HTTP_200_OK)
+
+        except RoomDiscountCode.DoesNotExist:
+            return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+        except ShoppingCenterDiscountCode.DoesNotExist:
+            return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
+        except HotelDiscountCode.DoesNotExist:
+            return Response({"error": "کد تخفیف هتل یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
-            logger.error(f"خطا در فعال‌سازی کد تخفیف {code} (نوع: {discount_type}): {str(exc)}")
-            logger.error(f"جزئیات خطا: {traceback.format_exc()}")
             return Response({
-                "error": "خطا در فعال‌سازی کد تخفیف",
+                "error": str(exc),
                 "exception_type": exc.__class__.__name__,
-                "details": str(exc)
+                "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
 
 # ای پی ای جوایز دریافتی کاربران 
 class DiscountActivationRecordListView(generics.ListAPIView):
