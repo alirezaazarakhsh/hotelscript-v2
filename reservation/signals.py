@@ -1,7 +1,6 @@
 # reservation/signals.py
 import logging
 import re
-import traceback
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum
@@ -351,7 +350,7 @@ def _process_discount_code_optimized(reservation):
             # مصرف کد تخفیف - کاهش دفعات باقی‌مانده
             logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
             
-            # کاهش دفعات باقی‌مانده با استفاده از F() expression برای جلوگیری از race condition
+            # روش 1: استفاده از F() expression برای جلوگیری از race condition
             if discount_type == 'room':
                 RoomDiscountCode.objects.filter(pk=discount_obj.pk).update(
                     remaining_uses=models.F('remaining_uses') - 1
@@ -364,10 +363,8 @@ def _process_discount_code_optimized(reservation):
             # رفرش کردن آبجکت برای گرفتن مقدار جدید
             discount_obj.refresh_from_db()
             
-            # افزودن کاربر به لیست استفاده‌کنندگان - این باعث فعال شدن سیگنال handle_activated_users_change می‌شود
-            if reservation_refreshed.buyer not in discount_obj.activated_users.all():
-                discount_obj.activated_users.add(reservation_refreshed.buyer)
-                logger.info(f"🟢 کاربر {reservation_refreshed.buyer.phone_number} به activated_users کد {discount_obj.code} اضافه شد")
+            # افزودن کاربر به لیست استفاده‌کنندگان
+            discount_obj.activated_users.add(reservation_refreshed.buyer)
             
             logger.info(f"🟢 کد تخفیف {discount_obj.code} ذخیره شد - remaining_uses بعد: {discount_obj.remaining_uses}")
             

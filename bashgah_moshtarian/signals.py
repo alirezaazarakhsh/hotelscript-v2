@@ -194,44 +194,13 @@ def _deduct_points_for_activation(user, discount_instance):
 @receiver(m2m_changed, sender=HotelDiscountCode.activated_users.through)
 @receiver(m2m_changed, sender=ShoppingCenterDiscountCode.activated_users.through)
 def handle_activated_users_change(sender, instance, action, pk_set, **kwargs):
-    """مدیریت تغییرات در activated_users برای همه انواع کدهای تخفیف - نسخه اصلاح شده"""
+    """مدیریت تغییرات در activated_users برای همه انواع کدهای تخفیف"""
     logger.info(f"تغییر در activated_users کد تخفیف {instance.code}: action={action}, users={pk_set}")
     
     if action == 'post_add':
         for user_id in pk_set:
             try:
                 user = BaseUser.objects.get(pk=user_id)
-                
-                # کاهش remaining_uses برای کدهای اتاق و هتل
-                if hasattr(instance, 'remaining_uses') and isinstance(instance, (RoomDiscountCode, HotelDiscountCode)):
-                    try:
-                        with transaction.atomic():
-                            # استفاده از select_for_update برای جلوگیری از race condition
-                            discount_obj = type(instance).objects.select_for_update().get(pk=instance.pk)
-                            
-                            if discount_obj.remaining_uses <= 0:
-                                logger.error(f"❌ تعداد دفعات استفاده از کد {discount_obj.code} به پایان رسیده است.")
-                                # حذف کاربر از activated_users
-                                discount_obj.activated_users.remove(user)
-                                continue
-                            
-                            logger.info(f"🟡 کاهش remaining_uses برای کد {discount_obj.code} - قبل: {discount_obj.remaining_uses}")
-                            
-                            # کاهش دفعات باقی‌مانده با استفاده از F expression
-                            type(instance).objects.filter(pk=discount_obj.pk).update(
-                                remaining_uses=models.F('remaining_uses') - 1
-                            )
-                            
-                            # رفرش برای گرفتن مقدار جدید
-                            discount_obj.refresh_from_db()
-                            
-                            logger.info(f"🟢 remaining_uses برای کد {discount_obj.code} کاهش یافت - بعد: {discount_obj.remaining_uses} - کاربر: {user.phone_number}")
-                            
-                    except Exception as e:
-                        logger.error(f"❌ خطا در کاهش remaining_uses برای کد {instance.code}: {str(e)}")
-                        # حذف کاربر از activated_users در صورت شکست
-                        instance.activated_users.remove(user)
-                        continue
                 
                 # ایجاد یا به روزرسانی رکورد فعال‌سازی
                 activation_record = _create_or_update_activation_record(user, instance)
@@ -253,14 +222,14 @@ def handle_activated_users_change(sender, instance, action, pk_set, **kwargs):
 # سیگنال جدید برای رزروهای پرداخت شده
 @receiver(post_save, sender='reservation.Reservationhotel')
 def handle_reservation_payment_for_discount(sender, instance, **kwargs):
-    """پردازش کد تخفیف پس از پرداخت موفق رزرو - نسخه اصلاح شده"""
+    """پردازش کد تخفیف پس از پرداخت موفق رزرو"""
     from reservation.models import Reservationhotel
     
     if (instance.payment_status == 'paid' and 
         instance.applied_discount_code and 
         not instance.discount_processed):
         
-        logger.info(f"🔵 پردازش کد تخفیف برای رزرو پرداخت شده {instance.tracking_code}")
+        logger.info(f"پردازش کد تخفیف برای رزرو پرداخت شده {instance.tracking_code}")
         
         try:
             with transaction.atomic():
