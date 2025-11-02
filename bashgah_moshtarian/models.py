@@ -355,7 +355,7 @@ class HotelDiscountCode(models.Model):
         """
         try:
             with transaction.atomic():
-                # استفاده از select_for_update برای جلوگیری از race condition
+                # استفاده از select_for_update
                 discount_obj = HotelDiscountCode.objects.select_for_update().get(pk=self.pk)
                 
                 # بررسی شرایط استفاده
@@ -367,8 +367,8 @@ class HotelDiscountCode(models.Model):
                 
                 logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
                 
-                # کاهش دفعات باقی‌مانده
-                discount_obj.remaining_uses -= 1
+                # کاهش مستقیم remaining_uses
+                discount_obj.remaining_uses = discount_obj.remaining_uses - 1
                 discount_obj.save(update_fields=['remaining_uses'])
                 
                 # افزودن کاربر به activated_users
@@ -381,10 +381,15 @@ class HotelDiscountCode(models.Model):
         except Exception as e:
             logger.error(f"🔴 خطا در مصرف کد تخفیف {self.code}: {str(e)}")
             raise
-
+    
     def save(self, *args, **kwargs):
-        if not self.pk:
-            self.remaining_uses = self.usage_limit  # اطمینان از تنظیم اولیه
+        # اگر شیء جدید است و remaining_uses صفر است، آن را برابر usage_limit قرار بده
+        if not self.pk and self.remaining_uses == 0:
+            self.remaining_uses = self.usage_limit
+        # اگر شیء جدید است و remaining_uses تنظیم نشده
+        elif not self.pk:
+            self.remaining_uses = self.remaining_uses or self.usage_limit
+        
         super().save(*args, **kwargs)
 
     class Meta:
