@@ -80,6 +80,7 @@ class CustomerClubPointSerializer(serializers.ModelSerializer):
         fields = ['points']
 
 
+
 class DiscountActivationRecordSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     discount_type = serializers.CharField(source='get_discount_type_display', read_only=True)
@@ -103,21 +104,28 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
 
     def get_discount_value(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
-        if code and code.discount_value is not None:
-            return f"{int(code.discount_value):,}"
+        if code and hasattr(code, 'discount_value') and code.discount_value is not None:
+            try:
+                # برای HotelDiscountCode و RoomDiscountCode (DecimalField)
+                if hasattr(code, 'discount_value') and isinstance(code.discount_value, (int, float)):
+                    return f"{int(code.discount_value):,}"
+                # برای ShoppingCenterDiscountCode (CharField)
+                return f"{int(code.discount_value):,}"
+            except (ValueError, TypeError):
+                return str(code.discount_value)
         return '—'
 
     def get_required_points(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
-        return code.required_points if code and code.required_points is not None else 0
+        return code.required_points if code and hasattr(code, 'required_points') else 0
 
     def get_expires_at(self, obj):
         code = obj.room_discount_code or obj.shopping_discount_code or obj.hotel_discount_code
         if not code or not hasattr(code, 'expires_at') or not code.expires_at:
             return None
         try:
-            return code.expires_at.strftime('%Y/%m/%d')  # شمسی به صورت رشته
-        except Exception:
+            return code.expires_at.strftime('%Y/%m/%d')
+        except (AttributeError, ValueError):
             return str(code.expires_at)
 
     def get_related_info(self, obj):
@@ -133,11 +141,8 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
                 }
 
             elif obj.discount_type == 'shopping_center' and obj.shopping_discount_code:
-                sc = obj.shopping_discount_code
-                name = getattr(sc, 'shopping_center_name', None) or \
-                       getattr(sc, 'shopping_center', None)
-                if hasattr(name, 'name'):
-                    name = name.name
+                # مستقیم از shopping_center_name استفاده کن
+                name = getattr(obj.shopping_discount_code, 'shopping_center_name', "مرکز خرید نامشخص")
                 return {
                     'shopping_center_name': name or "مرکز خرید نامشخص"
                 }
@@ -146,12 +151,11 @@ class DiscountActivationRecordSerializer(serializers.ModelSerializer):
                 hotel = obj.hotel_discount_code.hotel
                 return {
                     'hotel_id': hotel.id,
-                    'hotel_name': hotel.name or "هتل نامشخص"
+                    'hotel_name': getattr(hotel, 'name', "هتل نامشخص")
                 }
 
         except Exception as e:
             logger.warning(f"Error in get_related_info for record {obj.id}: {e}")
-            # در صورت خطا، اطلاعات حداقلی برگردان
             pass
 
         return {}

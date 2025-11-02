@@ -295,10 +295,10 @@ class ActivateDiscountCodeView(APIView):
             required=['code', 'discount_type']
         ),
         responses={
-            200: "کد تخفیف با موفقیت فعال شد",
-            400: "ورودی نامعتبر یا کد تخفیف موجود نیست",
-            403: "کاربر قبلاً این کد را فعال کرده یا مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد",
-            500: "خطای سرور داخلی"
+            200: openapi.Response("کد تخفیف با موفقیت فعال شد"),
+            400: openapi.Response("ورودی نامعتبر یا کد تخفیف موجود نیست"),
+            403: openapi.Response("کاربر قبلاً این کد را فعال کرده یا مجاز به فعال‌سازی نیست یا امتیاز کافی ندارد یا پروفایل کاربری ندارد"),
+            500: openapi.Response("خطای سرور داخلی")
         },
         tags=['discount-crm']
     )
@@ -315,6 +315,10 @@ class ActivateDiscountCodeView(APIView):
             natural_profile = NaturalProfile.objects.get(base_user=user)
             customer_points = CustomerClubPoint.objects.get(user=user)
 
+            # تاریخ امروز شمسی
+            today_jalali = jdatetime.datetime.now().date()
+
+            # تابع ایجاد رکورد فعال‌سازی
             def create_activation_record(discount_code):
                 kwargs = {
                     "user": user,
@@ -329,20 +333,19 @@ class ActivateDiscountCodeView(APIView):
                     kwargs["hotel_discount_code"] = discount_code
                 DiscountActivationRecord.objects.create(**kwargs)
 
-            # شرط مشترک برای هر سه نوع
+            # شرط مشترک: کاربر مجاز است؟
             def check_user_permission(discount_code):
-                # اگر کاربر در لیست users نباشد و user_level تنظیم شده باشد و سطح کاربر مطابقت نداشته باشد → رد
-                if (user not in discount_code.users.all() and 
+                if (user not in discount_code.users.all() and
                     discount_code.user_level and natural_profile.level != discount_code.user_level):
                     return False
                 return True
 
-            # تاریخ امروز شمسی
-            today_jalali = jdatetime.datetime.now().date()
-
             # === نوع: اتاق ===
             if discount_type == 'room':
-                discount_code = RoomDiscountCode.objects.get(code=code)
+                try:
+                    discount_code = RoomDiscountCode.objects.get(code=code)
+                except RoomDiscountCode.DoesNotExist:
+                    return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
                 if DiscountActivationRecord.objects.filter(user=user, room_discount_code=discount_code).exists():
                     return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
@@ -365,7 +368,10 @@ class ActivateDiscountCodeView(APIView):
 
             # === نوع: مرکز خرید ===
             elif discount_type == 'shopping_center':
-                discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+                try:
+                    discount_code = ShoppingCenterDiscountCode.objects.get(code=code)
+                except ShoppingCenterDiscountCode.DoesNotExist:
+                    return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
                 if DiscountActivationRecord.objects.filter(user=user, shopping_discount_code=discount_code).exists():
                     return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
@@ -388,7 +394,10 @@ class ActivateDiscountCodeView(APIView):
 
             # === نوع: هتل ===
             elif discount_type == 'hotel':
-                discount_code = HotelDiscountCode.objects.get(code=code)
+                try:
+                    discount_code = HotelDiscountCode.objects.get(code=code)
+                except HotelDiscountCode.DoesNotExist:
+                    return Response({"error": "کد تخفیف هتل یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
 
                 if DiscountActivationRecord.objects.filter(user=user, hotel_discount_code=discount_code).exists():
                     return Response({"error": "شما قبلاً این کد تخفیف را فعال کرده‌اید و فقط یک‌بار می‌توانید از آن استفاده کنید."},
@@ -418,19 +427,12 @@ class ActivateDiscountCodeView(APIView):
             return Response({"error": "پروفایل کاربری برای این کاربر یافت نشد"}, status=status.HTTP_403_FORBIDDEN)
         except CustomerClubPoint.DoesNotExist:
             return Response({"error": "امتیاز باشگاه مشتریان برای این کاربر یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-        except RoomDiscountCode.DoesNotExist:
-            return Response({"error": "کد تخفیف اتاق یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-        except ShoppingCenterDiscountCode.DoesNotExist:
-            return Response({"error": "کد تخفیف مرکز خرید یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
-        except HotelDiscountCode.DoesNotExist:
-            return Response({"error": "کد تخفیف هتل یافت نشد"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({
                 "error": str(exc),
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 class DiscountActivationRecordListView(generics.ListAPIView):
@@ -440,9 +442,9 @@ class DiscountActivationRecordListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return DiscountActivationRecord.objects.filter(user=user).select_related(
-            'room_discount_code__room',
-            'shopping_discount_code__shopping_center',  # این مهمه!
-            'hotel_discount_code__hotel'
+            'room_discount_code__room',           # درست
+            # 'shopping_discount_code__shopping_center',  # حذف شد
+            'hotel_discount_code__hotel'          # درست
         ).order_by('-activated_at')
 
     @swagger_auto_schema(
