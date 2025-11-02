@@ -1490,15 +1490,92 @@ class Reservationhotel(models.Model):
 
 
 # --- متد جدید برای پردازش کد تخفیف ---
-def process_discount_after_payment(self):
-    """پردازش کد تخفیف پس از پرداخت موفق"""
+def process_discount_after_payment_v2(self):
+    """پردازش کد تخفیف با استفاده از متد consume_discount_for_user موجود"""
     if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):
+        logger.info(f"شرایط اولیه برای پردازش کد تخفیف برقرار نیست: "
+                   f"payment_status={self.payment_status}, "
+                   f"applied_discount_code={self.applied_discount_code}, "
+                   f"discount_processed={self.discount_processed}")
         return False
 
     try:
-        from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord
-        
-        # پیدا کردن کد تخفیف
+        from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
+        from django.db import transaction
+
+        # ابتدا وضعیت فعلی را دیباگ کنیم
+        logger.info(f"🔍 شروع پردازش کد تخفیف برای رزرو {self.tracking_code}")
+        self._debug_discount_status()
+
+        with transaction.atomic():
+            reservation = Reservationhotel.objects.select_for_update().get(pk=self.pk)
+            if reservation.discount_processed:
+                logger.info(f"کد تخفیف برای رزرو {reservation.tracking_code} قبلاً پردازش شده است")
+                return True
+
+            # پیدا کردن کد تخفیف
+            discount_obj = None
+            try:
+                discount_obj = RoomDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
+                logger.info(f"✅ RoomDiscountCode پیدا شد: {discount_obj.code}")
+            except RoomDiscountCode.DoesNotExist:
+                try:
+                    discount_obj = HotelDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
+                    logger.info(f"✅ HotelDiscountCode پیدا شد: {discount_obj.code}")
+                except HotelDiscountCode.DoesNotExist:
+                    logger.error(f"❌ کد تخفیف {reservation.applied_discount_code} یافت نشد")
+                    return False
+
+            # دیباگ وضعیت کد تخفیف قبل از مصرف
+            logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف:")
+            logger.info(f"   - کد: {discount_obj.code}")
+            logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+            logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
+            logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
+
+            # استفاده از متد consume_discount_for_user که از قبل تست شده
+            try:
+                success = discount_obj.consume_discount_for_user(reservation.buyer)
+                if success:
+                    reservation.discount_processed = True
+                    reservation.save(update_fields=['discount_processed'])
+                    
+                    # رفرش کردن discount_obj برای گرفتن مقادیر جدید
+                    discount_obj.refresh_from_db()
+                    
+                    # دیباگ وضعیت بعد از مصرف
+                    logger.info(f"🟢 وضعیت کد تخفیف بعد از مصرف:")
+                    logger.info(f"   - کد: {discount_obj.code}")
+                    logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+                    logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
+                    logger.info(f"   - discount_processed: {reservation.discount_processed}")
+                    
+                    logger.info(f"✅ کد تخفیف با موفقیت مصرف شد برای رزرو {reservation.tracking_code}")
+                    return True
+                else:
+                    logger.error(f"❌ متد consume_discount_for_user False برگرداند")
+                    return False
+                    
+            except ValueError as e:
+                logger.error(f"❌ خطا در مصرف کد تخفیف (ValueError): {e}")
+                return False
+            except Exception as e:
+                logger.error(f"❌ خطای غیرمنتظره در مصرف کد تخفیف: {e}")
+                import traceback
+                logger.error(f"❌ جزئیات خطا: {traceback.format_exc()}")
+                return False
+
+    except Exception as e:
+        logger.error(f"🔴 خطا در پردازش کد تخفیف: {e}")
+        import traceback
+        logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
+        return False
+
+def _debug_discount_status(self):
+    """تابع کمکی برای دیباگ وضعیت کد تخفیف"""
+    from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
+    
+    try:
         discount_obj = None
         discount_type = None
         
@@ -1510,35 +1587,21 @@ def process_discount_after_payment(self):
                 discount_obj = HotelDiscountCode.objects.get(code__iexact=self.applied_discount_code)
                 discount_type = 'hotel'
             except HotelDiscountCode.DoesNotExist:
-                logger.error(f"کد تخفیف {self.applied_discount_code} برای رزرو {self.tracking_code} یافت نشد")
-                return False
-
-        # بررسی موجودی دفعات استفاده
-        if discount_obj.remaining_uses <= 0:
-            logger.error(f"دفعات استفاده از کد تخفیف {discount_obj.code} به پایان رسیده است")
-            return False
-
-        # کاهش دفعات باقی‌مانده
-        discount_obj.remaining_uses -= 1
+                logger.error(f"🔴 کد تخفیف {self.applied_discount_code} در دیباگ یافت نشد")
+                return
         
-        # افزودن کاربر به activated_users
-        if self.buyer not in discount_obj.activated_users.all():
-            discount_obj.activated_users.add(self.buyer)
-            logger.info(f"کاربر {self.buyer.phone_number} به activated_users کد {discount_obj.code} اضافه شد")
-
-        # ذخیره تغییرات در کد تخفیف
-        discount_obj.save()
-
-        # علامت‌گذاری رزرو به عنوان پردازش شده
-        self.discount_processed = True
-        self.save(update_fields=['discount_processed'])
-        
-        logger.info(f"کد تخفیف {discount_obj.code} برای رزرو {self.tracking_code} پردازش شد. دفعات باقی‌مانده: {discount_obj.remaining_uses}")
-        return True
+        logger.info(f"🔍 دیباگ کد تخفیف {discount_obj.code} (نوع: {discount_type}):")
+        logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+        logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
+        logger.info(f"   - کاربر در activated_users: {self.buyer in discount_obj.activated_users.all()}")
+        logger.info(f"   - discount_processed در رزرو: {self.discount_processed}")
+        logger.info(f"   - required_points: {discount_obj.required_points}")
+        if discount_obj.expires_at:
+            logger.info(f"   - expires_at: {discount_obj.expires_at}")
         
     except Exception as e:
-        logger.error(f"خطا در پردازش کد تخفیف برای رزرو {self.tracking_code}: {e}")
-        return False
+        logger.error(f"🔴 خطا در دیباگ کد تخفیف: {e}")
+        
         
         
 _thread_locals = local()
