@@ -1,9 +1,9 @@
 # reservation/signals.py
 import logging
 import re
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
-from django.db.models import Sum
+from django.db.models import Sum, F
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from channels.layers import get_channel_layer
@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.db import transaction
 from threading import local
 import jdatetime
+import traceback
 
 from authentication import models
 
@@ -34,6 +35,57 @@ def set_skip_points_and_sms(value):
 
 def get_skip_points_and_sms():
     return getattr(_thread_locals, 'skip_points_and_sms', False)
+
+# ===================================================================
+# سیگنال جدید برای بررسی تغییر وضعیت پرداخت
+# ===================================================================
+@receiver(pre_save, sender=Reservationhotel)
+def handle_payment_status_change(sender, instance, **kwargs):
+    """
+    بررسی تغییر وضعیت پرداخت و انجام عملیات مربوطه
+    """
+    if instance.pk:
+        try:
+            old_instance = Reservationhotel.objects.get(pk=instance.pk)
+            
+            # اگر وضعیت پرداخت از چیزی غیر از 'paid' به 'paid' تغییر کرد
+            if (old_instance.payment_status != 'paid' and 
+                instance.payment_status == 'paid'):
+                
+                logger.info(f"🟢 تغییر وضعیت پرداخت به paid برای رزرو {instance.tracking_code}")
+                
+                # انجام عملیات مربوط به پرداخت موفق
+                _handle_successful_payment(instance)
+                
+        except Reservationhotel.DoesNotExist:
+            pass
+
+def _handle_successful_payment(reservation):
+    """
+    مدیریت پرداخت موفق رزرو
+    """
+    logger.info(f"🔵 شروع پردازش پرداخت موفق برای رزرو {reservation.tracking_code}")
+    
+    # ---------- مصرف کد تخفیف ----------
+    if reservation.applied_discount_code and not reservation.discount_processed:
+        success = _process_discount_code_optimized(reservation)
+        if success:
+            logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {reservation.tracking_code}")
+        else:
+            logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {reservation.tracking_code}")
+
+    # ---------- تخصیص امتیاز ----------
+    if not reservation.points_assigned:
+        _assign_customer_points(reservation)
+
+    # ---------- برداشت از کیف پول ----------
+    if (reservation.wallet_withdrawal_amount > 0 and 
+        not reservation.wallet_withdrawn):
+        _process_wallet_withdrawal(reservation)
+
+    # ---------- ارسال WebSocket ----------
+    channel_layer = get_channel_layer()
+    _send_websocket_update(channel_layer, reservation)
 
 # ===================================================================
 # 1. به‌روزرسانی موجودی اتاق هنگام رزرو (ذخیره یا حذف)
@@ -170,47 +222,26 @@ def update_hotel_status(sender, instance, **kwargs):
         hotel.is_special_offer = hotel.is_flash_sale = hotel.is_best_seller = False
         hotel.save(update_fields=['is_special_offer', 'is_flash_sale', 'is_best_seller'])
 
-
 # ===================================================================
-# 6. مدیریت پرداخت، امتیاز، تخفیف، کیف پول - نسخه نهایی و اصلاح شده
+# 6. مدیریت پرداخت، امتیاز، تخفیف، کیف پول - نسخه اصلاح شده
 # ===================================================================
 @receiver(post_save, sender=Reservationhotel)
 def handle_reservation_payment_complete(sender, instance, **kwargs):
     """
-    مدیریت کامل پرداخت رزرو - نسخه نهایی و اصلاح شده
+    مدیریت کامل پرداخت رزرو - نسخه اصلاح شده
     """
     if get_skip_points_and_sms():
         logger.info(f"سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد (skip flag).")
         return
 
-    channel_layer = get_channel_layer()
-
-    # --- پرداخت موفق ---
+    # اگر وضعیت پرداخت 'paid' است، عملیات را انجام بده
     if instance.payment_status == 'paid':
         logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
-
-        # ---------- مصرف کد تخفیف (اولویت اول) ----------
-        if instance.applied_discount_code and not instance.discount_processed:
-            success = _process_discount_code_optimized(instance)
-            if success:
-                logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {instance.tracking_code}")
-            else:
-                logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {instance.tracking_code}")
-
-        # ---------- تخصیص امتیاز ----------
-        if not instance.points_assigned:
-            _assign_customer_points(instance)
-
-        # ---------- برداشت از کیف پول ----------
-        if instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
-            _process_wallet_withdrawal(instance)
+        _handle_successful_payment(instance)
 
     # --- رد رزرو ---
     elif instance.capacity_status == 'rejected':
         _handle_rejected_reservation(instance)
-
-    # --- ارسال وضعیت WebSocket ---
-    _send_websocket_update(channel_layer, instance)
 
 def _assign_customer_points(reservation):
     """تخصیص امتیاز باشگاه مشتریان"""
@@ -350,7 +381,7 @@ def _process_discount_code_optimized(reservation):
             # مصرف کد تخفیف - کاهش دفعات باقی‌مانده
             logger.info(f"🟡 مصرف کد تخفیف {discount_obj.code} - remaining_uses قبل: {discount_obj.remaining_uses}")
             
-            # روش 1: استفاده از F() expression برای جلوگیری از race condition
+            # استفاده از F() expression برای جلوگیری از race condition
             if discount_type == 'room':
                 RoomDiscountCode.objects.filter(pk=discount_obj.pk).update(
                     remaining_uses=models.F('remaining_uses') - 1
@@ -392,26 +423,41 @@ def _process_discount_code_optimized(reservation):
         return False
 
 def _process_wallet_withdrawal(reservation):
-    """برداشت از کیف پول"""
+    """برداشت از کیف پول - نسخه اصلاح شده"""
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         return
 
     try:
         with transaction.atomic():
-            wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
-            if wallet.balance >= reservation.wallet_withdrawal_amount:
-                wallet.balance -= reservation.wallet_withdrawal_amount
-                wallet.save()
-                reservation.wallet_withdrawn = True
-                reservation.save(update_fields=['wallet_withdrawn'])
-                logger.info(f"مبلغ {reservation.wallet_withdrawal_amount} از کیف پول کاربر {reservation.buyer.phone_number} کسر شد.")
+            # رفرش کردن رزرو برای اطمینان از آخرین وضعیت
+            reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=reservation.pk)
+            
+            if (reservation_refreshed.wallet_withdrawal_amount > 0 and 
+                not reservation_refreshed.wallet_withdrawn):
+                
+                wallet = Wallet.objects.select_for_update().get(user=reservation_refreshed.buyer)
+                
+                if wallet.balance >= reservation_refreshed.wallet_withdrawal_amount:
+                    # کسر از کیف پول
+                    wallet.balance -= reservation_refreshed.wallet_withdrawal_amount
+                    wallet.save()
+                    
+                    # علامت‌گذاری که برداشت انجام شده
+                    reservation_refreshed.wallet_withdrawn = True
+                    reservation_refreshed.save(update_fields=['wallet_withdrawn'])
+                    
+                    logger.info(f"✅ مبلغ {reservation_refreshed.wallet_withdrawal_amount} از کیف پول کاربر {reservation_refreshed.buyer.phone_number} کسر شد. موجودی جدید: {wallet.balance}")
+                else:
+                    logger.error(f"❌ موجودی کیف پول برای رزرو {reservation_refreshed.tracking_code} کافی نیست. موجودی: {wallet.balance}, مبلغ درخواستی: {reservation_refreshed.wallet_withdrawal_amount}")
             else:
-                logger.error(f"موجودی کیف پول برای رزرو {reservation.tracking_code} کافی نیست. موجودی: {wallet.balance}, مبلغ درخواستی: {reservation.wallet_withdrawal_amount}")
+                logger.info(f"🟡 برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code} لازم نیست یا قبلاً انجام شده است.")
+
     except Wallet.DoesNotExist:
-        logger.error(f"کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
+        logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
     except Exception as e:
-        logger.error(f"خطا در برداشت از کیف پول برای رزرو {reservation.tracking_code}: {e}")
+        logger.error(f"🔴 خطا در برداشت از کیف پول برای رزرو {reservation.tracking_code}: {e}")
+        logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
     finally:
         cache.delete(cache_key)
 
@@ -440,14 +486,14 @@ def _send_websocket_update(channel_layer, reservation):
                     "applied_discount_code": reservation.applied_discount_code,
                     "discount_processed": reservation.discount_processed,
                     "points_assigned": reservation.points_assigned,
+                    "wallet_withdrawn": reservation.wallet_withdrawn,
+                    "wallet_withdrawal_amount": int(reservation.wallet_withdrawal_amount) if reservation.wallet_withdrawal_amount else 0,
                 },
             },
         )
         logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {reservation.tracking_code} ارسال شد.")
     except Exception as e:
         logger.error(f"خطا در ارسال WebSocket برای رزرو {reservation.tracking_code}: {e}")
-        
-        
 
 # ===================================================================
 # 7. مدیریت کنسلی کاربر
