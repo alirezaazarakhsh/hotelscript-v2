@@ -11,6 +11,7 @@ from .sms.sms import send_customer_club_deduct_sms, send_discount_sms
 logger = logging.getLogger(__name__)
 
 def delayed_send_deduct_sms(phone_number, user_name, deducted_points, current_points):
+    """ارسال SMS با تاخیر 120 ثانیه"""
     send_customer_club_deduct_sms(
         phone_number=phone_number,
         user_name=user_name,
@@ -21,13 +22,16 @@ def delayed_send_deduct_sms(phone_number, user_name, deducted_points, current_po
 _thread_locals = local()
 
 def set_skip_points_and_sms(value):
+    """تنظیم وضعیت رد کردن ارسال SMS در thread local"""
     setattr(_thread_locals, 'skip_points_and_sms', value)
 
 def get_skip_points_and_sms():
+    """دریافت وضعیت رد کردن ارسال SMS از thread local"""
     return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 @receiver(pre_save, sender=CustomerClubPoint)
 def store_previous_points(sender, instance, **kwargs):
+    """ذخیره مقدار قبلی امتیاز قبل از ذخیره‌سازی"""
     if instance.pk:
         try:
             old = CustomerClubPoint.objects.get(pk=instance.pk)
@@ -39,6 +43,7 @@ def store_previous_points(sender, instance, **kwargs):
 
 @receiver(post_save, sender=CustomerClubPoint)
 def send_club_points_sms(sender, instance, created, **kwargs):
+    """ارسال SMS هنگام کاهش امتیاز کاربر"""
     if get_skip_points_and_sms():
         logger.info(f"ارسال SMS برای کاربر {instance.user.phone_number} نادیده گرفته شد.")
         return
@@ -60,12 +65,14 @@ def send_club_points_sms(sender, instance, created, **kwargs):
 @receiver(post_save, sender=ShoppingCenterDiscountCode)
 @receiver(post_save, sender=HotelDiscountCode)
 def send_discount_sms_on_discount_code_save(sender, instance, created, **kwargs):
+    """ارسال SMS هنگام ایجاد یا تغییر کد تخفیف"""
     if created or instance.users.exists():
         logger.info(f"ارسال SMS تخفیف برای کد {instance.code} به کاربران.")
         send_discount_sms(instance, send_to_all=True)
 
 @receiver(pre_save, sender=DiscountActivationRecord)
 def handle_manual_reward_claimed(sender, instance, **kwargs):
+    """مدیریت تغییر وضعیت reward_claimed و کسر امتیاز"""
     if instance.pk:
         try:
             old_instance = DiscountActivationRecord.objects.get(pk=instance.pk)
@@ -219,22 +226,25 @@ def handle_activated_users_change(sender, instance, action, pk_set, **kwargs):
             except Exception as e:
                 logger.error(f"خطای غیرمنتظره برای کاربر {user_id}: {str(e)}")
 
-# سیگنال جدید برای رزروهای پرداخت شده
+# سیگنال اصلی برای پردازش کد تخفیف رزرو هتل
 @receiver(post_save, sender='reservation.Reservationhotel')
 def handle_reservation_payment_for_discount(sender, instance, **kwargs):
     """پردازش کد تخفیف پس از پرداخت موفق رزرو"""
     from reservation.models import Reservationhotel
     
+    # بررسی شرایط لازم برای پردازش کد تخفیف
     if (instance.payment_status == 'paid' and 
         instance.applied_discount_code and 
         not instance.discount_processed):
         
-        logger.info(f"پردازش کد تخفیف برای رزرو پرداخت شده {instance.tracking_code}")
+        logger.info(f"🟡 شروع پردازش کد تخفیف برای رزرو پرداخت شده {instance.tracking_code}")
         
         try:
             with transaction.atomic():
+                # قفل کردن رکورد رزرو برای جلوگیری از پردازش تکراری
                 reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
                 if reservation.discount_processed:
+                    logger.info(f"🔵 کد تخفیف برای رزرو {reservation.tracking_code} قبلاً پردازش شده است.")
                     return
                 
                 # پیدا کردن کد تخفیف
@@ -244,23 +254,85 @@ def handle_reservation_payment_for_discount(sender, instance, **kwargs):
                 try:
                     discount_obj = RoomDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
                     discount_type = 'room'
+                    logger.info(f"🔵 کد تخفیف اتاق یافت شد: {discount_obj.code}")
                 except RoomDiscountCode.DoesNotExist:
                     try:
                         discount_obj = HotelDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
                         discount_type = 'hotel'
+                        logger.info(f"🔵 کد تخفیف هتل یافت شد: {discount_obj.code}")
                     except HotelDiscountCode.DoesNotExist:
-                        logger.error(f"کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code} یافت نشد")
-                        return
+                        try:
+                            discount_obj = ShoppingCenterDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
+                            discount_type = 'shopping_center'
+                            logger.info(f"🔵 کد تخفیف مرکز خرید یافت شد: {discount_obj.code}")
+                        except ShoppingCenterDiscountCode.DoesNotExist:
+                            logger.error(f"🔴 کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code} یافت نشد")
+                            return
                 
-                # افزودن کاربر به activated_users - این باعث فعال شدن سیگنال بالا می‌شود
-                if reservation.buyer not in discount_obj.activated_users.all():
-                    discount_obj.activated_users.add(reservation.buyer)
-                    logger.info(f"کاربر {reservation.buyer.phone_number} به activated_users کد {discount_obj.code} اضافه شد")
+                # 🔄 بررسی دفعات باقی‌مانده کد تخفیف
+                if discount_obj.remaining_uses <= 0:
+                    logger.warning(f"🔴 کد تخفیف {discount_obj.code} دفعات استفاده‌اش به پایان رسیده است (remaining_uses: {discount_obj.remaining_uses})")
+                    # می‌توانید خطا ایجاد کنید یا اطلاع دهید
+                    return
                 
-                # علامت‌گذاری رزرو به عنوان پردازش شده
-                reservation.discount_processed = True
-                reservation.save(update_fields=['discount_processed'])
-                logger.info(f"کد تخفیف {discount_obj.code} برای رزرو {reservation.tracking_code} با موفقیت پردازش شد")
+                # 🔄 بررسی اینکه کاربر قبلاً از این کد استفاده نکرده باشد
+                if reservation.buyer in discount_obj.activated_users.all():
+                    logger.warning(f"🔴 کاربر {reservation.buyer.phone_number} قبلاً از کد تخفیف {discount_obj.code} استفاده کرده است")
+                    return
                 
+                logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف: remaining_uses={discount_obj.remaining_uses}, activated_users_count={discount_obj.activated_users.count()}")
+                
+                # 🔄 استفاده از متد consume_discount_for_user برای مصرف کد تخفیف
+                try:
+                    success = discount_obj.consume_discount_for_user(reservation.buyer)
+                    
+                    if success:
+                        logger.info(f"🟢 کد تخفیف {discount_obj.code} با موفقیت مصرف شد - remaining_uses جدید: {discount_obj.remaining_uses}")
+                        
+                        # ایجاد رکورد فعال‌سازی
+                        activation_record = _create_or_update_activation_record(reservation.buyer, discount_obj)
+                        if activation_record:
+                            logger.info(f"🟢 رکورد فعال‌سازی برای کاربر {reservation.buyer.phone_number} ایجاد شد")
+                        
+                        # علامت‌گذاری رزرو به عنوان پردازش شده
+                        reservation.discount_processed = True
+                        reservation.save(update_fields=['discount_processed'])
+                        logger.info(f"🟢 کد تخفیف {discount_obj.code} برای رزرو {reservation.tracking_code} با موفقیت پردازش شد")
+                    else:
+                        logger.error(f"🔴 مصرف کد تخفیف {discount_obj.code} ناموفق بود")
+                        
+                except ValueError as e:
+                    logger.error(f"🔴 خطا در مصرف کد تخفیف: {str(e)}")
+                    return
+                except Exception as e:
+                    logger.error(f"🔴 خطای غیرمنتظره در مصرف کد تخفیف: {str(e)}")
+                    return
+                
+        except Reservationhotel.DoesNotExist:
+            logger.error(f"🔴 رزرو با ID {instance.pk} یافت نشد")
         except Exception as e:
-            logger.error(f"خطا در پردازش کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
+            logger.error(f"🔴 خطا در پردازش کد تخفیف برای رزرو {instance.tracking_code}: {str(e)}")
+
+# سیگنال برای مدیریت تغییرات remaining_uses
+@receiver(pre_save, sender=RoomDiscountCode)
+@receiver(pre_save, sender=HotelDiscountCode)
+@receiver(pre_save, sender=ShoppingCenterDiscountCode)
+def handle_discount_code_save(sender, instance, **kwargs):
+    """مدیریت مقادیر پیش‌فرض هنگام ذخیره کد تخفیف"""
+    if not instance.pk:
+        # برای کدهای تخفیف جدید، remaining_uses را برابر usage_limit قرار بده
+        if hasattr(instance, 'usage_limit') and hasattr(instance, 'remaining_uses'):
+            if instance.remaining_uses == 0:  # فقط اگر مقدار پیش‌فرض باشد
+                instance.remaining_uses = instance.usage_limit
+                logger.info(f"🟡 تنظیم remaining_uses برای کد جدید {instance.code}: {instance.remaining_uses}")
+
+# سیگنال برای لاگ کردن تغییرات remaining_uses
+@receiver(post_save, sender=RoomDiscountCode)
+@receiver(post_save, sender=HotelDiscountCode)
+@receiver(post_save, sender=ShoppingCenterDiscountCode)
+def log_discount_code_changes(sender, instance, created, **kwargs):
+    """لاگ کردن تغییرات در کدهای تخفیف"""
+    if created:
+        logger.info(f"🟢 کد تخفیف جدید ایجاد شد: {instance.code} - remaining_uses: {instance.remaining_uses}")
+    else:
+        logger.info(f"🔵 کد تخفیف به روز شد: {instance.code} - remaining_uses: {instance.remaining_uses}")
