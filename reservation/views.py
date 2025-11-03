@@ -4275,7 +4275,7 @@ class ApplyDiscountCodeAPIView(APIView):
         
         
 # ای پی ای برداشت از کیف پول 
-logger = logging.getLogger(__name__)
+llogger = logging.getLogger(__name__)
 
 class WalletWithdrawAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -4284,13 +4284,13 @@ class WalletWithdrawAPIView(APIView):
         operation_summary="تنظیم برداشت از کیف پول برای رزرو",
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد مبلغ برداشت از کیف پول را برای یک رزرو مشخص تنظیم یا حذف کند.
-        مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود.
+        مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود (توسط سیگنال).
 
         **ورودی‌ها (در body درخواست POST):**
         - `amount`: مبلغ برداشت (تومان، حداقل ۱۰,۰۰۰ تومان، حداکثر موجودی کیف پول یا قیمت نهایی رزرو)
 
         **حالات خاص:**
-        - برای حذف برداشت، مقدار `amount=0` ارسال کنید یا از متد DELETE استفاده کنید.
+        - برای حذف برداشت، مقدار `amount=0` ارسال کنید.
         - فقط برای رزروهای با وضعیت پرداخت `pending` قابل تنظیم است.
         - مبلغ زیر ۱۰,۰۰۰ تومان یا بیشتر از موجودی کیف پول/قیمت نهایی رزرو مجاز نیست.
 
@@ -4314,85 +4314,94 @@ class WalletWithdrawAPIView(APIView):
         tags=["reservation-api"]
     )
     def post(self, request, tracking_code):
-        # دریافت رزرو
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         
-        # بررسی دسترسی
         if reservation.buyer != request.user:
             logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # فقط برای رزروهای با وضعیت pending (در انتظار پرداخت)
         if reservation.payment_status != 'pending':
             return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده یا در حال پرداخت برداشت تنظیم کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # تبدیل مبلغ
         amount_str = request.data.get('amount')
         try:
             amount = Decimal(str(amount_str).replace(',', '').strip())
         except Exception:
             return Response({"detail": "مبلغ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی مبلغ معتبر
         if amount < 0:
             return Response({"detail": "مبلغ نمی‌تواند منفی باشد."}, status=status.HTTP_400_BAD_REQUEST)
         if amount > 0 and amount < 10000:
             return Response({"detail": "مبلغ باید حداقل ۱۰,۰۰۰ تومان باشد."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # دریافت کیف پول
         wallet = getattr(request.user, "wallet", None)
         if not wallet:
             return Response({"detail": "کیف پول یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
 
-        # بررسی موجودی کیف پول
         if amount > wallet.balance:
             return Response({"detail": "مبلغ بیشتر از موجودی کیف پول است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # محاسبه قیمت پایه بدون در نظر گرفتن برداشت کیف پول
-        (
-            total, total_extra, discount_amount,
-            half_in, half_out, total_half,
-            code_discount, final_before_wallet, room_fixed
-        ) = reservation.calculate_total_price()
-        base_price = total + total_extra + total_half - code_discount - room_fixed
-        if amount > base_price:
-            return Response({"detail": "مبلغ بیشتر از مبلغ نهایی رزرو (بدون برداشت کیف پول) است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # به‌روزرسانی برداشت کیف پول
         with transaction.atomic():
+            # برای محاسبه base_price_before_wallet (قیمت نهایی قبل از کسر مبلغ کیف پول)،
+            # نیاز داریم که موقتاً wallet_withdrawal_amount رزرو را صفر کنیم.
+            original_wallet_withdrawal_amount = reservation.wallet_withdrawal_amount
+            reservation.wallet_withdrawal_amount = Decimal('0')
+            
+            # calculate_total_price را صدا می‌زنیم تا price_before_wallet را بدست آوریم
+            # این تابع 9 مقدار را برمی‌گرداند (total, total_extra, discount_applied, half_in, half_out, total_half, discount_code_amount, final_price_before_wallet, room_fixed_discount)
+            # ما فقط به final_price_before_wallet نیاز داریم.
+            (_, _, _, _, _, _, _, price_before_wallet, _) = reservation.calculate_total_price()
+            
+            # مقدار اصلی را برمی‌گردانیم
+            reservation.wallet_withdrawal_amount = original_wallet_withdrawal_amount
+
+            if amount > price_before_wallet:
+                return Response({
+                    "detail": f"مبلغ برداشت ({amount:,} تومان) بیشتر از مبلغ نهایی رزرو ({price_before_wallet:,} تومان) قبل از اعمال برداشت کیف پول است."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # آپدیت واقعی رزرو با مقدار جدید برداشت از کیف پول
+            # از فلگ _skip_price_calculation_on_save استفاده می‌کنیم تا متد save مدل،
+            # calculate_total_price را دوباره صدا نزند.
+            reservation._skip_price_calculation_on_save = True
+            
             reservation.wallet_withdrawal_amount = amount
-            reservation.wallet_withdrawn = False
-            # بازمحاسبه تمام قیمت‌ها
+            reservation.wallet_withdrawn = False # هر بار که مبلغ تغییر کند، این فیلد باید False باشد تا سیگنال آن را به True تغییر دهد.
+
+            # بازمحاسبه تمام قیمت‌ها با wallet_withdrawal_amount جدید
             (
-                total, total_extra, discount_amount,
+                total, total_extra, discount_amount_field, # این همان self.discount است
                 half_in, half_out, total_half,
-                code_discount, final, room_fixed
+                code_discount_for_response, # این هم همان self.discount است
+                final, room_fixed
             ) = reservation.calculate_total_price()
+
             reservation.total_price = total
             reservation.total_extra_passenger_charge = total_extra
-            reservation.discount = code_discount
+            reservation.discount = discount_amount_field # مقدار کد تخفیف اعمال‌شده
             reservation.room_fixed_discount = room_fixed
             reservation.half_day_in_charge = half_in
             reservation.half_day_out_charge = half_out
             reservation.total_half_day_charge = total_half
             reservation.final_price = final
+            
             reservation.save(update_fields=[
                 "wallet_withdrawal_amount", "wallet_withdrawn",
                 "total_price", "total_extra_passenger_charge", "discount",
                 "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
                 "total_half_day_charge", "final_price"
             ])
+            del reservation._skip_price_calculation_on_save # حذف فلگ پس از ذخیره
 
-        # پاسخ نهایی
         message = "برداشت از کیف پول حذف شد." if amount == 0 else "برداشت از کیف پول تنظیم شد."
-        logger.info(f"Wallet updated: user={request.user.id}, tracking_code={tracking_code}, amount={amount}")
+        logger.info(f"Wallet withdrawal updated: user={request.user.id}, tracking_code={tracking_code}, amount={amount}")
 
         return Response({
             "detail": message,
             "wallet_balance": int(wallet.balance),
             "wallet_withdrawal_amount": int(reservation.wallet_withdrawal_amount),
             "final_price": int(reservation.final_price),
-            "discount_code_amount": int(code_discount or 0),
+            "discount_code_amount": int(code_discount_for_response or 0),
             "room_fixed_discount": int(room_fixed or 0),
             "total_price": int(total),
             "extra_passengers": int(total_extra),
@@ -4421,43 +4430,46 @@ class WalletWithdrawAPIView(APIView):
         tags=["reservation-api"]
     )
     def delete(self, request, tracking_code):
-        # دریافت رزرو
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
         
-        # بررسی دسترسی
         if reservation.buyer != request.user:
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # فقط برای pending
         if reservation.payment_status != 'pending':
             return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده برداشت را حذف کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
+            reservation._skip_price_calculation_on_save = True 
+
             reservation.wallet_withdrawal_amount = Decimal('0')
             reservation.wallet_withdrawn = False
-            # بازمحاسبه تمام قیمت‌ها
+            
             (
-                total, total_extra, discount_amount,
+                total, total_extra, discount_amount_field,
                 half_in, half_out, total_half,
-                code_discount, final, room_fixed
+                code_discount_for_response,
+                final, room_fixed
             ) = reservation.calculate_total_price()
+
             reservation.total_price = total
             reservation.total_extra_passenger_charge = total_extra
-            reservation.discount = code_discount
+            reservation.discount = discount_amount_field
             reservation.room_fixed_discount = room_fixed
             reservation.half_day_in_charge = half_in
             reservation.half_day_out_charge = half_out
             reservation.total_half_day_charge = total_half
             reservation.final_price = final
+            
             reservation.save(update_fields=[
                 "wallet_withdrawal_amount", "wallet_withdrawn",
                 "total_price", "total_extra_passenger_charge", "discount",
                 "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
                 "total_half_day_charge", "final_price"
             ])
+            del reservation._skip_price_calculation_on_save
 
+        logger.info(f"Wallet withdrawal deleted: user={request.user.id}, tracking_code={tracking_code}")
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
-    
     
     
 # ای پی ای سئو هتل ها 

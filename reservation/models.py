@@ -1371,6 +1371,9 @@ class Reservationhotel(models.Model):
 
     @cached_property
     def total_rooms(self):
+        # این تابع به ReservationRoom نیاز دارد
+        # اگر ReservationRoom در فایل جداگانه است، باید در آن فایل رابطه را تعریف کنید
+        # اینجا فرض می‌کنیم که related_name به درستی ست شده است
         if not hasattr(self, 'reservation_rooms'):
             return 0
         return self.reservation_rooms.aggregate(total=Sum('quantity'))['total'] or 0
@@ -1380,17 +1383,20 @@ class Reservationhotel(models.Model):
         total = 0
         if hasattr(self, 'reservation_rooms'):
             for res_room in self.reservation_rooms.all():
+                # این هم به مدل Room و ReservationRoomPassenger نیاز دارد
                 if res_room.room:
                     total += (res_room.room.room_capacity + res_room.room.extra_capacity) * res_room.quantity
         return total
 
     def get_hotel(self):
+        # این به مدل Room و Hotel نیاز دارد
         if hasattr(self, 'reservation_rooms') and self.reservation_rooms.exists():
             return self.reservation_rooms.first().room.hotel
         return None
 
     def calculate_cancellation_refund(self):
         hotel = self.get_hotel()
+        # این به مدل Hotel.cancellation_penalty نیاز دارد
         if not hotel or not hasattr(hotel, 'cancellation_penalty'):
             penalty_amount = Decimal('0')
             refund_amount = self.final_price
@@ -1414,16 +1420,25 @@ class Reservationhotel(models.Model):
 
     # --- محاسبه قیمت (همون قبلی) ---
     def calculate_total_price(self):
+        # این متد باید قیمت نهایی را با در نظر گرفتن wallet_withdrawal_amount فعلی محاسبه کند.
+        # وقتی API View این را صدا می‌زند، wallet_withdrawal_amount از قبل آپدیت شده است.
         if not self.pk or not self.reservation_rooms.exists():
+            # برمی‌گرداند (total, total_extra, self.discount, half_in, half_out, total_half, code_discount, final, room_fixed)
+            return (Decimal('0'),) * 9 
+
+        # فرض بر این است که ReservationRoom و Room در دسترس هستند
+        # باید مطمئن شوید که همه Room‌ها از یک Hotel هستند
+        first_res_room = self.reservation_rooms.first()
+        if not first_res_room:
             return (Decimal('0'),) * 9
 
-        hotel = self.reservation_rooms.first().room.hotel
+        hotel = first_res_room.room.hotel
         if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
-        total = Decimal('0')
-        total_extra = Decimal('0')
-        room_fixed_discount = Decimal('0')
+        total = Decimal('0') # مجموع قیمت اتاق‌ها بدون تخفیف و نفرات اضافه
+        total_extra = Decimal('0') # مجموع قیمت نفرات اضافه
+        room_fixed_discount = Decimal('0') # تخفیف ثابت اعمال شده روی اتاق
         half_day_in_charge = Decimal('0')
         half_day_out_charge = Decimal('0')
 
@@ -1437,8 +1452,11 @@ class Reservationhotel(models.Model):
         for res_room in self.reservation_rooms.all():
             room = res_room.room
             quantity = res_room.quantity
+            
+            # این به ReservationRoomPassenger نیاز دارد
             extra_guests = res_room.passengers.filter(passenger_type='extra').count()
 
+            # این به RoomDatePrice نیاز دارد
             price_obj = room.date_prices.filter(
                 start_date__lte=check_in_date_std,
                 end_date__gte=check_in_date_std,
@@ -1455,37 +1473,56 @@ class Reservationhotel(models.Model):
             total += daily_price * nights * quantity
             total_extra += extra_price_per_person * extra_guests * nights * quantity
 
+            # Check if discount_date is available and relevant for fixed discount
             if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                if not price_obj.discount_date or check_in_date_std <= price_obj.discount_date:
+                # Ensure discount_date is not null before comparison
+                if price_obj.discount_date and check_in_date_std <= price_obj.discount_date:
                     room_fixed_discount += Decimal(price_obj.discount_value) * quantity
+                # If discount_date is null, assume it's always valid if one-time and fixed
+                elif not price_obj.discount_date:
+                     room_fixed_discount += Decimal(price_obj.discount_value) * quantity
 
-            if res_room.half_day_in_selected and hotel.has_check_in_half_day_charge:
-                half_day_in_charge += res_room.half_day_in_price * quantity
-            if res_room.half_day_out_selected and hotel.has_check_out_half_day_charge:
-                half_day_out_charge += res_room.half_day_out_price * quantity
+            # فرض بر این است که half_day_in_selected, half_day_out_selected, half_day_in_price, half_day_out_price
+            # روی مدل ReservationRoom و has_check_in_half_day_charge, has_check_out_half_day_charge روی مدل Hotel هستند.
+            if hasattr(res_room, 'half_day_in_selected') and res_room.half_day_in_selected and hasattr(hotel, 'has_check_in_half_day_charge') and hotel.has_check_in_half_day_charge:
+                half_day_in_charge += (res_room.half_day_in_price if hasattr(res_room, 'half_day_in_price') else Decimal('0')) * quantity
+            if hasattr(res_room, 'half_day_out_selected') and res_room.half_day_out_selected and hasattr(hotel, 'has_check_out_half_day_charge') and hotel.has_check_out_half_day_charge:
+                half_day_out_charge += (res_room.half_day_out_price if hasattr(res_room, 'half_day_out_price') else Decimal('0')) * quantity
 
         total_half_day_charge = half_day_in_charge + half_day_out_charge
-        base_price = total + total_extra + total_half_day_charge
-        final_price = base_price - self.discount - room_fixed_discount - self.wallet_withdrawal_amount
-        if final_price < 0:
-            final_price = Decimal('0')
+        
+        # calculate_total_price باید مقدار تخفیف کد تخفیف را از روی فیلد discount رزرو بخواند، نه از جایی دیگر
+        # این فیلد discount توسط کد تخفیف پر شده است.
+        # base_price_after_all_discounts_except_wallet: قیمت پس از اعمال همه تخفیف‌ها (کد تخفیف و ثابت اتاق)
+        base_price_after_all_discounts_except_wallet = total + total_extra + total_half_day_charge - self.discount - room_fixed_discount
+        
+        # قیمت نهایی که کاربر باید پرداخت کند = (قیمت پایه - تخفیف‌ها) - مبلغ برداشت از کیف پول
+        final_price_to_pay = base_price_after_all_discounts_except_wallet - self.wallet_withdrawal_amount
+        
+        if final_price_to_pay < 0:
+            final_price_to_pay = Decimal('0')
 
         return (total, total_extra, self.discount, half_day_in_charge, half_day_out_charge,
-                total_half_day_charge, self.discount, final_price, room_fixed_discount)
+                total_half_day_charge, self.discount, final_price_to_pay, room_fixed_discount)
+
 
     def save(self, *args, **kwargs):
-        if not getattr(self, '_skip_price_calculation', False):
-            total, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final, room_fixed = self.calculate_total_price()
+        # این فلگ به ما اجازه می‌دهد تا در برخی موارد (مثل API View) از محاسبه مجدد قیمت جلوگیری کنیم.
+        if not getattr(self, '_skip_price_calculation_on_save', False):
+            # calculate_total_price باید تمام مقادیر را برگرداند تا اینجا پر شوند
+            total, total_extra, code_discount, half_in, half_out, total_half, _, final, room_fixed = self.calculate_total_price()
             self.total_price = total
             self.total_extra_passenger_charge = total_extra
-            self.discount = code_discount
+            self.discount = code_discount # مقدار code_discount از calculate_total_price می آید
             self.room_fixed_discount = room_fixed
             self.half_day_in_charge = half_in
             self.half_day_out_charge = half_out
             self.total_half_day_charge = total_half
-            self.final_price = final
+            self.final_price = final # این final_price شامل کسر wallet_withdrawal_amount است
 
         super().save(*args, **kwargs)
+        
+        
 
 # --- متد جدید برای پردازش کد تخفیف ---
 def process_discount_after_payment_v2(self):
