@@ -19,6 +19,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.encoding import force_str
 from django.core.cache import cache
 from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
+from bashgah_moshtarian.signals import get_skip_points_and_sms, set_skip_points_and_sms
 from config.models import UserLevel  # 👈 
 
 
@@ -1286,7 +1287,7 @@ class Reservationhotel(models.Model):
     ]
 
     buyer = models.ForeignKey(
-        BaseUser,
+        'authentication.BaseUser',
         on_delete=models.CASCADE,
         verbose_name=_('کاربر خریدار'),
         related_name='reservations',
@@ -1486,133 +1487,337 @@ class Reservationhotel(models.Model):
             self.final_price = final
 
         super().save(*args, **kwargs)
-        
 
-
-# --- متد جدید برای پردازش کد تخفیف ---
-# --- متد جدید برای پردازش کد تخفیف ---
-def process_discount_after_payment_v2(self):
-    """پردازش کد تخفیف با استفاده از متد consume_discount_for_user موجود"""
-    if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):
-        logger.info(f"شرایط اولیه برای پردازش کد تخفیف برقرار نیست: "
-                   f"payment_status={self.payment_status}, "
-                   f"applied_discount_code={self.applied_discount_code}, "
-                   f"discount_processed={self.discount_processed}")
-        return False
-
-    try:
-        from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
-        from django.db import transaction
-
-        # ابتدا وضعیت فعلی را دیباگ کنیم
-        logger.info(f"🔍 شروع پردازش کد تخفیف برای رزرو {self.tracking_code}")
-        self._debug_discount_status()
-
-        with transaction.atomic():
-            reservation = Reservationhotel.objects.select_for_update().get(pk=self.pk)
-            if reservation.discount_processed:
-                logger.info(f"کد تخفیف برای رزرو {reservation.tracking_code} قبلاً پردازش شده است")
-                return True
-
-            # پیدا کردن کد تخفیف
-            discount_obj = None
-            try:
-                discount_obj = RoomDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
-                logger.info(f"✅ RoomDiscountCode پیدا شد: {discount_obj.code}")
-            except RoomDiscountCode.DoesNotExist:
-                try:
-                    discount_obj = HotelDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
-                    logger.info(f"✅ HotelDiscountCode پیدا شد: {discount_obj.code}")
-                except HotelDiscountCode.DoesNotExist:
-                    logger.error(f"❌ کد تخفیف {reservation.applied_discount_code} یافت نشد")
-                    return False
-
-            # دیباگ وضعیت کد تخفیف قبل از مصرف
-            logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف:")
-            logger.info(f"   - کد: {discount_obj.code}")
-            logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
-            logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
-            logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
-
-            # استفاده از متد consume_discount_for_user که از قبل تست شده
-            try:
-                success = discount_obj.consume_discount_for_user(reservation.buyer)
-                if success:
-                    reservation.discount_processed = True
-                    reservation.save(update_fields=['discount_processed'])
+    # --- متدهای جدید برای مدیریت کیف پول ---
+    
+    def pay_fully_from_wallet(self):
+        """پرداخت کامل مبلغ رزرو از کیف پول"""
+        try:
+            from finance.models import Wallet
+            
+            with transaction.atomic():
+                wallet = Wallet.objects.select_for_update().get(user=self.buyer)
+                
+                if wallet.balance >= self.final_price:
+                    # پرداخت کامل از کیف پول
+                    self.wallet_withdrawal_amount = self.final_price
+                    self.final_price = Decimal('0')
+                    self.payment_status = 'paid'
+                    self.wallet_withdrawn = True
                     
-                    # رفرش کردن discount_obj برای گرفتن مقادیر جدید
-                    discount_obj.refresh_from_db()
+                    # ذخیره تغییرات رزرو
+                    self.save()
                     
-                    # دیباگ وضعیت بعد از مصرف
-                    logger.info(f"🟢 وضعیت کد تخفیف بعد از مصرف:")
-                    logger.info(f"   - کد: {discount_obj.code}")
-                    logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
-                    logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
-                    logger.info(f"   - discount_processed: {reservation.discount_processed}")
+                    # کسر از کیف پول
+                    wallet.balance -= self.wallet_withdrawal_amount
+                    wallet.save()
                     
-                    logger.info(f"✅ کد تخفیف با موفقیت مصرف شد برای رزرو {reservation.tracking_code}")
+                    logger.info(f"✅ پرداخت کامل از کیف پول برای رزرو {self.tracking_code} - مبلغ: {self.wallet_withdrawal_amount}")
                     return True
                 else:
-                    logger.error(f"❌ متد consume_discount_for_user False برگرداند")
+                    logger.error(f"❌ موجودی کیف پول کافی نیست برای رزرو {self.tracking_code}")
                     return False
                     
-            except ValueError as e:
-                logger.error(f"❌ خطا در مصرف کد تخفیف (ValueError): {e}")
-                return False
-            except Exception as e:
-                logger.error(f"❌ خطای غیرمنتظره در مصرف کد تخفیف: {e}")
-                import traceback
-                logger.error(f"❌ جزئیات خطا: {traceback.format_exc()}")
-                return False
+        except Exception as e:
+            logger.error(f"❌ خطا در پرداخت کامل از کیف پول برای رزرو {self.tracking_code}: {e}")
+            return False
 
-    except Exception as e:
-        logger.error(f"🔴 خطا در پردازش کد تخفیف: {e}")
-        import traceback
-        logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
-        return False
+    def set_wallet_withdrawal(self, amount):
+        """تنظیم مبلغ برداشت از کیف پول"""
+        try:
+            from finance.models import Wallet
+            
+            with transaction.atomic():
+                wallet = Wallet.objects.get(user=self.buyer)
+                
+                # اعتبارسنجی مبلغ
+                if amount < 0:
+                    return False, "مبلغ نمی‌تواند منفی باشد"
+                
+                if amount > 0 and amount < 10000:
+                    return False, "مبلغ باید حداقل ۱۰,۰۰۰ تومان باشد"
+                    
+                if amount > wallet.balance:
+                    return False, "مبلغ بیشتر از موجودی کیف پول است"
+                
+                # محاسبه قیمت پایه
+                (
+                    total, total_extra, discount_amount,
+                    half_in, half_out, total_half,
+                    code_discount, final_before_wallet, room_fixed
+                ) = self.calculate_total_price()
+                
+                base_price = total + total_extra + total_half - code_discount - room_fixed
+                if amount > base_price:
+                    return False, "مبلغ بیشتر از مبلغ نهایی رزرو است"
+                
+                # تنظیم برداشت
+                self.wallet_withdrawal_amount = amount
+                self.wallet_withdrawn = False
+                
+                # بازمحاسبه قیمت‌ها
+                (
+                    total, total_extra, discount_amount,
+                    half_in, half_out, total_half,
+                    code_discount, final, room_fixed
+                ) = self.calculate_total_price()
+                
+                self.total_price = total
+                self.total_extra_passenger_charge = total_extra
+                self.discount = code_discount
+                self.room_fixed_discount = room_fixed
+                self.half_day_in_charge = half_in
+                self.half_day_out_charge = half_out
+                self.total_half_day_charge = total_half
+                self.final_price = final
+                
+                self.save()
+                
+                logger.info(f"✅ برداشت از کیف پول تنظیم شد برای رزرو {self.tracking_code} - مبلغ: {amount}")
+                return True, "برداشت از کیف پول تنظیم شد"
+                
+        except Exception as e:
+            logger.error(f"❌ خطا در تنظیم برداشت از کیف پول برای رزرو {self.tracking_code}: {e}")
+            return False, "خطا در تنظیم برداشت"
 
-def _debug_discount_status(self):
-    """تابع کمکی برای دیباگ وضعیت کد تخفیف"""
-    from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
+    def clear_wallet_withdrawal(self):
+        """حذف برداشت از کیف پول"""
+        try:
+            with transaction.atomic():
+                self.wallet_withdrawal_amount = Decimal('0')
+                self.wallet_withdrawn = False
+                
+                # بازمحاسبه قیمت‌ها
+                (
+                    total, total_extra, discount_amount,
+                    half_in, half_out, total_half,
+                    code_discount, final, room_fixed
+                ) = self.calculate_total_price()
+                
+                self.total_price = total
+                self.total_extra_passenger_charge = total_extra
+                self.discount = code_discount
+                self.room_fixed_discount = room_fixed
+                self.half_day_in_charge = half_in
+                self.half_day_out_charge = half_out
+                self.total_half_day_charge = total_half
+                self.final_price = final
+                
+                self.save()
+                
+                logger.info(f"✅ برداشت از کیف پول حذف شد برای رزرو {self.tracking_code}")
+                return True, "برداشت از کیف پول حذف شد"
+                
+        except Exception as e:
+            logger.error(f"❌ خطا در حذف برداشت از کیف پول برای رزرو {self.tracking_code}: {e}")
+            return False, "خطا در حذف برداشت"
+
+    def process_wallet_withdrawal_after_payment(self):
+        """پردازش برداشت از کیف پول پس از پرداخت موفق"""
+        try:
+            from finance.models import Wallet
+            
+            if self.payment_status != 'paid':
+                logger.warning(f"⚠️  رزرو {self.tracking_code} پرداخت نشده - برداشت از کیف پول انجام نمی‌شود")
+                return False
+                
+            if self.wallet_withdrawn:
+                logger.info(f"✅ برداشت از کیف پول برای رزرو {self.tracking_code} قبلاً انجام شده")
+                return True
+                
+            if self.wallet_withdrawal_amount <= 0:
+                logger.info(f"ℹ️  مبلغ برداشت از کیف پول برای رزرو {self.tracking_code} صفر است")
+                return True
+
+            with transaction.atomic():
+                wallet = Wallet.objects.select_for_update().get(user=self.buyer)
+                
+                if wallet.balance < self.wallet_withdrawal_amount:
+                    logger.error(f"❌ موجودی کیف پول برای رزرو {self.tracking_code} کافی نیست")
+                    return False
+
+                # کسر از کیف پول
+                wallet.balance -= self.wallet_withdrawal_amount
+                wallet.save()
+                
+                # علامت‌گذاری برداشت شده
+                self.wallet_withdrawn = True
+                self.save(update_fields=['wallet_withdrawn'])
+                
+                logger.info(f"✅ مبلغ {self.wallet_withdrawal_amount} از کیف پول کاربر {self.buyer.phone_number} برای رزرو {self.tracking_code} کسر شد")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ خطا در برداشت از کیف پول برای رزرو {self.tracking_code}: {e}")
+            return False
+
+    # --- متدهای پردازش کد تخفیف ---
     
-    try:
-        discount_obj = None
-        discount_type = None
+    def process_discount_after_payment_v2(self):
+        """پردازش کد تخفیف با استفاده از متد consume_discount_for_user موجود"""
+        if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):
+            logger.info(f"شرایط اولیه برای پردازش کد تخفیف برقرار نیست: "
+                       f"payment_status={self.payment_status}, "
+                       f"applied_discount_code={self.applied_discount_code}, "
+                       f"discount_processed={self.discount_processed}")
+            return False
+
+        try:
+            from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
+
+            # ابتدا وضعیت فعلی را دیباگ کنیم
+            logger.info(f"🔍 شروع پردازش کد تخفیف برای رزرو {self.tracking_code}")
+            self._debug_discount_status()
+
+            with transaction.atomic():
+                reservation = Reservationhotel.objects.select_for_update().get(pk=self.pk)
+                if reservation.discount_processed:
+                    logger.info(f"کد تخفیف برای رزرو {reservation.tracking_code} قبلاً پردازش شده است")
+                    return True
+
+                # پیدا کردن کد تخفیف
+                discount_obj = None
+                try:
+                    discount_obj = RoomDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
+                    logger.info(f"✅ RoomDiscountCode پیدا شد: {discount_obj.code}")
+                except RoomDiscountCode.DoesNotExist:
+                    try:
+                        discount_obj = HotelDiscountCode.objects.get(code__iexact=reservation.applied_discount_code)
+                        logger.info(f"✅ HotelDiscountCode پیدا شد: {discount_obj.code}")
+                    except HotelDiscountCode.DoesNotExist:
+                        logger.error(f"❌ کد تخفیف {reservation.applied_discount_code} یافت نشد")
+                        return False
+
+                # دیباگ وضعیت کد تخفیف قبل از مصرف
+                logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف:")
+                logger.info(f"   - کد: {discount_obj.code}")
+                logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+                logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
+                logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
+
+                # استفاده از متد consume_discount_for_user که از قبل تست شده
+                try:
+                    success = discount_obj.consume_discount_for_user(reservation.buyer)
+                    if success:
+                        reservation.discount_processed = True
+                        reservation.save(update_fields=['discount_processed'])
+                        
+                        # رفرش کردن discount_obj برای گرفتن مقادیر جدید
+                        discount_obj.refresh_from_db()
+                        
+                        # دیباگ وضعیت بعد از مصرف
+                        logger.info(f"🟢 وضعیت کد تخفیف بعد از مصرف:")
+                        logger.info(f"   - کد: {discount_obj.code}")
+                        logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+                        logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
+                        logger.info(f"   - discount_processed: {reservation.discount_processed}")
+                        
+                        logger.info(f"✅ کد تخفیف با موفقیت مصرف شد برای رزرو {reservation.tracking_code}")
+                        return True
+                    else:
+                        logger.error(f"❌ متد consume_discount_for_user False برگرداند")
+                        return False
+                        
+                except ValueError as e:
+                    logger.error(f"❌ خطا در مصرف کد تخفیف (ValueError): {e}")
+                    return False
+                except Exception as e:
+                    logger.error(f"❌ خطای غیرمنتظره در مصرف کد تخفیف: {e}")
+                    import traceback
+                    logger.error(f"❌ جزئیات خطا: {traceback.format_exc()}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"🔴 خطا در پردازش کد تخفیف: {e}")
+            import traceback
+            logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
+            return False
+
+    def _debug_discount_status(self):
+        """تابع کمکی برای دیباگ وضعیت کد تخفیف"""
+        from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode
         
         try:
-            discount_obj = RoomDiscountCode.objects.get(code__iexact=self.applied_discount_code)
-            discount_type = 'room'
-        except RoomDiscountCode.DoesNotExist:
+            discount_obj = None
+            discount_type = None
+            
             try:
-                discount_obj = HotelDiscountCode.objects.get(code__iexact=self.applied_discount_code)
-                discount_type = 'hotel'
-            except HotelDiscountCode.DoesNotExist:
-                logger.error(f"🔴 کد تخفیف {self.applied_discount_code} در دیباگ یافت نشد")
-                return
-        
-        logger.info(f"🔍 دیباگ کد تخفیف {discount_obj.code} (نوع: {discount_type}):")
-        logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
-        logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
-        logger.info(f"   - کاربر در activated_users: {self.buyer in discount_obj.activated_users.all()}")
-        logger.info(f"   - discount_processed در رزرو: {self.discount_processed}")
-        logger.info(f"   - required_points: {discount_obj.required_points}")
-        if discount_obj.expires_at:
-            logger.info(f"   - expires_at: {discount_obj.expires_at}")
-        
-    except Exception as e:
-        logger.error(f"🔴 خطا در دیباگ کد تخفیف: {e}")
-        
-        
-        
-_thread_locals = local()
+                discount_obj = RoomDiscountCode.objects.get(code__iexact=self.applied_discount_code)
+                discount_type = 'room'
+            except RoomDiscountCode.DoesNotExist:
+                try:
+                    discount_obj = HotelDiscountCode.objects.get(code__iexact=self.applied_discount_code)
+                    discount_type = 'hotel'
+                except HotelDiscountCode.DoesNotExist:
+                    logger.error(f"🔴 کد تخفیف {self.applied_discount_code} در دیباگ یافت نشد")
+                    return
+            
+            logger.info(f"🔍 دیباگ کد تخفیف {discount_obj.code} (نوع: {discount_type}):")
+            logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
+            logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
+            logger.info(f"   - کاربر در activated_users: {self.buyer in discount_obj.activated_users.all()}")
+            logger.info(f"   - discount_processed در رزرو: {self.discount_processed}")
+            logger.info(f"   - required_points: {discount_obj.required_points}")
+            if discount_obj.expires_at:
+                logger.info(f"   - expires_at: {discount_obj.expires_at}")
+            
+        except Exception as e:
+            logger.error(f"🔴 خطا در دیباگ کد تخفیف: {e}")
 
-def set_skip_points_and_sms(value):
-    setattr(_thread_locals, 'skip_points_and_sms', value)
+    # --- متدهای وضعیت پرداخت ---
+    
+    def mark_as_paid(self, ref_id=None):
+        """علامت‌گذاری رزرو به عنوان پرداخت شده"""
+        try:
+            with transaction.atomic():
+                self.payment_status = 'paid'
+                if ref_id:
+                    self.ref_id = ref_id
+                self.save(update_fields=['payment_status', 'ref_id'] if ref_id else ['payment_status'])
+                
+                logger.info(f"✅ رزرو {self.tracking_code} به عنوان پرداخت شده علامت‌گذاری شد")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ خطا در علامت‌گذاری رزرو {self.tracking_code} به عنوان پرداخت شده: {e}")
+            return False
 
-def get_skip_points_and_sms():
-    return getattr(_thread_locals, 'skip_points_and_sms', False)
+    def get_payment_summary(self):
+        """دریافت خلاصه وضعیت پرداخت"""
+        return {
+            'tracking_code': self.tracking_code,
+            'final_price': int(self.final_price),
+            'wallet_withdrawal_amount': int(self.wallet_withdrawal_amount),
+            'remaining_amount': int(self.final_price - self.wallet_withdrawal_amount),
+            'payment_status': self.payment_status,
+            'wallet_withdrawn': self.wallet_withdrawn,
+            'discount_processed': self.discount_processed,
+            'points_assigned': self.points_assigned
+        }
 
+    # --- property های کمکی ---
+    
+    @property
+    def can_use_wallet(self):
+        """آیا می‌توان از کیف پول استفاده کرد؟"""
+        return self.payment_status in ['unpaid', 'pending']
+    
+    @property
+    def wallet_balance_sufficient(self):
+        """آیا موجودی کیف پول کافی است؟"""
+        try:
+            from finance.models import Wallet
+            wallet = Wallet.objects.get(user=self.buyer)
+            return wallet.balance >= self.wallet_withdrawal_amount
+        except Exception:
+            return False
+    
+    @property
+    def remaining_payment_amount(self):
+        """مبلغ باقی‌مانده برای پرداخت"""
+        return max(Decimal('0'), self.final_price - self.wallet_withdrawal_amount)
+
+# --- سیگنال‌ها ---
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     if get_skip_points_and_sms():
@@ -1631,6 +1836,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         return
 
     if instance.capacity_status == 'rejected':
+        from .models import ReservationRoom, Room
         rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
         with transaction.atomic():
             for r in rooms:
@@ -1659,6 +1865,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 total_points += points * quantity
 
             if total_points > 0:
+                from bashgah_moshtarian.models import CustomerClubPoint
+                from bashgah_moshtarian.sms.sms import send_customer_club_sms
+                
                 customer_points, created = CustomerClubPoint.objects.get_or_create(
                     user=reservation.buyer,
                     defaults={'points': 0}
@@ -1695,6 +1904,9 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
             cache.set(cache_key_discount, True, timeout=60)
 
+            from bashgah_moshtarian.models import RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord
+            import jdatetime
+            
             discount_obj = None
             discount_type = None
             try:
@@ -1767,17 +1979,12 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
     elif instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
         logger.info(f"برداشت از کیف پول برای رزرو {instance.tracking_code} در حال انجام است...")
-        with transaction.atomic():
-            wallet = Wallet.objects.select_for_update().get(user=instance.buyer)
-            if wallet.balance < instance.wallet_withdrawal_amount:
-                logger.error(f"موجودی کیف پول برای رزرو {instance.tracking_code} کافی نیست. برداشت لغو شد.")
-                return
-
-            wallet.balance -= instance.wallet_withdrawal_amount
-            wallet.save()
-            instance.wallet_withdrawn = True
-            instance.save(update_fields=['wallet_withdrawn'])
-            logger.info(f"مبلغ {instance.wallet_withdrawal_amount} از کیف پول کاربر {instance.buyer.phone_number} برای رزرو {instance.tracking_code} کسر شد.")
+        # استفاده از متد جدید برای پردازش برداشت از کیف پول
+        success = instance.process_wallet_withdrawal_after_payment()
+        if success:
+            logger.info(f"✅ برداشت از کیف پول برای رزرو {instance.tracking_code} با موفقیت انجام شد")
+        else:
+            logger.error(f"❌ خطا در برداشت از کیف پول برای رزرو {instance.tracking_code}")
 
     elif instance.capacity_status in ['confirmed', 'rejected']:
         cache.delete_many([cache_key_approval, cache_key_payment, cache_key_discount])
@@ -1794,6 +2001,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         },
     )
     logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
+    
     
     
 
