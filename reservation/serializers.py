@@ -360,16 +360,26 @@ class HotelTagSerializer(serializers.ModelSerializer):
         fields = ('id', 'title')
 
 class HotelGalleryImageSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField()
+
     class Meta:
         model = HotelGalleryImage
-        fields = ('id', 'image', 'order')
+        fields = ('image',)  
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and data['image']:
+            data['image'] = request.build_absolute_uri(data['image'])
+        return data
+
 
 class HotelGallerySerializer(serializers.ModelSerializer):
     images = HotelGalleryImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = HotelGallery
-        fields = ('id', 'title', 'hotel', 'images')
+        fields = ('id', 'title', 'images') 
 
 class SuggestedCommentItemSerializer(serializers.ModelSerializer):
     class Meta:

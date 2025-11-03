@@ -337,14 +337,13 @@ class HotelAdmin(admin.ModelAdmin):
 class HotelGalleryImageInline(admin.TabularInline):
     model = HotelGalleryImage
     extra = 1
-    fields = ('image', 'order', 'preview',)
+    fields = ('image', 'preview',)
     readonly_fields = ('preview',)
-    ordering = ('order',)
 
     def preview(self, obj):
         if obj.image:
             return format_html(
-                '<img src="{}" width="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />',
+                '<img src="{}" width="100" height="100" style="object-fit: cover; border: 1px solid #ccc; border-radius: 4px;" />',
                 obj.image.url
             )
         return "-"
@@ -546,9 +545,10 @@ class RoomAdmin(admin.ModelAdmin):
         'auto_approved_count',
         'room_capacity',
         'extra_capacity',
+        'thumbnail_preview',  # پیش‌نمایش تصویر
     )
-    search_fields = ('title',)
-    autocomplete_fields = ('hotel',)
+    search_fields = ('title', 'hotel__name')  # جستجو در نام هتل هم اضافه شد
+    autocomplete_fields = ('hotel', 'services')
     fields = (
         'hotel',
         'title',
@@ -560,7 +560,20 @@ class RoomAdmin(admin.ModelAdmin):
         'room_capacity',
         'extra_capacity',
         'services',
+        'image',           # فیلد آپلود تصویر
+        'image_alt',       # متن جایگزین
     )
+    inlines = [RoomDateInline, ClosedDateInline]
+    readonly_fields = ('thumbnail_preview',)  # پیش‌نمایش فقط خواندنی
+
+    def thumbnail_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="width: 80px; height: 60px; object-fit: cover; border-radius: 4px;" />',
+                obj.image.url
+            )
+        return "(بدون تصویر)"
+    thumbnail_preview.short_description = 'پیش‌نمایش تصویر'
     inlines = [RoomDateInline]
 
 

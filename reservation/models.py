@@ -519,19 +519,14 @@ class HotelGalleryImage(models.Model):
         upload_to=image_upload_to,
         verbose_name='تصویر',
     )
-    order = models.PositiveIntegerField(
-        verbose_name='ترتیب نمایش',
-        default=0,
-    )
 
     class Meta:
         verbose_name = 'تصویر گالری'
         verbose_name_plural = 'تصاویر گالری'
-        ordering = ['order']
+        ordering = ['-id']  # ترتیب بر اساس جدیدترین (یا هر ترتیب دیگه‌ای)
 
     def __str__(self):
-        return f'تصویر #{self.id} از گالری {self.gallery}'
-        return self.title
+        return f'تصویر گالری {self.gallery.title}'
 
 
 
@@ -896,6 +891,21 @@ class Room(models.Model):
         verbose_name=_('خدمات'),
         related_name='rooms',
         blank=True,
+    )
+    
+    image = models.ImageField(
+        upload_to='room_images/',
+        verbose_name=_('تصویر اتاق'),
+        null=True,
+        blank=True,
+        help_text=_('تصویر نمایشی اتاق — اختیاری')
+    )
+    image_alt = models.CharField(
+        max_length=255,
+        verbose_name=_('متن جایگزین تصویر'),
+        null=True,
+        blank=True,
+        help_text=_('متن جایگزین برای سئو و دسترسی — اختیاری')
     )
 
     class Meta:
