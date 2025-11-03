@@ -661,8 +661,8 @@ class HotelImagesView(RetrieveAPIView):
     lookup_url_kwarg = 'slug'
 
     @swagger_auto_schema(
-        operation_summary="دریافت تصاویر هتل",
-        operation_description="این API تصاویر اصلی هتل را بر اساس slug باز می‌گرداند.",
+        operation_summary="دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل",
+        operation_description="این API تا ۵ تصویر اصلی هتل را به صورت لیست مستقیم URLها (بدون کلید) برمی‌گرداند.",
         tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
@@ -674,15 +674,22 @@ class HotelImagesView(RetrieveAPIView):
             ),
         ],
         responses={
-            200: HotelImagesSerializer,
+            200: openapi.Response(
+                description="لیست URLهای تصاویر هتل",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(type=openapi.TYPE_STRING),
+                    description="آدرس کامل تصاویر"
+                )
+            ),
             404: 'هتل پیدا نشد.'
         }
     )
-    def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-
-    
-
+    def retrieve(self, request, *args, **kwargs):
+        hotel = self.get_object()
+        serializer = self.get_serializer(hotel, context={'request': request})
+        # فقط مقدار فیلد images را برمی‌گردانیم (نه کل آبجکت)
+        return Response(serializer.data['images'])
 
 
 
@@ -2090,7 +2097,7 @@ class HotelGalleryView(RetrieveAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت گالری تصاویر هتل",
-        operation_description="این API گالری‌های تصویری مربوط به یک هتل را بر اساس slug بازمی‌گرداند. هر گالری شامل id، عنوان و لیست تصاویر است.",
+        operation_description="این API گالری‌های تصویری مربوط به یک هتل را بر اساس slug بازمی‌گرداند. هر گالری شامل id، عنوان و لیست مستقیم URL تصاویر است.",
         tags=['hotel'],
         manual_parameters=[
             openapi.Parameter(
@@ -2102,7 +2109,10 @@ class HotelGalleryView(RetrieveAPIView):
             ),
         ],
         responses={
-            200: HotelGallerySerializer(many=True),
+            200: openapi.Response(
+                description="گالری‌های هتل",
+                schema=HotelGallerySerializer(many=True)
+            ),
             404: 'هتل پیدا نشد.'
         }
     )
@@ -2111,7 +2121,6 @@ class HotelGalleryView(RetrieveAPIView):
         galleries = hotel.galleries.all()
         serializer = self.get_serializer(galleries, many=True, context={'request': request})
         return Response(serializer.data)
-    
     
     
     

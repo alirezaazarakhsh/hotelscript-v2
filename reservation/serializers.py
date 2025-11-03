@@ -246,10 +246,25 @@ class HotelTagSerializer(serializers.ModelSerializer):
         fields = ('title',)
 
 class HotelImagesSerializer(serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+
     class Meta:
         model = Hotel
-        fields = ('main_image', 'image1', 'image2', 'image3', 'image4')
+        fields = ('images',)
 
+    def get_images(self, obj):
+        request = self.context.get('request')
+        image_fields = ['main_image', 'image1', 'image2', 'image3', 'image4']
+        urls = []
+
+        for field_name in image_fields:
+            image_field = getattr(obj, field_name)
+            if image_field and hasattr(image_field, 'url'):
+                url = request.build_absolute_uri(image_field.url) if request else image_field.url
+                urls.append(url)
+
+        return urls
+    
 class HotelDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
@@ -360,26 +375,32 @@ class HotelTagSerializer(serializers.ModelSerializer):
         fields = ('id', 'title')
 
 class HotelGalleryImageSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField()
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = HotelGalleryImage
-        fields = ('image',)  
+        fields = ('image',)
 
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
+    def get_image(self, obj):
         request = self.context.get('request')
-        if request and data['image']:
-            data['image'] = request.build_absolute_uri(data['image'])
-        return data
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+        return None
 
 
 class HotelGallerySerializer(serializers.ModelSerializer):
-    images = HotelGalleryImageSerializer(many=True, read_only=True)
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = HotelGallery
-        fields = ('id', 'title', 'images') 
+        fields = ('id', 'title', 'images')
+
+    def get_images(self, obj):
+        request = self.context.get('request')
+        return [
+            request.build_absolute_uri(img.image.url) if request and img.image else (img.image.url if img.image else None)
+            for img in obj.images.all()
+        ]
 
 class SuggestedCommentItemSerializer(serializers.ModelSerializer):
     class Meta:
