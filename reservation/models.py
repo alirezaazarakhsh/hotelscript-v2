@@ -1487,9 +1487,53 @@ class Reservationhotel(models.Model):
 
         super().save(*args, **kwargs)
         
+    def mark_as_paid(self):
+        """
+        تغییر وضعیت پرداخت به paid و انجام تمام عملیات مربوطه
+        """
+        with transaction.atomic():
+            # فقط اگر وضعیت پرداخت قبلی paid نباشد
+            if self.payment_status != 'paid':
+                logger.info(f"🔄 تغییر وضعیت پرداخت به paid برای رزرو {self.tracking_code}")
+                
+                self.payment_status = 'paid'
+                self.save(update_fields=['payment_status'])
+                
+                # انجام عملیات مربوط به پرداخت موفق
+                self._process_payment_success()
+    
+    def _process_payment_success(self):
+        """
+        پردازش پرداخت موفق - کسر از کیف پول و سایر عملیات
+        """
+        logger.info(f"🔵 شروع پردازش پرداخت موفق برای رزرو {self.tracking_code}")
+        
+        # ---------- برداشت از کیف پول ----------
+        if self.wallet_withdrawal_amount > 0 and not self.wallet_withdrawn:
+            cache_key = f"wallet_withdrawal_lock_{self.tracking_code}"
+            if not cache.get(cache_key):
+                try:
+                    cache.set(cache_key, True, timeout=60)
+                    
+                    wallet = self.buyer.wallet
+                    if wallet.balance >= self.wallet_withdrawal_amount:
+                        # کسر از کیف پول با استفاده از متد جدید
+                        wallet.deduct(self.wallet_withdrawal_amount, self)
+                        
+                        # علامت‌گذاری که برداشت انجام شده
+                        self.wallet_withdrawn = True
+                        self.save(update_fields=['wallet_withdrawn'])
+                        
+                        logger.info(f"✅ برداشت از کیف پول برای رزرو {self.tracking_code} تکمیل شد")
+                    else:
+                        logger.error(f"❌ موجودی کیف پول کافی نیست. موجودی: {wallet.balance}, مبلغ درخواستی: {self.wallet_withdrawal_amount}")
+                    
+                    cache.delete(cache_key)
+                    
+                except Exception as e:
+                    logger.error(f"🔴 خطا در برداشت از کیف پول برای رزرو {self.tracking_code}: {e}")
+                    cache.delete(cache_key)
 
-
-# --- متد جدید برای پردازش کد تخفیف ---
 # --- متد جدید برای پردازش کد تخفیف ---
 def process_discount_after_payment_v2(self):
     """پردازش کد تخفیف با استفاده از متد consume_discount_for_user موجود"""
