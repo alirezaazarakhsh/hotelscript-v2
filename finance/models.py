@@ -1,5 +1,4 @@
-import logging
-from django.db import models, transaction
+from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
@@ -29,8 +28,6 @@ class WalletPack(models.Model):
 
 
 # مدل کیف پول کاربر برای موجودی 
-logger = logging.getLogger(__name__)
-
 class Wallet(models.Model):
     user = models.OneToOneField(
         BaseUser,
@@ -55,37 +52,3 @@ class Wallet(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-
-    def deduct(self, amount, reservation=None):
-        """
-        کسر از کیف پول با مدیریت تراکنش
-        """
-        if amount <= 0:
-            raise ValueError("مبلغ باید بزرگتر از صفر باشد")
-            
-        if self.balance < amount:
-            raise ValueError("موجودی کافی نیست")
-            
-        with transaction.atomic():
-            # استفاده از F() expression برای جلوگیری از race condition
-            Wallet.objects.filter(pk=self.pk).update(
-                balance=models.F('balance') - amount
-            )
-            
-            # رفرش کردن آبجکت برای گرفتن مقدار جدید
-            self.refresh_from_db()
-            
-            logger.info(f"✅ مبلغ {amount} از کیف پول کاربر {self.user.phone_number} کسر شد. موجودی جدید: {self.balance}")
-            
-            # ایجاد تراکنش برای تاریخچه (اختیاری)
-            if reservation:
-                from .models import WalletTransaction  # اگر مدل تراکنش دارید
-                WalletTransaction.objects.create(
-                    wallet=self,
-                    amount=amount,
-                    transaction_type='withdrawal',
-                    description=f'برداشت برای رزرو {reservation.tracking_code}',
-                    related_reservation=reservation
-                )
-            
-        return True
