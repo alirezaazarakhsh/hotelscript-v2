@@ -37,12 +37,12 @@ def get_skip_points_and_sms():
     return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 # ===================================================================
-# سیگنال جدید برای بررسی تغییر وضعیت پرداخت
+# سیگنال اصلی برای تغییر وضعیت پرداخت - نسخه نهایی
 # ===================================================================
 @receiver(pre_save, sender=Reservationhotel)
 def handle_payment_status_change(sender, instance, **kwargs):
     """
-    بررسی تغییر وضعیت پرداخت و انجام عملیات مربوطه
+    بررسی تغییر وضعیت پرداخت و انجام عملیات مربوطه - نسخه نهایی
     """
     if instance.pk:
         try:
@@ -54,38 +54,42 @@ def handle_payment_status_change(sender, instance, **kwargs):
                 
                 logger.info(f"🟢 تغییر وضعیت پرداخت به paid برای رزرو {instance.tracking_code}")
                 
-                # انجام عملیات مربوط به پرداخت موفق
-                _handle_successful_payment(instance)
+                # استفاده از متد mark_as_paid که در مدل تعریف شده
+                # این کار را در post_save انجام می‌دهیم تا از race condition جلوگیری شود
+                instance._needs_payment_processing = True
                 
         except Reservationhotel.DoesNotExist:
             pass
 
-def _handle_successful_payment(reservation):
+@receiver(post_save, sender=Reservationhotel)
+def handle_payment_processing_after_save(sender, instance, created, **kwargs):
     """
-    مدیریت پرداخت موفق رزرو
+    پردازش پرداخت پس از ذخیره‌سازی - نسخه نهایی
     """
-    logger.info(f"🔵 شروع پردازش پرداخت موفق برای رزرو {reservation.tracking_code}")
-    
-    # ---------- مصرف کد تخفیف ----------
-    if reservation.applied_discount_code and not reservation.discount_processed:
-        success = _process_discount_code_optimized(reservation)
-        if success:
-            logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {reservation.tracking_code}")
-        else:
-            logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {reservation.tracking_code}")
+    # اگر از skip flag استفاده شده باشد
+    if get_skip_points_and_sms():
+        logger.info(f"سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد (skip flag).")
+        return
 
-    # ---------- تخصیص امتیاز ----------
-    if not reservation.points_assigned:
-        _assign_customer_points(reservation)
+    # اگر پرداخت نیاز به پردازش دارد
+    if getattr(instance, '_needs_payment_processing', False):
+        try:
+            # حذف فلگ برای جلوگیری از اجرای مجدد
+            delattr(instance, '_needs_payment_processing')
+            
+            logger.info(f"🔵 پردازش پرداخت برای رزرو {instance.tracking_code}")
+            
+            # استفاده از متد mark_as_paid که تمام عملیات را مدیریت می‌کند
+            instance.mark_as_paid()
+            
+        except Exception as e:
+            logger.error(f"🔴 خطا در پردازش پرداخت برای رزرو {instance.tracking_code}: {e}")
+            logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
 
-    # ---------- برداشت از کیف پول ----------
-    if (reservation.wallet_withdrawal_amount > 0 and 
-        not reservation.wallet_withdrawn):
-        _process_wallet_withdrawal(reservation)
-
-    # ---------- ارسال WebSocket ----------
-    channel_layer = get_channel_layer()
-    _send_websocket_update(channel_layer, reservation)
+    # --- رد رزرو (فقط اگر پردازش پرداخت انجام نشده) ---
+    elif (instance.capacity_status == 'rejected' and 
+          not getattr(instance, '_needs_payment_processing', False)):
+        _handle_rejected_reservation(instance)
 
 # ===================================================================
 # 1. به‌روزرسانی موجودی اتاق هنگام رزرو (ذخیره یا حذف)
@@ -223,26 +227,8 @@ def update_hotel_status(sender, instance, **kwargs):
         hotel.save(update_fields=['is_special_offer', 'is_flash_sale', 'is_best_seller'])
 
 # ===================================================================
-# 6. مدیریت پرداخت، امتیاز، تخفیف، کیف پول - نسخه اصلاح شده
+# 6. توابع کمکی برای پردازش پرداخت (برای موارد خاص)
 # ===================================================================
-@receiver(post_save, sender=Reservationhotel)
-def handle_reservation_payment_complete(sender, instance, **kwargs):
-    """
-    مدیریت کامل پرداخت رزرو - نسخه اصلاح شده
-    """
-    if get_skip_points_and_sms():
-        logger.info(f"سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد (skip flag).")
-        return
-
-    # اگر وضعیت پرداخت 'paid' است، عملیات را انجام بده
-    if instance.payment_status == 'paid':
-        logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
-        _handle_successful_payment(instance)
-
-    # --- رد رزرو ---
-    elif instance.capacity_status == 'rejected':
-        _handle_rejected_reservation(instance)
-
 def _assign_customer_points(reservation):
     """تخصیص امتیاز باشگاه مشتریان"""
     cache_key = f"points_assignment_lock_{reservation.tracking_code}"
