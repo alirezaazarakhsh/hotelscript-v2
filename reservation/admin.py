@@ -545,10 +545,11 @@ class RoomAdmin(admin.ModelAdmin):
         'auto_approved_count',
         'room_capacity',
         'extra_capacity',
-        'thumbnail_preview',  # پیش‌نمایش تصویر
+        'thumbnail_preview',
     )
-    search_fields = ('title', 'hotel__name')  # جستجو در نام هتل هم اضافه شد
+    search_fields = ('title', 'hotel__name')
     autocomplete_fields = ('hotel', 'services')
+
     fields = (
         'hotel',
         'title',
@@ -560,12 +561,15 @@ class RoomAdmin(admin.ModelAdmin):
         'room_capacity',
         'extra_capacity',
         'services',
-        'image',           # فیلد آپلود تصویر
-        'image_alt',       # متن جایگزین
+        'image',
+        'image_preview',   # پیش‌نمایش زیر فیلد آپلود
+        'image_alt',
     )
-    inlines = [RoomDateInline, ClosedDateInline]
-    readonly_fields = ('thumbnail_preview',)  # پیش‌نمایش فقط خواندنی
 
+    inlines = [RoomDateInline, ClosedDateInline]
+    readonly_fields = ('thumbnail_preview', 'image_preview')  # هر دو فقط خواندنی
+
+    # پیش‌نمایش در لیست
     def thumbnail_preview(self, obj):
         if obj.image:
             return format_html(
@@ -573,7 +577,20 @@ class RoomAdmin(admin.ModelAdmin):
                 obj.image.url
             )
         return "(بدون تصویر)"
-    thumbnail_preview.short_description = 'پیش‌نمایش تصویر'
+    thumbnail_preview.short_description = 'پیش‌نمایش'
+
+    # پیش‌نمایش زیر فیلد آپلود در فرم ویرایش
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<div style="margin-top: 10px;">'
+                '<p style="margin: 5px 0; font-weight: bold; color: #555;">تصویر فعلی:</p>'
+                '<img src="{}" style="max-width: 300px; max-height: 200px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />'
+                '</div>',
+                obj.image.url
+            )
+        return "(هنوز تصویری انتخاب نشده)"
+    image_preview.short_description = 'پیش‌نمایش تصویر'
     inlines = [RoomDateInline]
 
 
