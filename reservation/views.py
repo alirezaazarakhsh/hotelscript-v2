@@ -4291,7 +4291,7 @@ class WalletWithdrawAPIView(APIView):
 
         **حالات خاص:**
         - برای حذف برداشت، مقدار `amount=0` ارسال کنید یا از متد DELETE استفاده کنید.
-        - فقط برای رزروهای با وضعیت پرداخت `unpaid` قابل تنظیم است.
+        - فقط برای رزروهای با وضعیت پرداخت `pending` قابل تنظیم است.
         - مبلغ زیر ۱۰,۰۰۰ تومان یا بیشتر از موجودی کیف پول/قیمت نهایی رزرو مجاز نیست.
 
         **خروجی:**
@@ -4322,8 +4322,8 @@ class WalletWithdrawAPIView(APIView):
             logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # فقط برای رزروهای پرداخت‌نشده
-        if reservation.payment_status != 'unpaid':
+        # فقط برای رزروهای با وضعیت pending (در انتظار پرداخت)
+        if reservation.payment_status != 'pending':
             return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده یا در حال پرداخت برداشت تنظیم کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
         # تبدیل مبلغ
@@ -4406,7 +4406,7 @@ class WalletWithdrawAPIView(APIView):
         این عمل مقدار `wallet_withdrawal_amount` را به صفر و فلگ `wallet_withdrawn` را به False تنظیم می‌کند.
 
         **حالات خاص:**
-        - فقط برای رزروهای با وضعیت پرداخت `unpaid` قابل انجام است.
+        - فقط برای رزروهای با وضعیت پرداخت `pending` قابل انجام است.
 
         **خروجی:**
         - در صورت موفقیت: پیام تأیید حذف برداشت.
@@ -4428,8 +4428,8 @@ class WalletWithdrawAPIView(APIView):
         if reservation.buyer != request.user:
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
-        # فقط برای unpaid
-        if reservation.payment_status != 'unpaid':
+        # فقط برای pending
+        if reservation.payment_status != 'pending':
             return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده برداشت را حذف کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
@@ -4457,7 +4457,6 @@ class WalletWithdrawAPIView(APIView):
             ])
 
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
-    
     
     
     
