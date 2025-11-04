@@ -3,6 +3,7 @@ import environ
 from pathlib import Path
 from datetime import timedelta
 import sys
+import re
 
 env = environ.Env(
     DB_ENGINE=(str, 'django.db.backends.postgresql'),
@@ -17,8 +18,8 @@ environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
-DEBUG = True
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu")
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -30,6 +31,7 @@ ALLOWED_HOSTS = [
     "91.107.134.107",
 ]
 
+# لیست اصلی origins
 CSRF_TRUSTED_ORIGINS = [
     "http://safarnameh24.com",
     "https://safarnameh24.com",
@@ -37,13 +39,15 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.safarnameh24.com",
     "http://cps.safarnameh24.com",
     "https://cps.safarnameh24.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
 
-STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_URL = '/static/'
+STATIC_ROOT = os.environ.get('STATIC_ROOT', os.path.join(BASE_DIR, 'staticfiles'))
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -72,15 +76,13 @@ INSTALLED_APPS = [
     'notification',
     'setting_payment',
     'favorite',
-    
-    
     'tinymce',
     'channels',
     'nested_admin',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # باید اول باشد
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -120,14 +122,14 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [("redis" if os.environ.get('REDIS_HOST') else "127.0.0.1", 6379)],
+            "hosts": [(os.environ.get('REDIS_HOST', 'redis'), int(os.environ.get('REDIS_PORT', 6379)))],
         },
     },
 }
 
 # تنظیمات Celery
-CELERY_BROKER_URL = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
+CELERY_BROKER_URL = f"redis://{os.environ.get('REDIS_HOST', 'redis')}:{os.environ.get('REDIS_PORT', 6379)}/0"
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -135,12 +137,12 @@ CELERY_TIMEZONE = 'Asia/Tehran'
 
 DATABASES = {
     'default': {
-        'ENGINE': env('DB_ENGINE'),
-        'NAME': env('DB_NAME'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST') if not os.environ.get('DB_HOST') else os.environ.get('DB_HOST'),
-        'PORT': env('DB_PORT'),
+        'ENGINE': os.environ.get('DB_ENGINE', env('DB_ENGINE')),
+        'NAME': os.environ.get('DB_NAME', env('DB_NAME')),
+        'USER': os.environ.get('DB_USER', env('DB_USER')),
+        'PASSWORD': os.environ.get('DB_PASSWORD', env('DB_PASSWORD')),
+        'HOST': os.environ.get('DB_HOST', env('DB_HOST')),
+        'PORT': os.environ.get('DB_PORT', env('DB_PORT')),
     }
 }
 
@@ -204,6 +206,11 @@ SIMPLE_JWT = {
 
 INTERNAL_IPS = ['127.0.0.1']
 
+# ====================== CORS SETTINGS ======================
+CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = False  # فقط در توسعه = True کنید
+
+# لیست اصلی origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -217,13 +224,29 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ORIGIN_ALLOW_ALL = False
+# افزودن دامنه Google User Content (برای توسعه با Google SCF)
+# این برای محیط توسعه با Google App Engine یا Firebase Hosting ضروری است
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.scf\.usercontent\.goog$",
+    r"^https://.*\.googleusercontent\.com$",
+]
+
 CORS_ALLOW_HEADERS = [
-    'content-type',
+    'accept',
+    'accept-encoding',
     'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
     'x-requested-with',
 ]
+
+# فقط در محیط توسعه (اختیاری)
+if DEBUG:
+    CORS_ORIGIN_ALLOW_ALL = True  # فقط برای تست لوکال
+# =========================================================
 
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
@@ -246,7 +269,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': 'debug.log',
+            'filename': os.path.join(BASE_DIR, 'debug.log'),
         },
         'console': {
             'level': 'DEBUG',
@@ -276,30 +299,16 @@ TINYMCE_DEFAULT_CONFIG = {
     "content_style": "body { font-family: Arial, sans-serif; font-size: 14px }",
 }
 
+# تنظیمات محیط
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'production')
 
-
-
-# safarnameh24/settings.py
-
-# مشخص کردن محیط (local یا production)
-ENVIRONMENT = 'production'  # برای محیط پروداکشن
-# ENVIRONMENT = 'local'  # برای محیط لوکال (برای تست لوکال این را فعال کنید)
-
-# تنظیم URL پایه برای ریدایرکت callback
 if ENVIRONMENT == 'local':
     CALLBACK_REDIRECT_BASE_URL = 'http://localhost:3000'
 else:
     CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
 
-#  تنظیمات درگاه زرین‌پال (برای پروداکشن - کامنت شده)
 ZARINPAL_REQUEST_URL = 'https://payment.zarinpal.com/pg/v4/payment/request.json'
 ZARINPAL_PAYMENT_URL = 'https://payment.zarinpal.com/pg/StartPay'
 ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
 
-# تنظیمات درگاه ایران‌درگاه
 IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
-
-# تنظیمات درگاه زرین‌پال (فقط سندباکس)
-# ZARINPAL_SANDBOX_REQUEST_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
-# ZARINPAL_SANDBOX_PAYMENT_URL = 'https://sandbox.zarinpal.com/pg/StartPay'
-# ZARINPAL_SANDBOX_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
