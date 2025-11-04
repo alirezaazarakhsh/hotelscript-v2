@@ -216,6 +216,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://cps.safarnameh24.com",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://2scqqz07t8cygwv6p5z8y5febhuoiv27hy8wyjvevdmhnrw36q-h825039400.scf.usercontent.goog",  # فقط این خط اضافه شد
+
 ]
 
 CORS_ALLOW_CREDENTIALS = True
