@@ -131,6 +131,7 @@ from .serializers import (
     HotelGallerySerializer,
     HotelImagesSerializer,
     HotelIntroductionSerializer,
+    HotelLinkSerializer,
     HotelListSerializer,
     CitySerializer,
     HotelRulesSerializer,
@@ -5277,3 +5278,46 @@ class ReservationInvoiceDetailAPIView(APIView):
         }
 
         return Response(data, status=status.HTTP_200_OK)
+    
+    
+    
+    #ای پی ای مشخصات هتل برای چت بات 
+class HotelChatBotListView(APIView):
+    permission_classes = (AllowAny,)
+
+    @swagger_auto_schema(
+        operation_summary="لیست تمام هتل‌ها برای چت‌بات",
+        operation_description="""
+        این API لیست تمام هتل‌های موجود در سایت را با نام و لینک اصلی برمی‌گرداند.
+
+        **لینک خروجی**: `https://safarnameh24.com/best-hotels/{slug}/`
+
+        مناسب برای:
+        - نمایش لیست هتل‌ها در چت‌بات
+        - دکمه‌های پیشنهادی
+        - جستجوی سریع
+        """,
+        tags=['chat-bot'],
+        responses={
+            200: openapi.Response(
+                description="لیست هتل‌ها با موفقیت برگردانده شد",
+                schema=HotelLinkSerializer(many=True),
+                examples={
+                    "application/json": [
+                        {
+                            "name": "هتل عباسی",
+                            "url": "https://safarnameh24.com/best-hotels/hotel-abbasi/"
+                        },
+                        {
+                            "name": "هتل پارسیان کوثر",
+                            "url": "https://safarnameh24.com/best-hotels/hotel-parsian-kowsar/"
+                        }
+                    ]
+                }
+            )
+        }
+    )
+    def get(self, request):
+        hotels = Hotel.objects.all().order_by('name')
+        serializer = HotelLinkSerializer(hotels, many=True)
+        return Response(serializer.data)

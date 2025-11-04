@@ -800,3 +800,15 @@ class ReservationListSerializer(serializers.ModelSerializer):
             return obj.created_at.strftime('%Y/%m/%d %H:%M')
         return None
     
+
+
+
+class HotelLinkSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = ['name', 'url']
+
+    def get_url(self, obj):
+        return f'https://safarnameh24.com/best-hotels/{obj.slug}/'

@@ -6,6 +6,7 @@ from .views import (
     CommentPointsAndSuggestionsView,
     GetPriceRangeAPI,
     HomeHotelByHotelSlugView,
+    HotelChatBotListView,
     HotelCommentPointSummaryView,
     HotelCommentsBySlugView,
     CreateCommentView,
@@ -109,4 +110,10 @@ urlpatterns = [
 
     # ==== discount code reservation ===
     path('reservation/discount-code/<str:tracking_code>/', views.ApplyDiscountCodeAPIView.as_view(), name='apply-discount'),
+    
+    # === Chat-bot API ===
+    path('hotels/chatbot/', HotelChatBotListView.as_view(), name='hotel-chatbot-list'),
+    
 ]
+
+  
