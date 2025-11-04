@@ -27,6 +27,8 @@ ALLOWED_HOSTS = [
     "www.safarnameh24.com",
     "cps.safarnameh24.com",
     "www.cps.safarnameh24.com",
+    "chatbot.safarnameh24.com",
+    "www.chatbot.safarnameh24.com",
     "91.107.134.107",
 ]
 
@@ -37,8 +39,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.safarnameh24.com",
     "http://cps.safarnameh24.com",
     "https://cps.safarnameh24.com",
-    "https://2scqqz07t8cygwv6p5z8y5febhuoiv27hy8wyjvevdmhnrw36q-h825039400.scf.usercontent.goog",  # فقط این خط اضافه شد
-]
+    "http://chatbot.safarnameh24.com",
+    "https://chatbot.safarnameh24.com",]
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -216,8 +218,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://cps.safarnameh24.com",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "https://2scqqz07t8cygwv6p5z8y5febhuoiv27hy8wyjvevdmhnrw36q-h825039400.scf.usercontent.goog",  # فقط این خط اضافه شد
-
+    "http://chatbot.safarnameh24.com",
+    "https://chatbot.safarnameh24.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
