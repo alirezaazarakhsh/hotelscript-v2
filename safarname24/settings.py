@@ -40,7 +40,10 @@ CSRF_TRUSTED_ORIGINS = [
     "http://cps.safarnameh24.com",
     "https://cps.safarnameh24.com",
     "http://chatbot.safarnameh24.com",
-    "https://chatbot.safarnameh24.com",]
+    "https://chatbot.safarnameh24.com",
+    "http://www.chatbot.safarnameh24.com",
+    "https://www.chatbot.safarnameh24.com",
+    ]
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -220,6 +223,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://chatbot.safarnameh24.com",
     "https://chatbot.safarnameh24.com",
+    "http://www.chatbot.safarnameh24.com",
+    "https://www.chatbot.safarnameh24.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
