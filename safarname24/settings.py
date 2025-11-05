@@ -78,6 +78,8 @@ INSTALLED_APPS = [
     'notification',
     'setting_payment',
     'favorite',
+    'settingchatbot',
+    'chat_api',
     
     
     'tinymce',

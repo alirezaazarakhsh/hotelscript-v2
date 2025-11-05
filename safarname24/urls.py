@@ -35,6 +35,11 @@ urlpatterns = [
         path('crm/', include('bashgah_moshtarian.urls', namespace='bashgah')), 
         path('favorite/', include('favorite.urls', namespace='favorites')),
         path('payment/', include('setting_payment.urls', namespace='payment')),  # اضافه کردن setting_payment
+        
+        # --- اضافه کردن URL های چت بات و تنظیمات جدید ---
+        path('chatbot/', include('chat_api.urls', namespace='chatbot_api')), # این خط را اضافه کنید
+        path('chatbot_settings/', include('settingchatbot.urls', namespace='chatbot_settings')), # این خط را اضافه کنید
+        # --------------------------------------------------
 
     ])),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
