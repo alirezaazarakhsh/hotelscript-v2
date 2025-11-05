@@ -236,14 +236,14 @@ class ChatbotTTSView(APIView):
             configure(api_key=google_api_key)
             
             # Use the TTS model
-            model = GenerativeModel("gemini-2.0-flash-exp")
+            model = GenerativeModel("gemini-2.5-flash-preview-tts")
             
             # Generate TTS response
             response = model.generate_content(
                 text_to_speak,
                 generation_config={
                     "response_modalities": ["AUDIO"],
-                    "audio_config": {
+                    "speech_config": {
                         "voice_config": {
                             "prebuilt_voice_config": {
                                 "voice_name": bot_settings.default_voice
