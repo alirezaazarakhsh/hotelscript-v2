@@ -6,14 +6,13 @@ class BotSettingsAdmin(admin.ModelAdmin):
     """
     ادمین برای تنظیمات بات. فقط اجازه اضافه کردن یک رکورد رو می‌ده (singleton).
     """
-    # فیلدهای نمایش در لیست: available_fonts و hotel_links حذف شدند
-    list_display = ('default_voice', 'is_bot_voice_enabled', 'google_api_key') 
+    # فیلدهای نمایش در لیست: فیلدهای جدید اضافه شدند
+    list_display = ('default_voice', 'is_bot_voice_enabled', 'google_api_key', 'welcome_title') 
     fieldsets = (
         ('تنظیمات اصلی', {
-            # available_fonts و hotel_links از اینجا حذف شدند
-            'fields': ('google_api_key', 'system_instruction', 'default_voice', 'is_bot_voice_enabled'),
+            # فیلدهای جدید اضافه شدند: logo, welcome_title, welcome_message
+            'fields': ('google_api_key', 'system_instruction', 'default_voice', 'is_bot_voice_enabled', 'hotel_links', 'logo', 'welcome_title', 'welcome_message'),
         }),
-        # 'تنظیمات اضافی' که شامل available_fonts و hotel_links بود، حذف شد
     )
     
     # فقط اگر هیچ رکوردی نبود، اجازه اضافه کردن بده (singleton)
