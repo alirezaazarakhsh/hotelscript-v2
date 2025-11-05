@@ -14,16 +14,10 @@ RUN apt-get update && \
     postgresql-client \
     tar \
     curl \
-    gcc \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # به‌روزرسانی pip
 RUN pip install --upgrade pip
-
-# ابتدا پکیج‌های مشکل‌ساز را نصب کن
-RUN pip install --no-cache-dir typing-extensions==4.8.0
-RUN pip install --no-cache-dir urllib3==1.26.18
 
 # کپی requirements و نصب آنها
 COPY requirements.txt /app/
