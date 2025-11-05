@@ -8,30 +8,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from google.generativeai import GenerativeModel, configure
-from google.generativeai.types import HarmBlockThreshold, HarmCategory
-from google.generativeai.protos import GenerationConfig
-from google.generativeai.client import get_default_retriever_async_client
-from google.generativeai.types import Tool
-from google.generativeai.operations import WaitIterator
-from google.generativeai.protos import (
-    GenerationConfig,
-    SafetySetting,
-    HarmCategory,
-    HarmBlockThreshold,
-)
-from google.generativeai.types.generation_types import (
-    Candidate,
-    GenerateContentResponse,
-    Part,
-    RetrieveContentResponse,
-    SpeechConfig,
-    TextPart,
-    ToolConfig,
-    ToolFunction,
-    ToolUse,
-    ToolUseResponse,
-    Modality
-)
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import google.generativeai as genai
 
 from settingchatbot.models import BotSettings, FAQ
 from .serializers import ChatMessageSerializer, ChatSettingsSerializer, FAQSerializer
@@ -39,28 +17,27 @@ from .serializers import ChatMessageSerializer, ChatSettingsSerializer, FAQSeria
 # For Swagger documentation
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from rest_framework.permissions import AllowAny # Assuming you might use this for some public endpoints
 
 logger = logging.getLogger(__name__)
 
-# Safety settings (optional, you can customize)
+# Safety settings
 safety_settings = [
-    SafetySetting(
-        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold=HarmBlockThreshold.BLOCK_NONE,
-    ),
-    SafetySetting(
-        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold=HarmBlockThreshold.BLOCK_NONE,
-    ),
-    SafetySetting(
-        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold=HarmBlockThreshold.BLOCK_NONE,
-    ),
-    SafetySetting(
-        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold=HarmBlockThreshold.BLOCK_NONE,
-    ),
+    {
+        "category": HarmCategory.HARM_CATEGORY_HARASSMENT,
+        "threshold": HarmBlockThreshold.BLOCK_NONE,
+    },
+    {
+        "category": HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        "threshold": HarmBlockThreshold.BLOCK_NONE,
+    },
+    {
+        "category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        "threshold": HarmBlockThreshold.BLOCK_NONE,
+    },
+    {
+        "category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        "threshold": HarmBlockThreshold.BLOCK_NONE,
+    },
 ]
 
 class ChatbotMessageView(APIView):
@@ -134,35 +111,47 @@ class ChatbotMessageView(APIView):
                 model_name='gemini-2.5-flash',
                 safety_settings=safety_settings,
                 system_instruction=bot_settings.system_instruction,
-                tools=[Tool.google_search()]
             )
 
-            chat_history = []
+            # Build chat history
+            chat = model.start_chat(history=[])
+            
+            # Add conversation history to the chat
             for entry in conversation_history:
-                sender = entry['sender']
-                text = entry['text']
-                if sender == 'user':
-                    chat_history.append({'role': 'user', 'parts': [text]})
-                elif sender == 'bot' and text:
-                    chat_history.append({'role': 'model', 'parts': [text]})
+                if entry['sender'] == 'user':
+                    chat.history.append({
+                        'role': 'user',
+                        'parts': [entry['text']]
+                    })
+                elif entry['sender'] == 'bot':
+                    chat.history.append({
+                        'role': 'model',
+                        'parts': [entry['text']]
+                    })
 
-            chat = model.start_chat(history=chat_history)
-
+            # Prepare current message parts
             current_message_parts = []
             if message_text:
                 current_message_parts.append(message_text)
             if audio_data_b64 and mime_type:
-                current_message_parts.append(Part.from_data(data=base64.b64decode(audio_data_b64), mime_type=mime_type))
+                audio_bytes = base64.b64decode(audio_data_b64)
+                current_message_parts.append({
+                    'mime_type': mime_type,
+                    'data': audio_bytes
+                })
 
             if not current_message_parts:
                 return Response({"error": "پیام یا داده صوتی برای پردازش یافت نشد."}, status=status.HTTP_400_BAD_REQUEST)
 
-            response_stream = chat.send_message_stream(current_message_parts)
+            # Send message and get response
+            if len(current_message_parts) == 1 and isinstance(current_message_parts[0], str):
+                # Text only message
+                response = chat.send_message(current_message_parts[0])
+            else:
+                # Mixed content (text + audio)
+                response = chat.send_message(current_message_parts)
 
-            full_bot_response_text = ""
-            for chunk in response_stream:
-                if chunk.text:
-                    full_bot_response_text += chunk.text
+            full_bot_response_text = response.text
 
             return Response({"response": full_bot_response_text})
 
@@ -175,14 +164,14 @@ class ChatbotTTSView(APIView):
         operation_summary="تبدیل متن به گفتار (Text-to-Speech)",
         operation_description="""
         این API یک متن را به عنوان ورودی دریافت کرده و فایل صوتی تبدیل شده به گفتار را برمی‌گرداند.
-        از قابلیت TTS مدل Gemini 2.5 Flash استفاده می‌کند.
+        از قابلیت TTS مدل Gemini استفاده می‌کند.
 
         **ورودی**:
         - `text` (الزامی): متنی که باید به گفتار تبدیل شود.
 
         **خروجی**:
         - `audio_data`: داده صوتی به صورت Base64.
-        - `mime_type`: نوع MIME فایل صوتی (معمولاً `audio/x-flac`).
+        - `mime_type`: نوع MIME فایل صوتی.
 
         **نکات**:
         - کلید API گوگل از `BotSettings` یا متغیر محیطی `GEMINI_API_KEY` خوانده می‌شود.
@@ -207,7 +196,7 @@ class ChatbotTTSView(APIView):
                         'mime_type': openapi.Schema(type=openapi.TYPE_STRING, description="نوع MIME فایل صوتی")
                     }
                 ),
-                examples={"application/json": {"audio_data": "base64_encoded_audio_data...", "mime_type": "audio/x-flac"}}
+                examples={"application/json": {"audio_data": "base64_encoded_audio_data...", "mime_type": "audio/mp3"}}
             ),
             400: openapi.Response(
                 description="درخواست نامعتبر",
@@ -243,20 +232,40 @@ class ChatbotTTSView(APIView):
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             configure(api_key=google_api_key)
-            model = GenerativeModel(model_name="gemini-2.5-flash-preview-tts")
-
-            tts_response = model.generate_content(
+            
+            # Use the TTS model
+            model = GenerativeModel("gemini-2.0-flash-exp")
+            
+            # Generate TTS response
+            response = model.generate_content(
                 text_to_speak,
-                generation_config=GenerationConfig(
-                    response_modalities=[Modality.AUDIO],
-                    speech_config=SpeechConfig(
-                        voice_config={"prebuiltVoice": {"voiceName": bot_settings.default_voice}}
-                    ),
-                ),
+                generation_config={
+                    "response_modalities": ["AUDIO"],
+                    "audio_config": {
+                        "voice_config": {
+                            "prebuilt_voice_config": {
+                                "voice_name": bot_settings.default_voice
+                            }
+                        }
+                    }
+                }
             )
             
-            audio_data_b64 = tts_response.candidates[0].content.parts[0].inline_data.data
-            return Response({"audio_data": audio_data_b64, "mime_type": "audio/x-flac"})
+            # Extract audio data
+            if (response.candidates and 
+                response.candidates[0].content and 
+                response.candidates[0].content.parts and 
+                response.candidates[0].content.parts[0].inline_data):
+                
+                audio_data_b64 = response.candidates[0].content.parts[0].inline_data.data
+                mime_type = response.candidates[0].content.parts[0].inline_data.mime_type
+                
+                return Response({
+                    "audio_data": audio_data_b64, 
+                    "mime_type": mime_type or "audio/mp3"
+                })
+            else:
+                return Response({"error": "پاسخ صوتی تولید نشد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
         except Exception as e:
             logger.exception("Error during TTS generation:")
@@ -319,9 +328,6 @@ class ChatbotSettingsView(APIView):
         except Exception as e:
             logger.exception("Error retrieving chatbot settings:")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 class FAQListView(APIView):
     @swagger_auto_schema(
