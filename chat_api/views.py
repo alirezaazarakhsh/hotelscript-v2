@@ -1,4 +1,3 @@
-# chat_api/views.py
 import json
 import base64
 import logging
@@ -7,6 +6,7 @@ from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny # اضافه کردن AllowAny
 from google.generativeai import GenerativeModel, configure
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import google.generativeai as genai
@@ -41,6 +41,7 @@ safety_settings = [
 ]
 
 class ChatbotMessageView(APIView):
+    permission_classes = [AllowAny] # اضافه کردن این خط
     @swagger_auto_schema(
         operation_summary="ارسال پیام به چت‌بات و دریافت پاسخ",
         operation_description="""
@@ -160,6 +161,7 @@ class ChatbotMessageView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChatbotTTSView(APIView):
+    permission_classes = [AllowAny] # اضافه کردن این خط
     @swagger_auto_schema(
         operation_summary="تبدیل متن به گفتار (Text-to-Speech)",
         operation_description="""
@@ -192,7 +194,7 @@ class ChatbotTTSView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'audio_data': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_BASE64, description="داده صوتی Base64"), # <-- تغییر اعمال شده اینجاست
+                        'audio_data': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_BASE64, description="داده صوتی Base64"),
                         'mime_type': openapi.Schema(type=openapi.TYPE_STRING, description="نوع MIME فایل صوتی")
                     }
                 ),
@@ -272,6 +274,7 @@ class ChatbotTTSView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChatbotSettingsView(APIView):
+    permission_classes = [AllowAny] # اضافه کردن این خط
     @swagger_auto_schema(
         operation_summary="دریافت تنظیمات چت‌بات",
         operation_description="""
@@ -330,6 +333,7 @@ class ChatbotSettingsView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FAQListView(APIView):
+    permission_classes = [AllowAny] # اضافه کردن این خط
     @swagger_auto_schema(
         operation_summary="لیست سوالات متداول (FAQ)",
         operation_description="""
