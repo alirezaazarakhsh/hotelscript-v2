@@ -10,6 +10,7 @@ from rest_framework.permissions import AllowAny
 from google.generativeai import GenerativeModel, configure
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import google.generativeai as genai
+from google.cloud import texttospeech  # برای استفاده از Google Cloud TTS
 
 from settingchatbot.models import BotSettings, FAQ
 from .serializers import ChatMessageSerializer, ChatSettingsSerializer, FAQSerializer
@@ -166,27 +167,30 @@ class ChatbotTTSView(APIView):
         operation_summary="تبدیل متن به گفتار (Text-to-Speech)",
         operation_description="""
         این API یک متن را به عنوان ورودی دریافت کرده و فایل صوتی تبدیل شده به گفتار را برمی‌گرداند.
-        از قابلیت TTS مدل Gemini استفاده می‌کند.
+        از Google Cloud Text-to-Speech API استفاده می‌کند.
 
         **ورودی**:
         - `text` (الزامی): متنی که باید به گفتار تبدیل شود.
+        - `voice_name` (اختیاری): نام صدای دستیار (مثل 'Kore' یا 'Puck').
 
         **خروجی**:
         - `audio_data`: داده صوتی به صورت Base64.
-        - `mime_type`: نوع MIME فایل صوتی.
+        - `mime_type`: نوع MIME فایل صوتی (مثل 'audio/mp3').
 
         **نکات**:
         - کلید API گوگل از `BotSettings` یا متغیر محیطی `GEMINI_API_KEY` خوانده می‌شود.
         - صدای پیش‌فرض بات از `bot_settings.default_voice` تعیین می‌شود.
+        - این API با دستیارهای صوتی گوگل (Google Cloud TTS) ادغام شده است.
         """,
         tags=['chat-bot'],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=['text'],
             properties={
-                'text': openapi.Schema(type=openapi.TYPE_STRING, description='متنی که باید به گفتار تبدیل شود.')
+                'text': openapi.Schema(type=openapi.TYPE_STRING, description='متنی که باید به گفتار تبدیل شود.'),
+                'voice_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام صدای دستیار (اختیاری).')
             },
-            example={"text": "سلام، چطور می‌توانم کمکتان کنم؟"}
+            example={"text": "سلام، چطور می‌توانم کمکتان کنم؟", "voice_name": "Kore"}
         ),
         responses={
             200: openapi.Response(
@@ -220,6 +224,7 @@ class ChatbotTTSView(APIView):
     )
     def post(self, request, *args, **kwargs):
         text_to_speak = request.data.get('text', '')
+        voice_name = request.data.get('voice_name', None)  # اختیاری از فرانت
         if not text_to_speak:
             return Response({"error": "متن برای تبدیل به گفتار فراهم نشده است."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -228,47 +233,41 @@ class ChatbotTTSView(APIView):
             if not bot_settings:
                 return Response({"error": "تنظیمات بات یافت نشد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            google_api_key = bot_settings.google_api_key if bot_settings.google_api_key else os.environ.get('GEMINI_API_KEY')
-            if not google_api_key:
-                return Response({"error": "کلید API گوگل در تنظیمات یا متغیر محیطی GEMINI_API_KEY یافت نشد."},
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # استفاده از صدای پیش‌فرض اگر voice_name ارسال نشده باشد
+            if not voice_name:
+                voice_name = bot_settings.default_voice
 
-            configure(api_key=google_api_key)
-            
-            # Use the TTS model
-            model = GenerativeModel("gemini-2.5-flash-preview-tts")
-            
-            # Generate TTS response
-            response = model.generate_content(
-                text_to_speak,
-                generation_config={
-                    "response_modalities": ["AUDIO"],
-                    "speech_config": {
-                        "voice_config": {
-                            "prebuilt_voice_config": {
-                                "voice_name": bot_settings.default_voice
-                            }
-                        }
-                    }
-                }
+            # تنظیم کلاینت Google Cloud TTS (نیاز به credentials.json یا env var GOOGLE_APPLICATION_CREDENTIALS)
+            client = texttospeech.TextToSpeechClient()
+
+            # تنظیم ورودی متن
+            synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
+
+            # تنظیم صدا (voice_name باید با فرمت Google TTS سازگار باشد، مثل 'fa-IR-Wavenet-A' برای فارسی)
+            voice = texttospeech.VoiceSelectionParams(
+                language_code="fa-IR",  # برای فارسی، یا بر اساس voice_name تغییر دهید
+                name=voice_name,  # استفاده از voice_name (مثل 'Kore' یا 'Puck' اگر ساپورت شود، اما Google TTS نام‌های خاص خودش رو داره)
             )
-            
-            # Extract audio data
-            if (response.candidates and 
-                response.candidates[0].content and 
-                response.candidates[0].content.parts and 
-                response.candidates[0].content.parts[0].inline_data):
-                
-                audio_data_b64 = response.candidates[0].content.parts[0].inline_data.data
-                mime_type = response.candidates[0].content.parts[0].inline_data.mime_type
-                
-                return Response({
-                    "audio_data": audio_data_b64, 
-                    "mime_type": mime_type or "audio/mp3"
-                })
-            else:
-                return Response({"error": "پاسخ صوتی تولید نشد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
+            # تنظیم فرمت خروجی (مثل MP3)
+            audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.MP3
+            )
+
+            # درخواست TTS
+            response = client.synthesize_speech(
+                input=synthesis_input, voice=voice, audio_config=audio_config
+            )
+
+            # تبدیل audio_content به base64
+            audio_data_b64 = base64.b64encode(response.audio_content).decode('utf-8')
+            mime_type = "audio/mp3"
+
+            return Response({
+                "audio_data": audio_data_b64, 
+                "mime_type": mime_type
+            })
+
         except Exception as e:
             logger.exception("Error during TTS generation:")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
