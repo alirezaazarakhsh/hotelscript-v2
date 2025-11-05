@@ -28,3 +28,4 @@ class FAQSerializer(serializers.ModelSerializer):
     class Meta:
         model = FAQ # مطمئن شوید که FAQ را از settingchatbot.models ایمپورت کرده‌اید
         fields = ['id', 'question', 'answer'] # فقط فیلدهای مورد نیاز را نمایش می‌دهیم
+        ref_name = 'ChatbotFAQSerializer' # <--- This is the crucial line to add/change
