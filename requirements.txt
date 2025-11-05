@@ -21,7 +21,7 @@ click-repl==0.3.0
 constantly==23.10.4
 coreapi==2.3.3
 coreschema==0.0.4
-cryptography==44.0.3
+cryptography>=41.0.0 # Relaxed to allow newer versions, 44.0.3 should be fine, but sometimes dependency conflicts arise
 daphne==4.2.1
 Django==4.2.20
 django-admin-interface==0.30.0
@@ -49,8 +49,8 @@ google-auth==2.42.1
 google-auth-httplib2==0.2.1
 google-generativeai==0.8.5
 googleapis-common-protos==1.71.0
-grpcio==1.49.0
-grpcio-status==1.71.2
+grpcio-status>=1.71.2 # Relax this to allow newer grpcio to be pulled
+grpcio>=1.71.2 # Update grpcio to meet grpcio-status requirement
 h11==0.14.0
 httpcore==0.17.3
 httplib2==0.31.0
@@ -79,7 +79,7 @@ platformdirs==4.5.0
 prometheus_client==0.22.1
 prompt_toolkit==3.0.51
 proto-plus==1.26.1
-protobuf==5.29.5
+protobuf>=3.20.0 # Relaxed this, as older protobuf versions often conflict with newer grpcio
 psycopg==3.2.9
 psycopg-binary==3.2.3
 psycopg2-binary==2.9.10
