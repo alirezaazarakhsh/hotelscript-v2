@@ -1,15 +1,7 @@
 from django.db import models
-from django.contrib.postgres.fields import JSONField # برای Django 3.1 به بعد
-# اگر از نسخه‌های قدیمی‌تر Django (قبل از 3.1) استفاده می‌کنید، 
-# باید یک پکیج شخص ثالث مثل 'jsonfield' را نصب کرده و آن را import کنید:
-# from jsonfield import JSONField 
+from django.contrib.postgres.fields import JSONField  # برای Django 3.1 به بعد
 
-# مدل برای تنظیمات کلی چت بات   
 class BotSettings(models.Model):
-    """
-    مدل برای ذخیره تنظیمات کلی بات، مثل سیستم اینستراکشن، صدای پیش‌فرض و غیره.
-    فقط یک رکورد از این مدل بساز (singleton-like).
-    """
     google_api_key = models.CharField(
         max_length=255,
         blank=True,
@@ -21,18 +13,11 @@ class BotSettings(models.Model):
         help_text="دستورالعمل سیستم برای مدل AI (مثل Gemini)."
     )
     
-    # انتخاب‌های صدای حرفه‌ای‌تر برای Google Cloud Text-to-Speech API
-    # شما باید این نام‌ها را از مستندات رسمی Google Cloud Text-to-Speech پیدا کنید.
-    # این لیست شامل نام‌های رایج برای فارسی و همچنین گزینه‌های Gemini شماست.
-    # در نهایت، نام‌هایی را که واقعاً توسط API شما پشتیبانی می‌شوند، نگه‌دارید.
     VOICE_CHOICES = [
-        # Google Cloud Text-to-Speech Standard Voices for Farsi (مثال)
         ('fa-IR-Standard-A', 'فارسی - صدای استاندارد زنانه (A)'),
         ('fa-IR-Standard-B', 'فارسی - صدای استاندارد مردانه (B)'),
-        # Google Cloud Text-to-Speech WaveNet Voices for Farsi (مثال) - کیفیت بالاتر
         ('fa-IR-Wavenet-C', 'فارسی - صدای WaveNet زنانه (C)'),
         ('fa-IR-Wavenet-D', 'فارسی - صدای WaveNet مردانه (D)'),
-        # اگر Gemini نام‌های خاص خودش را برای صداهای پیش‌ساخته دارد، می‌توانید آن‌ها را هم اینجا اضافه کنید
         ('Kore', 'Kore (پیش‌فرض Gemini، زنانه)'), 
         ('Puck', 'Puck (پیش‌فرض Gemini، مردانه)'),
     ]
@@ -40,28 +25,14 @@ class BotSettings(models.Model):
     default_voice = models.CharField(
         max_length=50,
         choices=VOICE_CHOICES,
-        default='fa-IR-Wavenet-C', # پیش‌فرض به یک صدای WaveNet با کیفیت بالاتر
+        default='fa-IR-Wavenet-C',
         help_text="صدای پیش‌فرض بات (برای TTS). WaveNet کیفیت بالاتری دارد و توصیه می‌شود."
     )
     is_bot_voice_enabled = models.BooleanField(
         default=True,
         help_text="آیا پاسخ صوتی بات فعال باشد؟"
     )
-    
-    # اضافه شدن فیلد برای لینک‌های هتل
-    # JSONField برای ذخیره لیستی از دیکشنری‌ها (مثل {name: "نام", url: "لینک"}) مناسب است.
-    # برای Django 3.1 به بالا از django.db.models.JSONField استفاده کنید.
-    # برای نسخه‌های قدیمی‌تر، یک پکیج مانند 'jsonfield' را نصب کنید.
-    # در اینجا از django.db.models.JSONField استفاده شده است. اگر خطایی گرفتید، 
-    # ممکن است نیاز به تغییر به django.contrib.postgres.fields.JSONField
-    # یا استفاده از پکیج jsonfield داشته باشید.
-    hotel_links = models.JSONField(
-        default=list, # پیش‌فرض یک لیست خالی است
-        blank=True,
-        help_text="لیستی از لینک‌های هتل به صورت JSON (مثال: [{'name': 'هتل اسپیناس', 'url': 'https://...'}])."
-    )
 
-    # اضافه کردن فیلد برای لوگو
     logo = models.ImageField(
         upload_to='logos/',
         null=True,
@@ -69,14 +40,12 @@ class BotSettings(models.Model):
         help_text="لوگوی چت‌بات (برای نمایش در فرانت‌اند)."
     )
 
-    # اضافه کردن فیلد برای عنوان خوش‌آمدگویی
     welcome_title = models.CharField(
         max_length=255,
         default="چت بات هوشمند سفرنامه ۲۴",
         help_text="عنوان خوش‌آمدگویی در صفحه اصلی چت‌بات."
     )
 
-    # اضافه کردن فیلد برای پیام خوش‌آمدگویی
     welcome_message = models.TextField(
         default="به چت بات هوشمند سفرنامه ۲۴ خوش آمدید. اگر نیاز به مشاوره قبل از خرید یا انتخاب دارید، این چت بات نیاز شما را برطرف می‌کند. لطفا safarnameh24.com را دنبال کنید.",
         help_text="پیام خوش‌آمدگویی کامل در صفحه اصلی چت‌بات."
@@ -90,11 +59,7 @@ class BotSettings(models.Model):
         return "تنظیمات کلی بات"
     
     
-# مدل سوال و جواب چت بات 
 class FAQ(models.Model):
-    """
-    مدل برای سوالات متداول (FAQ). برای پاسخ‌های ثابت مثل ساعت کاری، قیمت‌ها و غیره.
-    """
     question = models.CharField(
         max_length=255,
         help_text="سوال کاربر (مثال: 'ساعت کاری سایت چنده؟')"
@@ -110,7 +75,7 @@ class FAQ(models.Model):
     class Meta:
         verbose_name = "سوال و جواب"
         verbose_name_plural = "سوال و جواب های چت بات"
-        ordering = ['question'] # مثلاً بر اساس سوال به ترتیب الفبا
+        ordering = ['question']
 
     def __str__(self):
         return self.question

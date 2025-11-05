@@ -6,7 +6,7 @@ from django.conf import settings
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny # اضافه کردن AllowAny
+from rest_framework.permissions import AllowAny
 from google.generativeai import GenerativeModel, configure
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import google.generativeai as genai
@@ -41,7 +41,7 @@ safety_settings = [
 ]
 
 class ChatbotMessageView(APIView):
-    permission_classes = [AllowAny] # اضافه کردن این خط
+    permission_classes = [AllowAny]
     @swagger_auto_schema(
         operation_summary="ارسال پیام به چت‌بات و دریافت پاسخ",
         operation_description="""
@@ -161,7 +161,7 @@ class ChatbotMessageView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChatbotTTSView(APIView):
-    permission_classes = [AllowAny] # اضافه کردن این خط
+    permission_classes = [AllowAny]
     @swagger_auto_schema(
         operation_summary="تبدیل متن به گفتار (Text-to-Speech)",
         operation_description="""
@@ -274,19 +274,21 @@ class ChatbotTTSView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChatbotSettingsView(APIView):
-    permission_classes = [AllowAny] # اضافه کردن این خط
+    permission_classes = [AllowAny]
     @swagger_auto_schema(
         operation_summary="دریافت تنظیمات چت‌بات",
         operation_description="""
         این API تنظیمات کلی چت‌بات را برمی‌گرداند.
-        این شامل دستورالعمل سیستمی، صدای پیش‌فرض، فعال بودن صدای بات، فونت‌های موجود و لینک‌های هتل (در صورت وجود) می‌شود.
+        این شامل دستورالعمل سیستمی، صدای پیش‌فرض، فعال بودن صدای بات، فونت‌های موجود می‌شود.
 
         **خروجی**:
         - `system_instruction`: دستورالعمل سیستمی برای مدل چت‌بات.
         - `default_voice`: نام صدای پیش‌فرض برای تبدیل متن به گفتار.
         - `is_bot_voice_enabled`: آیا قابلیت گفتار برای بات فعال است یا خیر.
         - `available_fonts`: لیستی از فونت‌های موجود برای نمایش در چت.
-        - `hotel_links`: لیستی از لینک‌های هتل (که احتمالا از `BotSettings` می‌آید).
+        - `welcome_title`: عنوان خوش‌آمدگویی.
+        - `welcome_message`: پیام خوش‌آمدگویی.
+        - `logo_url`: URL لوگو (اگر موجود باشد).
 
         **نکات**:
         - اگر تنظیمات بات در دیتابیس یافت نشد، مقادیر پیش‌فرض منطقی برگردانده می‌شوند.
@@ -301,7 +303,9 @@ class ChatbotSettingsView(APIView):
                     "default_voice": "Kore",
                     "is_bot_voice_enabled": True,
                     "available_fonts": [{'name': 'وزیرمتن', 'family': 'Vazirmatn'}],
-                    "hotel_links": [],
+                    "welcome_title": "چت بات هوشمند سفرنامه ۲۴",
+                    "welcome_message": "به چت بات هوشمند سفرنامه ۲۴ خوش آمدید.",
+                    "logo_url": "https://example.com/logo.png",
                 }}
             ),
             500: openapi.Response(
@@ -323,17 +327,19 @@ class ChatbotSettingsView(APIView):
                     "default_voice": "Kore",
                     "is_bot_voice_enabled": True,
                     "available_fonts": [{'name': 'وزیرمتن', 'family': 'Vazirmatn'}],
-                    "hotel_links": [],
+                    "welcome_title": "چت بات هوشمند سفرنامه ۲۴",
+                    "welcome_message": "به چت بات هوشمند سفرنامه ۲۴ خوش آمدید. اگر نیاز به مشاوره قبل از خرید یا انتخاب دارید، این چت بات نیاز شما را برطرف می‌کند. لطفا safarnameh24.com را دنبال کنید.",
+                    "logo_url": "http://cps.safarnameh24.com/media/images/logo/full-red-gray_mej9jEE.webp",
                 })
             
-            serializer = ChatSettingsSerializer(bot_settings)
+            serializer = ChatSettingsSerializer(bot_settings, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
             logger.exception("Error retrieving chatbot settings:")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FAQListView(APIView):
-    permission_classes = [AllowAny] # اضافه کردن این خط
+    permission_classes = [AllowAny]
     @swagger_auto_schema(
         operation_summary="لیست سوالات متداول (FAQ)",
         operation_description="""

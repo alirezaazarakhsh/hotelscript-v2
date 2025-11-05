@@ -1,6 +1,6 @@
 # chat_api/serializers.py
 from rest_framework import serializers
-from settingchatbot.models import FAQ # این خط را اضافه کنید
+from settingchatbot.models import FAQ, BotSettings
 
 
 class ChatMessageSerializer(serializers.Serializer):
@@ -14,18 +14,28 @@ class ChatMessageSerializer(serializers.Serializer):
         default=[]
     )
 
-class ChatSettingsSerializer(serializers.Serializer):
-    # این فیلدها از مدل BotSettings خوانده می‌شوند
-    google_api_key = serializers.CharField(read_only=True)
-    system_instruction = serializers.CharField(read_only=True)
-    default_voice = serializers.CharField(read_only=True)
-    is_bot_voice_enabled = serializers.BooleanField(read_only=True)
-    available_fonts = serializers.JSONField(read_only=True)
-    hotel_links = serializers.JSONField(read_only=True)
+class ChatSettingsSerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
 
-# سریالایزر جدید برای مدل FAQ
+    class Meta:
+        model = BotSettings
+        fields = [
+            'system_instruction',
+            'default_voice',
+            'is_bot_voice_enabled',
+            'welcome_title',
+            'welcome_message',
+            'logo_url'
+        ]
+
+    def get_logo_url(self, obj):
+        request = self.context.get('request')
+        if obj.logo and request:
+            return request.build_absolute_uri(obj.logo.url)
+        return None
+
 class FAQSerializer(serializers.ModelSerializer):
     class Meta:
-        model = FAQ # مطمئن شوید که FAQ را از settingchatbot.models ایمپورت کرده‌اید
-        fields = ['id', 'question', 'answer'] # فقط فیلدهای مورد نیاز را نمایش می‌دهیم
-        ref_name = 'ChatbotFAQSerializer' # <--- This is the crucial line to add/change
+        model = FAQ
+        fields = ['id', 'question', 'answer']
+        ref_name = 'ChatbotFAQSerializer'

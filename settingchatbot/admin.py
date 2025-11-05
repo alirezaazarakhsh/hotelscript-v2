@@ -11,7 +11,7 @@ class BotSettingsAdmin(admin.ModelAdmin):
     fieldsets = (
         ('تنظیمات اصلی', {
             # فیلدهای جدید اضافه شدند: logo, welcome_title, welcome_message
-            'fields': ('google_api_key', 'system_instruction', 'default_voice', 'is_bot_voice_enabled', 'hotel_links', 'logo', 'welcome_title', 'welcome_message'),
+            'fields': ('google_api_key', 'system_instruction', 'default_voice', 'is_bot_voice_enabled', 'logo', 'welcome_title', 'welcome_message'),
         }),
     )
     
