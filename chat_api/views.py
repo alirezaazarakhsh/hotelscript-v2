@@ -192,7 +192,7 @@ class ChatbotTTSView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'audio_data': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_BYTE, description="داده صوتی Base64"),
+                        'audio_data': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_BASE64, description="داده صوتی Base64"), # <-- تغییر اعمال شده اینجاست
                         'mime_type': openapi.Schema(type=openapi.TYPE_STRING, description="نوع MIME فایل صوتی")
                     }
                 ),
