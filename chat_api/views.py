@@ -10,7 +10,8 @@ from rest_framework.permissions import AllowAny
 from google.generativeai import GenerativeModel, configure
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import google.generativeai as genai
-from google.cloud import texttospeech  # برای استفاده از Google Cloud TTS
+from gtts import gTTS  # جایگزین برای TTS با پشتیبانی از فارسی
+from io import BytesIO
 
 from settingchatbot.models import BotSettings, FAQ
 from .serializers import ChatMessageSerializer, ChatSettingsSerializer, FAQSerializer
@@ -167,20 +168,19 @@ class ChatbotTTSView(APIView):
         operation_summary="تبدیل متن به گفتار (Text-to-Speech)",
         operation_description="""
         این API یک متن را به عنوان ورودی دریافت کرده و فایل صوتی تبدیل شده به گفتار را برمی‌گرداند.
-        از Google Cloud Text-to-Speech API استفاده می‌کند.
+        از gTTS (با پشتیبانی از فارسی) استفاده می‌کند.
 
         **ورودی**:
         - `text` (الزامی): متنی که باید به گفتار تبدیل شود.
-        - `voice_name` (اختیاری): نام صدای دستیار (مثل 'Kore' یا 'Puck').
+        - `voice_name` (اختیاری): نام صدای دستیار (اما gTTS صدای‌های محدودی دارد، این فیلد می‌تواند برای تنظیمات آینده استفاده شود).
 
         **خروجی**:
         - `audio_data`: داده صوتی به صورت Base64.
         - `mime_type`: نوع MIME فایل صوتی (مثل 'audio/mp3').
 
         **نکات**:
-        - کلید API گوگل از `BotSettings` یا متغیر محیطی `GEMINI_API_KEY` خوانده می‌شود.
-        - صدای پیش‌فرض بات از `bot_settings.default_voice` تعیین می‌شود.
-        - این API با دستیارهای صوتی گوگل (Google Cloud TTS) ادغام شده است.
+        - صدای پیش‌فرض بات از `bot_settings.default_voice` تعیین می‌شود (اما gTTS از lang='fa' استفاده می‌کند).
+        - این API ساده و رایگان است و نیاز به API key ندارد.
         """,
         tags=['chat-bot'],
         request_body=openapi.Schema(
@@ -233,34 +233,18 @@ class ChatbotTTSView(APIView):
             if not bot_settings:
                 return Response({"error": "تنظیمات بات یافت نشد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # استفاده از صدای پیش‌فرض اگر voice_name ارسال نشده باشد
+            # استفاده از صدای پیش‌فرض اگر voice_name ارسال نشده باشد (gTTS صدای‌های محدودی دارد، اما برای fa خوب کار می‌کند)
             if not voice_name:
-                voice_name = bot_settings.default_voice
+                voice_name = bot_settings.default_voice  # اگر نیاز به تنظیم باشه، اما gTTS از tld برای accent استفاده می‌کند (مثل tld='com' برای استاندارد)
 
-            # تنظیم کلاینت Google Cloud TTS (نیاز به credentials.json یا env var GOOGLE_APPLICATION_CREDENTIALS)
-            client = texttospeech.TextToSpeechClient()
+            # ایجاد TTS با gTTS
+            tts = gTTS(text=text_to_speak, lang='fa', slow=False)  # lang='fa' برای فارسی
 
-            # تنظیم ورودی متن
-            synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-
-            # تنظیم صدا (voice_name باید با فرمت Google TTS سازگار باشد، مثل 'fa-IR-Wavenet-A' برای فارسی)
-            voice = texttospeech.VoiceSelectionParams(
-                language_code="fa-IR",  # برای فارسی، یا بر اساس voice_name تغییر دهید
-                name=voice_name,  # استفاده از voice_name (مثل 'Kore' یا 'Puck' اگر ساپورت شود، اما Google TTS نام‌های خاص خودش رو داره)
-            )
-
-            # تنظیم فرمت خروجی (مثل MP3)
-            audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3
-            )
-
-            # درخواست TTS
-            response = client.synthesize_speech(
-                input=synthesis_input, voice=voice, audio_config=audio_config
-            )
-
-            # تبدیل audio_content به base64
-            audio_data_b64 = base64.b64encode(response.audio_content).decode('utf-8')
+            # ذخیره در BytesIO برای base64
+            mp3_fp = BytesIO()
+            tts.write_to_fp(mp3_fp)
+            mp3_fp.seek(0)
+            audio_data_b64 = base64.b64encode(mp3_fp.read()).decode('utf-8')
             mime_type = "audio/mp3"
 
             return Response({
