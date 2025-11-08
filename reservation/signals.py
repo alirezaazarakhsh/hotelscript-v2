@@ -203,48 +203,43 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
                 logger.info(f"تلاش برای برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}...")
                 success = _process_wallet_withdrawal(reservation_refreshed)
                 if success:
-                    # نیازی به اضافه کردن wallet_withdrawn به fields_to_update نیست
-                    # چون _process_wallet_withdrawal خودش save را صدا می‌زند
                     logger.info(f"✅ برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                    reservation_refreshed.refresh_from_db() # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
                 else:
                     logger.error(f"❌ خطا در برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}.")
 
+            # اگر به هر دلیلی تیک زده نشده بود ولی شرایط برداشت هست، دستی بزنش
+            if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
+                logger.warning(f"⚠️ تیک برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} زده نشده بود، حالا دستی می‌زنم.")
+                reservation_refreshed.wallet_withdrawn = True
+                fields_to_update.append('wallet_withdrawn')
 
             # ---------- مصرف کد تخفیف ----------
             if reservation_refreshed.applied_discount_code and not reservation_refreshed.discount_processed:
                 logger.info(f"تلاش برای پردازش کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code}...")
                 success = _process_discount_code_optimized(reservation_refreshed)
                 if success:
-                    # نیازی به اضافه کردن discount_processed به fields_to_update نیست
-                    # چون _process_discount_code_optimized خودش save را صدا می‌زند
                     logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {reservation_refreshed.tracking_code}")
-                    reservation_refreshed.refresh_from_db() # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
                 else:
                     logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {reservation_refreshed.tracking_code}")
-
 
             # ---------- تخصیص امتیاز ----------
             if not reservation_refreshed.points_assigned:
                 logger.info(f"تلاش برای تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}...")
                 success = _assign_customer_points(reservation_refreshed)
                 if success:
-                    # نیازی به اضافه کردن points_assigned به fields_to_update نیست
-                    # چون _assign_customer_points خودش save را صدا می‌زند
                     logger.info(f"✅ تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                    reservation_refreshed.refresh_from_db() # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
                 else:
                     logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}.")
 
-            # --- اگر فیلدهایی به صورت دستی در این تابع تغییر کرده باشند (که در حال حاضر اینگونه نیست)
-            # --- و نیاز به یک save نهایی داشته باشیم، اینجا انجام می‌شود.
-            # --- در حال حاضر توابع داخلی خودشان save می‌کنند و این قسمت بیشتر جنبه اطمینان دارد.
+            # ذخیره نهایی اگر فیلدی به‌روز شده بود
             if fields_to_update:
                 reservation_refreshed._skip_price_calculation_on_save = True
                 reservation_refreshed.save(update_fields=fields_to_update)
                 del reservation_refreshed._skip_price_calculation_on_save
                 logger.info(f"✅ ذخیره نهایی رزرو {reservation_refreshed.tracking_code} با فیلدهای {fields_to_update}")
-
 
     # --- رد رزرو ---
     elif instance.capacity_status == 'rejected':
@@ -252,6 +247,7 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
 
     # --- ارسال وضعیت WebSocket ---
     _send_websocket_update(channel_layer, instance)
+
 
 
 def _assign_customer_points(reservation):
