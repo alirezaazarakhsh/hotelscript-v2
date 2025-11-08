@@ -178,81 +178,63 @@ def update_hotel_status(sender, instance, **kwargs):
 @receiver(post_save, sender=Reservationhotel)
 def handle_reservation_payment_complete(sender, instance, **kwargs):
     """
-    مدیریت کامل پرداخت رزرو - نسخه نهایی و اصلاح شده
+    سیگنال پس از ذخیره رزرو برای مدیریت وضعیت پرداخت و اقدامات بعدی
     """
     if get_skip_points_and_sms():
-        logger.info(f"سیگنال برای رزرو {instance.tracking_code} نادیده گرفته شد (skip flag).")
+        logger.info(f"سیگنال برای رزرو {instance.tracking_code} به دلیل فلگ skip نادیده گرفته شد.")
         return
 
     channel_layer = get_channel_layer()
 
-    try:
-        # --- پرداخت موفق ---
-        if instance.payment_status == 'paid':
-            logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
+    if instance.payment_status == 'paid':
+        logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
 
-            with transaction.atomic():
-                reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+        with transaction.atomic():
+            reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+            fields_to_update = []
 
-                fields_to_update = []
-
-                # ---------- برداشت از کیف پول (اولویت اول) ----------
-                if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
-                    logger.info(f"تلاش برای برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}...")
-                    success = _process_wallet_withdrawal(reservation_refreshed)
+            # برداشت از کیف پول
+            if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
+                logger.info(f"تلاش برای برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code}...")
+                success = _process_wallet_withdrawal(reservation_refreshed)
+                if success:
+                    logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} موفق بود.")
                     reservation_refreshed.refresh_from_db()
-                    if success:
-                        logger.info(f"✅ برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                    else:
-                        logger.error(f"❌ خطا در برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}.")
+                else:
+                    logger.error(f"❌ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} شکست خورد.")
 
-                # اگر به هر دلیلی هنوز تیک زده نشده، دستی بزنش
-                if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
-                    logger.warning(f"⚠️ تیک برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} زده نشده بود، حالا دستی می‌زنم.")
-                    reservation_refreshed.wallet_withdrawn = True
-                    fields_to_update.append('wallet_withdrawn')
+            # مصرف کد تخفیف
+            if reservation_refreshed.applied_discount_code and not reservation_refreshed.discount_processed:
+                logger.info(f"تلاش برای پردازش کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code}...")
+                success = _process_discount_code_optimized(reservation_refreshed)
+                if success:
+                    logger.info(f"✅ کد تخفیف برای رزرو {reservation_refreshed.tracking_code} پردازش شد.")
+                    reservation_refreshed.refresh_from_db()
+                else:
+                    logger.error(f"❌ خطا در پردازش کد تخفیف رزرو {reservation_refreshed.tracking_code}")
 
-                # ---------- مصرف کد تخفیف ----------
-                if reservation_refreshed.applied_discount_code and not reservation_refreshed.discount_processed:
-                    logger.info(f"تلاش برای پردازش کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code}...")
-                    success = _process_discount_code_optimized(reservation_refreshed)
-                    if success:
-                        logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {reservation_refreshed.tracking_code}")
-                        reservation_refreshed.refresh_from_db()
-                    else:
-                        logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {reservation_refreshed.tracking_code}")
+            # تخصیص امتیاز
+            if not reservation_refreshed.points_assigned:
+                logger.info(f"تلاش برای تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}...")
+                success = _assign_customer_points(reservation_refreshed)
+                if success:
+                    logger.info(f"✅ امتیاز برای رزرو {reservation_refreshed.tracking_code} تخصیص داده شد.")
+                    reservation_refreshed.refresh_from_db()
+                else:
+                    logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}.")
 
-                # ---------- تخصیص امتیاز ----------
-                if not reservation_refreshed.points_assigned:
-                    logger.info(f"تلاش برای تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}...")
-                    success = _assign_customer_points(reservation_refreshed)
-                    if success:
-                        logger.info(f"✅ تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                        reservation_refreshed.refresh_from_db()
-                    else:
-                        logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}.")
+            # ذخیره نهایی اگر نیاز به آپدیت فیلدها بود
+            if fields_to_update:
+                reservation_refreshed._skip_price_calculation_on_save = True
+                reservation_refreshed.save(update_fields=fields_to_update)
+                del reservation_refreshed._skip_price_calculation_on_save
+                logger.info(f"✅ ذخیره نهایی رزرو {reservation_refreshed.tracking_code} با فیلدهای {fields_to_update}")
 
-                # ذخیره نهایی اگر فیلدی به‌روز شده بود
-                if fields_to_update:
-                    reservation_refreshed._skip_price_calculation_on_save = True
-                    reservation_refreshed.save(update_fields=fields_to_update)
-                    del reservation_refreshed._skip_price_calculation_on_save
-                    logger.info(f"✅ ذخیره نهایی رزرو {reservation_refreshed.tracking_code} با فیلدهای {fields_to_update}")
+    elif instance.capacity_status == 'rejected':
+        _handle_rejected_reservation(instance)
 
-        # --- رد رزرو ---
-        elif instance.capacity_status == 'rejected':
-            _handle_rejected_reservation(instance)
-
-    except Exception as exc:
-        logger.error(f"❌ خطا در اجرای سیگنال پرداخت رزرو {instance.tracking_code}: {exc}")
-        logger.error(traceback.format_exc())
-
-    # --- ارسال وضعیت WebSocket ---
-    try:
-        _send_websocket_update(channel_layer, instance)
-    except Exception as exc:
-        logger.error(f"❌ خطا در ارسال به WebSocket برای رزرو {instance.tracking_code}: {exc}")
-        logger.error(traceback.format_exc())
+    # ارسال آپدیت به WebSocket
+    _send_websocket_update(channel_layer, instance)
 
 
 
@@ -435,7 +417,9 @@ def _process_discount_code_optimized(reservation):
         cache.delete(cache_key)
 
 def _process_wallet_withdrawal(reservation):
-    """برداشت از کیف پول - نسخه اصلاح‌شده با لاگر بیشتر و try/except جدا"""
+    """
+    برداشت از کیف پول - با لاگ دقیق و تراکنش ایمن
+    """
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         logger.info(f"Wallet withdrawal for {reservation.tracking_code} skipped due to lock.")
@@ -443,9 +427,9 @@ def _process_wallet_withdrawal(reservation):
 
     try:
         with transaction.atomic():
-            logger.info(f"🟡 شروع transaction برای برداشت کیف پول رزرو {reservation.tracking_code}")
+            logger.info(f"🟡 شروع transaction برداشت کیف پول رزرو {reservation.tracking_code}")
             reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=reservation.pk)
-            
+
             if reservation_refreshed.wallet_withdrawn:
                 logger.info(f"Wallet already withdrawn for reservation {reservation_refreshed.tracking_code}, skipping.")
                 return True
@@ -457,57 +441,58 @@ def _process_wallet_withdrawal(reservation):
             cache.set(cache_key, True, timeout=60)
 
             wallet = Wallet.objects.select_for_update().get(user=reservation_refreshed.buyer)
-            
             withdrawal_amount = int(reservation_refreshed.wallet_withdrawal_amount)
-            
-            logger.info(f"🟢 شروع برداشت: موجودی فعلی کیف پول: {wallet.balance:,} | مبلغ درخواستی: {withdrawal_amount:,}")
+
+            logger.info(f"🟢 شروع برداشت: موجودی کیف پول: {wallet.balance:,} | مبلغ برداشت: {withdrawal_amount:,}")
 
             if wallet.balance < withdrawal_amount:
-                logger.warning(f"❌ موجودی کافی نیست: موجودی: {wallet.balance:,} | درخواستی: {withdrawal_amount:,}")
+                logger.warning(f"❌ موجودی کیف پول کافی نیست: {wallet.balance:,} | مبلغ درخواستی: {withdrawal_amount:,}")
                 return False
 
+            # کم کردن مبلغ از کیف پول
             try:
                 wallet.balance = F('balance') - withdrawal_amount
                 wallet.save(update_fields=['balance'])
                 wallet.refresh_from_db()
                 logger.info(f"✅ کیف پول ذخیره شد: موجودی جدید: {wallet.balance:,}")
             except Exception as wallet_err:
-                logger.error(f"🔴 خطا در ذخیره کیف پول: {wallet_err}")
+                logger.error(f"خطا در ذخیره کیف پول: {wallet_err}")
                 logger.error(traceback.format_exc())
-                raise  # rollback transaction
+                raise
 
+            # زدن تیک برداشت در رزرو
             try:
                 reservation_refreshed.wallet_withdrawn = True
-                reservation_refreshed._skip_price_calculation_on_save = True 
+                reservation_refreshed._skip_price_calculation_on_save = True
                 reservation_refreshed.save(update_fields=['wallet_withdrawn'])
                 del reservation_refreshed._skip_price_calculation_on_save
-                logger.info(f"✅ فلگ wallet_withdrawn به True تغییر کرد و رزرو ذخیره شد.")
+                logger.info(f"✅ فلگ wallet_withdrawn برای رزرو {reservation_refreshed.tracking_code} فعال شد.")
             except Exception as res_err:
-                logger.error(f"🔴 خطا در ذخیره رزرو (فلگ wallet_withdrawn): {res_err}")
+                logger.error(f"خطا در ذخیره رزرو (فلگ wallet_withdrawn): {res_err}")
                 logger.error(traceback.format_exc())
+
                 # rollback دستی کیف پول
                 wallet.refresh_from_db()
-                wallet.balance += withdrawal_amount
+                wallet.balance = F('balance') + withdrawal_amount
                 wallet.save(update_fields=['balance'])
                 logger.warning(f"🟠 rollback دستی کیف پول انجام شد.")
                 raise
 
-            logger.info(f"✅ برداشت کامل موفقیت‌آمیز برای {reservation_refreshed.tracking_code}")
+            logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} موفقیت‌آمیز بود.")
             return True
 
     except Wallet.DoesNotExist:
-        logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
+        logger.error(f"کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
         return False
     except Exception as e:
-        logger.error(f"🔴 خطا کلی در برداشت از کیف پول برای رزرو {reservation.tracking_code}: {e}")
-        logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
+        logger.error(f"خطای کلی در برداشت کیف پول رزرو {reservation.tracking_code}: {e}")
+        logger.error(traceback.format_exc())
         return False
     finally:
-        try:
-            cache.delete(cache_key)
-            logger.info(f"🟡 پایان transaction برای {reservation.tracking_code}")
-        except Exception as cache_err:
-            logger.error(f"خطا در حذف قفل کش {cache_key}: {cache_err}")
+        cache.delete(cache_key)
+        logger.info(f"🟡 پایان تراکنش برداشت کیف پول رزرو {reservation.tracking_code}")
+
+
         
 
 def _handle_rejected_reservation(reservation):
