@@ -433,60 +433,77 @@ def _process_discount_code_optimized(reservation):
         cache.delete(cache_key)
 
 def _process_wallet_withdrawal(reservation):
-    """برداشت از کیف پول"""
+    """برداشت از کیف پول - نسخه اصلاح‌شده با logger بیشتر و try/except جدا"""
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         logger.info(f"Wallet withdrawal for {reservation.tracking_code} skipped due to lock.")
-        return False # اضافه شده برای نشان دادن عدم موفقیت در پردازش
+        return False
 
     try:
         with transaction.atomic():
+            logger.info(f"🟡 شروع transaction برای برداشت کیف پول رزرو {reservation.tracking_code}")
             reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=reservation.pk)
             
             if reservation_refreshed.wallet_withdrawn:
                 logger.info(f"Wallet already withdrawn for reservation {reservation_refreshed.tracking_code}, skipping.")
-                return True # قبلا انجام شده، پس موفقیت آمیز است
+                return True
 
             if reservation_refreshed.wallet_withdrawal_amount <= 0:
                 logger.info(f"No wallet withdrawal amount set for reservation {reservation_refreshed.tracking_code}.")
-                return True # چیزی برای برداشت نبوده، پس موفقیت آمیز تلقی می‌شود
+                return True
 
             cache.set(cache_key, True, timeout=60)
 
             wallet = Wallet.objects.select_for_update().get(user=reservation_refreshed.buyer)
             
-            # تبدیل به int برای جلوگیری از mismatch نوع (Decimal به int)
             withdrawal_amount = int(reservation_refreshed.wallet_withdrawal_amount)
             
-            logger.info(f"🟢 شروع برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}. "
-                        f"موجودی فعلی: {wallet.balance:,}, مبلغ درخواستی: {withdrawal_amount:,}")
+            logger.info(f"🟢 شروع برداشت: موجودی فعلی کیف پول: {wallet.balance:,} | مبلغ درخواستی: {withdrawal_amount:,}")
 
-            if wallet.balance >= withdrawal_amount:
+            if wallet.balance < withdrawal_amount:
+                logger.warning(f"❌ موجودی کافی نیست: موجودی: {wallet.balance:,} | درخواستی: {withdrawal_amount:,}")
+                return False
+
+            # ذخیره wallet در try جدا برای ایمنی
+            try:
                 wallet.balance = F('balance') - withdrawal_amount
                 wallet.save(update_fields=['balance'])
                 wallet.refresh_from_db()
+                logger.info(f"✅ کیف پول ذخیره شد: موجودی جدید: {wallet.balance:,}")
+            except Exception as wallet_err:
+                logger.error(f"🔴 خطا در ذخیره کیف پول: {wallet_err}")
+                logger.error(traceback.format_exc())
+                raise  # برای rollback atomic
 
+            # ذخیره reservation در try جدا
+            try:
                 reservation_refreshed.wallet_withdrawn = True
                 reservation_refreshed._skip_price_calculation_on_save = True 
                 reservation_refreshed.save(update_fields=['wallet_withdrawn'])
                 del reservation_refreshed._skip_price_calculation_on_save
+                logger.info(f"✅ فلگ wallet_withdrawn به True تغییر کرد و رزرو ذخیره شد.")
+            except Exception as res_err:
+                logger.error(f"🔴 خطا در ذخیره رزرو (فلگ wallet_withdrawn): {res_err}")
+                logger.error(traceback.format_exc())
+                # دستی rollback wallet اگر atomic شکست بخورد (بعید اما ایمنی)
+                wallet.balance = F('balance') + withdrawal_amount
+                wallet.save(update_fields=['balance'])
+                logger.warning(f"🟠 rollback دستی کیف پول انجام شد.")
+                raise
 
-                logger.info(f"✅ مبلغ {withdrawal_amount:,} از کیف پول کاربر {reservation_refreshed.buyer.phone_number} "
-                            f"برای رزرو {reservation_refreshed.tracking_code} کسر شد. موجودی جدید: {wallet.balance:,}")
-                return True
-            else:
-                logger.warning(f"❌ موجودی کیف پول کاربر {reservation_refreshed.buyer.phone_number} برای رزرو {reservation_refreshed.tracking_code} کافی نیست. "
-                               f"موجودی: {wallet.balance:,}, مبلغ درخواستی: {withdrawal_amount:,}")
-                return False
+            logger.info(f"✅ برداشت کامل موفقیت‌آمیز برای {reservation_refreshed.tracking_code}")
+            return True
+
     except Wallet.DoesNotExist:
         logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
         return False
     except Exception as e:
-        logger.error(f"🔴 خطا در برداشت از کیف پول برای رزرو {reservation.tracking_code}: {e}")
+        logger.error(f"🔴 خطا کلی در برداشت از کیف پول برای رزرو {reservation.tracking_code}: {e}")
         logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
         return False
     finally:
         cache.delete(cache_key)
+        logger.info(f"🟡 پایان transaction برای {reservation.tracking_code}")
 
 def _handle_rejected_reservation(reservation):
     """مدیریت رزرو رد شده"""
