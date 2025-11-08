@@ -4296,6 +4296,7 @@ class WalletWithdrawAPIView(APIView):
         operation_description="""
         این API به کاربر احراز هویت‌شده اجازه می‌دهد مبلغ برداشت از کیف پول را برای یک رزرو مشخص تنظیم یا حذف کند.
         مبلغ فقط در صورت نهایی شدن پرداخت رزرو (payment_status='paid') از موجودی کیف پول کسر می‌شود (توسط سیگنال).
+        فیلد `wallet_withdrawn` تا زمان پرداخت نهایی `False` باقی می‌ماند.
 
         **ورودی‌ها (در body درخواست POST):**
         - `amount`: مبلغ برداشت (تومان، حداقل ۱۰,۰۰۰ تومان، حداکثر موجودی کیف پول یا قیمت نهایی رزرو)
@@ -4331,6 +4332,7 @@ class WalletWithdrawAPIView(APIView):
             logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
 
+        # فقط برای رزروهای در انتظار پرداخت می‌توان برداشت را تنظیم کرد
         if reservation.payment_status != 'pending':
             return Response({"detail": "نمی‌توان برای رزرو پرداخت‌شده یا در حال پرداخت برداشت تنظیم کرد."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -4377,7 +4379,7 @@ class WalletWithdrawAPIView(APIView):
             reservation._skip_price_calculation_on_save = True
             
             reservation.wallet_withdrawal_amount = amount
-            reservation.wallet_withdrawn = False # هر بار که مبلغ تغییر کند، این فیلد باید False باشد تا سیگنال آن را به True تغییر دهد.
+            reservation.wallet_withdrawn = False # <--- مهم: این فیلد همیشه False می‌ماند تا پرداخت نهایی شود.
 
             # بازمحاسبه تمام قیمت‌ها با wallet_withdrawal_amount جدید
             (
@@ -4397,7 +4399,7 @@ class WalletWithdrawAPIView(APIView):
             reservation.final_price = final
             
             reservation.save(update_fields=[
-                "wallet_withdrawal_amount", "wallet_withdrawn",
+                "wallet_withdrawal_amount", "wallet_withdrawn", # wallet_withdrawn را نیز در update_fields قرار دهید
                 "total_price", "total_extra_passenger_charge", "discount",
                 "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
                 "total_half_day_charge", "final_price"
@@ -4409,9 +4411,9 @@ class WalletWithdrawAPIView(APIView):
 
         return Response({
             "detail": message,
-            "wallet_balance": int(wallet.balance),
-            "wallet_withdrawal_amount": int(reservation.wallet_withdrawal_amount),
-            "final_price": int(reservation.final_price),
+            "wallet_balance": int(wallet.balance), # موجودی فعلی کیف پول کاربر
+            "wallet_withdrawal_amount": int(reservation.wallet_withdrawal_amount), # مبلغ برداشت تنظیم شده
+            "final_price": int(reservation.final_price), # قیمت نهایی پس از اعمال برداشت
             "discount_code_amount": int(code_discount_for_response or 0),
             "room_fixed_discount": int(room_fixed or 0),
             "total_price": int(total),
@@ -4453,8 +4455,9 @@ class WalletWithdrawAPIView(APIView):
             reservation._skip_price_calculation_on_save = True 
 
             reservation.wallet_withdrawal_amount = Decimal('0')
-            reservation.wallet_withdrawn = False
+            reservation.wallet_withdrawn = False # <--- مهم: این فیلد نیز False می‌شود.
             
+            # بازمحاسبه تمام قیمت‌ها با wallet_withdrawal_amount جدید (صفر)
             (
                 total, total_extra, discount_amount_field,
                 half_in, half_out, total_half,
@@ -4472,7 +4475,7 @@ class WalletWithdrawAPIView(APIView):
             reservation.final_price = final
             
             reservation.save(update_fields=[
-                "wallet_withdrawal_amount", "wallet_withdrawn",
+                "wallet_withdrawal_amount", "wallet_withdrawn", # wallet_withdrawn را نیز در update_fields قرار دهید
                 "total_price", "total_extra_passenger_charge", "discount",
                 "room_fixed_discount", "half_day_in_charge", "half_day_out_charge",
                 "total_half_day_charge", "final_price"
@@ -4481,6 +4484,8 @@ class WalletWithdrawAPIView(APIView):
 
         logger.info(f"Wallet withdrawal deleted: user={request.user.id}, tracking_code={tracking_code}")
         return Response({"detail": "برداشت از کیف پول حذف شد."}, status=status.HTTP_200_OK)
+    
+    
     
     
 # ای پی ای سئو هتل ها 
