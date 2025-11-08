@@ -190,9 +190,6 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
     if instance.payment_status == 'paid':
         logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
 
-        # اطمینان از تازگی آبجکت در ابتدای پردازش payment_complete
-        # این کار ضروری است زیرا سیگنال ممکن است چندین بار تریگر شود
-        # و ما باید همیشه با آخرین وضعیت آبجکت کار کنیم.
         with transaction.atomic():
             reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
 
@@ -204,11 +201,11 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
                 success = _process_wallet_withdrawal(reservation_refreshed)
                 if success:
                     logger.info(f"✅ برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()
                 else:
                     logger.error(f"❌ خطا در برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}.")
 
-            # اگر به هر دلیلی تیک زده نشده بود ولی شرایط برداشت هست، دستی بزنش
+            # اگر به هر دلیلی هنوز تیک زده نشده، دستی بزنش
             if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
                 logger.warning(f"⚠️ تیک برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} زده نشده بود، حالا دستی می‌زنم.")
                 reservation_refreshed.wallet_withdrawn = True
@@ -220,7 +217,7 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
                 success = _process_discount_code_optimized(reservation_refreshed)
                 if success:
                     logger.info(f"✅ کد تخفیف با موفقیت پردازش شد برای رزرو {reservation_refreshed.tracking_code}")
-                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()
                 else:
                     logger.error(f"❌ خطا در پردازش کد تخفیف برای رزرو {reservation_refreshed.tracking_code}")
 
@@ -230,7 +227,7 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
                 success = _assign_customer_points(reservation_refreshed)
                 if success:
                     logger.info(f"✅ تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code} موفقیت آمیز بود.")
-                    reservation_refreshed.refresh_from_db()  # رفرش کردن آبجکت بعد از save داخلی
+                    reservation_refreshed.refresh_from_db()
                 else:
                     logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}.")
 
@@ -247,6 +244,7 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
 
     # --- ارسال وضعیت WebSocket ---
     _send_websocket_update(channel_layer, instance)
+
 
 
 
