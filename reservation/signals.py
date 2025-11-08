@@ -455,11 +455,14 @@ def _process_wallet_withdrawal(reservation):
 
             wallet = Wallet.objects.select_for_update().get(user=reservation_refreshed.buyer)
             
+            # تبدیل به int برای جلوگیری از mismatch نوع (Decimal به int)
+            withdrawal_amount = int(reservation_refreshed.wallet_withdrawal_amount)
+            
             logger.info(f"🟢 شروع برداشت از کیف پول برای رزرو {reservation_refreshed.tracking_code}. "
-                        f"موجودی فعلی: {wallet.balance:,}, مبلغ درخواستی: {reservation_refreshed.wallet_withdrawal_amount:,}")
+                        f"موجودی فعلی: {wallet.balance:,}, مبلغ درخواستی: {withdrawal_amount:,}")
 
-            if wallet.balance >= reservation_refreshed.wallet_withdrawal_amount:
-                wallet.balance = F('balance') - reservation_refreshed.wallet_withdrawal_amount
+            if wallet.balance >= withdrawal_amount:
+                wallet.balance = F('balance') - withdrawal_amount
                 wallet.save(update_fields=['balance'])
                 wallet.refresh_from_db()
 
@@ -468,12 +471,12 @@ def _process_wallet_withdrawal(reservation):
                 reservation_refreshed.save(update_fields=['wallet_withdrawn'])
                 del reservation_refreshed._skip_price_calculation_on_save
 
-                logger.info(f"✅ مبلغ {reservation_refreshed.wallet_withdrawal_amount:,} از کیف پول کاربر {reservation_refreshed.buyer.phone_number} "
+                logger.info(f"✅ مبلغ {withdrawal_amount:,} از کیف پول کاربر {reservation_refreshed.buyer.phone_number} "
                             f"برای رزرو {reservation_refreshed.tracking_code} کسر شد. موجودی جدید: {wallet.balance:,}")
                 return True
             else:
                 logger.warning(f"❌ موجودی کیف پول کاربر {reservation_refreshed.buyer.phone_number} برای رزرو {reservation_refreshed.tracking_code} کافی نیست. "
-                               f"موجودی: {wallet.balance:,}, مبلغ درخواستی: {reservation_refreshed.wallet_withdrawal_amount:,}")
+                               f"موجودی: {wallet.balance:,}, مبلغ درخواستی: {withdrawal_amount:,}")
                 return False
     except Wallet.DoesNotExist:
         logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")

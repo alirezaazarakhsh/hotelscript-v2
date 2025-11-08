@@ -4286,7 +4286,7 @@ class ApplyDiscountCodeAPIView(APIView):
         
         
 # ای پی ای برداشت از کیف پول 
-llogger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 class WalletWithdrawAPIView(APIView):
     permission_classes = [IsAuthenticated]
