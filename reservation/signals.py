@@ -433,7 +433,7 @@ def _process_discount_code_optimized(reservation):
         cache.delete(cache_key)
 
 def _process_wallet_withdrawal(reservation):
-    """برداشت از کیف پول - نسخه اصلاح‌شده با logger بیشتر و try/except جدا"""
+    """برداشت از کیف پول - نسخه اصلاح‌شده با لاگر بیشتر و try/except جدا"""
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         logger.info(f"Wallet withdrawal for {reservation.tracking_code} skipped due to lock.")
@@ -504,6 +504,8 @@ def _process_wallet_withdrawal(reservation):
     finally:
         cache.delete(cache_key)
         logger.info(f"🟡 پایان transaction برای {reservation.tracking_code}")
+        
+        
 
 def _handle_rejected_reservation(reservation):
     """مدیریت رزرو رد شده"""
