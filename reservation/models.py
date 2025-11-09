@@ -2287,9 +2287,21 @@ class ReservationInvoiceSettings(models.Model):
         blank=True,
         null=True
     )
-    contact_number = models.CharField(
+    contact_number_1 = models.CharField(
         max_length=15,
-        verbose_name="شماره تماس"
+        verbose_name="شماره تماس ۱"
+    )
+    contact_number_2 = models.CharField(
+        max_length=15,
+        verbose_name="شماره تماس ۲",
+        blank=True,
+        null=True
+    )
+    postal_address = models.CharField(
+        max_length=300,
+        verbose_name="آدرس پستی",
+        blank=True,
+        null=True
     )
 
     class Meta:
@@ -2298,5 +2310,3 @@ class ReservationInvoiceSettings(models.Model):
 
     def __str__(self):
         return self.title
-
-

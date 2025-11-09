@@ -1228,19 +1228,28 @@ class CancellationPenaltyAdmin(admin.ModelAdmin):
 
 
 
+
 @admin.register(ReservationInvoiceSettings)
 class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
     form = ReservationInvoiceSettingsAdminForm
-    list_display = ('title', 'contact_number', 'signature_preview_list', 'edit_link')
-    search_fields = ('title', 'contact_number')
-
-    # حذف کامل readonly_fields
-    # readonly_fields = ('signature_preview',)  ← حذف شد
+    list_display = (
+        'title',
+        'contact_number_1',
+        'contact_number_2',
+        'signature_preview_list',
+        'edit_link',
+    )
+    search_fields = ('title', 'contact_number_1', 'contact_number_2')
 
     fieldsets = (
         ('تنظیمات فاکتور رزرو', {
-            'fields': ('title', 'contact_number', 'signature_image')
-            # signature_preview حذف شد
+            'fields': (
+                'title',
+                'contact_number_1',
+                'contact_number_2',
+                'postal_address',
+                'signature_image',
+            )
         }),
     )
 

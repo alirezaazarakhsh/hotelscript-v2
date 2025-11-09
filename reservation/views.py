@@ -4993,7 +4993,7 @@ class UserCancellationCreateAPIView(APIView):
 class ReservationInvoiceSettingsAPIView(APIView):
     """
     API برای دریافت تنظیمات فاکتور رزرو
-    شامل عنوان فاکتور، شماره تماس و لینک کامل عکس امضا با دامنه safarnameh24.com
+    شامل عنوان فاکتور، شماره تماس‌ها، آدرس پستی و لینک کامل عکس امضا با دامنه safarnameh24.com
     """
     permission_classes = [AllowAny]
 
@@ -5002,7 +5002,9 @@ class ReservationInvoiceSettingsAPIView(APIView):
         operation_description="""
         این API تنظیمات فاکتور رزرو را برمی‌گرداند که شامل:
         - عنوان فاکتور
-        - شماره تماس
+        - شماره تماس ۱
+        - شماره تماس ۲
+        - آدرس پستی
         - لینک کامل عکس امضا (با دامنه اصلی: `https://safarnameh24.com`)
 
         **نکته مهم**: لینک عکس همیشه با دامنه اصلی `safarnameh24.com` برگردانده می‌شود.
@@ -5015,8 +5017,10 @@ class ReservationInvoiceSettingsAPIView(APIView):
                     "application/json": {
                         "invoice_settings": {
                             "title": "فاکتور رسمی رزرو هتل",
-                            "contact_number": "021-12345678",
-                            "signature_image": "https://safarnameh24.com/media/invoice_signatures/signature.png"
+                            "contact_number_1": "021-12345678",
+                            "contact_number_2": "0912-1234567",
+                            "postal_address": "تهران، خیابان آزادی، پلاک ۱۲۳",
+                            "signature_image": "https://safarnameh24.com/media/signatures/signature.png"
                         }
                     }
                 }
@@ -5048,19 +5052,19 @@ class ReservationInvoiceSettingsAPIView(APIView):
         # ساخت لینک کامل با دامنه اصلی
         signature_url = None
         if settings_obj.signature_image:
-            # استفاده از MEDIA_URL و دامنه اصلی
             base_url = "https://safarnameh24.com"
             signature_url = f"{base_url}{settings_obj.signature_image.url}"
 
         data = {
             "title": settings_obj.title,
-            "contact_number": settings_obj.contact_number,
+            "contact_number_1": settings_obj.contact_number_1,
+            "contact_number_2": settings_obj.contact_number_2,
+            "postal_address": settings_obj.postal_address,
             "signature_image": signature_url
         }
 
         return Response({"invoice_settings": data}, status=status.HTTP_200_OK)
-    
-    
+
 
 
 # ای پی ای فاکتور رزروها 
