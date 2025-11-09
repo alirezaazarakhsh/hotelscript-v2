@@ -507,7 +507,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
-            # --- محاسبه قیمت کل از price_calendar ---
+            # --- محاسبه قیمت کل از price_calendar (بدون احتساب نفر اضافه) ---
             total_price = sum(
                 day['price']['price'] for day in price_calendar
                 if day['status'] == "open" and day['price'] and day['price']['price'] is not None
@@ -569,18 +569,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 }, status=200)
 
             for room in filtered_rooms:
-                if required_capacity > room['capacity']:
-                    extra_passengers = required_capacity - room['capacity']
-                    extra_price_per_night = room['price']['extra_capacity_price']
-                    for day in room['price_calendar']:
-                        if day['status'] == "open" and day['price']:
-                            day['price']['price'] += extra_passengers * extra_price_per_night
-                            day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
-                    room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                    room['price']['total_price_discount'] = sum(
-                        day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
-                        day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
-                    )
+                # قیمت نفر اضافه را به قیمت کل اضافه نکن؛ فقط ظرفیت را چک کن
                 room['selected_passenger'] = required_capacity
             
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
@@ -599,18 +588,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 pack_rooms = []
                 for orig_room, p in current_pack:
                     room = copy.deepcopy(orig_room)
-                    if p > room['capacity']:
-                        extra_passengers = p - room['capacity']
-                        extra_price_per_night = room['price']['extra_capacity_price']
-                        for day in room['price_calendar']:
-                            if day['status'] == "open" and day['price']:
-                                day['price']['price'] += extra_passengers * extra_price_per_night
-                                day['price']['price_after_discount'] += extra_passengers * extra_price_per_night if day['price']['discount_percentage'] is None else 0
-                        room['price']['total_price'] = sum(day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price'])
-                        room['price']['total_price_discount'] = sum(
-                            day['price']['price_after_discount'] if day['price']['discount_percentage'] is not None else
-                            day['price']['price'] for day in room['price_calendar'] if day['status'] == "open" and day['price']
-                        )
+                    # قیمت نفر اضافه را به قیمت کل اضافه نکن؛ فقط ظرفیت را چک کن
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
                     pack_total_price += room['price']['total_price_discount']
@@ -650,6 +628,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
+    
     
 
 
