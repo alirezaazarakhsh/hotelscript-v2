@@ -274,6 +274,14 @@ class JuridicalProfileListCreateAPIView(APIView):
                     {"detail": "این کاربر از قبل پروفایل حقوقی دارد."},
                     status=400
                 )
+            
+            # چک کردن اگر تمام داده‌ها null یا خالی باشند
+            if not request.data or all(value is None for value in request.data.values()):
+                return Response(
+                    {"detail": "هیچ اطلاعاتی ارائه نشده است. عملیات بدون خطا پایان یافت."},
+                    status=200
+                )
+            
             serializer = JuridicalProfileSerializer(
                 data=request.data,
                 context={'request': request}
@@ -287,7 +295,6 @@ class JuridicalProfileListCreateAPIView(APIView):
                 {"detail": "برای ایجاد پروفایل حقوقی، ابتدا باید پروفایل حقیقی ایجاد کنید."},
                 status=400
             )
-
 
 
 
