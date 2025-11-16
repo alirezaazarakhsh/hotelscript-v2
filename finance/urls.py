@@ -19,13 +19,17 @@ urlpatterns = [
         views.CreatePaymentLinkAPIView.as_view(),
         name='wallet-create-payment-link'
     ),
-    # اضافه کردن API جدید تنظیمات کارت ادمین
+    # اضافه کردن مسیر کال‌بک
+    path(
+        'wallet/payment-callback/',
+        views.CreatePaymentLinkAPIView.as_view(),
+        name='wallet-payment-callback'
+    ),
     path(
         'admin-card-settings/',
         views.AdminCardSettingsAPIView.as_view(),
         name='admin-card-settings'
     ),
-    # اضافه کردن API ثبت فیش واریزی
     path(
         'deposit-receipts/',
         views.DepositReceiptCreateAPIView.as_view(),
