@@ -1,4 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
+import requests
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
