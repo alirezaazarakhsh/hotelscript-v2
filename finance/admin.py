@@ -3,6 +3,7 @@ from django.utils.html import format_html
 from authentication.models import NaturalProfile
 from finance.sms.sms import send_wallet_increase_sms
 from .models import (
+    AdminCardSettings,
     Wallet,
     WalletPack,
 )
@@ -101,3 +102,23 @@ class WalletAdmin(admin.ModelAdmin):
     
     
 
+@admin.register(AdminCardSettings)
+class AdminCardSettingsAdmin(admin.ModelAdmin):
+    list_display = ('account_holder_name', 'card_number', 'iban_number')
+    search_fields = ('account_holder_name', 'card_number', 'iban_number')
+
+    def has_add_permission(self, request):
+        # اگر رکوردی وجود داشت، اجازه اضافه کردن رکورد جدید نده
+        if AdminCardSettings.objects.exists():
+            return False
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        # فقط وقتی رکورد هست، اجازه حذف بده
+        return AdminCardSettings.objects.exists()
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        # دکمه "Save and add another" را غیر فعال کن
+        extra_context = extra_context or {}
+        extra_context['show_save_and_add_another'] = False
+        return super().changeform_view(request, object_id, form_url, extra_context)

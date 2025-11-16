@@ -11,8 +11,8 @@ from drf_yasg import openapi
 
 from setting_payment.models import IranianGateway, PaymentGatewayPreference, ZarinpalGateway
 
-from .models import  Wallet, WalletPack
-from .serializers import  WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
+from .models import  AdminCardSettings, Wallet, WalletPack
+from .serializers import  AdminCardSettingsSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
 
 
 
@@ -200,3 +200,35 @@ class PaymentCallbackAPIView(APIView):
             "Authority": authority,
             "Status": status_param
         }, status=status.HTTP_200_OK)
+        
+        
+        
+        
+#ای پی ای مشخصات شماره کارت ادمین
+class AdminCardSettingsAPIView(APIView):
+    """
+    API برای دریافت تنظیمات شماره کارت ادمین
+    """
+
+    @swagger_auto_schema(
+        operation_summary="دریافت تنظیمات شماره کارت ادمین",
+        operation_description="""
+        این API تنظیمات شماره کارت ادمین را برمی‌گرداند.
+        
+        شامل شماره کارت ۱۶ رقمی، شماره شبای ۲۴ رقمی و نام صاحب حساب است.
+        
+        توجه: فقط یک تنظیمات وجود دارد و اگر تنظیمی ثبت نشده باشد، خطا بازگردانده می‌شود.
+        """,
+        responses={200: AdminCardSettingsSerializer}
+    )
+    def get(self, request):
+        try:
+            setting = AdminCardSettings.objects.get()
+        except AdminCardSettings.DoesNotExist:
+            return Response(
+                {"detail": "تنظیمات شماره کارت ادمین ثبت نشده است."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AdminCardSettingsSerializer(setting)
+        return Response(serializer.data, status=status.HTTP_200_OK)

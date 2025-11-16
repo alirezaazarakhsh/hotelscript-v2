@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import (
+    AdminCardSettings,
     Wallet,
     WalletPack,
 )
@@ -22,3 +23,11 @@ class WalletTopUpSerializer(serializers.Serializer):
         max_value=10_000_000,  # 10 میلیون تومان یعنی 100 میلیون ریال
         help_text="مبلغ افزایش کیف پول به تومان (بین 100,000 تا 10,000,000 تومان)"
     )
+
+
+
+
+class AdminCardSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminCardSettings
+        fields = ['card_number', 'iban_number', 'account_holder_name']

@@ -25,4 +25,10 @@ urlpatterns = [
         views.PaymentCallbackAPIView.as_view(),
         name='payment-callback'
     ),
+    # اضافه کردن API جدید تنظیمات کارت ادمین
+    path(
+        'admin-card-settings/',
+        views.AdminCardSettingsAPIView.as_view(),
+        name='admin-card-settings'
+    ),
 ]

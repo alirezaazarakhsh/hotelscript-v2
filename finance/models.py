@@ -52,3 +52,30 @@ class Wallet(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        
+        
+
+#مدل شماره کارت ادمین 
+class AdminCardSettings(models.Model):
+    card_number = models.CharField(
+        max_length=16,
+        verbose_name=_("شماره کارت"),
+        help_text=_("شماره کارت ۱۶ رقمی بدون فاصله"),
+    )
+    iban_number = models.CharField(
+        max_length=24,
+        verbose_name=_("شماره شبا"),
+        help_text=_("شماره شبا ۲۴ رقمی"),
+    )
+    account_holder_name = models.CharField(
+        max_length=255,
+        verbose_name=_("نام صاحب حساب"),
+        help_text=_("نام کامل صاحب حساب"),
+    )
+
+    class Meta:
+        verbose_name = _("تنظیمات شماره کارت ادمین")
+        verbose_name_plural = _("تنظیمات شماره کارت ادمین‌ها")
+
+    def __str__(self):
+        return f"{self.account_holder_name} - {self.card_number}"
