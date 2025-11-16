@@ -232,9 +232,11 @@ class TokenRefreshView(JwtTokenRefreshView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         
-        # Set new access token in HTTP-only cookie
+        # Set new access token and refresh token (if rotated) in HTTP-only cookies
         response = Response(status=status.HTTP_200_OK)
         access_token = serializer.validated_data.get('access')
+        new_refresh_token = serializer.validated_data.get('refresh')
+        
         if access_token:
             response.set_cookie(
                 key='access_token',
@@ -245,6 +247,19 @@ class TokenRefreshView(JwtTokenRefreshView):
                 domain='.safarnameh24.com',
                 max_age=60*60*24,  # 1 day
             )
+        
+        # اگر refresh token جدید تولید شده (rotation enabled)، آن را هم ست کن
+        if new_refresh_token:
+            response.set_cookie(
+                key='refresh_token',
+                value=new_refresh_token,
+                httponly=True,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
+                max_age=60*60*24*7,  # 7 days
+            )
+        
         return response
 
 
