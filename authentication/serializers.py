@@ -48,17 +48,6 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer, ErrorMessageSeria
         }
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(None, self.user)
-        try:
-            natural_profile = NaturalProfile.objects.get(base_user=self.user)
-            first_name = natural_profile.first_name
-            last_name = natural_profile.last_name
-        except NaturalProfile.DoesNotExist:
-            first_name = ""
-            last_name = ""
-        data["user_id"] = self.user.id
-        data["phone_number"] = getattr(self.user, "phone_number", "")
-        data["first_name"] = first_name
-        data["last_name"] = last_name
         return data
 
 # -----------------------------

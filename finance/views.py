@@ -202,11 +202,18 @@ class CreatePaymentLinkAPIView(APIView):
                     gateway = ZarinpalGateway.objects.first()
                     if gateway and request.user.is_authenticated:
                         amount_riel = saved_amount * 10
-                        verify_url = (
-                            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
-                            if gateway.mode == "sandbox"
-                            else "https://api.zarinpal.com/pg/v4/payment/verify.json"
-                        )
+                        
+                        # در حالت sandbox، مستقیم موجودی را اضافه کن (بدون verify)
+                        if gateway.mode == "sandbox":
+                            logger.info(f"Sandbox mode: Adding balance without verify")
+                            wallet = Wallet.objects.get(user=request.user)
+                            wallet.balance += saved_amount
+                            wallet.save()
+                            self._clear_session(request)
+                            return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
+                        
+                        # حالت production: verify کامل
+                        verify_url = "https://api.zarinpal.com/pg/v4/payment/verify.json"
                         verify_data = {
                             "merchant_id": gateway.merchant_code,
                             "amount": amount_riel,
@@ -224,8 +231,8 @@ class CreatePaymentLinkAPIView(APIView):
                                 self._clear_session(request)
                                 # پرداخت موفق (success)
                                 return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Zarinpal callback error: {e}")
             # عدم موفقیت یا عدم verify
             self._clear_session(request)
             # پرداخت ناموفق (unsuccessfull)
