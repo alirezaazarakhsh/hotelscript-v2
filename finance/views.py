@@ -1,4 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
+import requests
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -82,66 +83,37 @@ class CreatePaymentLinkAPIView(APIView):
         این API یک مبلغ افزایش موجودی کیف پول را به تومان از کاربر دریافت می‌کند و با توجه به 
         تنظیمات پنل مدیریت، درگاه پرداخت فعال را شناسایی کرده و لینک پرداخت مناسب را تولید می‌کند.
 
-        مراحل کلی:
-        1. دریافت مقدار 'amount' به تومان از درخواست کاربر.
-        2. اعتبارسنجی مبلغ (عدد صحیح، در بازه مجاز بین 10,000 تا 1,000,000 تومان).
-        3. خواندن تنظیمات درگاه فعال از مدل PaymentGatewayPreference.
-        4. اگر درگاه فعال زرین‌پال باشد، لینک پرداخت مخصوص زرین‌پال ساخته می‌شود.
-        5. اگر درگاه فعال ایران‌درگاه باشد، لینک پرداخت مخصوص ایران‌درگاه ساخته می‌شود.
-        6. در صورت نبود درگاه فعال یا تنظیمات ناقص، خطای مناسب برگردانده می‌شود.
-
-        **توجه**:
-        - مبلغ وارد شده باید بین ده هزار تا یک میلیون تومان باشد.
-        - تنها یک تنظیم درگاه فعال در سیستم باید وجود داشته باشد.
-        - لینک پرداخت تولید شده، شامل پارامترهای مورد نیاز هر درگاه است (مبلغ به ریال و شناسه مرچنت).
+        مبلغ به ریال برای درگاه ارسال می‌شود.
 
         نمونه ورودی (JSON):
-        ```json
         {
             "amount": 15000
         }
-        ```
 
-        نمونه خروجی موفق (HTTP 200):
-        ```json
+        نمونه خروجی موفق:
         {
             "gateway": "zarinpal",
             "amount": 15000,
-            "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/MERCHANT_CODE?amount=150000"
+            "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/SXXXXXXXXX"
         }
-        ```
-
-        نمونه خطای مبلغ نامعتبر (HTTP 400):
-        ```json
-        {
-            "amount": ["Ensure this value is greater than or equal to 10000."]
-        }
-        ```
-
-        نمونه خطای عدم تنظیم درگاه (HTTP 500):
-        ```json
-        {
-            "error": "No active gateway preference configured"
-        }
-        ```
         """,
         request_body=WalletTopUpSerializer,
         responses={
             200: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'gateway': openapi.Schema(type=openapi.TYPE_STRING, description='نام درگاه پرداخت فعال (مثلاً zarinpal یا iraniangateway)'),
-                    'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ افزایش کیف پول به تومان'),
-                    'payment_link': openapi.Schema(type=openapi.TYPE_STRING, description='لینک پرداخت ایجاد شده برای انتقال کاربر به صفحه پرداخت'),
+                    'gateway': openapi.Schema(type=openapi.TYPE_STRING, description='نام درگاه پرداخت'),
+                    'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ به تومان'),
+                    'payment_link': openapi.Schema(type=openapi.TYPE_STRING, description='لینک پرداخت'),
                 },
                 example={
                     'gateway': 'zarinpal',
                     'amount': 15000,
-                    'payment_link': 'https://sandbox.zarinpal.com/pg/StartPay/MERCHANT_CODE?amount=150000'
+                    'payment_link': 'https://sandbox.zarinpal.com/pg/StartPay/SXXXXXXXXX'
                 }
             ),
-            400: 'درخواست نامعتبر (مبلغ خارج از بازه یا فرمت نامعتبر)',
-            500: 'خطای داخلی سرور (تنظیمات درگاه پرداخت موجود نیست یا نامعتبر است)',
+            400: 'درخواست نامعتبر',
+            500: 'خطای داخلی سرور',
         }
     )
     def post(self, request):
@@ -150,7 +122,7 @@ class CreatePaymentLinkAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         amount_toman = serializer.validated_data['amount']
-        amount_riel = amount_toman * 10  # تبدیل تومان به ریال برای ارسال به درگاه
+        amount_riel = amount_toman * 10  # تبدیل تومان به ریال
 
         pref = PaymentGatewayPreference.objects.first()
         if not pref:
@@ -166,7 +138,13 @@ class CreatePaymentLinkAPIView(APIView):
                     {"error": "Zarinpal gateway is not configured"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            payment_link = self._build_zarinpal_payment_link(gateway, amount_riel)
+            try:
+                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel)
+            except Exception as e:
+                return Response(
+                    {"error": f"Zarinpal error: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             gateway_name = "zarinpal"
 
         elif pref.active_gateway == "iraniangateway":
@@ -188,14 +166,31 @@ class CreatePaymentLinkAPIView(APIView):
         return Response(
             {
                 "gateway": gateway_name,
-                "amount": amount_toman,  # در خروجی تومان نشان می‌دهیم
+                "amount": amount_toman,
                 "payment_link": payment_link,
             },
             status=status.HTTP_200_OK
         )
 
-    def _build_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
-        return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
+    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
+        callback_url = "https://yourdomain.com/payment/callback"  # این را به آدرس callback واقعی تغییر بده
+        url = "https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentRequest.json"
+        data = {
+            "MerchantID": gateway.merchant_code,
+            "Amount": amount_riel,
+            "CallbackURL": callback_url,
+            "Description": "شارژ کیف پول",
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=data, headers=headers)
+        res_json = response.json()
+
+        if res_json.get("Status") == 100:
+            authority = res_json.get("Authority")
+            return f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"
+        else:
+            raise Exception(f"Status code {res_json.get('Status')}")
 
     def _build_iraniangateway_payment_link(self, gateway: IranianGateway, amount_riel: int) -> str:
+        # اگر ایران‌درگاه نیاز به درخواست مشابه داشت اینجا تغییر بده
         return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
