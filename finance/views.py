@@ -80,129 +80,151 @@ class CreatePaymentLinkAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="ایجاد لینک پرداخت برای افزایش موجودی کیف پول کاربر",
         operation_description="""
-        این API یک مبلغ افزایش موجودی کیف پول را به تومان از کاربر دریافت می‌کند و با توجه به 
+        این API یک مبلغ افزایش موجودی کیف پول را از کاربر دریافت می‌کند و با توجه به 
         تنظیمات پنل مدیریت، درگاه پرداخت فعال را شناسایی کرده و لینک پرداخت مناسب را تولید می‌کند.
+        
+        ✔ همین API همچنین کال‌بک برگشتی زرین‌پال را هندل می‌کند (GET)
+        ✔ پرداخت را Verify می‌کند
+        ✔ کاربر را به آدرس زیر Redirect می‌کند:
+            - موفق:  payment_status=ok
+            - ناموفق: payment_status=no
         """,
         request_body=WalletTopUpSerializer,
-        responses={
-            200: openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'gateway': openapi.Schema(type=openapi.TYPE_STRING, description='نام درگاه پرداخت فعال'),
-                    'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ افزایش کیف پول به تومان'),
-                    'payment_link': openapi.Schema(type=openapi.TYPE_STRING, description='لینک پرداخت'),
-                }
-            ),
-            400: 'درخواست نامعتبر (مبلغ خارج از بازه یا فرمت نامعتبر)',
-            500: 'خطای داخلی سرور (تنظیمات درگاه پرداخت موجود نیست یا نامعتبر است)',
-        }
+        responses={200: "Payment link created"}
     )
     def post(self, request):
+        """ساخت لینک پرداخت (مرحله ۱)"""
+
         serializer = WalletTopUpSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=400)
 
         amount_toman = serializer.validated_data['amount']
         if amount_toman < 10000 or amount_toman > 1000000:
             return Response(
                 {"amount": ["مبلغ باید بین ۱۰,۰۰۰ تا ۱,۰۰۰,۰۰۰ تومان باشد."]},
-                status=status.HTTP_400_BAD_REQUEST
+                status=400
             )
-        amount_riel = amount_toman * 10  # تبدیل تومان به ریال
 
+        amount_riel = amount_toman * 10
         pref = PaymentGatewayPreference.objects.first()
+
         if not pref:
-            return Response({"error": "No active gateway preference configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "Gateway preference not configured"}, status=500)
 
         if pref.active_gateway == "zarinpal":
             gateway = ZarinpalGateway.objects.first()
             if not gateway:
-                return Response({"error": "Zarinpal gateway is not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"error": "Zarinpal gateway not configured"}, status=500)
+
             try:
-                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel, request)
+                payment_link, authority = self._create_zarinpal_payment(
+                    gateway, amount_riel, request
+                )
             except Exception as e:
-                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            gateway_name = "zarinpal"
+                return Response({"error": str(e)}, status=500)
 
-        elif pref.active_gateway == "iraniangateway":
-            gateway = IranianGateway.objects.first()
-            if not gateway:
-                return Response({"error": "Iranian gateway is not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            payment_link = self._build_iraniangateway_payment_link(gateway, amount_riel)
-            gateway_name = "iraniangateway"
+            # ذخیره اطلاعات در سشن برای وریفای
+            request.session["wallet_amount"] = amount_riel
+            request.session["wallet_authority"] = authority
 
-        else:
-            return Response({"error": "Unknown active gateway"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "gateway": "zarinpal",
+                "amount": amount_toman,
+                "payment_link": payment_link
+            })
 
-        return Response({
-            "gateway": gateway_name,
-            "amount": amount_toman,
-            "payment_link": payment_link,
-        }, status=status.HTTP_200_OK)
+        return Response({"error": "Unsupported gateway"}, status=500)
 
-    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int, request) -> str:
-        # اصلاح شده: آدرس کال‌بک دقیق با استفاده از build_absolute_uri و مسیر صحیح
-        callback_url = request.build_absolute_uri('/api/v1/finance/payment/callback/')
+    # -----------------------------------------------------------------
+    # 🎯 همین API کال‌بک زرین‌پال را هندل می‌کند
+    # -----------------------------------------------------------------
+    def get(self, request):
+        """کال‌بک زرین‌پال (مرحله ۲)"""
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
+        status_param = request.GET.get("Status")
+        authority = request.GET.get("Authority")
+
+        # اگر کاربر پرداخت را لغو کرد
+        if status_param != "OK":
+            return redirect(
+                "https://safarnameh24.com/dashboard/financial/wallet?payment_status=no"
+            )
+
+        # داده‌های ذخیره‌شده
+        saved_amount = request.session.get("wallet_amount")
+        saved_authority = request.session.get("wallet_authority")
+
+        if not saved_amount or not saved_authority or saved_authority != authority:
+            return redirect(
+                "https://safarnameh24.com/dashboard/financial/wallet?payment_status=no"
+            )
+
+        # وریفای نهایی
+        gateway = ZarinpalGateway.objects.first()
+        verify_url = (
+            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
+            if gateway.mode == "sandbox"
+            else "https://api.zarinpal.com/pg/v4/payment/verify.json"
+        )
+
+        verify_data = {
+            "merchant_id": gateway.merchant_code,
+            "amount": saved_amount,
+            "authority": authority
         }
+
+        response = requests.post(verify_url, json=verify_data)
+        result = response.json()
+
+        if result.get("data", {}).get("code") == 100:
+            # ✔ پرداخت موفق → می‌توانی اینجا کیف پول را شارژ کنی
+            return redirect(
+                "https://safarnameh24.com/dashboard/financial/wallet?payment_status=ok"
+            )
+
+        # ❌ پرداخت ناموفق
+        return redirect(
+            "https://safarnameh24.com/dashboard/financial/wallet?payment_status=no"
+        )
+
+    # -----------------------------------------------------------------
+    # ساخت لینک زرین‌پال
+    # -----------------------------------------------------------------
+    def _create_zarinpal_payment(self, gateway, amount, request):
+        callback_url = request.build_absolute_uri()  # همین API کال‌بک است
+
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
         data = {
             "merchant_id": gateway.merchant_code,
-            "amount": amount_riel,
+            "amount": amount,
             "callback_url": callback_url,
             "description": "افزایش موجودی کیف پول",
         }
 
-        if gateway.mode == 'sandbox':
+        # محیط
+        if gateway.mode == "sandbox":
             url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
-            payment_base_url = "https://sandbox.zarinpal.com/pg/StartPay"
+            base = "https://sandbox.zarinpal.com/pg/StartPay"
         else:
             url = "https://api.zarinpal.com/pg/v4/payment/request.json"
-            payment_base_url = "https://www.zarinpal.com/pg/StartPay"
+            base = "https://www.zarinpal.com/pg/StartPay"
 
-        resp = requests.post(url, json=data, headers=headers, timeout=10)
+        resp = requests.post(url, json=data, headers=headers)
         if resp.status_code != 200:
-            raise Exception(f"HTTP error from Zarinpal: {resp.status_code}")
+            raise Exception("Zarinpal request failed")
 
-        result = resp.json()
-        if result.get("data", {}).get("code") == 100:
-            authority = result["data"].get("authority")
-            if not authority or not authority.startswith("S"):
-                raise Exception("Invalid authority received from Zarinpal.")
-            payment_link = f"{payment_base_url}/{authority}"
-            return payment_link
-        else:
-            code = result.get("data", {}).get("code")
-            message = (
-                result.get("errors", {}).get("message") or
-                result.get("data", {}).get("message") or
-                "خطایی در دریافت لینک پرداخت رخ داده است."
-            )
-            raise Exception(f"Zarinpal error {code}: {message}")
+        res = resp.json()
 
-    def _build_iraniangateway_payment_link(self, gateway: IranianGateway, amount_riel: int) -> str:
-        return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
+        if res.get("data", {}).get("code") != 100:
+            raise Exception("Zarinpal error")
+
+        authority = res["data"]["authority"]
+        payment_link = f"{base}/{authority}"
+
+        return payment_link, authority
     
-    
-
-# ای پی ای کال‌بک پرداخت زرین‌پال
-class PaymentCallbackAPIView(APIView):
-    def get(self, request):
-        authority = request.GET.get('Authority')
-        status_param = request.GET.get('Status')
-
-        # اینجا می‌تونی لاجیک وریفای پرداخت رو انجام بدی
-
-        return Response({
-            "message": "Callback received",
-            "Authority": authority,
-            "Status": status_param
-        }, status=status.HTTP_200_OK)
-        
-        
-        
+           
         
 #ای پی ای مشخصات شماره کارت ادمین
 class AdminCardSettingsAPIView(APIView):

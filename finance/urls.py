@@ -19,12 +19,6 @@ urlpatterns = [
         views.CreatePaymentLinkAPIView.as_view(),
         name='wallet-create-payment-link'
     ),
-    # مسیر کال‌بک زرین‌پال:
-    path(
-        'payment/callback/',
-        views.PaymentCallbackAPIView.as_view(),
-        name='payment-callback'
-    ),
     # اضافه کردن API جدید تنظیمات کارت ادمین
     path(
         'admin-card-settings/',
