@@ -2,6 +2,7 @@ from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import redirect
 import requests
+import logging
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
@@ -16,6 +17,7 @@ from setting_payment.models import IranianGateway, PaymentGatewayPreference, Zar
 from .models import  AdminCardSettings, Wallet, WalletPack
 from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -81,6 +83,23 @@ class CreatePaymentLinkAPIView(APIView):
 
     REDIRECT_BASE_URL = "https://safarnameh24.com/dashboard/financial/wallet"
     CALLBACK_PATH = "/api/v1/finance/wallet/payment-callback/"
+    MIN_TOPUP = 1_000_000
+    MAX_TOPUP = 100_000_000
+    STATUS_SUCCESS = "sucsess"   # نگه داشتن فرمت فعلی برای سازگاری فرانت
+    STATUS_FAILURE = "unsucsess"
+
+    def _validate_amount(self, amount_toman):
+        if amount_toman < self.MIN_TOPUP or amount_toman > self.MAX_TOPUP:
+            raise ValidationError({"amount": [f"مبلغ باید بین {self.MIN_TOPUP:,} تا {self.MAX_TOPUP:,} تومان باشد."]})
+
+    def _store_session(self, request, **kwargs):
+        for k, v in kwargs.items():
+            request.session[k] = v
+        request.session.save()
+
+    def _build_redirect(self, status_key, amount):
+        amount_part = amount if amount else ''
+        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status={status_key}&amount={amount_part}")
 
     @swagger_auto_schema(
         operation_summary="ایجاد لینک پرداخت برای افزایش موجودی کیف پول کاربر",
@@ -102,12 +121,10 @@ class CreatePaymentLinkAPIView(APIView):
             return Response(serializer.errors, status=400)
 
         amount_toman = serializer.validated_data['amount']
-
-        if amount_toman < 1_000_000 or amount_toman > 100_000_000:
-            return Response(
-                {"amount": ["مبلغ باید بین ۱,۰۰۰,۰۰۰ تا ۱۰۰,۰۰۰,۰۰۰ تومان باشد."]},
-                status=400
-            )
+        try:
+            self._validate_amount(amount_toman)
+        except ValidationError as ve:
+            return Response(ve.detail, status=400)
 
         pref = PaymentGatewayPreference.objects.first()
         if not pref:
@@ -124,10 +141,10 @@ class CreatePaymentLinkAPIView(APIView):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
-            request.session["wallet_amount"] = amount_toman  # تومان ذخیره می‌کنیم
-            request.session["wallet_authority"] = authority
-            request.session["active_gateway"] = "zarinpal"
-            request.session.save()
+            self._store_session(request,
+                                wallet_amount=amount_toman,
+                                wallet_authority=authority,
+                                active_gateway="zarinpal")
 
             return Response({
                 "gateway": "zarinpal",
@@ -145,10 +162,10 @@ class CreatePaymentLinkAPIView(APIView):
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
-            request.session["wallet_amount"] = amount_toman
-            request.session["wallet_order_id"] = order_id
-            request.session["active_gateway"] = "iraniangateway"
-            request.session.save()
+            self._store_session(request,
+                                wallet_amount=amount_toman,
+                                wallet_order_id=order_id,
+                                active_gateway="iraniangateway")
 
             return Response({
                 "gateway": "iraniangateway",
@@ -204,13 +221,13 @@ class CreatePaymentLinkAPIView(APIView):
                                 wallet.save()
                                 self._clear_session(request)
                                 # طبق درخواست شما: sucsess
-                                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=sucsess&amount={saved_amount}")
+                                return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
                 except Exception:
                     pass
             # عدم موفقیت یا عدم verify
             self._clear_session(request)
             # طبق درخواست شما: unsucsess
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsucsess&amount={saved_amount}")
+            return self._build_redirect(self.STATUS_FAILURE, saved_amount)
 
         # ایران‌درگاه
         if order_id and status_param:
@@ -230,15 +247,16 @@ class CreatePaymentLinkAPIView(APIView):
                                 wallet.balance += saved_amount
                                 wallet.save()
                                 self._clear_session(request)
-                                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=sucsess&amount={saved_amount}")
+                                return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
                 except Exception:
                     pass
             self._clear_session(request)
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsucsess&amount={saved_amount}")
+            return self._build_redirect(self.STATUS_FAILURE, saved_amount)
 
         # ورودی نامعتبر
         self._clear_session(request)
-        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsucsess&amount=0")
+        # عدم نمایش مقدار صفر؛ اگر مبلغ ذخیره شده نبود، پارامتر amount را خالی می‌فرستیم
+        return self._build_redirect(self.STATUS_FAILURE, saved_amount)
 
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
         base_url = request.build_absolute_uri('/')  # https://cps.safarnameh24.com/
