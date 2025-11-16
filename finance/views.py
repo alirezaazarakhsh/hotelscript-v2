@@ -86,10 +86,8 @@ class CreatePaymentLinkAPIView(APIView):
     MIN_TOPUP = 1_000_000
     MAX_TOPUP = 100_000_000
     # وضعیت‌های استاندارد خروجی برای فرانت
-    STATUS_SUCCESS = "success"
-    STATUS_FAILURE = "unsuccessfull"  # طبق درخواست شما (دو حرف l)
-    LEGACY_SUCCESS = "sucsess"        # در صورت نیاز برای سازگاری موقت
-    LEGACY_FAILURE = "unsucsess"      # در صورت نیاز برای سازگاری موقت
+    STATUS_SUCCESS = "success"          # پرداخت موفق
+    STATUS_FAILURE = "unsuccessfull"    # پرداخت ناموفق
 
     def _validate_amount(self, amount_toman):
         if amount_toman < self.MIN_TOPUP or amount_toman > self.MAX_TOPUP:
