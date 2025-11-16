@@ -1,5 +1,4 @@
 from django.contrib.contenttypes.models import ContentType
-import requests
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -74,6 +73,7 @@ class WalletPackListAPIView(APIView):
     
     
 #ای پی ای افزایش موجودی کیف پول 
+
 class CreatePaymentLinkAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -83,38 +83,22 @@ class CreatePaymentLinkAPIView(APIView):
         این API یک مبلغ افزایش موجودی کیف پول را به تومان از کاربر دریافت می‌کند و با توجه به 
         تنظیمات پنل مدیریت، درگاه پرداخت فعال را شناسایی کرده و لینک پرداخت مناسب را تولید می‌کند.
 
-        مبلغ به ریال برای درگاه ارسال می‌شود.
-
-        نمونه ورودی (JSON):
-        {
-            "amount": 15000
-        }
-
-        نمونه خروجی موفق:
-        {
-            "gateway": "zarinpal",
-            "amount": 15000,
-            "payment_link": "https://sandbox.zarinpal.com/pg/StartPay/SXXXXXXXXX"
-        }
+        مبلغ باید بین 10,000 تا 1,000,000 تومان باشد.
         """,
         request_body=WalletTopUpSerializer,
         responses={
             200: openapi.Schema(
                 type=openapi.TYPE_OBJECT,
                 properties={
-                    'gateway': openapi.Schema(type=openapi.TYPE_STRING, description='نام درگاه پرداخت'),
+                    'gateway': openapi.Schema(type=openapi.TYPE_STRING, description='نام درگاه پرداخت فعال'),
                     'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ به تومان'),
                     'payment_link': openapi.Schema(type=openapi.TYPE_STRING, description='لینک پرداخت'),
-                },
-                example={
-                    'gateway': 'zarinpal',
-                    'amount': 15000,
-                    'payment_link': 'https://sandbox.zarinpal.com/pg/StartPay/SXXXXXXXXX'
                 }
             ),
-            400: 'درخواست نامعتبر',
-            500: 'خطای داخلی سرور',
-        }
+            400: 'درخواست نامعتبر (مبلغ خارج از بازه یا فرمت نامعتبر)',
+            500: 'خطای داخلی سرور (تنظیمات درگاه پرداخت موجود نیست یا نامعتبر است)',
+        },
+        tags=["wallet-api"]
     )
     def post(self, request):
         serializer = WalletTopUpSerializer(data=request.data)
@@ -125,7 +109,7 @@ class CreatePaymentLinkAPIView(APIView):
         amount_riel = amount_toman * 10  # تبدیل تومان به ریال
 
         pref = PaymentGatewayPreference.objects.first()
-        if not pref:
+        if not pref or not pref.active_gateway:
             return Response(
                 {"error": "No active gateway preference configured"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -133,25 +117,19 @@ class CreatePaymentLinkAPIView(APIView):
 
         if pref.active_gateway == "zarinpal":
             gateway = ZarinpalGateway.objects.first()
-            if not gateway:
+            if not gateway or not gateway.payment_url or not gateway.merchant_code:
                 return Response(
-                    {"error": "Zarinpal gateway is not configured"},
+                    {"error": "Zarinpal gateway is not configured properly"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            try:
-                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel)
-            except Exception as e:
-                return Response(
-                    {"error": f"Zarinpal error: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+            payment_link = self._build_zarinpal_payment_link(gateway, amount_riel)
             gateway_name = "zarinpal"
 
         elif pref.active_gateway == "iraniangateway":
             gateway = IranianGateway.objects.first()
-            if not gateway:
+            if not gateway or not gateway.payment_url or not gateway.merchant_code:
                 return Response(
-                    {"error": "Iranian gateway is not configured"},
+                    {"error": "Iranian gateway is not configured properly"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
             payment_link = self._build_iraniangateway_payment_link(gateway, amount_riel)
@@ -159,38 +137,20 @@ class CreatePaymentLinkAPIView(APIView):
 
         else:
             return Response(
-                {"error": "Unknown active gateway"},
+                {"error": f"Unknown active gateway: {pref.active_gateway}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        return Response(
-            {
-                "gateway": gateway_name,
-                "amount": amount_toman,
-                "payment_link": payment_link,
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({
+            "gateway": gateway_name,
+            "amount": amount_toman,
+            "payment_link": payment_link,
+        }, status=status.HTTP_200_OK)
 
-    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
-        callback_url = "https://yourdomain.com/payment/callback"  # این را به آدرس callback واقعی تغییر بده
-        url = "https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentRequest.json"
-        data = {
-            "MerchantID": gateway.merchant_code,
-            "Amount": amount_riel,
-            "CallbackURL": callback_url,
-            "Description": "شارژ کیف پول",
-        }
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=data, headers=headers)
-        res_json = response.json()
-
-        if res_json.get("Status") == 100:
-            authority = res_json.get("Authority")
-            return f"https://sandbox.zarinpal.com/pg/StartPay/{authority}"
-        else:
-            raise Exception(f"Status code {res_json.get('Status')}")
+    def _build_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
+        # لینک استاندارد زرین‌پال به صورت https://payment_url/merchant_code?amount=...
+        return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
 
     def _build_iraniangateway_payment_link(self, gateway: IranianGateway, amount_riel: int) -> str:
-        # اگر ایران‌درگاه نیاز به درخواست مشابه داشت اینجا تغییر بده
+        # لینک استاندارد ایران‌درگاه به صورت https://payment_url/merchant_code?amount=...
         return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
