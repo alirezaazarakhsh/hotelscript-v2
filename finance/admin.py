@@ -4,6 +4,7 @@ from authentication.models import NaturalProfile
 from finance.sms.sms import send_wallet_increase_sms
 from .models import (
     AdminCardSettings,
+    DepositReceipt,
     Wallet,
     WalletPack,
 )
@@ -122,3 +123,32 @@ class AdminCardSettingsAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         extra_context['show_save_and_add_another'] = False
         return super().changeform_view(request, object_id, form_url, extra_context)
+    
+    
+    
+@admin.register(DepositReceipt)
+class DepositReceiptAdmin(admin.ModelAdmin):
+    list_display = (
+        'depositor_name',
+        'tracking_number',
+        'amount',
+        'deposit_date_jalali',
+        'is_approved',
+        'receipt_image_preview',  # اضافه کردن پیش نمایش عکس
+    )
+    list_filter = ('is_approved',)
+    search_fields = ('depositor_name', 'tracking_number')
+    readonly_fields = ('receipt_image_preview',)  # نمایش پیش‌نمایش در صفحه ویرایش
+
+    actions = ['approve_receipts']
+
+    def receipt_image_preview(self, obj):
+        if obj.receipt_image:
+            return format_html('<img src="{}" style="height: 80px; border-radius: 4px;" />', obj.receipt_image.url)
+        return "-"
+    receipt_image_preview.short_description = "پیش نمایش فیش"
+
+    def approve_receipts(self, request, queryset):
+        updated = queryset.update(is_approved=True)
+        self.message_user(request, f"{updated} فیش واریزی تایید شد.")
+    approve_receipts.short_description = "تایید فیش‌های انتخاب شده"

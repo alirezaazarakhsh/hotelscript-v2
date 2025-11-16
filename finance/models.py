@@ -79,3 +79,45 @@ class AdminCardSettings(models.Model):
 
     def __str__(self):
         return f"{self.account_holder_name} - {self.card_number}"
+    
+    
+    
+#مدل فیش واریز دستی کاربران 
+class DepositReceipt(models.Model):
+    depositor_name = models.CharField(
+        max_length=255,
+        verbose_name=_("نام واریز کننده"),
+    )
+    tracking_number = models.CharField(
+        max_length=12,
+        unique=True,
+        verbose_name=_("شماره پیگیری"),
+        help_text=_("شماره پیگیری ۱۲ رقمی"),
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name=_("مبلغ واریز"),
+    )
+    deposit_date_jalali = models.CharField(
+        max_length=10,
+        verbose_name=_("تاریخ واریز (شمسی)"),
+        help_text=_("فرمت: YYYY/MM/DD"),
+    )
+    receipt_image = models.ImageField(
+        upload_to='deposit_receipts/',
+        verbose_name=_("عکس فیش"),
+    )
+
+    is_approved = models.BooleanField(
+        default=False,
+        verbose_name=_("تایید شده"),
+        help_text=_("آیا این فیش واریز توسط ادمین تایید شده است؟"),
+    )
+
+    class Meta:
+        verbose_name = _("فیش واریزی")
+        verbose_name_plural = _("فیش‌های واریزی کاربران")
+
+    def __str__(self):
+        return f"{self.depositor_name} - {self.tracking_number}"

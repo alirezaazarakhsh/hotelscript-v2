@@ -12,7 +12,7 @@ from drf_yasg import openapi
 from setting_payment.models import IranianGateway, PaymentGatewayPreference, ZarinpalGateway
 
 from .models import  AdminCardSettings, Wallet, WalletPack
-from .serializers import  AdminCardSettingsSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
+from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
 
 
 
@@ -232,3 +232,36 @@ class AdminCardSettingsAPIView(APIView):
 
         serializer = AdminCardSettingsSerializer(setting)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+
+#ای پی ای فیش واریز دستی کاربران
+class DepositReceiptCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @swagger_auto_schema(
+        request_body=DepositReceiptSerializer,
+        operation_summary="ثبت فیش واریزی",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد فیش واریزی خود را ثبت کند.
+        
+        فیلدهای مورد نیاز:
+        - نام واریز کننده
+        - شماره پیگیری ۱۲ رقمی
+        - مبلغ واریز
+        - تاریخ واریز به فرمت شمسی (YYYY/MM/DD)
+        - عکس فیش
+        
+        فیلد تایید (is_approved) فقط توسط ادمین قابل تغییر است.
+        """,
+        responses={
+            201: DepositReceiptSerializer,
+            400: "خطا در داده‌های ورودی"
+        }
+    )
+    def post(self, request):
+        serializer = DepositReceiptSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

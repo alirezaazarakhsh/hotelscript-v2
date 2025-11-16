@@ -31,4 +31,10 @@ urlpatterns = [
         views.AdminCardSettingsAPIView.as_view(),
         name='admin-card-settings'
     ),
+    # اضافه کردن API ثبت فیش واریزی
+    path(
+        'deposit-receipts/',
+        views.DepositReceiptCreateAPIView.as_view(),
+        name='deposit-receipt-create'
+    ),
 ]
