@@ -174,20 +174,82 @@ class CreatePaymentLinkAPIView(APIView):
         status_param = request.GET.get("Status") or request.GET.get("status")
         order_id = request.GET.get("order_id")
 
+        saved_amount = request.session.get("wallet_amount", 0)
+        active_gateway = request.session.get("active_gateway")
+
+        # هندل کال‌بک زرین‌پال
         if authority and status_param:
-            saved_amount = request.session.get("wallet_amount", 0)
             if status_param == "OK":
-                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
-            else:
-                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
+                # تلاش برای verify کردن پرداخت
+                try:
+                    gateway = ZarinpalGateway.objects.first()
+                    if gateway:
+                        amount_riel = saved_amount * 10  # تبدیل تومان به ریال
+                        verify_url = (
+                            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
+                            if gateway.mode == "sandbox"
+                            else "https://api.zarinpal.com/pg/v4/payment/verify.json"
+                        )
+                        
+                        verify_data = {
+                            "merchant_id": gateway.merchant_code,
+                            "amount": amount_riel,
+                            "authority": authority,
+                        }
+                        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+                        
+                        resp = requests.post(verify_url, json=verify_data, headers=headers)
+                        if resp.status_code == 200:
+                            result = resp.json()
+                            if result.get("data", {}).get("code") == 100:
+                                # پرداخت موفق - افزایش موجودی کیف پول
+                                wallet = Wallet.objects.get(user=request.user)
+                                wallet.balance += saved_amount
+                                wallet.save()
+                                
+                                self._clear_session(request)
+                                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
+                except Exception as e:
+                    # در صورت خطا، به صفحه ناموفق هدایت می‌شود
+                    pass
+            
+            # اگر Status != OK یا verify ناموفق بود
+            self._clear_session(request)
+            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
 
+        # هندل کال‌بک ایران‌درگاه
         if order_id and status_param:
-            saved_amount = request.session.get("wallet_amount", 0)
             if status_param.lower() in ["success", "ok", "1"]:
-                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
-            else:
-                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
+                # تلاش برای verify کردن پرداخت
+                try:
+                    gateway = IranianGateway.objects.first()
+                    if gateway:
+                        verify_data = {
+                            "merchant_id": gateway.merchant_code,
+                            "order_id": order_id,
+                        }
+                        
+                        resp = requests.post(gateway.verify_url, json=verify_data)
+                        if resp.status_code == 200:
+                            result = resp.json()
+                            if result.get("success"):
+                                # پرداخت موفق - افزایش موجودی کیف پول
+                                wallet = Wallet.objects.get(user=request.user)
+                                wallet.balance += saved_amount
+                                wallet.save()
+                                
+                                self._clear_session(request)
+                                return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
+                except Exception as e:
+                    # در صورت خطا، به صفحه ناموفق هدایت می‌شود
+                    pass
+            
+            # اگر status ناموفق بود یا verify ناموفق بود
+            self._clear_session(request)
+            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
 
+        # اگر هیچ پارامتری نداشت
+        self._clear_session(request)
         return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount=0")
 
     def _create_zarinpal_payment(self, gateway, amount_riel, request):

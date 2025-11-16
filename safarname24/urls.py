@@ -21,7 +21,10 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
+    #تنظیم لینک بک اند وب سایت و پنل ادمین جنگو
     path('admin/', admin.site.urls),
+    
+    # APIهای سایت (برای کاربران/وب‌سایت)
     path('api/v1/', include([
         path('', include('authentication.urls', namespace='auth')),
         path('config/', include('config.urls', namespace='config')),
@@ -42,6 +45,13 @@ urlpatterns = [
         # --------------------------------------------------
 
     ])),
+    
+    # APIهای پنل گرافیکی (برای تنظیمات/ادمین)
+    path('api/v1/adminpanel/', include([
+        
+      
+    ])),
+    
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 ]
