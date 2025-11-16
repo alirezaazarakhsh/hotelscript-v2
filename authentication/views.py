@@ -187,7 +187,8 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 value=access_token,
                 httponly=True,
                 secure=True,
-                samesite='Lax',
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*24,  # 1 day
             )
         if refresh_token:
@@ -196,7 +197,8 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 value=refresh_token,
                 httponly=True,
                 secure=True,
-                samesite='Lax',
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*7,  # 7 days
             )
         return response
@@ -229,7 +231,8 @@ class TokenRefreshView(JwtTokenRefreshView):
                 value=access_token,
                 httponly=True,
                 secure=True,
-                samesite='Lax',
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*24,  # 1 day
             )
         return response
