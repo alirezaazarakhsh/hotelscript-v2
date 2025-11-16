@@ -13,7 +13,7 @@ class WalletSerializer(serializers.ModelSerializer):
 class WalletPackSerializer(serializers.ModelSerializer):
     class Meta:
         model = WalletPack
-        fields = ['id', 'amount_1', 'amount_2', 'amount_3', 'amount_4']
+        fields = ['amount_1', 'amount_2', 'amount_3', 'amount_4']
         
         
 class WalletTopUpSerializer(serializers.Serializer):
