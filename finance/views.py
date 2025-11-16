@@ -347,7 +347,7 @@ class AdminCardSettingsAPIView(APIView):
 
 #ای پی ای فیش واریز دستی کاربران
 class DepositReceiptCreateAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         request_body=DepositReceiptSerializer,
