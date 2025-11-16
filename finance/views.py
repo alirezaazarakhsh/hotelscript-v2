@@ -79,6 +79,7 @@ class CreatePaymentLinkAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     REDIRECT_BASE_URL = "https://safarnameh24.com/dashboard/financial/wallet"
+    CALLBACK_PATH = "/api/v1/finance/wallet/payment-callback/"
 
     @swagger_auto_schema(
         operation_summary="ایجاد لینک پرداخت برای افزایش موجودی کیف پول کاربر",
@@ -158,7 +159,16 @@ class CreatePaymentLinkAPIView(APIView):
         else:
             return Response({"error": "Unsupported gateway"}, status=500)
 
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
+        # بررسی مسیر درخواست
+        if request.path == self.CALLBACK_PATH:
+            # هندل کال‌بک‌ها روی این مسیر
+            return self._handle_payment_callback(request)
+
+        # اگر روی مسیر اصلی کال‌بک آمد، خطا یا ریدایرکت به ناموفق بزن
+        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount=0")
+
+    def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority")
         status_param = request.GET.get("Status") or request.GET.get("status")
         order_id = request.GET.get("order_id")
@@ -177,20 +187,11 @@ class CreatePaymentLinkAPIView(APIView):
             else:
                 return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
 
-        active = request.session.get("active_gateway")
-        saved_amount = request.session.get("wallet_amount", 0)
-        if not active:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
-
-        if active == "zarinpal":
-            return self._handle_zarinpal_callback(request)
-        elif active == "iraniangateway":
-            return self._handle_iraniangateway_callback(request)
-        else:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount}")
+        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount=0")
 
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
-        callback_url = request.build_absolute_uri()
+        base_url = request.build_absolute_uri('/')  # https://cps.safarnameh24.com/
+        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
 
         data = {
             "merchant_id": gateway.merchant_code,
@@ -225,51 +226,18 @@ class CreatePaymentLinkAPIView(APIView):
         return payment_link, authority
 
     def _handle_zarinpal_callback(self, request):
-        status_param = request.GET.get("Status")
-        authority = request.GET.get("Authority")
-
-        saved_amount = request.session.get("wallet_amount")
-        saved_authority = request.session.get("wallet_authority")
-
-        if status_param != "OK":
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        if not saved_amount or saved_authority != authority:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        gateway = ZarinpalGateway.objects.first()
-        if not gateway:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        verify_url = (
-            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
-            if gateway.mode == "sandbox"
-            else "https://api.zarinpal.com/pg/v4/payment/verify.json"
-        )
-
-        verify_data = {
-            "merchant_id": gateway.merchant_code,
-            "amount": saved_amount * 10,  # تومان به ریال
-            "authority": authority
-        }
-
-        response = requests.post(verify_url, json=verify_data)
-        result = response.json()
-
-        if result.get("data", {}).get("code") == 100:
-            wallet, _ = Wallet.objects.get_or_create(user=request.user)
-            wallet.balance += saved_amount
-            wallet.save()
-            self._clear_session(request)
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
-
-        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
+        # این متد الان استفاده نمیشه، چون کال‌بک تو مسیر جدا هست
+        # ولی می‌تونی کدهای قبلی را داخل _handle_payment_callback بیاری اگر لازم شد
+        pass
 
     def _create_iraniangateway_payment(self, gateway, amount_toman, request):
+        base_url = request.build_absolute_uri('/')
+        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
+
         data = {
             "merchant_id": gateway.merchant_code,
             "amount": amount_toman,
-            "callback_url": request.build_absolute_uri(),
+            "callback_url": callback_url,
             "description": "افزایش موجودی کیف پول",
         }
 
@@ -289,37 +257,8 @@ class CreatePaymentLinkAPIView(APIView):
         return payment_url, order_id
 
     def _handle_iraniangateway_callback(self, request):
-        status = request.GET.get("status")
-        order_id = request.GET.get("order_id")
-
-        saved_amount = request.session.get("wallet_amount")
-        saved_order_id = request.session.get("wallet_order_id")
-
-        if not saved_amount or saved_order_id != order_id:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        gateway = IranianGateway.objects.first()
-        if not gateway:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        verify_data = {
-            "merchant_id": gateway.merchant_code,
-            "order_id": order_id,
-        }
-
-        resp = requests.post(gateway.verify_url, json=verify_data)
-        if resp.status_code != 200:
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
-
-        result = resp.json()
-        if result.get("success"):
-            wallet, _ = Wallet.objects.get_or_create(user=request.user)
-            wallet.balance += saved_amount
-            wallet.save()
-            self._clear_session(request)
-            return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=success&amount={saved_amount}")
-
-        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount={saved_amount or 0}")
+        # این متد الان استفاده نمیشه، کال‌بک تو مسیر جدا هندل میشه
+        pass
 
     def _clear_session(self, request):
         keys = ["wallet_amount", "wallet_authority", "wallet_order_id", "active_gateway"]
@@ -327,8 +266,6 @@ class CreatePaymentLinkAPIView(APIView):
             if key in request.session:
                 del request.session[key]
         request.session.save()
-
-
         
         
 #ای پی ای مشخصات شماره کارت ادمین
