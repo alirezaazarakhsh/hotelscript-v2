@@ -218,6 +218,7 @@ class CreatePaymentLinkAPIView(APIView):
                         resp = requests.post(verify_url, json=verify_data, headers=headers)
                         if resp.status_code == 200:
                             result = resp.json()
+                            logger.info(f"Zarinpal verify response: {result}")
                             if result.get("data", {}).get("code") == 100:
                                 wallet = Wallet.objects.get(user=request.user)
                                 wallet.balance += saved_amount
@@ -245,6 +246,7 @@ class CreatePaymentLinkAPIView(APIView):
                         resp = requests.post(gateway.verify_url, json=verify_data)
                         if resp.status_code == 200:
                             result = resp.json()
+                            logger.info(f"IranianGateway verify response: {result}")
                             if result.get("success"):
                                 wallet = Wallet.objects.get(user=request.user)
                                 wallet.balance += saved_amount
