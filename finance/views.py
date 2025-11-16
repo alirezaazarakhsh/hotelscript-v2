@@ -85,8 +85,11 @@ class CreatePaymentLinkAPIView(APIView):
     CALLBACK_PATH = "/api/v1/finance/wallet/payment-callback/"
     MIN_TOPUP = 1_000_000
     MAX_TOPUP = 100_000_000
-    STATUS_SUCCESS = "sucsess"   # نگه داشتن فرمت فعلی برای سازگاری فرانت
-    STATUS_FAILURE = "unsucsess"
+    # وضعیت‌های استاندارد خروجی برای فرانت
+    STATUS_SUCCESS = "success"
+    STATUS_FAILURE = "unsuccessfull"  # طبق درخواست شما (دو حرف l)
+    LEGACY_SUCCESS = "sucsess"        # در صورت نیاز برای سازگاری موقت
+    LEGACY_FAILURE = "unsucsess"      # در صورت نیاز برای سازگاری موقت
 
     def _validate_amount(self, amount_toman):
         if amount_toman < self.MIN_TOPUP or amount_toman > self.MAX_TOPUP:
@@ -220,13 +223,13 @@ class CreatePaymentLinkAPIView(APIView):
                                 wallet.balance += saved_amount
                                 wallet.save()
                                 self._clear_session(request)
-                                # طبق درخواست شما: sucsess
+                                # پرداخت موفق (success)
                                 return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
                 except Exception:
                     pass
             # عدم موفقیت یا عدم verify
             self._clear_session(request)
-            # طبق درخواست شما: unsucsess
+            # پرداخت ناموفق (unsuccessfull)
             return self._build_redirect(self.STATUS_FAILURE, saved_amount)
 
         # ایران‌درگاه
