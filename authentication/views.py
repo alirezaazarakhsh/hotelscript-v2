@@ -38,22 +38,15 @@ class APILogoutView(APIView):
 
     @swagger_auto_schema(
         operation_summary="خروج از حساب کاربری",
-        operation_description="این API برای خروج کاربر از سیستم با باطل کردن توکن refresh استفاده می‌شود.",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'refresh_token': openapi.Schema(type=openapi.TYPE_STRING, description='توکن refresh کاربر')
-            },
-            required=['refresh_token']
-        ),
+        operation_description="این API برای خروج کاربر از سیستم با باطل کردن توکن refresh استفاده می‌شود. توکن از کوکی خوانده می‌شود.",
         responses={200: 'OK', 400: 'Bad Request'}
     )
     def post(self, request, *args, **kwargs):
         try:
-            refresh_token = self.request.data.get('refresh_token')
+            refresh_token = request.COOKIES.get('refresh_token')
             if not refresh_token:
                 return Response(
-                    {"detail": "refresh_token is required"},
+                    {"detail": "refresh_token not found in cookies"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -62,11 +55,23 @@ class APILogoutView(APIView):
 
             # ارسال پیامک خروج
             user = request.user
-            phone = user.phone_number  
+            phone = user.phone_number
             full_name = f"{user.first_name}{user.last_name}".strip()
             send_logout_sms(phone, full_name)
 
-            return Response({"detail": _("با موفقیت خارج شدید.")})
+            # حذف کوکی‌ها (expire)
+            response = Response({"detail": _("با موفقیت خارج شدید.")})
+            response.delete_cookie(
+                key='access_token',
+                domain='.safarnameh24.com',
+                samesite='None'
+            )
+            response.delete_cookie(
+                key='refresh_token',
+                domain='.safarnameh24.com',
+                samesite='None'
+            )
+            return response
 
         except Exception as e:
             return Response(
