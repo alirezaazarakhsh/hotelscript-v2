@@ -123,7 +123,6 @@ class CreatePaymentLinkAPIView(APIView):
             gateway = IranianGateway.objects.first()
             if not gateway:
                 return Response({"error": "Iranian gateway is not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            # ایران درگاه همان لینک ساده است
             payment_link = self._build_iraniangateway_payment_link(gateway, amount_riel)
             gateway_name = "iraniangateway"
 
@@ -137,38 +136,41 @@ class CreatePaymentLinkAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
     def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int, request) -> str:
-        callback_url = request.build_absolute_uri("/api/payment/callback/")  # آدرس callback خودت رو اصلاح کن
+        callback_url = request.build_absolute_uri("/api/payment/callback/")  # آدرس کال‌بک خودت را اینجا وارد کن
+
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
         data = {
-            "MerchantID": gateway.merchant_code,
-            "Amount": amount_riel,
-            "CallbackURL": callback_url,
-            "Description": "افزایش موجودی کیف پول",
+            "merchant_id": gateway.merchant_code,
+            "amount": amount_riel,
+            "callback_url": callback_url,
+            "description": "افزایش موجودی کیف پول",
         }
-        # انتخاب url بر اساس حالت sandbox یا production
         if gateway.mode == 'sandbox':
-            url = "https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentRequest.json"
+            url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
             payment_base_url = "https://sandbox.zarinpal.com/pg/StartPay"
         else:
-            url = "https://www.zarinpal.com/pg/rest/WebGate/PaymentRequest.json"
+            url = "https://api.zarinpal.com/pg/v4/payment/request.json"
             payment_base_url = "https://www.zarinpal.com/pg/StartPay"
 
         resp = requests.post(url, json=data, headers=headers, timeout=10)
         if resp.status_code != 200:
             raise Exception(f"HTTP error from Zarinpal: {resp.status_code}")
+
         result = resp.json()
-        if result.get("Status") == 100:
-            authority = result.get("Authority")
+        # بررسی پاسخ طبق مستندات نسخه 4 زرین پال
+        if result.get("data", {}).get("code") == 100:
+            authority = result["data"].get("authority")
             if not authority or not authority.startswith("S"):
                 raise Exception("Invalid authority received from Zarinpal.")
             payment_link = f"{payment_base_url}/{authority}"
             return payment_link
         else:
-            raise Exception(f"Zarinpal error: {result.get('Status')}")
+            code = result.get("data", {}).get("code")
+            message = result.get("errors", {}).get("message") or result.get("data", {}).get("message") or "خطایی در دریافت لینک پرداخت رخ داده است."
+            raise Exception(f"Zarinpal error {code}: {message}")
 
     def _build_iraniangateway_payment_link(self, gateway: IranianGateway, amount_riel: int) -> str:
-        # فرض شده در ایران‌درگاه لینک مستقیم بر اساس payment_url و merchant_code ساخته می‌شود
         return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
