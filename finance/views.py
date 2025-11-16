@@ -1,3 +1,4 @@
+from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import redirect
 import requests
