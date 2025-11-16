@@ -9,7 +9,7 @@ from reservation import views as reservation_views
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="API",
+        title="API SITE HOTEL",
         default_version='v1',
         description="API SAFARNAMEH24",
         terms_of_service="https://www.sevinhost.com/",
@@ -18,6 +18,21 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
+)
+
+# Empty schema for adminpanel ReDoc (shows no endpoints)
+schema_view_adminpanel_empty = get_schema_view(
+    openapi.Info(
+        title="API ADMIN HOTEL",
+        default_version='v1',
+        description="API SAFARNAMEH24",
+        terms_of_service="https://www.sevinhost.com/",
+        contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
+        license=openapi.License(name="checked ✅"),
+    ),
+    public=True,
+    permission_classes=(permissions.AllowAny,),
+    patterns=[],
 )
 
 urlpatterns = [
@@ -54,7 +69,7 @@ urlpatterns = [
     
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-    path('redoc/adminpanel', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('redoc/adminpanel', schema_view_adminpanel_empty.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
     
 ]
