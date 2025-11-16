@@ -177,7 +177,29 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         # ارسال پیام خوش آمدگویی
         send_welcome_sms(phone_number, full_name)
 
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        # Set JWT tokens in HTTP-only cookies
+        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        access_token = serializer.validated_data.get('access')
+        refresh_token = serializer.validated_data.get('refresh')
+        if access_token:
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                max_age=60*60*24,  # 1 day
+            )
+        if refresh_token:
+            response.set_cookie(
+                key='refresh_token',
+                value=refresh_token,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                max_age=60*60*7,  # 7 days
+            )
+        return response
 
 
 
@@ -198,6 +220,19 @@ class TokenRefreshView(JwtTokenRefreshView):
                 {"detail": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        # Set new access token in HTTP-only cookie
+        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        access_token = serializer.validated_data.get('access')
+        if access_token:
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite='Lax',
+                max_age=60*60*24,  # 1 day
+            )
+        return response
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
