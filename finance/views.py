@@ -100,9 +100,9 @@ class CreatePaymentLinkAPIView(APIView):
 
         amount_toman = serializer.validated_data['amount']
 
-        if amount_toman < 10000 or amount_toman > 1000000:
+        if amount_toman < 1_000_000 or amount_toman > 100_000_000:
             return Response(
-                {"amount": ["مبلغ باید بین ۱۰,۰۰۰ تا ۱,۰۰۰,۰۰۰ تومان باشد."]},
+                {"amount": ["مبلغ باید بین ۱,۰۰۰,۰۰۰ تا ۱۰۰,۰۰۰,۰۰۰ تومان باشد."]},
                 status=400
             )
 
@@ -110,19 +110,18 @@ class CreatePaymentLinkAPIView(APIView):
         if not pref:
             return Response({"error": "Gateway preference not configured"}, status=500)
 
-        # درگاه زرین‌پال
         if pref.active_gateway == "zarinpal":
             gateway = ZarinpalGateway.objects.first()
             if not gateway:
                 return Response({"error": "Zarinpal gateway not configured"}, status=500)
 
-            amount_riel = amount_toman * 10
+            amount_riel = amount_toman * 10  # تبدیل تومان به ریال برای زرین‌پال
             try:
                 payment_link, authority = self._create_zarinpal_payment(gateway, amount_riel, request)
             except Exception as e:
                 return Response({"error": str(e)}, status=500)
 
-            request.session["wallet_amount"] = amount_riel
+            request.session["wallet_amount"] = amount_toman  # تومان ذخیره می‌کنیم
             request.session["wallet_authority"] = authority
             request.session["active_gateway"] = "zarinpal"
             request.session.save()
@@ -133,7 +132,6 @@ class CreatePaymentLinkAPIView(APIView):
                 "payment_link": payment_link,
             })
 
-        # درگاه ایران‌درگاه
         elif pref.active_gateway == "iraniangateway":
             gateway = IranianGateway.objects.first()
             if not gateway:
@@ -160,6 +158,9 @@ class CreatePaymentLinkAPIView(APIView):
 
     def get(self, request):
         active = request.session.get("active_gateway")
+        if not active:
+            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+
         if active == "zarinpal":
             return self._handle_zarinpal_callback(request)
         elif active == "iraniangateway":
@@ -167,7 +168,7 @@ class CreatePaymentLinkAPIView(APIView):
         else:
             return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
 
-    # ---- متدهای زرین‌پال ----
+    # متدهای زرین‌پال
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
         callback_url = request.build_absolute_uri()
 
@@ -228,7 +229,7 @@ class CreatePaymentLinkAPIView(APIView):
 
         verify_data = {
             "merchant_id": gateway.merchant_code,
-            "amount": saved_amount,
+            "amount": saved_amount * 10,  # تومان به ریال
             "authority": authority
         }
 
@@ -236,21 +237,16 @@ class CreatePaymentLinkAPIView(APIView):
         result = response.json()
 
         if result.get("data", {}).get("code") == 100:
-            # پرداخت موفق → شارژ کیف پول
             wallet, _ = Wallet.objects.get_or_create(user=request.user)
-            wallet.balance += saved_amount // 10  # تبدیل ریال به تومان
+            wallet.balance += saved_amount
             wallet.save()
             self._clear_session(request)
             return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=ok")
 
         return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
 
-    # ---- متدهای ایران‌درگاه ----
+    # متدهای ایران‌درگاه
     def _create_iraniangateway_payment(self, gateway, amount_toman, request):
-        """
-        ساخت درخواست پرداخت ایران‌درگاه
-        فرض شده API ایران‌درگاه مشابه زیر عمل می‌کند:
-        """
         data = {
             "merchant_id": gateway.merchant_code,
             "amount": amount_toman,

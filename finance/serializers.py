@@ -20,10 +20,11 @@ class WalletPackSerializer(serializers.ModelSerializer):
         
 class WalletTopUpSerializer(serializers.Serializer):
     amount = serializers.IntegerField(
-        min_value=100_000,   # 100 هزار تومان یعنی 1 میلیون ریال
-        max_value=10_000_000,  # 10 میلیون تومان یعنی 100 میلیون ریال
-        help_text="مبلغ افزایش کیف پول به تومان (بین 100,000 تا 10,000,000 تومان)"
+        min_value=1_000_000,      # حداقل 1 میلیون تومان
+        max_value=100_000_000,    # حداکثر 100 میلیون تومان
+        help_text="مبلغ افزایش کیف پول به تومان (بین 1,000,000 تا 100,000,000 تومان)"
     )
+
 
 
 
