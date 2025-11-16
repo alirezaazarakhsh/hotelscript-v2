@@ -108,7 +108,7 @@ class CreatePaymentLinkAPIView(APIView):
                 {"amount": ["مبلغ باید بین ۱۰,۰۰۰ تا ۱,۰۰۰,۰۰۰ تومان باشد."]},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        amount_riel = amount_toman * 10  # تومان به ریال
+        amount_riel = amount_toman * 10  # تبدیل تومان به ریال
 
         pref = PaymentGatewayPreference.objects.first()
         if not pref:
@@ -119,7 +119,7 @@ class CreatePaymentLinkAPIView(APIView):
             if not gateway:
                 return Response({"error": "Zarinpal gateway is not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             try:
-                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel)
+                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel, request)
             except Exception as e:
                 return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             gateway_name = "zarinpal"
@@ -140,8 +140,9 @@ class CreatePaymentLinkAPIView(APIView):
             "payment_link": payment_link,
         }, status=status.HTTP_200_OK)
 
-    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
-        callback_url = "http://cps.safarnameh24.com/api/finance/payment/callback/"  # حتما این آدرس تو urls.py تعریف شده باشه
+    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int, request) -> str:
+        # اصلاح شده: آدرس کال‌بک دقیق با استفاده از build_absolute_uri و مسیر صحیح
+        callback_url = request.build_absolute_uri('/api/v1/finance/payment/callback/')
 
         headers = {
             "Content-Type": "application/json",
