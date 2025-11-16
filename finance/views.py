@@ -141,7 +141,7 @@ class CreatePaymentLinkAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
     def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
-        callback_url = "http://cps.safarnameh24.com/api/payment/callback/"
+        callback_url = "http://cps.safarnameh24.com/api/finance/payment/callback/"  # حتما این آدرس تو urls.py تعریف شده باشه
 
         headers = {
             "Content-Type": "application/json",
@@ -174,8 +174,28 @@ class CreatePaymentLinkAPIView(APIView):
             return payment_link
         else:
             code = result.get("data", {}).get("code")
-            message = result.get("errors", {}).get("message") or result.get("data", {}).get("message") or "خطایی در دریافت لینک پرداخت رخ داده است."
+            message = (
+                result.get("errors", {}).get("message") or
+                result.get("data", {}).get("message") or
+                "خطایی در دریافت لینک پرداخت رخ داده است."
+            )
             raise Exception(f"Zarinpal error {code}: {message}")
 
     def _build_iraniangateway_payment_link(self, gateway: IranianGateway, amount_riel: int) -> str:
         return f"{gateway.payment_url}/{gateway.merchant_code}?amount={amount_riel}"
+    
+    
+
+# ای پی ای کال‌بک پرداخت زرین‌پال
+class PaymentCallbackAPIView(APIView):
+    def get(self, request):
+        authority = request.GET.get('Authority')
+        status_param = request.GET.get('Status')
+
+        # اینجا می‌تونی لاجیک وریفای پرداخت رو انجام بدی
+
+        return Response({
+            "message": "Callback received",
+            "Authority": authority,
+            "Status": status_param
+        }, status=status.HTTP_200_OK)
