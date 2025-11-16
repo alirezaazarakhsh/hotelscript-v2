@@ -210,11 +210,20 @@ class TokenObtainPairView(JwtTokenObtainPairView):
 class TokenRefreshView(JwtTokenRefreshView):
     @swagger_auto_schema(
         operation_summary="تازه‌سازی توکن JWT",
-        operation_description="دریافت توکن جدید با استفاده از refresh token",
+        operation_description="دریافت توکن جدید با استفاده از refresh token از کوکی",
         responses={200: 'توکن جدید با موفقیت صادر شد'}
     )
     def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        # خواندن refresh_token از کوکی
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response(
+                {"detail": "refresh_token not found in cookies"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        
+        # استفاده از refresh_token برای تولید access جدید
+        serializer = self.get_serializer(data={'refresh': refresh_token})
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
@@ -222,6 +231,7 @@ class TokenRefreshView(JwtTokenRefreshView):
                 {"detail": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        
         # Set new access token in HTTP-only cookie
         response = Response(status=status.HTTP_200_OK)
         access_token = serializer.validated_data.get('access')
@@ -236,7 +246,6 @@ class TokenRefreshView(JwtTokenRefreshView):
                 max_age=60*60*24,  # 1 day
             )
         return response
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 
