@@ -87,8 +87,8 @@ class CreatePaymentLinkAPIView(APIView):
         ✔ همین API همچنین کال‌بک برگشتی زرین‌پال و ایران‌درگاه را هندل می‌کند (GET)
         ✔ پرداخت را Verify می‌کند
         ✔ کاربر را به آدرس زیر Redirect می‌کند:
-            - موفق:  payment_status=ok
-            - ناموفق: payment_status=no
+            - موفق:  payment_status=success
+            - ناموفق: payment_status=unsuccess
         """,
         request_body=WalletTopUpSerializer,
         responses={200: "Payment link created"}
@@ -159,14 +159,14 @@ class CreatePaymentLinkAPIView(APIView):
     def get(self, request):
         active = request.session.get("active_gateway")
         if not active:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount=0")
 
         if active == "zarinpal":
             return self._handle_zarinpal_callback(request)
         elif active == "iraniangateway":
             return self._handle_iraniangateway_callback(request)
         else:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount=0")
 
     # متدهای زرین‌پال
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
@@ -208,18 +208,18 @@ class CreatePaymentLinkAPIView(APIView):
         status_param = request.GET.get("Status")
         authority = request.GET.get("Authority")
 
-        if status_param != "OK":
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
-
         saved_amount = request.session.get("wallet_amount")
         saved_authority = request.session.get("wallet_authority")
 
+        if status_param != "OK":
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
+
         if not saved_amount or saved_authority != authority:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
         gateway = ZarinpalGateway.objects.first()
         if not gateway:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
         verify_url = (
             "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
@@ -241,9 +241,9 @@ class CreatePaymentLinkAPIView(APIView):
             wallet.balance += saved_amount
             wallet.save()
             self._clear_session(request)
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=ok")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=success&amount={saved_amount}")
 
-        return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+        return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
     # متدهای ایران‌درگاه
     def _create_iraniangateway_payment(self, gateway, amount_toman, request):
@@ -277,11 +277,11 @@ class CreatePaymentLinkAPIView(APIView):
         saved_order_id = request.session.get("wallet_order_id")
 
         if not saved_amount or saved_order_id != order_id:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
         gateway = IranianGateway.objects.first()
         if not gateway:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
         verify_data = {
             "merchant_id": gateway.merchant_code,
@@ -290,7 +290,7 @@ class CreatePaymentLinkAPIView(APIView):
 
         resp = requests.post(gateway.verify_url, json=verify_data)
         if resp.status_code != 200:
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
         result = resp.json()
         if result.get("success"):
@@ -298,9 +298,9 @@ class CreatePaymentLinkAPIView(APIView):
             wallet.balance += saved_amount
             wallet.save()
             self._clear_session(request)
-            return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=ok")
+            return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=success&amount={saved_amount}")
 
-        return redirect("https://safarnameh24.com/dashboard/financial/wallet?payment_status=no")
+        return redirect(f"https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount={saved_amount or 0}")
 
     def _clear_session(self, request):
         keys = ["wallet_amount", "wallet_authority", "wallet_order_id", "active_gateway"]
@@ -308,7 +308,8 @@ class CreatePaymentLinkAPIView(APIView):
             if key in request.session:
                 del request.session[key]
         request.session.save()
-           
+        
+        
         
 #ای پی ای مشخصات شماره کارت ادمین
 class AdminCardSettingsAPIView(APIView):
