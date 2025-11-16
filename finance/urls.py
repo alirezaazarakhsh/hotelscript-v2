@@ -19,10 +19,10 @@ urlpatterns = [
         views.CreatePaymentLinkAPIView.as_view(),
         name='wallet-create-payment-link'
     ),
-    # اضافه کردن مسیر کال‌بک
+    # مسیر کال‌بک برای پرداخت - باید از یک view جداگانه استفاده کند
     path(
         'wallet/payment-callback/',
-        views.CreatePaymentLinkAPIView.as_view(),
+        views.PaymentCallbackAPIView.as_view(),
         name='wallet-payment-callback'
     ),
     path(

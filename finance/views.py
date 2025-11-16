@@ -88,11 +88,10 @@ class CreatePaymentLinkAPIView(APIView):
         این API یک مبلغ افزایش موجودی کیف پول را از کاربر دریافت می‌کند و با توجه به
         تنظیمات پنل مدیریت، درگاه پرداخت فعال را شناسایی کرده و لینک پرداخت مناسب را تولید می‌کند.
 
-        ✔ همین API همچنین کال‌بک برگشتی زرین‌پال و ایران‌درگاه را هندل می‌کند (GET)
-        ✔ پرداخت را Verify می‌کند
-        ✔ کاربر را به آدرس زیر Redirect می‌کند:
-            - موفق:  payment_status=success
-            - ناموفق: payment_status=unsuccess
+        ✔ لینک پرداخت را با توجه به درگاه فعال (زرین‌پال یا ایران‌درگاه) تولید می‌کند
+        ✔ اطلاعات پرداخت را در Session ذخیره می‌کند
+        ✔ کاربر را به درگاه پرداخت هدایت می‌کند
+        ✔ پس از پرداخت، درگاه کاربر را به callback API برمی‌گرداند
         """,
         request_body=WalletTopUpSerializer,
         responses={200: "Payment link created"}
@@ -160,16 +159,103 @@ class CreatePaymentLinkAPIView(APIView):
         else:
             return Response({"error": "Unsupported gateway"}, status=500)
 
-    def get(self, request, *args, **kwargs):
-        # بررسی مسیر درخواست
-        if request.path == self.CALLBACK_PATH:
-            # هندل کال‌بک‌ها روی این مسیر
-            return self._handle_payment_callback(request)
+    def _create_zarinpal_payment(self, gateway, amount_riel, request):
+        base_url = request.build_absolute_uri('/')  # https://cps.safarnameh24.com/
+        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
 
-        # اگر روی مسیر اصلی کال‌بک آمد، خطا یا ریدایرکت به ناموفق بزن
-        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount=0")
+        data = {
+            "merchant_id": gateway.merchant_code,
+            "amount": amount_riel,
+            "callback_url": callback_url,
+            "description": "افزایش موجودی کیف پول",
+        }
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
-    def _handle_payment_callback(self, request):
+        url = (
+            "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
+            if gateway.mode == "sandbox"
+            else "https://api.zarinpal.com/pg/v4/payment/request.json"
+        )
+        base = (
+            "https://sandbox.zarinpal.com/pg/StartPay"
+            if gateway.mode == "sandbox"
+            else "https://www.zarinpal.com/pg/StartPay"
+        )
+
+        resp = requests.post(url, json=data, headers=headers)
+        if resp.status_code != 200:
+            raise Exception("Zarinpal request failed")
+
+        res = resp.json()
+
+        if res.get("data", {}).get("code") != 100:
+            raise Exception(f"Zarinpal error: {res}")
+
+        authority = res["data"]["authority"]
+        payment_link = f"{base}/{authority}"
+        return payment_link, authority
+
+    def _create_iraniangateway_payment(self, gateway, amount_toman, request):
+        base_url = request.build_absolute_uri('/')
+        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
+
+        data = {
+            "merchant_id": gateway.merchant_code,
+            "amount": amount_toman,
+            "callback_url": callback_url,
+            "description": "افزایش موجودی کیف پول",
+        }
+
+        resp = requests.post(gateway.request_url, json=data)
+        if resp.status_code != 200:
+            raise Exception("Iranian gateway request failed")
+
+        result = resp.json()
+        if not result.get("success"):
+            raise Exception(f"Iranian gateway error: {result.get('message')}")
+
+        payment_url = result.get("payment_url")
+        order_id = result.get("order_id")
+        if not payment_url or not order_id:
+            raise Exception("Invalid Iranian gateway response")
+
+        return payment_url, order_id
+
+    def _clear_session(self, request):
+        keys = ["wallet_amount", "wallet_authority", "wallet_order_id", "active_gateway"]
+        for key in keys:
+            if key in request.session:
+                del request.session[key]
+        request.session.save()
+
+
+# ای پی ای کال‌بک پرداخت - جداگانه برای handle کردن callback از درگاه
+class PaymentCallbackAPIView(APIView):
+    """
+    API برای handle کردن callback های درگاه پرداخت
+    این view فقط درخواست های GET را می‌پذیرد
+    """
+    REDIRECT_BASE_URL = "https://safarnameh24.com/dashboard/financial/wallet"
+
+    @swagger_auto_schema(
+        operation_summary="کال‌بک پرداخت - برگشت از درگاه",
+        operation_description="""
+        این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) فراخوانی می‌شود.
+        
+        ✔ پرداخت را Verify می‌کند
+        ✔ در صورت موفق بودن، موجودی کیف پول را افزایش می‌دهد
+        ✔ کاربر را به صفحه مناسب Redirect می‌کند:
+            - موفق: https://safarnameh24.com/dashboard/financial/wallet?payment_status=success&amount=<مبلغ>
+            - ناموفق: https://safarnameh24.com/dashboard/financial/wallet?payment_status=unsuccess&amount=<مبلغ>
+        
+        توجه: این API مستقیماً توسط کاربر فراخوانی نمی‌شود.
+        """,
+        responses={302: "Redirect to success or failure page"}
+    )
+    def get(self, request):
+        """
+        هندل کردن callback پرداخت از درگاه
+        """
         authority = request.GET.get("Authority")
         status_param = request.GET.get("Status") or request.GET.get("status")
         order_id = request.GET.get("order_id")
@@ -183,7 +269,7 @@ class CreatePaymentLinkAPIView(APIView):
                 # تلاش برای verify کردن پرداخت
                 try:
                     gateway = ZarinpalGateway.objects.first()
-                    if gateway:
+                    if gateway and request.user.is_authenticated:
                         amount_riel = saved_amount * 10  # تبدیل تومان به ریال
                         verify_url = (
                             "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
@@ -223,7 +309,7 @@ class CreatePaymentLinkAPIView(APIView):
                 # تلاش برای verify کردن پرداخت
                 try:
                     gateway = IranianGateway.objects.first()
-                    if gateway:
+                    if gateway and request.user.is_authenticated:
                         verify_data = {
                             "merchant_id": gateway.merchant_code,
                             "order_id": order_id,
@@ -251,77 +337,6 @@ class CreatePaymentLinkAPIView(APIView):
         # اگر هیچ پارامتری نداشت
         self._clear_session(request)
         return redirect(f"{self.REDIRECT_BASE_URL}?payment_status=unsuccess&amount=0")
-
-    def _create_zarinpal_payment(self, gateway, amount_riel, request):
-        base_url = request.build_absolute_uri('/')  # https://cps.safarnameh24.com/
-        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
-
-        data = {
-            "merchant_id": gateway.merchant_code,
-            "amount": amount_riel,
-            "callback_url": callback_url,
-            "description": "افزایش موجودی کیف پول",
-        }
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-
-        url = (
-            "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
-            if gateway.mode == "sandbox"
-            else "https://api.zarinpal.com/pg/v4/payment/request.json"
-        )
-        base = (
-            "https://sandbox.zarinpal.com/pg/StartPay"
-            if gateway.mode == "sandbox"
-            else "https://www.zarinpal.com/pg/StartPay"
-        )
-
-        resp = requests.post(url, json=data, headers=headers)
-        if resp.status_code != 200:
-            raise Exception("Zarinpal request failed")
-
-        res = resp.json()
-
-        if res.get("data", {}).get("code") != 100:
-            raise Exception(f"Zarinpal error: {res}")
-
-        authority = res["data"]["authority"]
-        payment_link = f"{base}/{authority}"
-        return payment_link, authority
-
-    def _handle_zarinpal_callback(self, request):
-        # این متد الان استفاده نمیشه، چون کال‌بک تو مسیر جدا هست
-        # ولی می‌تونی کدهای قبلی را داخل _handle_payment_callback بیاری اگر لازم شد
-        pass
-
-    def _create_iraniangateway_payment(self, gateway, amount_toman, request):
-        base_url = request.build_absolute_uri('/')
-        callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
-
-        data = {
-            "merchant_id": gateway.merchant_code,
-            "amount": amount_toman,
-            "callback_url": callback_url,
-            "description": "افزایش موجودی کیف پول",
-        }
-
-        resp = requests.post(gateway.request_url, json=data)
-        if resp.status_code != 200:
-            raise Exception("Iranian gateway request failed")
-
-        result = resp.json()
-        if not result.get("success"):
-            raise Exception(f"Iranian gateway error: {result.get('message')}")
-
-        payment_url = result.get("payment_url")
-        order_id = result.get("order_id")
-        if not payment_url or not order_id:
-            raise Exception("Invalid Iranian gateway response")
-
-        return payment_url, order_id
-
-    def _handle_iraniangateway_callback(self, request):
-        # این متد الان استفاده نمیشه، کال‌بک تو مسیر جدا هندل میشه
-        pass
 
     def _clear_session(self, request):
         keys = ["wallet_amount", "wallet_authority", "wallet_order_id", "active_gateway"]
