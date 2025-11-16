@@ -178,7 +178,7 @@ class TokenObtainPairView(JwtTokenObtainPairView):
         send_welcome_sms(phone_number, full_name)
 
         # Set JWT tokens in HTTP-only cookies
-        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        response = Response(status=status.HTTP_200_OK)
         access_token = serializer.validated_data.get('access')
         refresh_token = serializer.validated_data.get('refresh')
         if access_token:
@@ -221,7 +221,7 @@ class TokenRefreshView(JwtTokenRefreshView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         # Set new access token in HTTP-only cookie
-        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+        response = Response(status=status.HTTP_200_OK)
         access_token = serializer.validated_data.get('access')
         if access_token:
             response.set_cookie(
