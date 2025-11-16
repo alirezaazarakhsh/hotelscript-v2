@@ -103,6 +103,11 @@ class CreatePaymentLinkAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         amount_toman = serializer.validated_data['amount']
+        if amount_toman < 10000 or amount_toman > 1000000:
+            return Response(
+                {"amount": ["مبلغ باید بین ۱۰,۰۰۰ تا ۱,۰۰۰,۰۰۰ تومان باشد."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         amount_riel = amount_toman * 10  # تومان به ریال
 
         pref = PaymentGatewayPreference.objects.first()
@@ -114,7 +119,7 @@ class CreatePaymentLinkAPIView(APIView):
             if not gateway:
                 return Response({"error": "Zarinpal gateway is not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             try:
-                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel, request)
+                payment_link = self._request_zarinpal_payment_link(gateway, amount_riel)
             except Exception as e:
                 return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             gateway_name = "zarinpal"
@@ -135,8 +140,8 @@ class CreatePaymentLinkAPIView(APIView):
             "payment_link": payment_link,
         }, status=status.HTTP_200_OK)
 
-    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int, request) -> str:
-        callback_url = request.build_absolute_uri("/api/payment/callback/")  # آدرس کال‌بک خودت را اینجا وارد کن
+    def _request_zarinpal_payment_link(self, gateway: ZarinpalGateway, amount_riel: int) -> str:
+        callback_url = "http://cps.safarnameh24.com/api/payment/callback/"
 
         headers = {
             "Content-Type": "application/json",
@@ -148,6 +153,7 @@ class CreatePaymentLinkAPIView(APIView):
             "callback_url": callback_url,
             "description": "افزایش موجودی کیف پول",
         }
+
         if gateway.mode == 'sandbox':
             url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
             payment_base_url = "https://sandbox.zarinpal.com/pg/StartPay"
@@ -160,7 +166,6 @@ class CreatePaymentLinkAPIView(APIView):
             raise Exception(f"HTTP error from Zarinpal: {resp.status_code}")
 
         result = resp.json()
-        # بررسی پاسخ طبق مستندات نسخه 4 زرین پال
         if result.get("data", {}).get("code") == 100:
             authority = result["data"].get("authority")
             if not authority or not authority.startswith("S"):
