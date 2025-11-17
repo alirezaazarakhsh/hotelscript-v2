@@ -12,14 +12,20 @@ class AdminAuthBackend(ModelBackend):
                     user = BaseUser.objects.get(**{username_field: username})
 
                     # بررسی وجود superuser و پسورد معتبر
-                    if hasattr(user, 'superuser') and user.superuser.password:
+                    if hasattr(user, 'superuser') and user.superuser and user.superuser.password:
                         if user.superuser.check_password(password):
+                            return user
+                    
+                    # بررسی وجود admin و پسورد معتبر
+                    elif hasattr(user, 'admin') and user.admin and user.admin.password:
+                        if user.admin.check_password(password):
                             return user
             except BaseUser.DoesNotExist:
                 return None
     
     def user_can_authenticate(self, user):
-        return user.is_superuser
+        # هم superuser و هم admin می‌توانند احراز هویت شوند
+        return user.is_staff
 
 class UserAuthBackend(ModelBackend):
     def authenticate(self, request, **kwargs):
