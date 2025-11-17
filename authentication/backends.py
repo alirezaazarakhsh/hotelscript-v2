@@ -11,16 +11,42 @@ class AdminAuthBackend(ModelBackend):
                 if username:
                     user = BaseUser.objects.get(**{username_field: username})
 
-                    # فقط بررسی وجود password و superuser بودن
-                    if user.is_superuser and user.password:
+                    # بررسی وجود password و is_staff (ادمین معمولی یا سوپر یوزر)
+                    if user.is_staff and user.password:
                         if user.check_password(password):
                             return user
             except BaseUser.DoesNotExist:
                 return None
     
     def user_can_authenticate(self, user):
-        # فقط superuser می‌تواند احراز هویت شود
-        return user.is_superuser
+        # هر کسی که is_staff باشد (ادمین معمولی یا سوپر یوزر) می‌تواند authenticate شود
+        return user.is_staff
+    
+    def has_perm(self, user_obj, perm, obj=None):
+        """
+        چک کردن دسترسی‌ها:
+        - سوپر یوزر: دسترسی کامل
+        - ادمین معمولی: فقط دسترسی‌های گروه‌ها
+        """
+        if not user_obj.is_active or not user_obj.is_staff:
+            return False
+        if user_obj.is_superuser:
+            return True
+        # برای ادمین معمولی، از گروه‌ها و دسترسی‌های مستقیم استفاده می‌شود
+        return super().has_perm(user_obj, perm, obj)
+    
+    def has_module_perms(self, user_obj, app_label):
+        """
+        چک کردن دسترسی به یک app:
+        - سوپر یوزر: دسترسی به همه app‌ها
+        - ادمین معمولی: فقط app‌هایی که در گروه‌هایش permission دارد
+        """
+        if not user_obj.is_active or not user_obj.is_staff:
+            return False
+        if user_obj.is_superuser:
+            return True
+        # برای ادمین معمولی، چک می‌کنیم آیا حداقل یک permission از این app دارد
+        return super().has_module_perms(user_obj, app_label)
 
 class UserAuthBackend(ModelBackend):
     def authenticate(self, request, **kwargs):
