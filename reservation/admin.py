@@ -563,7 +563,6 @@ class RoomAdmin(admin.ModelAdmin):
         'services',
         'image',
         'image_preview',   # پیش‌نمایش زیر فیلد آپلود
-        'image_alt',
     )
 
     inlines = [RoomDateInline, ClosedDateInline]
