@@ -20,6 +20,7 @@ from .models import (
     JuridicalProfileDocument,
     OTP,
     SMSPattern,
+    AppGroup,
 )
 from .forms import (
     AdminForm,
@@ -54,28 +55,54 @@ class AdminAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'base_user_info',
-        'admin_avatar',   # 👈 نمایش عکس پروفایل
-       
+        'admin_avatar',
+        'get_groups',
+        'get_permissions_count',
     )
     search_fields = (
         'base_user__phone_number',
-        
+        'first_name',
+        'last_name',
     )
     autocomplete_fields = ['base_user']
     ordering = ('-id',)
+    
+    # امکان تنظیم گروه‌ها و دسترسی‌ها برای ادمین
+    filter_horizontal = ('sms_patterns',)
+    
+    fieldsets = (
+        ('اطلاعات پایه', {
+            'fields': ('base_user', 'first_name', 'last_name', 'image', 'signature')
+        }),
+        ('دسترسی‌های پیامکی', {
+            'fields': ('sms_patterns',),
+            'classes': ('collapse',),
+        }),
+    )
 
     def base_user_info(self, obj):
-        profile_name = ""
-        if hasattr(obj.base_user, 'natural_profile') and obj.base_user.natural_profile:
-            profile_name = f"{obj.base_user.natural_profile.first_name or ''} {obj.base_user.natural_profile.last_name or ''}".strip()
-        return f"{obj.base_user.phone_number} ({profile_name or 'پروفایل موجود نیست'})"
+        profile_name = f"{obj.first_name or ''} {obj.last_name or ''}".strip()
+        return f"{obj.base_user.phone_number} ({profile_name or 'بدون نام'})"
     base_user_info.short_description = 'موبایل و نام'
 
     def admin_avatar(self, obj):
-        if obj.image:  # 👈 فرض بر این است فیلد image در مدل Admin وجود دارد
+        if obj.image:
             return format_html('<img src="{}" style="width:50px; height:50px; border-radius:10%;" />', obj.image.url)
         return "—"
-    admin_avatar.short_description = "عکس پروفایل"
+    admin_avatar.short_description = "عکس"
+    
+    def get_groups(self, obj):
+        groups = obj.base_user.groups.all()
+        if groups:
+            return format_html('<br>'.join([f'🔹 {g.name}' for g in groups]))
+        return "—"
+    get_groups.short_description = 'گروه‌های دسترسی'
+    
+    def get_permissions_count(self, obj):
+        perms_count = obj.base_user.user_permissions.count()
+        groups_count = obj.base_user.groups.count()
+        return f"👤 {perms_count} | 👥 {groups_count}"
+    get_permissions_count.short_description = 'دسترسی‌ها (مستقیم | گروهی)'
 
     def get_urls(self):
         urls = super().get_urls()
@@ -127,6 +154,15 @@ class AdminAdmin(admin.ModelAdmin):
     
     
 
+# گروه‌بندی اپلیکیشن‌ها
+@admin.register(AppGroup)
+class AppGroupAdmin(admin.ModelAdmin):
+    list_display = ('display_name', 'order', 'name', 'icon')
+    list_editable = ('order',)
+    search_fields = ('name', 'display_name')
+    ordering = ('order', 'name')
+
+
 @admin.register(BaseUser)
 class BaseUserAdmin(admin.ModelAdmin):
     exclude = ('is_superuser',)
@@ -136,27 +172,32 @@ class BaseUserAdmin(admin.ModelAdmin):
         'phone_number',
         'date_joined_jalali',
         'last_login_jalali',
-        'is_staff',
-        'get_groups',
+        'user_type',
     )
     
     search_fields = ('phone_number',)
     ordering = ('-id',)
     
-    # اضافه کردن فیلتر برای groups و permissions
-    filter_horizontal = ('groups', 'user_permissions',)
-    list_filter = ('is_superuser', 'groups',)
+    # حذف filter_horizontal برای BaseUser - فقط برای ادمین‌ها نیاز است
+    list_filter = ('is_superuser',)
 
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
     }
 
-    readonly_fields = ('last_login_date', 'last_login_time')
+    readonly_fields = ('last_login_date', 'last_login_time', 'is_staff')
     
-    # نمایش گروه‌ها در لیست
-    def get_groups(self, obj):
-        return ", ".join([g.name for g in obj.groups.all()]) if obj.groups.exists() else "-"
-    get_groups.short_description = 'گروه‌ها'
+    # نمایش نوع کاربر
+    def user_type(self, obj):
+        if obj.is_superuser:
+            return "🔴 ادمین جنگو"
+        elif hasattr(obj, 'admin') and obj.admin:
+            return "🟡 ادمین سایت"
+        elif hasattr(obj, 'natural_profile') and obj.natural_profile:
+            return "🟢 کاربر عادی"
+        else:
+            return "⚪ نامشخص"
+    user_type.short_description = 'نوع کاربر'
 
     def date_joined_jalali(self, obj):
         if obj.date_joined:

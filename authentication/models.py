@@ -30,6 +30,46 @@ from config.models import (
 )
 
 
+# مدل گروه‌بندی اپلیکیشن‌ها برای مدیریت بهتر دسترسی‌ها
+class AppGroup(models.Model):
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_('نام گروه'),
+        help_text=_('نام گروه اپلیکیشن (مثلاً: مدیریت محتوا، مالی، تنظیمات)')
+    )
+    display_name = models.CharField(
+        max_length=100,
+        verbose_name=_('نام نمایشی'),
+        help_text=_('نام نمایشی گروه به فارسی')
+    )
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_('آیکون'),
+        help_text=_('نام آیکون برای نمایش (اختیاری)')
+    )
+    order = models.IntegerField(
+        default=0,
+        verbose_name=_('ترتیب نمایش'),
+        help_text=_('عدد کوچکتر = اولویت بالاتر')
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name=_('توضیحات'),
+    )
+
+    class Meta:
+        verbose_name = "گروه اپلیکیشن"
+        verbose_name_plural = "گروه‌های اپلیکیشن"
+        ordering = ['order', 'name']
+
+    def __str__(self):
+        return self.display_name
+
+
 
 LEGAL_PROFILE_STATUSES = (
     ('checking','در حال بررسی'),
@@ -94,8 +134,8 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_staff(self):
-        # اگر superuser باشد یا admin profile داشته باشد، به عنوان staff شناخته می‌شود
-        return self.is_superuser or (hasattr(self, 'admin') and self.admin is not None)
+        # فقط superuser به عنوان staff شناخته می‌شود (دسترسی به پنل ادمین جنگو)
+        return self.is_superuser
 
 
 
