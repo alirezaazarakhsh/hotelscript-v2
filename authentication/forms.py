@@ -13,26 +13,32 @@ class AdminForm(forms.ModelForm):
         label='رمز پنل گرافیکی',
         widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
         required=False,
-        help_text='برای تنظیم یا تغییر رمز پنل گرافیکی ادمین'
+        help_text='رمز برای ورود به پنل گرافیکی'
     )
     panel_password2 = forms.CharField(
         label='تایید رمز پنل گرافیکی',
         widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
         required=False,
-        help_text='تایید رمز پنل گرافیکی'
     )
 
-    # تبدیل به سوپر یوزر (برای دسترسی کامل به پنل جنگو)
-    is_superuser = forms.BooleanField(
-        label='سوپر یوزر (دسترسی کامل به پنل جنگو)',
-        required=False,
-        help_text='با تیک زدن، این ادمین به پنل جنگو دسترسی کامل خواهد داشت. برای ادمین معمولی تیک نزنید.'
-    )
-    django_admin_password = forms.CharField(
+    # رمز پنل جنگو (برای هر دو نوع ادمین)
+    django_admin_password1 = forms.CharField(
         label='رمز پنل جنگو',
         widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
         required=False,
-        help_text='فقط برای سوپر یوزر الزامی است. برای ادمین معمولی خالی بگذارید.'
+        help_text='رمز برای ورود به پنل جنگو (برای ادمین معمولی و سوپر یوزر)'
+    )
+    django_admin_password2 = forms.CharField(
+        label='تایید رمز پنل جنگو',
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+        required=False,
+    )
+
+    # تبدیل به سوپر یوزر (دسترسی کامل)
+    is_superuser = forms.BooleanField(
+        label='سوپر یوزر (دسترسی کامل)',
+        required=False,
+        help_text='با تیک زدن، دسترسی کامل به تمام بخش‌ها. بدون تیک، فقط دسترسی‌های گروه‌ها اعمال می‌شود.'
     )
 
     # گروه‌های دسترسی (برای ادمین معمولی)
@@ -54,35 +60,38 @@ class AdminForm(forms.ModelForm):
             self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})
             self.fields['image'].help_text = f'<img src="{self.instance.image.url}" style="max-height: 200px; max-width: 200px;" />' if self.instance.image else ""
             if self.instance.panel_password:
-                self.fields['panel_password1'].help_text = '✓ رمز پنل گرافیکی تنظیم شده است. برای تغییر، رمز جدید وارد کنید.'
-            # مقداردهی اولیه گروه‌ها و وضعیت سوپر یوزر از base_user
+                self.fields['panel_password1'].help_text = '✓ رمز پنل گرافیکی تنظیم شده است.'
+            # مقداردهی اولیه
             if self.instance.base_user_id:
                 self.fields['admin_groups'].initial = self.instance.base_user.groups.all()
                 self.fields['is_superuser'].initial = self.instance.base_user.is_superuser
                 if self.instance.base_user.password:
-                    self.fields['django_admin_password'].help_text = '✓ رمز پنل جنگو تنظیم شده است. برای تغییر، رمز جدید وارد کنید.'
+                    self.fields['django_admin_password1'].help_text = '✓ رمز پنل جنگو تنظیم شده است.'
 
     def clean(self):
         cleaned = super().clean()
+        # اعتبارسنجی رمز پنل گرافیکی
         p1 = cleaned.get('panel_password1')
         p2 = cleaned.get('panel_password2')
         if (p1 or p2) and p1 != p2:
             self.add_error('panel_password2', 'رمزهای پنل گرافیکی مطابقت ندارند')
 
-        is_su = cleaned.get('is_superuser')
-        django_pwd = cleaned.get('django_admin_password')
-        # اگر is_superuser تیک خورده و هنوز رمزی ذخیره نشده، رمز الزامی است
-        if is_su and not django_pwd:
-            if not (self.instance and self.instance.pk and self.instance.base_user and self.instance.base_user.password):
-                self.add_error('django_admin_password', 'برای سوپر یوزر، وارد کردن رمز پنل جنگو الزامی است.')
+        # اعتبارسنجی رمز پنل جنگو
+        d1 = cleaned.get('django_admin_password1')
+        d2 = cleaned.get('django_admin_password2')
+        if (d1 or d2) and d1 != d2:
+            self.add_error('django_admin_password2', 'رمزهای پنل جنگو مطابقت ندارند')
+        
         return cleaned
 
     def save(self, commit=True):
         admin = super().save(commit=False)
+        
         # تنظیم رمز پنل گرافیکی
         panel_pwd = self.cleaned_data.get('panel_password1')
         if panel_pwd:
             admin.set_panel_password(panel_pwd)
+        
         if commit:
             admin.save()
 
@@ -91,18 +100,17 @@ class AdminForm(forms.ModelForm):
         if groups is not None and admin.base_user_id:
             admin.base_user.groups.set(groups)
 
-        # تنظیم is_superuser و رمز جنگو
+        # تنظیم رمز پنل جنگو (برای هر دو نوع ادمین)
+        django_pwd = self.cleaned_data.get('django_admin_password1')
+        if django_pwd and admin.base_user:
+            admin.base_user.set_password(django_pwd)
+            admin.base_user.save(update_fields=["password"])
+
+        # تنظیم is_superuser
         is_su = self.cleaned_data.get('is_superuser', False)
-        django_pwd = self.cleaned_data.get('django_admin_password')
-        if admin.base_user:
-            # به‌روزرسانی is_superuser
-            if admin.base_user.is_superuser != is_su:
-                admin.base_user.is_superuser = is_su
-                admin.base_user.save(update_fields=["is_superuser"])
-            # در صورت وارد کردن رمز جنگو، set_password
-            if django_pwd:
-                admin.base_user.set_password(django_pwd)
-                admin.base_user.save(update_fields=["password"])
+        if admin.base_user and admin.base_user.is_superuser != is_su:
+            admin.base_user.is_superuser = is_su
+            admin.base_user.save(update_fields=["is_superuser"])
 
         return admin
 

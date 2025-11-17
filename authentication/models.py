@@ -143,8 +143,8 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_staff(self):
-        # فقط superuser به عنوان staff شناخته می‌شود (دسترسی به پنل ادمین جنگو)
-        return self.is_superuser
+        # اگر ادمین سایت باشد (Admin) یا سوپر یوزر باشد -> is_staff = True
+        return self.is_superuser or hasattr(self, 'admin')
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
