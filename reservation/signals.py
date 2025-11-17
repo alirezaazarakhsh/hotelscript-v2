@@ -180,9 +180,6 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
     """
     سیگنال پس از ذخیره رزرو برای مدیریت وضعیت پرداخت و اقدامات بعدی
     """
-    logger.info(f"🔔 سیگنال handle_reservation_payment_complete فراخوانی شد برای رزرو {instance.tracking_code}")
-    logger.info(f"   payment_status={instance.payment_status}, wallet_withdrawal_amount={instance.wallet_withdrawal_amount}, wallet_withdrawn={instance.wallet_withdrawn}")
-    
     if get_skip_points_and_sms():
         logger.info(f"سیگنال برای رزرو {instance.tracking_code} به دلیل فلگ skip نادیده گرفته شد.")
         return
@@ -424,8 +421,6 @@ def _process_wallet_withdrawal(reservation):
     """
     برداشت از کیف پول با اطمینان از ذخیره تیک و کم کردن موجودی در یک تراکنش اتمیک
     """
-    logger.info(f"🟡 _process_wallet_withdrawal فراخوانی شد برای رزرو {reservation.tracking_code}")
-    
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         logger.info(f"Wallet withdrawal for {reservation.tracking_code} skipped due to lock.")
