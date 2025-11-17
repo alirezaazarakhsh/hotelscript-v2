@@ -94,7 +94,16 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         null=True,
         blank=True,
     )
-    password = None
+    password = models.CharField(
+        verbose_name=_('رمز عبور جنگو'),
+        max_length=128,
+        null=True,
+        blank=True,
+        help_text=_('رمز عبور برای ورود به پنل جنگو (فقط برای سوپر یوزرها)')
+    )
+    # Stores the raw password if set_password() is called so that it can
+    # be passed to password_changed() after the model is saved.
+    _password = None
 
     objects = UserManager()
 
@@ -137,32 +146,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         # فقط superuser به عنوان staff شناخته می‌شود (دسترسی به پنل ادمین جنگو)
         return self.is_superuser
 
-
-
-
-
-#مدل ادمین ها 
-class SuperUser(models.Model):
-    base_user = models.OneToOneField(
-        BaseUser,
-        on_delete=models.CASCADE,
-        related_name='superuser',
-    )
-    password = models.CharField(
-        verbose_name=_('رمز عبور'),
-        max_length=128,
-    )
-    # Stores the raw password if set_password() is called so that it can
-    # be passed to password_changed() after the model is saved.
-    _password = None
-
-    class Meta:
-        verbose_name = "ادمین جنگو"
-        verbose_name_plural = "ادمین‌های جنگو"
-
-    def __str__(self):
-        return f'{self.base_user}'
-
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if self._password is not None:
@@ -174,18 +157,17 @@ class SuperUser(models.Model):
         self._password = raw_password
 
     def check_password(self, raw_password):
+        if not self.password:
+            return False
         def setter(raw_password):
             self.set_password(raw_password)
             # Password hash upgrades shouldn't be considered password changes.
             self._password = None
             self.save(update_fields=["password"])
-
         return check_password(raw_password, self.password, setter)
 
     def get_session_auth_hash(self):
-        """
-        Return an HMAC of the password field.
-        """
+        """Return an HMAC of the password field."""
         return self._get_session_auth_hash()
 
     def get_session_auth_fallback_hash(self):
@@ -193,16 +175,17 @@ class SuperUser(models.Model):
             yield self._get_session_auth_hash(secret=fallback_secret)
 
     def _get_session_auth_hash(self, secret=None):
-        key_salt = "authentication.SuperUser.get_session_auth_hash"
+        key_salt = "authentication.BaseUser.get_session_auth_hash"
         return salted_hmac(
             key_salt,
-            self.password,
+            self.password or '',
             secret=secret,
             algorithm="sha256",
         ).hexdigest()
-    
-    
-    
+
+
+
+
 
 #مدل پروفایل ادمین ها 
 class Admin(models.Model):

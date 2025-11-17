@@ -11,9 +11,9 @@ class AdminAuthBackend(ModelBackend):
                 if username:
                     user = BaseUser.objects.get(**{username_field: username})
 
-                    # فقط بررسی وجود superuser و پسورد معتبر
-                    if hasattr(user, 'superuser') and user.superuser and user.superuser.password:
-                        if user.superuser.check_password(password):
+                    # فقط بررسی وجود password و superuser بودن
+                    if user.is_superuser and user.password:
+                        if user.check_password(password):
                             return user
             except BaseUser.DoesNotExist:
                 return None

@@ -15,7 +15,6 @@ from .models import (
     Admin,
     CardNumber,
     JuridicalCardNumber,
-    SuperUser,
     NaturalProfile,
     JuridicalProfile,
     JuridicalProfileDocument,
@@ -79,9 +78,13 @@ class AdminAdmin(admin.ModelAdmin):
             'fields': ('sms_patterns',),
             'classes': ('collapse',),
         }),
+        ('دسترسی‌ها و گروه‌بندی', {
+            'fields': ('is_superuser', 'admin_groups'),
+            'description': 'اگر سوپر یوزر تیک بخورد، دسترسی کامل به تمام بخش‌ها داده می‌شود. در غیر این صورت، فقط دسترسی‌های گروه‌های انتخابی اعمال می‌شود.',
+        }),
         ('رمزها', {
-            'fields': ('panel_password1', 'panel_password2', 'django_admin_password1', 'django_admin_password2'),
-            'description': 'در صورت نیاز رمزها را تنظیم کنید. رمز جنگو باعث SuperUser شدن این کاربر می‌شود.',
+            'fields': ('panel_password1', 'panel_password2', 'django_admin_password'),
+            'description': 'رمز پنل گرافیکی برای ورود به پنل اختصاصی. رمز پنل جنگو فقط برای سوپر یوزرها الزامی است.',
         }),
     )
 
@@ -143,18 +146,7 @@ class AdminAdmin(admin.ModelAdmin):
     
 
 
-# SuperUser را از پنل ادمین مخفی می‌کنیم - فقط از طریق ترمینال قابل مدیریت است
-# @admin.register(SuperUser)
-# class SuperUserAdmin(admin.ModelAdmin):
-#     list_display = ('id', 'base_user_info',)
-#     search_fields = ('base_user__phone_number',)
-#     ordering = ('-id',)
-
-#     def base_user_info(self, obj):
-#         profile_name = ""
-#         if hasattr(obj.base_user, 'natural_profile') and obj.base_user.natural_profile:
-#             profile_name = f"{obj.base_user.natural_profile.first_name or ''} {obj.base_user.natural_profile.last_name or ''}".strip()
-#         return f"{obj.base_user.phone_number} ({profile_name or 'پروفایل موجود نیست'})"
+# مدل SuperUser حذف شد - اکنون از فیلد is_superuser در BaseUser استفاده می‌شود
 #     base_user_info.short_description = 'موبایل و نام'
     
     
