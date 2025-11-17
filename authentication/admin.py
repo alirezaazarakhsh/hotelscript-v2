@@ -111,18 +111,19 @@ class AdminAdmin(admin.ModelAdmin):
     
 
 
-@admin.register(SuperUser)
-class SuperUserAdmin(admin.ModelAdmin):
-    list_display = ('id', 'base_user_info',)
-    search_fields = ('base_user__phone_number',)
-    ordering = ('-id',)
+# SuperUser را از پنل ادمین مخفی می‌کنیم - فقط از طریق ترمینال قابل مدیریت است
+# @admin.register(SuperUser)
+# class SuperUserAdmin(admin.ModelAdmin):
+#     list_display = ('id', 'base_user_info',)
+#     search_fields = ('base_user__phone_number',)
+#     ordering = ('-id',)
 
-    def base_user_info(self, obj):
-        profile_name = ""
-        if hasattr(obj.base_user, 'natural_profile') and obj.base_user.natural_profile:
-            profile_name = f"{obj.base_user.natural_profile.first_name or ''} {obj.base_user.natural_profile.last_name or ''}".strip()
-        return f"{obj.base_user.phone_number} ({profile_name or 'پروفایل موجود نیست'})"
-    base_user_info.short_description = 'موبایل و نام'
+#     def base_user_info(self, obj):
+#         profile_name = ""
+#         if hasattr(obj.base_user, 'natural_profile') and obj.base_user.natural_profile:
+#             profile_name = f"{obj.base_user.natural_profile.first_name or ''} {obj.base_user.natural_profile.last_name or ''}".strip()
+#         return f"{obj.base_user.phone_number} ({profile_name or 'پروفایل موجود نیست'})"
+#     base_user_info.short_description = 'موبایل و نام'
     
     
 

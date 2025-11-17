@@ -199,22 +199,12 @@ class Admin(models.Model):
         null=True,
         blank=True,
     )
-    password = models.CharField(
-        verbose_name=_('رمز عبور برای پنل ادمین'),
-        max_length=128,
-        null=True,
-        blank=True,
-        help_text=_('رمز عبور برای ورود به پنل ادمین جنگو')
-    )
     sms_patterns = models.ManyToManyField(
         SMSPattern,
         verbose_name="پترن‌های پیامکی فعال",
         blank=True,
         help_text="پترن‌های پیامکی که برای این ادمین فعال هستند را انتخاب کنید."
     )
-    # Stores the raw password if set_password() is called so that it can
-    # be passed to password_changed() after the model is saved.
-    _password = None
 
     class Meta:
         verbose_name = "ادمین"
@@ -222,45 +212,6 @@ class Admin(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
-    
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if self._password is not None:
-            password_validation.password_changed(self._password, self)
-            self._password = None
-
-    def set_password(self, raw_password):
-        self.password = make_password(raw_password)
-        self._password = raw_password
-
-    def check_password(self, raw_password):
-        if not self.password:
-            return False
-        def setter(raw_password):
-            self.set_password(raw_password)
-            # Password hash upgrades shouldn't be considered password changes.
-            self._password = None
-            self.save(update_fields=["password"])
-        return check_password(raw_password, self.password, setter)
-
-    def get_session_auth_hash(self):
-        """
-        Return an HMAC of the password field.
-        """
-        return self._get_session_auth_hash()
-
-    def get_session_auth_fallback_hash(self):
-        for fallback_secret in settings.SECRET_KEY_FALLBACKS:
-            yield self._get_session_auth_hash(secret=fallback_secret)
-
-    def _get_session_auth_hash(self, secret=None):
-        key_salt = "authentication.Admin.get_session_auth_hash"
-        return salted_hmac(
-            key_salt,
-            self.password or '',
-            secret=secret,
-            algorithm="sha256",
-        ).hexdigest()
     
     
     
