@@ -11,6 +11,7 @@ class IconShortcutAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'title_icon',
+        'order',
     )
     ordering = ('order',)
 

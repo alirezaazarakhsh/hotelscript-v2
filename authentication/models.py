@@ -1,8 +1,10 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from .managers import UserManager
 from setting_sms.models import SMSPattern
+from icons.models import IconShortcut
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -30,30 +32,36 @@ from config.models import (
 )
 
 
-# مدل گروه‌بندی اپلیکیشن‌ها برای مدیریت بهتر دسترسی‌ها
-class AppGroup(models.Model):
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        verbose_name=_('نام گروه'),
-        help_text=_('نام گروه اپلیکیشن (مثلاً: مدیریت محتوا، مالی، تنظیمات)')
+# مدل گروه‌بندی اپلیکیشن‌ها - حالا به Group متصل می‌شود
+class GroupExtension(models.Model):
+    """
+    افزودن فیلدهای اضافی به Group برای گروه‌بندی اپلیکیشن‌ها
+    """
+    group = models.OneToOneField(
+        Group,
+        on_delete=models.CASCADE,
+        related_name='extension',
+        verbose_name=_('گروه')
     )
-    display_name = models.CharField(
-        max_length=100,
-        verbose_name=_('نام نمایشی'),
-        help_text=_('نام نمایشی گروه به فارسی')
-    )
-    icon = models.CharField(
-        max_length=50,
-        blank=True,
+    icon = models.ForeignKey(
+        IconShortcut,
+        on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         verbose_name=_('آیکون'),
-        help_text=_('نام آیکون برای نمایش (اختیاری)')
+        help_text=_('آیکون این گروه')
     )
     order = models.IntegerField(
         default=0,
         verbose_name=_('ترتیب نمایش'),
         help_text=_('عدد کوچکتر = اولویت بالاتر')
+    )
+    display_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name=_('نام نمایشی فارسی'),
+        help_text=_('نام فارسی گروه برای نمایش')
     )
     description = models.TextField(
         blank=True,
@@ -62,12 +70,15 @@ class AppGroup(models.Model):
     )
 
     class Meta:
-        verbose_name = "گروه اپلیکیشن"
-        verbose_name_plural = "گروه‌های اپلیکیشن"
-        ordering = ['order', 'name']
+        verbose_name = "تنظیمات گروه"
+        verbose_name_plural = "تنظیمات گروه‌ها"
+        ordering = ['order', 'group__name']
 
     def __str__(self):
-        return self.display_name
+        return self.display_name or self.group.name
+
+
+# حذف مدل AppGroup قدیمی - حالا از GroupExtension استفاده می‌کنیم
 
 
 

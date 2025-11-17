@@ -20,7 +20,7 @@ from .models import (
     JuridicalProfileDocument,
     OTP,
     SMSPattern,
-    AppGroup,
+    GroupExtension,
 )
 from .forms import (
     AdminForm,
@@ -150,28 +150,53 @@ class AdminAdmin(admin.ModelAdmin):
 
 
 # مدل SuperUser حذف شد - اکنون از فیلد is_superuser در BaseUser استفاده می‌شود
-#     base_user_info.short_description = 'موبایل و نام'
-    
-    
 
-# گروه‌بندی اپلیکیشن‌ها
-@admin.register(AppGroup)
-class AppGroupAdmin(admin.ModelAdmin):
-    list_display = ('display_name', 'order', 'name', 'icon')
-    list_editable = ('order',)
-    search_fields = ('name', 'display_name')
-    ordering = ('order', 'name')
-
-# سفارشی‌سازی نمایش گروه‌ها برای نمایش تعداد ادمین‌های هر گروه
+# سفارشی‌سازی نمایش گروه‌ها
 try:
     admin.site.unregister(Group)
 except Exception:
     pass
 
+
+# Inline برای تنظیمات گروه
+class GroupExtensionInline(admin.StackedInline):
+    model = GroupExtension
+    extra = 0
+    autocomplete_fields = ['icon']
+    fields = ('icon', 'order', 'display_name', 'description')
+    verbose_name = "تنظیمات گروه"
+    verbose_name_plural = "تنظیمات گروه"
+
+
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "admin_members_count")
-    search_fields = ("name",)
+    list_display = ("name", "get_display_name", "get_icon", "get_order", "admin_members_count")
+    search_fields = ("name", "extension__display_name")
+    ordering = ("extension__order", "name")
+    inlines = [GroupExtensionInline]
+    
+    def get_display_name(self, obj):
+        try:
+            return obj.extension.display_name or obj.name
+        except GroupExtension.DoesNotExist:
+            return obj.name
+    get_display_name.short_description = "نام نمایشی"
+    
+    def get_icon(self, obj):
+        try:
+            if obj.extension.icon:
+                return obj.extension.icon.title_icon
+        except GroupExtension.DoesNotExist:
+            pass
+        return "—"
+    get_icon.short_description = "آیکون"
+    
+    def get_order(self, obj):
+        try:
+            return obj.extension.order
+        except GroupExtension.DoesNotExist:
+            return 0
+    get_order.short_description = "ترتیب"
 
     def admin_members_count(self, obj):
         return BaseUser.objects.filter(groups=obj, admin__isnull=False).count()
