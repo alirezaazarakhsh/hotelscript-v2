@@ -932,6 +932,12 @@ class Room(models.Model):
             raise ValidationError(_('ظرفیت رزرو نمی‌تواند منفی باشد.'))
         if current_inventory < 0:
             raise ValidationError(_('موجودی نمی‌تواند منفی باشد.'))
+        
+        # بررسی اینکه count و auto_approved_count بیشتر از inventory نباشند
+        if current_count > current_inventory:
+            raise ValidationError(_(f'ظرفیت رزرو نیازمند تأیید ادمین ({current_count}) نمی‌تواند بیشتر از موجودی فعلی ({current_inventory}) باشد.'))
+        if current_auto_approved_count > current_inventory:
+            raise ValidationError(_(f'ظرفیت رزرو بدون تأیید ادمین ({current_auto_approved_count}) نمی‌تواند بیشتر از موجودی فعلی ({current_inventory}) باشد.'))
 
     def __str__(self):
         return f'{self.title} - {self.hotel}' if self.hotel else self.title or 'اتاق بدون نام'
@@ -961,8 +967,25 @@ class Room(models.Model):
                 if room.count < quantity:
                     raise ValidationError(_('ظرفیت نیازمند تأیید ادمین کافی نیست.'))
                 room.count -= quantity
+            
+            # کاهش موجودی
+            old_inventory = room.inventory
             room.inventory -= quantity
+            
             room.save(update_fields=['inventory', 'count', 'auto_approved_count'])
+            
+            # ارسال SMS اگر موجودی صفر شد
+            if old_inventory > 0 and room.inventory == 0:
+                logger.info(f"Room {room.pk} inventory reached zero. Sending SMS to admins.")
+                try:
+                    send_room_availability_sms(
+                        room_name=f"{room.title} (ID: {room.pk})",
+                        status="صفر شد",
+                        hotel_name=room.hotel.title if room.hotel else "نامشخص"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send SMS for room {room.pk}: {str(e)}")
+        
         logger.info(f"Room {self.pk}: Reservation added successfully")
 
     def revert_inventory_for_cancellation(self, quantity: int, auto_approval: bool):
@@ -982,7 +1005,8 @@ class Room(models.Model):
         logger.info(f"Room {self.pk}: Reservation cancelled and reverted successfully")
 
     def _send_inventory_sms_if_zero(self):
-        pass  # منطق ارسال پیامک به سیگنال‌ها منتقل شده است
+        """ارسال SMS وقتی موجودی صفر می‌شود - این متد دیگر استفاده نمی‌شود"""
+        pass
     
     
 
