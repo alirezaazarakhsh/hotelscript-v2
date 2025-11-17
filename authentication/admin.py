@@ -78,13 +78,13 @@ class AdminAdmin(admin.ModelAdmin):
             'fields': ('sms_patterns',),
             'classes': ('collapse',),
         }),
-        ('دسترسی‌ها و گروه‌بندی', {
-            'fields': ('is_superuser', 'admin_groups'),
-            'description': 'اگر سوپر یوزر تیک بخورد، دسترسی کامل به تمام بخش‌ها داده می‌شود. در غیر این صورت، فقط دسترسی‌های گروه‌های انتخابی اعمال می‌شود.',
+        ('گروه‌های دسترسی', {
+            'fields': ('admin_groups',),
+            'description': 'گروه‌های دسترسی این ادمین را انتخاب کنید. مثلاً: گروه بلاگ، گروه مالی، گروه رزرواسیون و ...',
         }),
-        ('رمزها', {
-            'fields': ('panel_password1', 'panel_password2', 'django_admin_password'),
-            'description': 'رمز پنل گرافیکی برای ورود به پنل اختصاصی. رمز پنل جنگو فقط برای سوپر یوزرها الزامی است.',
+        ('رمز پنل گرافیکی', {
+            'fields': ('panel_password1', 'panel_password2'),
+            'description': 'رمز عبور برای ورود به پنل گرافیکی ادمین',
         }),
     )
 
