@@ -366,29 +366,34 @@ class PaymentCallbackAPIView(APIView):
 
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
+            # توجه: در callback فقط وضعیت موفقیت یا عدم موفقیت را ذخیره می‌کنیم
+            # تنظیم payment_status به paid را به verify واگذار می‌کنیم تا سیگنال درست اجرا شود
+            payment_success = False
+            
             if active_gateway == "zarinpal":
                 if payment_status == "OK":
                     logger.info(f"پرداخت زرین‌پال برای رزرو {tracking_code} موفق بود.")
-                    reservation.payment_status = "paid"
+                    payment_success = True
                 else:
                     logger.info(f"پرداخت زرین‌پال ناموفق بود (Status={payment_status}).")
-                    reservation.payment_status = "unpaid"
+                    with transaction.atomic():
+                        reservation.payment_status = "unpaid"
+                        reservation.save(update_fields=["payment_status"])
 
             elif active_gateway == "iraniangateway":
                 if payment_code == "100":
                     logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100).")
-                    reservation.payment_status = "paid"
-                    reservation.ref_id = ref_id or f"iraniangateway_{authority}"
+                    payment_success = True
+                    # ذخیره ref_id اما payment_status را به paid تنظیم نمی‌کنیم
+                    if ref_id:
+                        with transaction.atomic():
+                            reservation.ref_id = ref_id
+                            reservation.save(update_fields=["ref_id"])
                 else:
                     logger.info(f"پرداخت ایران‌درگاه ناموفق بود (code={payment_code}, message={message}).")
-                    reservation.payment_status = "unpaid"
-
-            with transaction.atomic():
-                update_fields = ["payment_status"]
-                if ref_id:
-                    reservation.ref_id = ref_id
-                    update_fields.append("ref_id")
-                reservation.save(update_fields=update_fields)
+                    with transaction.atomic():
+                        reservation.payment_status = "unpaid"
+                        reservation.save(update_fields=["payment_status"])
 
             # ذخیره در کش برای verify
             cache_data = {
@@ -399,6 +404,7 @@ class PaymentCallbackAPIView(APIView):
                 "order_id": order_id,
                 "ref_id": ref_id,
                 "message": message,
+                "payment_success": payment_success,  # اضافه کردن فلگ موفقیت
             }
             cache.set(f"callback_{authority}", cache_data, timeout=1800)
             logger.info(f"داده callback ذخیره شد: {cache_data}")
@@ -534,15 +540,30 @@ class PaymentVerifyAPIView(APIView):
                     )
 
                 if isinstance(resp_data, dict) and resp_data.get("data", {}).get("code") in [100, 101]:
+                    # ابتدا ref_id را ذخیره می‌کنیم
+                    ref_id_value = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                     with transaction.atomic():
+                        reservation.ref_id = ref_id_value
+                        reservation.save(update_fields=['ref_id'])
+                    
+                    # سپس در یک transaction جداگانه، payment_status را به paid تنظیم می‌کنیم
+                    # این کار باعث می‌شود سیگنال بعد از commit اجرا شود و wallet_withdrawn به درستی انجام شود
+                    with transaction.atomic():
+                        reservation.refresh_from_db()
                         reservation.payment_status = 'paid'
-                        reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
-                        reservation.save(update_fields=['payment_status', 'ref_id'])
-                        cache.delete(f"payment_link_{order_id}")
-                        cache.delete(f"payment_link_authority_{authority}")
-                        cache.delete(f"callback_{authority}")
+                        reservation.save(update_fields=['payment_status'])
+                    
+                    # پاک کردن کش‌ها
+                    cache.delete(f"payment_link_{order_id}")
+                    cache.delete(f"payment_link_authority_{authority}")
+                    cache.delete(f"callback_{authority}")
+                    
+                    # رفرش برای اطمینان از دریافت آخرین وضعیت
+                    reservation.refresh_from_db()
+                    logger.info(f"✅ پرداخت تایید شد - payment_status={reservation.payment_status}, wallet_withdrawn={reservation.wallet_withdrawn}")
+                    
                     return Response(
-                        {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
+                        {"status": "success", "refId": reservation.ref_id, "payment_status": "paid", "wallet_withdrawn": reservation.wallet_withdrawn},
                         status=status.HTTP_200_OK
                     )
                 else:
@@ -580,15 +601,30 @@ class PaymentVerifyAPIView(APIView):
                     )
 
                 if isinstance(resp_data, dict) and resp_data.get("status") in [100, 101]:
+                    # ابتدا ref_id را ذخیره می‌کنیم
+                    ref_id_value = resp_data.get("refId", f"iraniangateway_{authority}")
                     with transaction.atomic():
+                        reservation.ref_id = ref_id_value
+                        reservation.save(update_fields=['ref_id'])
+                    
+                    # سپس در یک transaction جداگانه، payment_status را به paid تنظیم می‌کنیم
+                    # این کار باعث می‌شود سیگنال بعد از commit اجرا شود و wallet_withdrawn به درستی انجام شود
+                    with transaction.atomic():
+                        reservation.refresh_from_db()
                         reservation.payment_status = 'paid'
-                        reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
-                        reservation.save(update_fields=['payment_status', 'ref_id'])
-                        cache.delete(f"payment_link_{order_id}")
-                        cache.delete(f"payment_link_authority_{authority}")
-                        cache.delete(f"callback_{authority}")
+                        reservation.save(update_fields=['payment_status'])
+                    
+                    # پاک کردن کش‌ها
+                    cache.delete(f"payment_link_{order_id}")
+                    cache.delete(f"payment_link_authority_{authority}")
+                    cache.delete(f"callback_{authority}")
+                    
+                    # رفرش برای اطمینان از دریافت آخرین وضعیت
+                    reservation.refresh_from_db()
+                    logger.info(f"✅ پرداخت تایید شد - payment_status={reservation.payment_status}, wallet_withdrawn={reservation.wallet_withdrawn}")
+                    
                     return Response(
-                        {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
+                        {"status": "success", "refId": reservation.ref_id, "payment_status": "paid", "wallet_withdrawn": reservation.wallet_withdrawn},
                         status=status.HTTP_200_OK
                     )
                 else:

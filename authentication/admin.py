@@ -213,7 +213,7 @@ class BaseUserAdmin(admin.ModelAdmin):
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
     }
 
-    readonly_fields = ('last_login_date', 'last_login_time', 'is_staff')
+    readonly_fields = ('last_login', 'last_login_jalali', 'last_login_date', 'last_login_time', 'is_staff')
     
     # نمایش نوع کاربر
     def user_type(self, obj):

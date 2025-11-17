@@ -9,6 +9,7 @@ from icons.models import IconShortcut
 import logging
 import threading
 import time
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +59,20 @@ def create_user_related_records(sender, instance, created, **kwargs):
     with transaction.atomic():
         customer_points, created_points = CustomerClubPoint.objects.select_for_update().get_or_create(
             user=instance,
-            defaults={'points': 0}
+            defaults={'points': 0, 'gift_sent': False}
         )
 
         if created_points:
             initial_points = 300
             customer_points.points += initial_points
+            customer_points.gift_sent = True
             customer_points.save()
             logger.info(f"Added {initial_points} points for {instance.phone_number}")
 
             def send_gift_later():
-                time.sleep(5)
+                # تاخیر تصادفی بین 20 تا 30 ثانیه بعد از اس‌ام‌اس ورود
+                delay = random.randint(20, 30)
+                time.sleep(delay)
                 send_registration_gift_sms(instance.phone_number, initial_points)
 
             threading.Thread(target=send_gift_later).start()

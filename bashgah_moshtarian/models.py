@@ -406,6 +406,12 @@ class CustomerClubPoint(models.Model):
         verbose_name=_("امتیاز فعلی")
     )
 
+    gift_sent = models.BooleanField(
+        default=False,
+        verbose_name=_("هدیه ثبت نام ارسال شده؟"),
+        help_text=_("نمایش وضعیت ارسال هدیه ثبت نام به کاربر")
+    )
+
     def __str__(self):
         return f"{self.user} - {self.points} امتیاز"
 

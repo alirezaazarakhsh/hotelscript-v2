@@ -4348,7 +4348,7 @@ class WalletWithdrawAPIView(APIView):
 
             if amount > price_before_wallet:
                 return Response({
-                    "detail": f"مبلغ برداشت ({amount:,} تومان) بیشتر از مبلغ نهایی رزرو ({price_before_wallet:,} تومان) قبل از اعمال برداشت کیف پول است."
+                    "detail": "مقدار برداشتی بیشتر از مبلغ کل صورت حساب می باشد"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # آپدیت واقعی رزرو با مقدار جدید برداشت از کیف پول

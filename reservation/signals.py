@@ -180,6 +180,9 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
     """
     سیگنال پس از ذخیره رزرو برای مدیریت وضعیت پرداخت و اقدامات بعدی
     """
+    logger.info(f"🔔 سیگنال handle_reservation_payment_complete فراخوانی شد برای رزرو {instance.tracking_code}")
+    logger.info(f"   payment_status={instance.payment_status}, wallet_withdrawal_amount={instance.wallet_withdrawal_amount}, wallet_withdrawn={instance.wallet_withdrawn}")
+    
     if get_skip_points_and_sms():
         logger.info(f"سیگنال برای رزرو {instance.tracking_code} به دلیل فلگ skip نادیده گرفته شد.")
         return
@@ -421,6 +424,8 @@ def _process_wallet_withdrawal(reservation):
     """
     برداشت از کیف پول با اطمینان از ذخیره تیک و کم کردن موجودی در یک تراکنش اتمیک
     """
+    logger.info(f"🟡 _process_wallet_withdrawal فراخوانی شد برای رزرو {reservation.tracking_code}")
+    
     cache_key = f"wallet_withdrawal_lock_{reservation.tracking_code}"
     if cache.get(cache_key):
         logger.info(f"Wallet withdrawal for {reservation.tracking_code} skipped due to lock.")
@@ -461,21 +466,21 @@ def _process_wallet_withdrawal(reservation):
             wallet.balance = F('balance') - withdrawal_amount
             wallet.save(update_fields=['balance'])
             wallet.refresh_from_db()
-            logger.info(f"موجودی کیف پول پس از برداشت: {wallet.balance}")
+            logger.info(f"✅ موجودی کیف پول پس از برداشت: {wallet.balance}")
 
-            logger.info(f"برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} با موفقیت انجام شد.")
+            logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} با موفقیت انجام شد.")
             return True
 
     except Wallet.DoesNotExist:
-        logger.error(f"کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
+        logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد.")
         return False
     except Exception as e:
-        logger.error(f"خطا در برداشت کیف پول رزرو {reservation.tracking_code}: {e}")
+        logger.error(f"❌ خطا در برداشت کیف پول رزرو {reservation.tracking_code}: {e}")
         logger.error(traceback.format_exc())
         return False
     finally:
         cache.delete(cache_key)
-        logger.info(f"پایان تراکنش برداشت کیف پول رزرو {reservation.tracking_code}")
+        logger.info(f"🔵 پایان تراکنش برداشت کیف پول رزرو {reservation.tracking_code}")
         
 
 def _handle_rejected_reservation(reservation):
