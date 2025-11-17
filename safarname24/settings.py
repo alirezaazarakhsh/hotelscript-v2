@@ -141,6 +141,14 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
+# تنظیمات Celery Beat برای اجرای تسک‌های زمان‌بندی شده
+CELERY_BEAT_SCHEDULE = {
+    'check-expired-reservations': {
+        'task': 'reservation.tasks.check_and_reject_expired_reservations',
+        'schedule': 60.0,  # هر 60 ثانیه (1 دقیقه)
+    },
+}
+
 DATABASES = {
     'default': {
         'ENGINE': env('DB_ENGINE'),
