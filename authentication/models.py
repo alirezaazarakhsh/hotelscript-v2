@@ -94,7 +94,8 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_staff(self):
-        return self.is_superuser
+        # اگر superuser باشد یا admin profile داشته باشد، به عنوان staff شناخته می‌شود
+        return self.is_superuser or (hasattr(self, 'admin') and self.admin is not None)
 
 
 

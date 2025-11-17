@@ -3,6 +3,7 @@ from django.contrib import admin
 from django import forms
 from django.http import JsonResponse
 from django.urls import path
+from django.db.models import Q
 from django_jalali.db import models as jmodels
 from jalali_date.widgets import AdminJalaliDateWidget  
 from django.utils.html import format_html
@@ -134,16 +135,27 @@ class BaseUserAdmin(admin.ModelAdmin):
         'phone_number',
         'date_joined_jalali',
         'last_login_jalali',
+        'is_staff',
+        'get_groups',
     )
     
     search_fields = ('phone_number',)
     ordering = ('-id',)
+    
+    # اضافه کردن فیلتر برای groups و permissions
+    filter_horizontal = ('groups', 'user_permissions',)
+    list_filter = ('is_superuser', 'groups',)
 
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
     }
 
     readonly_fields = ('last_login_date', 'last_login_time')
+    
+    # نمایش گروه‌ها در لیست
+    def get_groups(self, obj):
+        return ", ".join([g.name for g in obj.groups.all()]) if obj.groups.exists() else "-"
+    get_groups.short_description = 'گروه‌ها'
 
     def date_joined_jalali(self, obj):
         if obj.date_joined:
