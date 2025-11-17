@@ -590,7 +590,6 @@ class RoomAdmin(admin.ModelAdmin):
             )
         return "(هنوز تصویری انتخاب نشده)"
     image_preview.short_description = 'پیش‌نمایش تصویر'
-    inlines = [RoomDateInline]
 
 
 @admin.register(RoomDatePrice)
