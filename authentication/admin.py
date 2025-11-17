@@ -57,7 +57,6 @@ class AdminAdmin(admin.ModelAdmin):
         'base_user_info',
         'admin_avatar',
         'get_groups',
-        'get_permissions_count',
     )
     search_fields = (
         'base_user__phone_number',
@@ -103,17 +102,16 @@ class AdminAdmin(admin.ModelAdmin):
     admin_avatar.short_description = "عکس"
     
     def get_groups(self, obj):
+        # اگر سوپر یوزر باشد
+        if obj.base_user.is_superuser:
+            return format_html('<span style="color: red; font-weight: bold;">⭐ ادمین کل</span>')
+        
+        # در غیر این صورت گروه‌ها
         groups = obj.base_user.groups.all()
         if groups:
             return format_html('<br>'.join([f'🔹 {g.name}' for g in groups]))
         return "—"
     get_groups.short_description = 'گروه‌های دسترسی'
-    
-    def get_permissions_count(self, obj):
-        perms_count = obj.base_user.user_permissions.count()
-        groups_count = obj.base_user.groups.count()
-        return f"👤 {perms_count} | 👥 {groups_count}"
-    get_permissions_count.short_description = 'دسترسی‌ها (مستقیم | گروهی)'
 
     def get_urls(self):
         urls = super().get_urls()
@@ -158,29 +156,23 @@ except Exception:
     pass
 
 
-# Inline برای تنظیمات گروه
+# Inline برای تنظیمات گروه (بدون accordion)
 class GroupExtensionInline(admin.StackedInline):
     model = GroupExtension
     extra = 0
     autocomplete_fields = ['icon']
-    fields = ('icon', 'order', 'display_name', 'description')
+    fields = ('icon', 'order', 'description')
     verbose_name = "تنظیمات گروه"
     verbose_name_plural = "تنظیمات گروه"
 
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "get_display_name", "get_icon", "get_order", "admin_members_count")
+    list_display = ("name", "get_icon", "get_order", "admin_members_count")
     search_fields = ("name", "extension__display_name")
     ordering = ("extension__order", "name")
     inlines = [GroupExtensionInline]
-    
-    def get_display_name(self, obj):
-        try:
-            return obj.extension.display_name or obj.name
-        except GroupExtension.DoesNotExist:
-            return obj.name
-    get_display_name.short_description = "نام نمایشی"
+    filter_horizontal = ('permissions',)
     
     def get_icon(self, obj):
         try:
