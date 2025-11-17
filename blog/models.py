@@ -1,5 +1,5 @@
 from django.utils import timezone
-from ckeditor.fields import RichTextField
+from tinymce.models import HTMLField
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _

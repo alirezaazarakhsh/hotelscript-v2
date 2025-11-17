@@ -1,7 +1,7 @@
 from decimal import Decimal
 import logging
 import os
-from ckeditor.fields import RichTextField
+from tinymce.models import HTMLField
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -659,7 +659,7 @@ class Rule(models.Model):
         verbose_name=_('عنوان تب'),
         max_length=32,
     )
-    text = RichTextField(
+    text = HTMLField(
         verbose_name=_('متن'),
     )
     order = models.PositiveIntegerField(

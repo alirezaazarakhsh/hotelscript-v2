@@ -565,7 +565,7 @@ class RoomAdmin(admin.ModelAdmin):
         'image_preview',   # پیش‌نمایش زیر فیلد آپلود
     )
 
-    inlines = [RoomDateInline, ClosedDateInline]
+    inlines = [RoomDateInline]
     readonly_fields = ('thumbnail_preview', 'image_preview')  # هر دو فقط خواندنی
 
     # پیش‌نمایش در لیست

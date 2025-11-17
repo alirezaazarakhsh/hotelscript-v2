@@ -60,7 +60,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_jalali',
     'colorfield',
-    'ckeditor',
+    'tinymce',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'authentication',
@@ -81,8 +81,6 @@ INSTALLED_APPS = [
     'settingchatbot',
     'chat_api',
     
-    
-    'tinymce',
     'channels',
     'nested_admin',
 ]
