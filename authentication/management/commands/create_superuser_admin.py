@@ -1,9 +1,9 @@
 from django.core.management.base import BaseCommand
-from authentication.models import BaseUser, SuperUser
+from authentication.models import BaseUser
 
 
 class Command(BaseCommand):
-    help = 'ساخت یا تنظیم رمز عبور برای ادمین جنگو (SuperUser)'
+    help = 'ساخت یا تنظیم رمز عبور برای سوپر یوزر (دسترسی کامل به پنل جنگو)'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--password',
             type=str,
-            help='رمز عبور برای ورود به پنل ادمین',
+            help='رمز عبور برای ورود به پنل ادمین جنگو',
             required=True
         )
 
@@ -34,30 +34,27 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'✓ کاربر با شماره {phone_number} آماده است'))
 
             # تنظیم is_superuser
+            was_superuser = base_user.is_superuser
             if not base_user.is_superuser:
                 base_user.is_superuser = True
-                base_user.save()
-                self.stdout.write(self.style.SUCCESS('✓ کاربر به عنوان superuser تنظیم شد'))
+                base_user.save(update_fields=['is_superuser'])
+                self.stdout.write(self.style.SUCCESS('✓ کاربر به عنوان سوپر یوزر تنظیم شد'))
 
-            # پیدا کردن یا ساختن SuperUser
-            superuser, su_created = SuperUser.objects.get_or_create(
-                base_user=base_user
-            )
+            # تنظیم رمز عبور در BaseUser
+            base_user.set_password(password)
+            base_user.save(update_fields=['password'])
 
-            # تنظیم رمز عبور
-            superuser.set_password(password)
-            superuser.save()
-
-            if su_created:
-                self.stdout.write(self.style.SUCCESS('✓ SuperUser جدید ساخته شد و رمز عبور تنظیم شد'))
+            if not was_superuser:
+                self.stdout.write(self.style.SUCCESS('✓ سوپر یوزر جدید ساخته شد و رمز عبور تنظیم شد'))
             else:
-                self.stdout.write(self.style.SUCCESS('✓ رمز عبور SuperUser به‌روزرسانی شد'))
+                self.stdout.write(self.style.SUCCESS('✓ رمز عبور سوپر یوزر به‌روزرسانی شد'))
 
             self.stdout.write(self.style.SUCCESS('\n' + '='*50))
             self.stdout.write(self.style.SUCCESS('✅ عملیات با موفقیت انجام شد'))
             self.stdout.write(self.style.SUCCESS(f'📱 شماره موبایل: {phone_number}'))
             self.stdout.write(self.style.SUCCESS(f'🔑 رمز عبور: {"*" * len(password)}'))
-            self.stdout.write(self.style.SUCCESS('🌐 می‌توانید با این اطلاعات وارد پنل ادمین شوید'))
+            self.stdout.write(self.style.SUCCESS('🌐 می‌توانید با این اطلاعات وارد پنل ادمین جنگو شوید'))
+            self.stdout.write(self.style.SUCCESS('💡 نکته: این کاربر دسترسی کامل به تمام بخش‌ها دارد'))
             self.stdout.write(self.style.SUCCESS('='*50))
 
         except Exception as e:
