@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.models import update_last_login
 from django.core.validators import RegexValidator
 from django.db import IntegrityError
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from safarname24.serializers import ErrorMessageSerializerMixin
 from .validators import validate_phone_number
@@ -59,6 +60,44 @@ class AuthSerializer(serializers.Serializer):
         validators=[validate_phone_number],
         max_length=15,
     )
+
+
+# -----------------------------
+# Admin Panel Login Serializer (phone + panel_password)
+# -----------------------------
+class AdminPanelTokenObtainSerializer(serializers.Serializer):
+    phone = serializers.CharField(required=True, validators=[validate_phone_number], max_length=15)
+    password = serializers.CharField(required=True, write_only=True)
+
+    def validate(self, attrs):
+        phone = attrs.get('phone')
+        password = attrs.get('password')
+
+        try:
+            user = BaseUser.objects.get(phone_number=phone)
+        except BaseUser.DoesNotExist:
+            raise exceptions.AuthenticationFailed(_("کاربر یافت نشد."))
+
+        admin = getattr(user, 'admin', None)
+        if not admin:
+            raise exceptions.AuthenticationFailed(_("شما ادمین سایت نیستید."))
+
+        if not admin.check_panel_password(password):
+            raise exceptions.AuthenticationFailed(_("رمز عبور نادرست است."))
+
+        # تولید JWT tokens
+        refresh = RefreshToken.for_user(user)
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+
+        if api_settings.UPDATE_LAST_LOGIN:
+            update_last_login(None, user)
+
+        # نگهداری کاربر برای دسترسی در View در صورت نیاز
+        self.user = user
+        return data
 
 # -----------------------------
 # NaturalProfile Serializer

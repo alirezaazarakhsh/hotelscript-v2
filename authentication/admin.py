@@ -9,6 +9,7 @@ from jalali_date.widgets import AdminJalaliDateWidget
 from django.utils.html import format_html
 from django.utils import timezone  
 import jdatetime
+from django.contrib.auth.models import Group
 from .models import (
     BaseUser,
     Admin,
@@ -77,6 +78,10 @@ class AdminAdmin(admin.ModelAdmin):
         ('دسترسی‌های پیامکی', {
             'fields': ('sms_patterns',),
             'classes': ('collapse',),
+        }),
+        ('رمزها', {
+            'fields': ('panel_password1', 'panel_password2', 'django_admin_password1', 'django_admin_password2'),
+            'description': 'در صورت نیاز رمزها را تنظیم کنید. رمز جنگو باعث SuperUser شدن این کاربر می‌شود.',
         }),
     )
 
@@ -162,10 +167,25 @@ class AppGroupAdmin(admin.ModelAdmin):
     search_fields = ('name', 'display_name')
     ordering = ('order', 'name')
 
+# سفارشی‌سازی نمایش گروه‌ها برای نمایش تعداد ادمین‌های هر گروه
+try:
+    admin.site.unregister(Group)
+except Exception:
+    pass
+
+@admin.register(Group)
+class GroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "admin_members_count")
+    search_fields = ("name",)
+
+    def admin_members_count(self, obj):
+        return BaseUser.objects.filter(groups=obj, admin__isnull=False).count()
+    admin_members_count.short_description = "تعداد ادمین‌های سایت"
+
 
 @admin.register(BaseUser)
 class BaseUserAdmin(admin.ModelAdmin):
-    exclude = ('is_superuser',)
+    exclude = ('is_superuser', 'groups', 'user_permissions')
     
     list_display = (
         'id',
@@ -180,6 +200,7 @@ class BaseUserAdmin(admin.ModelAdmin):
     
     # حذف filter_horizontal برای BaseUser - فقط برای ادمین‌ها نیاز است
     list_filter = ('is_superuser',)
+    actions = ['make_admin']
 
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
@@ -222,6 +243,19 @@ class BaseUserAdmin(admin.ModelAdmin):
             return obj.last_login.strftime('%H:%M:%S')
         return "-"
     last_login_time.short_description = 'زمان آخرین ورود'
+
+    def make_admin(self, request, queryset):
+        created = 0
+        for user in queryset:
+            if not hasattr(user, 'admin') or user.admin is None:
+                Admin.objects.create(
+                    base_user=user,
+                    first_name=getattr(user, 'first_name', '') or '',
+                    last_name=getattr(user, 'last_name', '') or ''
+                )
+                created += 1
+        self.message_user(request, f"{created} ادمین جدید ساخته شد.")
+    make_admin.short_description = "تبدیل به ادمین سایت"
     
 
 

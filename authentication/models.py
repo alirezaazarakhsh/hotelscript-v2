@@ -239,6 +239,13 @@ class Admin(models.Model):
         null=True,
         blank=True,
     )
+    panel_password = models.CharField(
+        verbose_name=_('رمز عبور پنل گرافیکی'),
+        max_length=128,
+        null=True,
+        blank=True,
+        help_text=_('رمز عبور برای ورود به پنل گرافیکی ادمین (غیر از پنل جنگو)')
+    )
     sms_patterns = models.ManyToManyField(
         SMSPattern,
         verbose_name="پترن‌های پیامکی فعال",
@@ -252,6 +259,22 @@ class Admin(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+    # مدیریت رمز عبور پنل گرافیکی
+    _password = None
+
+    def set_panel_password(self, raw_password):
+        self.panel_password = make_password(raw_password)
+        self._password = raw_password
+
+    def check_panel_password(self, raw_password):
+        if not self.panel_password:
+            return False
+        def setter(raw_password):
+            self.set_panel_password(raw_password)
+            self._password = None
+            self.save(update_fields=["panel_password"])
+        return check_password(raw_password, self.panel_password, setter)
     
     
     

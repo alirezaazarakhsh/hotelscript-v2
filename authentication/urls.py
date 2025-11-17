@@ -7,6 +7,8 @@ urlpatterns = [
     # احراز هویت و خروج
     path('auth/', views.AuthView.as_view(), name='auth'),
     path('auth/logout/', views.APILogoutView.as_view(), name='logout'),
+    # ورود پنل گرافیکی ادمین
+    path('panel/login/', views.AdminPanelLoginView.as_view(), name='panel_login'),
 
     # توکن JWT
     path('token/', views.TokenObtainPairView.as_view(), name='token_obtain_pair'),

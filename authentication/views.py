@@ -20,6 +20,7 @@ from .serializers import (
     JuridicalProfileDocumentSerializer,
     JuridicalProfileSerializer,
     NaturalProfileSerializer,
+    AdminPanelTokenObtainSerializer,
 )
 from .models import (
     BaseUser,
@@ -265,6 +266,47 @@ class TokenRefreshView(JwtTokenRefreshView):
                 max_age=60*60*24*7,  # 7 days
             )
         
+        return response
+
+
+class AdminPanelLoginView(APIView):
+    permission_classes = (AllowAny,)
+
+    @swagger_auto_schema(
+        operation_summary="ورود ادمین پنل گرافیکی با رمز پنل",
+        operation_description="ادمین‌های سایت با شماره موبایل و رمز پنل گرافیکی وارد می‌شوند و JWT در کوکی ست می‌شود.",
+        request_body=AdminPanelTokenObtainSerializer,
+        responses={200: 'OK', 401: 'Unauthorized'}
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = AdminPanelTokenObtainSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Set JWT tokens in HTTP-only cookies
+        response = Response(status=status.HTTP_200_OK)
+        access_token = serializer.validated_data.get('access')
+        refresh_token = serializer.validated_data.get('refresh')
+
+        if access_token:
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
+                max_age=60*60*24,
+            )
+        if refresh_token:
+            response.set_cookie(
+                key='refresh_token',
+                value=refresh_token,
+                httponly=True,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
+                max_age=60*60*24*7,
+            )
         return response
 
 

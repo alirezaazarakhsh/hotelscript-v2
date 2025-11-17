@@ -29,15 +29,9 @@ class Command(BaseCommand):
             return
 
         try:
-            # پیدا کردن یا ساختن BaseUser
-            base_user, created = BaseUser.objects.get_or_create(
-                phone_number=phone_number
-            )
-            
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'✓ کاربر جدید با شماره {phone_number} ساخته شد'))
-            else:
-                self.stdout.write(self.style.WARNING(f'⚠ کاربر با شماره {phone_number} از قبل وجود دارد'))
+            # ساخت/یافتن کاربر با راه‌انداز کامل (پروفایل، کیف پول، امتیاز، سطح)
+            base_user = BaseUser.objects.get_by_phone_or_create(phone_number)
+            self.stdout.write(self.style.SUCCESS(f'✓ کاربر با شماره {phone_number} آماده است'))
 
             # تنظیم is_superuser
             if not base_user.is_superuser:
