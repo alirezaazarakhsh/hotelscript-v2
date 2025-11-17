@@ -45,8 +45,11 @@ class AdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(AdminForm, self).__init__(*args, **kwargs)
         
-        # فیلتر پترن‌های SMS: فقط نمایش پترن‌هایی که در name_fa کلمه "ادمین" دارند
-        self.fields['sms_patterns'].queryset = SMSPattern.objects.filter(name_fa__icontains='admin')
+        # فیلتر پترن‌های SMS: فقط نمایش پترن‌هایی که عبارت "ادمین" در name_fa دارند
+        # استفاده از get_FOO_display() برای دسترسی به label فارسی choices
+        from setting_sms.models import SMSPattern, PATTERN_SECTIONS
+        admin_patterns_keys = [key for key, label in PATTERN_SECTIONS if 'ادمین' in label]
+        self.fields['sms_patterns'].queryset = SMSPattern.objects.filter(name_fa__in=admin_patterns_keys)
         
         if self.instance and self.instance.pk:
             self.fields['image'].widget = forms.widgets.FileInput(attrs={'accept': 'image/*'})

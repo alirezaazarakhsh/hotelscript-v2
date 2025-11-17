@@ -900,13 +900,6 @@ class Room(models.Model):
         blank=True,
         help_text=_('تصویر نمایشی اتاق — اختیاری')
     )
-    image_alt = models.CharField(
-        max_length=255,
-        verbose_name=_('متن جایگزین تصویر'),
-        null=True,
-        blank=True,
-        help_text=_('متن جایگزین برای سئو و دسترسی — اختیاری')
-    )
 
     class Meta:
         verbose_name = 'اتاق'
@@ -941,6 +934,12 @@ class Room(models.Model):
 
     def __str__(self):
         return f'{self.title} - {self.hotel}' if self.hotel else self.title or 'اتاق بدون نام'
+
+    def save(self, *args, **kwargs):
+        # اگر count و auto_approved_count هر دو صفر باشند، inventory هم صفر می‌شود
+        if self.count == 0 and self.auto_approved_count == 0:
+            self.inventory = 0
+        super().save(*args, **kwargs)
 
     def is_closed(self, target_date=None):
         if target_date is None:

@@ -38,7 +38,7 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
                 logger.warning(f"No phone number found for admin {admin}. Skipping.")
                 continue
 
-            admin_name = f"{admin.first_name or ''}{admin.last_name or ''}".strip() or "ادمین"
+            admin_name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "ادمین"
             admin_name = admin_name[:20]
             room_full_name = room_name[:20]  # اسم کامل + ایدی، محدود به 20 کاراکتر
             status_trimmed = status[:20]
@@ -47,7 +47,7 @@ def send_room_availability_sms(room_name, status, hotel_name=None, pattern_secti
                 'receptor': phone_number,
                 'template': template_obj.pattern_code,
                 'token': admin_name,
-                'token10': room_full_name,
+                'token2': room_full_name,
                 'token3': status_trimmed,
                 'type': 'sms',
             }
