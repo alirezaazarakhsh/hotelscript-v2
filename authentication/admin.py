@@ -76,17 +76,9 @@ class AdminAdmin(admin.ModelAdmin):
         ('دسترسی‌های پیامکی', {
             'fields': ('sms_patterns',),
         }),
-        ('گروه‌های دسترسی', {
-            'fields': ('admin_groups',),
-            'description': 'اگر سوپر یوزر نباشد، فقط دسترسی‌های گروه‌های انتخابی اعمال می‌شود.',
-        }),
-        ('دسترسی کامل', {
-            'fields': ('is_superuser',),
-            'description': 'با تیک زدن، دسترسی کامل به تمام بخش‌ها.',
-        }),
-        ('رمز عبور', {
-            'fields': ('admin_password1', 'admin_password2'),
-            'description': 'رمز عبور یکسان برای ورود به پنل گرافیکی و پنل جنگو.',
+        ('تنظیمات دسترسی', {
+            'fields': ('admin_groups', 'is_superuser', 'admin_password1', 'admin_password2'),
+            'description': 'گروه‌های دسترسی، سوپر یوزر و رمز عبور را در اینجا تنظیم کنید.',
         }),
     )
 
@@ -164,6 +156,9 @@ class GroupExtensionInline(admin.StackedInline):
     fields = ('icon', 'order', 'description')
     verbose_name = "تنظیمات گروه"
     verbose_name_plural = "تنظیمات گروه"
+    
+    # حذف classes برای غیرفعال کردن accordion
+    classes = []
 
 
 @admin.register(Group)
