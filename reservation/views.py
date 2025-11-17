@@ -536,7 +536,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 "capacity": room.room_capacity,
                 "extra_capacity": room.extra_capacity,
                 "image": request.build_absolute_uri(room.image.url) if room.image else None,
-                "image_alt": room.image_alt or "",
                 "price": {
                     "total_price": total_price,
                     "total_price_discount": total_price_discount,
