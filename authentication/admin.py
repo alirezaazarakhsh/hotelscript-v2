@@ -76,19 +76,18 @@ class AdminAdmin(admin.ModelAdmin):
         }),
         ('دسترسی‌های پیامکی', {
             'fields': ('sms_patterns',),
-            'classes': ('collapse',),
         }),
         ('گروه‌های دسترسی', {
             'fields': ('admin_groups',),
-            'description': 'گروه‌های دسترسی برای این ادمین (مثل گروه بلاگ، مالی، رزرواسیون). اگر سوپر یوزر نباشد، فقط دسترسی‌های این گروه‌ها را خواهد داشت.',
-        }),
-        ('رمزها', {
-            'fields': ('panel_password1', 'panel_password2', 'django_admin_password1', 'django_admin_password2'),
-            'description': 'رمز پنل گرافیکی برای پنل اختصاصی. رمز پنل جنگو برای ورود به این پنل (/admin).',
+            'description': 'اگر سوپر یوزر نباشد، فقط دسترسی‌های گروه‌های انتخابی اعمال می‌شود.',
         }),
         ('دسترسی کامل', {
             'fields': ('is_superuser',),
-            'description': 'با تیک زدن، این ادمین سوپر یوزر می‌شود و دسترسی کامل به تمام بخش‌ها خواهد داشت.',
+            'description': 'با تیک زدن، دسترسی کامل به تمام بخش‌ها.',
+        }),
+        ('رمز عبور', {
+            'fields': ('admin_password1', 'admin_password2'),
+            'description': 'رمز عبور یکسان برای ورود به پنل گرافیکی و پنل جنگو.',
         }),
     )
 
