@@ -140,16 +140,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 logger.error(f"Error: Cannot reject {self.tracking_code} for approval_timeout, current capacity_status: {reservation.capacity_status}")
                 return
 
+            # فقط وضعیت را تغییر می‌دهیم، signal خودش موجودی را برمی‌گرداند
             reservation.capacity_status = "rejected"
             reservation.save(update_fields=["capacity_status"])
-            logger.info(f"Reservation {self.tracking_code} rejected successfully")
-            rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
-            for r in rooms:
-                room = Room.objects.select_for_update().get(pk=r.room.pk)
-                # استفاده از was_auto_approved از ReservationRoom برای برگرداندن به باکت صحیح
-                was_auto = getattr(r, 'was_auto_approved', False)
-                room.revert_inventory_for_cancellation(r.quantity, was_auto)
-                logger.debug(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, was_auto_approved: {was_auto}")
+            logger.info(f"Reservation {self.tracking_code} rejected, inventory will be reverted by signal")
 
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
             cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
