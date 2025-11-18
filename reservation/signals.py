@@ -180,6 +180,8 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
     """
     سیگنال پس از ذخیره رزرو برای مدیریت وضعیت پرداخت و اقدامات بعدی
     """
+    logger.info(f"🟦 سیگنال post_save فراخوانی شد برای رزرو {instance.tracking_code} - payment_status={instance.payment_status}")
+    
     if get_skip_points_and_sms():
         logger.info(f"سیگنال برای رزرو {instance.tracking_code} به دلیل فلگ skip نادیده گرفته شد.")
         return

@@ -19,7 +19,8 @@ from urllib.parse import urlencode
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
-from reservation.models import Reservationhotel
+from reservation.models import Reservationhotel, Wallet
+from django.db.models import F
 
 logger = logging.getLogger(__name__)
 
@@ -389,6 +390,31 @@ class PaymentCallbackAPIView(APIView):
                     reservation.ref_id = ref_id
                     update_fields.append("ref_id")
                 reservation.save(update_fields=update_fields)
+                
+                # اگر پرداخت موفق بود و کیف پول استفاده شده، آن را پردازش کن
+                if reservation.payment_status == 'paid' and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                    try:
+                        logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {tracking_code}")
+                        wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
+                        withdrawal_amount = int(reservation.wallet_withdrawal_amount)
+                        
+                        if wallet.balance >= withdrawal_amount:
+                            # کم کردن موجودی
+                            wallet.balance = F('balance') - withdrawal_amount
+                            wallet.save(update_fields=['balance'])
+                            
+                            # زدن تیک
+                            Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
+                            
+                            logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد و تیک wallet_withdrawn خورد")
+                        else:
+                            logger.warning(f"⚠️ موجودی کیف پول کافی نیست: {wallet.balance} < {withdrawal_amount}")
+                    except Wallet.DoesNotExist:
+                        logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد")
+                    except Exception as e:
+                        logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
 
             # ذخیره در کش برای verify
             cache_data = {
@@ -538,6 +564,24 @@ class PaymentVerifyAPIView(APIView):
                         reservation.payment_status = 'paid'
                         reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
+                        
+                        # پردازش کیف پول
+                        if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                            try:
+                                logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {reservation.tracking_code}")
+                                wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
+                                withdrawal_amount = int(reservation.wallet_withdrawal_amount)
+                                
+                                if wallet.balance >= withdrawal_amount:
+                                    wallet.balance = F('balance') - withdrawal_amount
+                                    wallet.save(update_fields=['balance'])
+                                    Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
+                                    logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
+                                else:
+                                    logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
+                            except Exception as e:
+                                logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                        
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
@@ -584,6 +628,24 @@ class PaymentVerifyAPIView(APIView):
                         reservation.payment_status = 'paid'
                         reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
+                        
+                        # پردازش کیف پول
+                        if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                            try:
+                                logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {reservation.tracking_code}")
+                                wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
+                                withdrawal_amount = int(reservation.wallet_withdrawal_amount)
+                                
+                                if wallet.balance >= withdrawal_amount:
+                                    wallet.balance = F('balance') - withdrawal_amount
+                                    wallet.save(update_fields=['balance'])
+                                    Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
+                                    logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
+                                else:
+                                    logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
+                            except Exception as e:
+                                logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                        
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
