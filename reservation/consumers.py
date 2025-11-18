@@ -27,14 +27,18 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"capacity_status": "not_found", "timer": 0})
             return
 
-        # تنظیم تایمر همیشه از زمان اتصال WebSocket برای capacity_status == 'pending'
+        # تنظیم تایمر فقط اولین بار برای capacity_status == 'pending'
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         if self.reservation.capacity_status == "pending":
-            approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
-            duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-            # همیشه تایمر را از زمان اتصال ست می‌کنیم (overwrite)
-            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-            logger.info(f"Timer reset for {self.tracking_code} from WebSocket connection: {duration_seconds} seconds")
+            existing_timer = cache.get(cache_key_approval)
+            if not existing_timer:
+                # فقط اگر تایمر وجود نداشته باشد، یک تایمر جدید ست می‌کنیم
+                approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+                duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+                cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
+                logger.info(f"Timer started for {self.tracking_code}: {duration_seconds} seconds")
+            else:
+                logger.info(f"Timer already exists for {self.tracking_code}, continuing from current time")
 
         asyncio.create_task(self.timer_loop())
 
