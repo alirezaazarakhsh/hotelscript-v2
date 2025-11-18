@@ -975,13 +975,16 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description='جریمه کنسلی')
     def cancellation_penalty_fa(self, obj):
         if obj.cancellation_penalty_applied > 0:
-            return format_html('<span style="color: red; font-weight: bold;">{:,}</span>', obj.cancellation_penalty_applied)
+            # اجتناب از استفاده مستقیم از placeholder {:,} داخل format_html برای جلوگیری از خطای فرمت
+            formatted_value = "{:,}".format(int(obj.cancellation_penalty_applied))
+            return format_html('<span style="color: red; font-weight: bold;">{}</span>', formatted_value)
         return "-"
 
     @admin.display(description='مبلغ برگشتی')
     def cancellation_refunded_fa(self, obj):
         if obj.cancellation_refunded_amount > 0:
-            return format_html('<span style="color: green; font-weight: bold;">{:,}</span>', obj.cancellation_refunded_amount)
+            formatted_value = "{:,}".format(int(obj.cancellation_refunded_amount))
+            return format_html('<span style="color: green; font-weight: bold;">{}</span>', formatted_value)
         return "-"
 
     @admin.display(description='درخواست کنسلی', boolean=True)
