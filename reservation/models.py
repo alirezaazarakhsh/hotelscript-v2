@@ -2255,6 +2255,69 @@ class UserCancellation(models.Model):
         verbose_name = _('کنسل رزرو کاربر')
         verbose_name_plural = _('کنسل رزروهای کاربران')
 
+    def process_cancellation(self):
+        """
+        پردازش کنسلی پس از تایید توسط ادمین:
+        1. محاسبه درصد جریمه از هتل مربوطه
+        2. کسر جریمه از مبلغ نهایی
+        3. برگشت مبلغ باقیمانده به کیف پول کاربر
+        4. ثبت مبلغ جریمه و مبلغ برگشتی در رزرو
+        """
+        if self.status != self.Status.APPROVED:
+            raise ValidationError(_('فقط درخواست‌های تایید شده قابل پردازش هستند.'))
+
+        reservation = self.reservation
+        
+        # پیدا کردن هتل مرتبط با رزرو
+        hotel = reservation.get_hotel()
+        if not hotel:
+            raise ValidationError(_('هتل مرتبط با رزرو یافت نشد.'))
+
+        # پیدا کردن تنظیمات جریمه کنسلی هتل
+        try:
+            penalty_obj = CancellationPenalty.objects.get(hotel=hotel)
+        except CancellationPenalty.DoesNotExist:
+            # اگر تنظیمات جریمه وجود نداشت، جریمه صفر در نظر گرفته می‌شود
+            penalty_percentage = Decimal('0')
+        else:
+            penalty_percentage = Decimal(penalty_obj.penalty_percentage) / 100
+
+        # محاسبه مبلغ جریمه
+        final_price = reservation.final_price
+        penalty_amount = (final_price * penalty_percentage).quantize(Decimal('1'), rounding=ROUND_UP)
+        refund_amount = final_price - penalty_amount
+
+        # اطمینان از اینکه مبلغ برگشتی منفی نشود
+        if refund_amount < 0:
+            refund_amount = Decimal('0')
+
+        # برگشت وجه به کیف پول کاربر
+        with transaction.atomic():
+            wallet, created = Wallet.objects.get_or_create(user=reservation.buyer)
+            wallet.balance += refund_amount
+            wallet.save()
+
+            # ثبت اطلاعات کنسلی در رزرو
+            reservation.cancellation_penalty_applied = penalty_amount
+            reservation.cancellation_refunded_amount = refund_amount
+            reservation.cancellation_requested = True
+            reservation.save(update_fields=[
+                'cancellation_penalty_applied',
+                'cancellation_refunded_amount',
+                'cancellation_requested'
+            ])
+
+        logger.info(
+            f"کنسلی رزرو {reservation.tracking_code} پردازش شد: "
+            f"جریمه {penalty_amount} تومان، برگشت {refund_amount} تومان به کیف پول"
+        )
+
+        return {
+            'penalty_amount': penalty_amount,
+            'refund_amount': refund_amount,
+            'final_price': final_price
+        }
+
 
 
 

@@ -6,7 +6,7 @@ import re
 from django.urls import reverse
 import jdatetime
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.forms import ModelForm
 from django.db.models import Q
 from django.utils.html import format_html, format_html_join, mark_safe
@@ -1106,6 +1106,28 @@ class UserCancellationAdmin(admin.ModelAdmin):
             ((r.title,) for r in qs)
         )
     show_reasons.short_description = 'دلایل کنسلی'
+
+    def save_model(self, request, obj, form, change):
+        """
+        وقتی ادمین وضعیت را به 'approved' تغییر داد،
+        پردازش کنسلی انجام می‌شود (محاسبه جریمه و برگشت وجه)
+        """
+        # ابتدا ذخیره می‌کنیم تا تغییرات status ثبت شود
+        super().save_model(request, obj, form, change)
+        
+        # اگر وضعیت approved شده باشد، پردازش کنسلی را انجام می‌دهیم
+        if obj.status == 'approved':
+            try:
+                result = obj.process_cancellation()
+                messages.success(
+                    request,
+                    f"کنسلی با موفقیت پردازش شد. جریمه: {result['penalty_amount']} تومان، "
+                    f"برگشت به کیف پول: {result['refund_amount']} تومان"
+                )
+            except ValidationError as e:
+                messages.error(request, f"خطا در پردازش کنسلی: {e}")
+            except Exception as e:
+                messages.error(request, f"خطای غیرمنتظره در پردازش کنسلی: {str(e)}")
     
     
     

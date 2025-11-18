@@ -4888,26 +4888,38 @@ class CancellationReasonListAPIView(APIView):
     
 #ای پی ای کنسلی کاربر 
 class UserCancellationCreateAPIView(APIView):
+    """
+    API برای ثبت درخواست کنسلی رزرو توسط کاربر
+    کاربر فقط می‌تواند رزروهای تأیید شده و پرداخت شده خود را کنسل کند.
+    وضعیت اولیه درخواست: pending (در انتظار بررسی ادمین)
+    """
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         operation_summary="ثبت درخواست کنسلی رزرو",
         operation_description="""
         کاربر فقط می‌تواند رزروهای **تأیید شده و پرداخت شده** خود را کنسل کند.
-        - وضعیت اولیه: `pending`
-        - فقط یک درخواست در حال بررسی یا تأیید شده مجاز است.
+        - وضعیت اولیه: `pending` (در انتظار بررسی)
+        - فقط یک درخواست در حال بررسی یا تأیید شده برای هر رزرو مجاز است.
+        - پس از تایید ادمین، جریمه کنسلی محاسبه و مبلغ باقیمانده به کیف پول برگشت داده می‌شود.
         """,
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             required=['tracking_code', 'reasons'],
             properties={
-                'tracking_code': openapi.Schema(type=openapi.TYPE_STRING, description='کد پیگیری رزرو'),
+                'tracking_code': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='کد پیگیری رزرو'
+                ),
                 'reasons': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_INTEGER),
-                    description='لیست شناسه دلایل کنسلی'
+                    description='لیست شناسه دلایل کنسلی (حداقل یک دلیل)'
                 ),
-                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات اختیاری')
+                'description': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='توضیحات اختیاری کاربر'
+                )
             }
         ),
         responses={
@@ -4920,12 +4932,27 @@ class UserCancellationCreateAPIView(APIView):
                         "status": "pending",
                         "status_display": "در انتظار بررسی",
                         "reasons": ["تغییر برنامه", "مشکل مالی"],
-                        "description": "سفر لغو شد"
+                        "description": "سفر لغو شد",
+                        "created_at": "1403/08/27 ساعت 14:30"
                     }
                 }
             ),
-            400: "درخواست نامعتبر",
-            404: "رزرو یافت نشد"
+            400: openapi.Response(
+                description="خطا در ورودی یا قوانین کنسلی",
+                examples={
+                    "application/json": {
+                        "detail": "درخواست کنسلی برای این رزرو قبلاً ثبت شده."
+                    }
+                }
+            ),
+            404: openapi.Response(
+                description="رزرو یافت نشد",
+                examples={
+                    "application/json": {
+                        "detail": "رزرو قابل کنسلی یافت نشد یا متعلق به شما نیست."
+                    }
+                }
+            )
         },
         tags=["reservedashboard-api"]
     )
@@ -4935,11 +4962,18 @@ class UserCancellationCreateAPIView(APIView):
         reasons_ids = request.data.get('reasons', [])
         description = request.data.get('description', '')
 
-        # --- اعتبارسنجی ---
+        # --- اعتبارسنجی ورودی‌ها ---
         if not tracking_code:
-            return Response({"detail": "tracking_code الزامی است."}, status=400)
-        if not reasons_ids:
-            return Response({"detail": "reasons الزامی است."}, status=400)
+            return Response(
+                {"detail": "tracking_code الزامی است."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not reasons_ids or not isinstance(reasons_ids, list) or len(reasons_ids) == 0:
+            return Response(
+                {"detail": "حداقل یک دلیل کنسلی باید انتخاب شود."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # --- پیدا کردن رزرو ---
         try:
@@ -4951,39 +4985,57 @@ class UserCancellationCreateAPIView(APIView):
             )
         except Reservationhotel.DoesNotExist:
             return Response(
-                {"detail": "رزرو قابل کنسلی یافت نشد یا متعلق به شما نیست."},
-                status=404
+                {"detail": "رزرو قابل کنسلی یافت نشد یا متعلق به شما نیست. فقط رزروهای تأیید شده و پرداخت شده قابل کنسل هستند."},
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        # --- چک کردن دلایل ---
+        # --- اعتبارسنجی دلایل کنسلی ---
         reasons = CancellationReason.objects.filter(id__in=reasons_ids)
         if reasons.count() != len(reasons_ids):
-            return Response({"detail": "یک یا چند دلیل نامعتبر هستند."}, status=400)
+            return Response(
+                {"detail": "یک یا چند دلیل نامعتبر هستند."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # --- چک درخواست قبلی ---
-        if UserCancellation.objects.filter(
+        # --- بررسی درخواست کنسلی قبلی ---
+        existing_cancellation = UserCancellation.objects.filter(
             reservation=reservation,
-            status__in=['pending', 'approved']
-        ).exists():
-            return Response({"detail": "درخواست کنسلی برای این رزرو قبلاً ثبت شده."}, status=400)
+            status__in=[UserCancellation.Status.PENDING, UserCancellation.Status.APPROVED]
+        ).first()
+        
+        if existing_cancellation:
+            return Response(
+                {
+                    "detail": f"درخواست کنسلی برای این رزرو قبلاً با وضعیت '{existing_cancellation.get_status_display()}' ثبت شده است."
+                }, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # --- ایجاد درخواست ---
+        # --- ایجاد درخواست کنسلی جدید ---
         cancellation = UserCancellation.objects.create(
             reservation=reservation,
             description=description or None,
-            status=UserCancellation.Status.PENDING  # درست و هماهنگ
+            status=UserCancellation.Status.PENDING
         )
         cancellation.reasons.set(reasons)
 
-        # --- پاسخ ---
+        # --- آماده‌سازی پاسخ ---
+        created_at_jalali = None
+        if cancellation.created_at:
+            import jdatetime
+            dt = jdatetime.datetime.fromgregorian(datetime=cancellation.created_at)
+            created_at_jalali = dt.strftime('%Y/%m/%d ساعت %H:%M')
+
         return Response({
             "id": cancellation.id,
             "tracking_code": reservation.tracking_code,
-            "status": cancellation.status,  # 'pending'
-            "status_display": cancellation.get_status_display(),  # "در انتظار بررسی"
+            "status": cancellation.status,
+            "status_display": cancellation.get_status_display(),
             "reasons": [r.title for r in reasons],
-            "description": description
-        }, status=201)
+            "description": description or "",
+            "created_at": created_at_jalali,
+            "message": "درخواست کنسلی شما با موفقیت ثبت شد و در انتظار بررسی ادمین است."
+        }, status=status.HTTP_201_CREATED)
 
 
 
