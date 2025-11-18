@@ -27,13 +27,14 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"capacity_status": "not_found", "timer": 0})
             return
 
-        # تنظیم تایمر فقط برای capacity_status == 'pending' اگر قبلاً تنظیم نشده باشد
+        # تنظیم تایمر همیشه از زمان اتصال WebSocket برای capacity_status == 'pending'
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
-        if self.reservation.capacity_status == "pending" and not cache.get(cache_key_approval):
+        if self.reservation.capacity_status == "pending":
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
             duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+            # همیشه تایمر را از زمان اتصال ست می‌کنیم (overwrite)
             cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-            logger.info(f"Timer set for {self.tracking_code} (pending): {duration_seconds} seconds")
+            logger.info(f"Timer reset for {self.tracking_code} from WebSocket connection: {duration_seconds} seconds")
 
         asyncio.create_task(self.timer_loop())
 
@@ -141,9 +142,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             rooms = ReservationRoom.objects.filter(reservation=reservation).select_related('room')
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                is_auto_approved = reservation.capacity_status == 'confirmed'
-                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
-                logger.debug(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, auto_approved: {is_auto_approved}")
+                # استفاده از was_auto_approved از ReservationRoom برای برگرداندن به باکت صحیح
+                was_auto = getattr(r, 'was_auto_approved', False)
+                room.revert_inventory_for_cancellation(r.quantity, was_auto)
+                logger.debug(f"Inventory reverted for room {room.id}, quantity: {r.quantity}, was_auto_approved: {was_auto}")
 
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
             cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
