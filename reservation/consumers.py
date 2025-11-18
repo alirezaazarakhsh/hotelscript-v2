@@ -27,18 +27,8 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"capacity_status": "not_found", "timer": 0})
             return
 
-        # تنظیم تایمر فقط اولین بار برای capacity_status == 'pending'
-        cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
-        if self.reservation.capacity_status == "pending":
-            existing_timer = cache.get(cache_key_approval)
-            if not existing_timer:
-                # فقط اگر تایمر وجود نداشته باشد، یک تایمر جدید ست می‌کنیم
-                approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
-                duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-                cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-                logger.info(f"Timer started for {self.tracking_code}: {duration_seconds} seconds")
-            else:
-                logger.info(f"Timer already exists for {self.tracking_code}, continuing from current time")
+        # شروع تایمر را به درخواست صریح کلاینت موکول می‌کنیم (start_approval_timer)
+        # اینجا فقط اتصال را برقرار می‌کنیم.
 
         asyncio.create_task(self.timer_loop())
 
@@ -85,17 +75,8 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                             await self.send_json({"capacity_status": capacity_status, "timer": None})
                             break
                 else:
-                    logger.warning(f"No active timer for {self.tracking_code} (pending)")
-                    await self.reject_reservation(reason="approval_timeout")
-                    self.reservation = await self.get_reservation(self.tracking_code)
-                    if self.reservation and self.reservation.capacity_status == "rejected":
-                        logger.info(f"Reservation {self.tracking_code} rejected due to missing timer")
-                        await self.send_json({"capacity_status": "rejected", "timer": None})
-                        break
-                    else:
-                        logger.error(f"Error: Failed to reject {self.tracking_code} due to missing timer, current capacity_status: {self.reservation.capacity_status if self.reservation else 'not found'}")
-                        await self.send_json({"capacity_status": capacity_status, "timer": None})
-                        break
+                    # هنوز تایمر توسط کلاینت شروع نشده؛ تایمر نشان داده نمی‌شود و کنسلی انجام نمی‌دهیم.
+                    logger.debug(f"Pending state without started timer for {self.tracking_code}; waiting for start_approval_timer")
 
             await self.send_json({
                 "capacity_status": capacity_status,
@@ -106,7 +87,23 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         data = json.loads(text_data)
-        if data.get("action") == "get_status":
+        action = data.get("action")
+        if action == "get_status":
+            remaining = await self.get_remaining_time()
+            await self.send_json({
+                "capacity_status": self.reservation.capacity_status,
+                "timer": int(remaining) if self.reservation.capacity_status == "pending" else None
+            })
+        elif action == "start_approval_timer":
+            # شروع تایمر تأیید به صورت صریح از سمت کلاینت
+            cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
+            if not cache.get(cache_key_approval):
+                approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+                approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+                cache.set(cache_key_approval, timezone.now(), timeout=approval_duration_seconds)
+                logger.info(f"Approval timer explicitly started for {self.tracking_code}: {approval_duration_seconds} seconds")
+            else:
+                logger.info(f"Approval timer already exists for {self.tracking_code}; not resetting")
             remaining = await self.get_remaining_time()
             await self.send_json({
                 "capacity_status": self.reservation.capacity_status,

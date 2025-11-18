@@ -232,8 +232,8 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
             else:
                 logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_fresh.tracking_code}.")
 
-    elif instance.capacity_status == 'rejected':
-        _handle_rejected_reservation(instance)
+    # لغو رزرو (rejected) در سیگنال models.py مدیریت می‌شود تا از تکرار بازگشت موجودی جلوگیری شود.
+    # اینجا عمداً هیچ عملی انجام نمی‌دهیم تا double-revert رخ ندهد.
 
     # ارسال آپدیت به WebSocket
     _send_websocket_update(channel_layer, instance)
