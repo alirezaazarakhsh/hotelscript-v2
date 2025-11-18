@@ -446,24 +446,22 @@ def _process_wallet_withdrawal(reservation):
             wallet.refresh_from_db()
             logger.info(f"✅ موجودی کیف پول پس از برداشت: {wallet.balance}")
 
-            # سپس ذخیره تیک برداشت کیف پول
-            # استفاده از set_skip_points_and_sms برای جلوگیری از فعال شدن سیگنال دوباره
-            set_skip_points_and_sms(True)
-            try:
-                reservation_refreshed.wallet_withdrawn = True
-                reservation_refreshed._skip_price_calculation_on_save = True
-                reservation_refreshed.save(update_fields=['wallet_withdrawn'])
-                del reservation_refreshed._skip_price_calculation_on_save
+            # سپس ذخیره تیک برداشت کیف پول با استفاده از update() که سیگنال را فعال نمی‌کند
+            updated_count = Reservationhotel.objects.filter(pk=reservation_refreshed.pk).update(wallet_withdrawn=True)
+            
+            if updated_count > 0:
+                logger.info(f"✅ فلگ wallet_withdrawn با موفقیت به‌روز شد (update count: {updated_count})")
                 
                 # تأیید ذخیره شدن تیک
                 reservation_refreshed.refresh_from_db()
                 if reservation_refreshed.wallet_withdrawn:
-                    logger.info(f"✅ فلگ wallet_withdrawn با موفقیت ذخیره و تأیید شد: {reservation_refreshed.wallet_withdrawn}")
+                    logger.info(f"✅ فلگ wallet_withdrawn تأیید شد: {reservation_refreshed.wallet_withdrawn}")
                 else:
-                    logger.error(f"❌ فلگ wallet_withdrawn ذخیره نشد!")
-                    raise Exception("فلگ wallet_withdrawn ذخیره نشد")
-            finally:
-                set_skip_points_and_sms(False)
+                    logger.error(f"❌ فلگ wallet_withdrawn بعد از update هنوز False است!")
+                    raise Exception("فلگ wallet_withdrawn به‌روز نشد")
+            else:
+                logger.error(f"❌ update برای wallet_withdrawn ناموفق بود!")
+                raise Exception("update ناموفق بود")
 
             logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} با موفقیت انجام شد.")
             return True
