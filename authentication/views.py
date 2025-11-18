@@ -324,25 +324,54 @@ class JuridicalProfileListCreateAPIView(APIView):
         }
     )
     def get(self, request):
-        # رفتار سازگار با UI: اگر پروفایل حقوقی وجود نداشت، 200 با ساختار خالی برگردان
-        try:
-            natural_profile = NaturalProfile.objects.get(base_user=request.user)
-        except NaturalProfile.DoesNotExist:
-            # ایجاد نمونه موقتی بدون ذخیره برای بازگرداندن ساختار خالی
-            temp_natural = NaturalProfile(base_user=request.user)
-            temp_juridical = JuridicalProfile(natural_profile=temp_natural)
-            serializer = JuridicalProfileSerializer(temp_juridical, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
+        # اگر پروفایل حقیقی وجود نداشته باشد، پاسخ خالی اما موفق برگردان
+        natural_profile = NaturalProfile.objects.filter(base_user=request.user).first()
+        if not natural_profile:
+            empty = {
+                'has_natural_profile': False,
+                'has_juridical_profile': False,
+                'organization_name': '',
+                'national_id': '',
+                'registeration_number': '',
+                'economical_code': '',
+                'phone_number': '',
+                'postal_code': '',
+                'address': None,
+                'email': None,
+                'image': None,
+                'status': None,
+                'reject_reason': '',
+                'documents': [],
+                'card_numbers': [],
+            }
+            return Response(empty, status=status.HTTP_200_OK)
 
-        try:
-            juridical_profile = JuridicalProfile.objects.get(natural_profile=natural_profile)
-            serializer = JuridicalProfileSerializer(juridical_profile, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except JuridicalProfile.DoesNotExist:
-            # بازگرداندن ساختار خالی در صورت نبود پروفایل حقوقی
-            temp_juridical = JuridicalProfile(natural_profile=natural_profile)
-            serializer = JuridicalProfileSerializer(temp_juridical, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
+        juridical_profile = JuridicalProfile.objects.filter(natural_profile=natural_profile).first()
+        if juridical_profile:
+            data = JuridicalProfileSerializer(juridical_profile, context={'request': request}).data
+            data['has_natural_profile'] = True
+            data['has_juridical_profile'] = True
+            return Response(data, status=status.HTTP_200_OK)
+
+        # پروفایل حقوقی موجود نیست؛ دادهٔ خالی استاندارد برگردان
+        empty = {
+            'has_natural_profile': True,
+            'has_juridical_profile': False,
+            'organization_name': '',
+            'national_id': '',
+            'registeration_number': '',
+            'economical_code': '',
+            'phone_number': '',
+            'postal_code': '',
+            'address': None,
+            'email': None,
+            'image': None,
+            'status': None,
+            'reject_reason': '',
+            'documents': [],
+            'card_numbers': [],
+        }
+        return Response(empty, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
