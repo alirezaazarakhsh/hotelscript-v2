@@ -1832,19 +1832,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
             cache.delete(cache_key_discount)
 
-    elif instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
-        logger.info(f"برداشت از کیف پول برای رزرو {instance.tracking_code} در حال انجام است...")
-        with transaction.atomic():
-            wallet = Wallet.objects.select_for_update().get(user=instance.buyer)
-            if wallet.balance < instance.wallet_withdrawal_amount:
-                logger.error(f"موجودی کیف پول برای رزرو {instance.tracking_code} کافی نیست. برداشت لغو شد.")
-                return
-
-            wallet.balance -= instance.wallet_withdrawal_amount
-            wallet.save()
-            instance.wallet_withdrawn = True
-            instance.save(update_fields=['wallet_withdrawn'])
-            logger.info(f"مبلغ {instance.wallet_withdrawal_amount} از کیف پول کاربر {instance.buyer.phone_number} برای رزرو {instance.tracking_code} کسر شد.")
+    # منطق برداشت کیف پول حذف شد؛ حالا فقط در reservation/signals.py (تابع handle_reservation_payment_complete و متد کمکی _process_wallet_withdrawal) انجام می‌شود
+    # جلوگیری از دو تلاش همزمان برای کسر موجودی و ساده‌سازی نقطه واحد مسئولیت.
 
     elif instance.capacity_status in ['confirmed', 'rejected']:
         cache.delete_many([cache_key_approval, cache_key_payment, cache_key_discount])
