@@ -25,52 +25,92 @@ def cleanup_expired_prices():
 @shared_task
 def check_and_reject_expired_reservations():
     """
-    بررسی رزروهای pending که تایمرشان تمام شده و هنوز تایید/رد نشده‌اند.
-    موجودی اتاق‌های این رزروها را برمی‌گرداند.
-    این task باید هر 1 دقیقه اجرا شود.
+    اسکن دوره‌ای رزروهایی که:
+      - هنوز پرداخت نشده‌اند (payment_status != paid)
+      - یا وضعیت ظرفیتشان مشخص نشده (capacity_status == pending)
+      - بیش از مدت مجاز (defaults to 15 mins) از زمان ایجادشان گذشته است.
+    در این حالت رزرو لغو (rejected) و موجودی اتاق‌ها دقیقاً به همان bucket اولیه (count یا auto_approved_count) برگردانده می‌شود.
+    پیشنهاد: اجرای هر دقیقه توسط celery beat.
     """
-    logger.info("Starting check_and_reject_expired_reservations task")
-    
-    # دریافت مدت زمان تأیید رزرو
+    logger.info("Starting enhanced check_and_reject_expired_reservations task")
+
     approval_duration = ReservationApprovalDuration.objects.first()
-    duration_minutes = approval_duration.duration_minutes if approval_duration else 5
-    cutoff_time = jdatetime.datetime.now() - jdatetime.timedelta(minutes=duration_minutes)
-    
-    # پیدا کردن رزروهای pending که قبل از cutoff_time ایجاد شده‌اند
-    expired_reservations = Reservationhotel.objects.filter(
-        capacity_status='pending',
-        created_at__lt=cutoff_time
-    )
-    
+    duration_minutes = approval_duration.duration_minutes if approval_duration else 15  # default 15
+
+    cutoff_gregorian = timezone.now() - timezone.timedelta(minutes=duration_minutes)
+    # created_at در مدل رزرو jDateTimeField است؛ تبدیل به gregorian برای مقایسه امن
+    expired_reservations = []
+    for r in Reservationhotel.objects.filter(payment_status__in=['pending','unpaid']).exclude(capacity_status='rejected'):
+        try:
+            created_dt = r.created_at.togregorian() if hasattr(r.created_at, 'togregorian') else r.created_at
+            if created_dt < cutoff_gregorian:
+                expired_reservations.append(r)
+        except Exception:
+            continue
+
     rejected_count = 0
     for reservation in expired_reservations:
         try:
             with transaction.atomic():
-                # قفل کردن رزرو
                 res = Reservationhotel.objects.select_for_update().get(pk=reservation.pk)
-                
-                # اگر هنوز pending است، رد می‌کنیم
-                if res.capacity_status == 'pending':
-                    res.capacity_status = 'rejected'
-                    res.save(update_fields=['capacity_status'])
-                    
-                    # برگرداندن موجودی اتاق‌ها
-                    rooms = ReservationRoom.objects.filter(reservation=res).select_related('room')
-                    for r in rooms:
-                        room = Room.objects.select_for_update().get(pk=r.room.pk)
-                        # برای pending، auto_approved همیشه False است
-                        room.revert_inventory_for_cancellation(r.quantity, auto_approval=False)
-                        logger.info(f"Reverted inventory for room {room.id}, quantity: {r.quantity}")
-                    
-                    # حذف کش‌های مربوطه
-                    cache_key_approval = f"reservation_approval_timer_{res.tracking_code}"
-                    cache_key_payment = f"reservation_payment_timer_{res.tracking_code}"
-                    cache.delete_many([cache_key_approval, cache_key_payment])
-                    
-                    rejected_count += 1
-                    logger.info(f"Reservation {res.tracking_code} rejected due to timeout")
+                # دوباره چک تا race condition کم شود
+                if res.payment_status == 'paid' or res.capacity_status == 'rejected':
+                    continue
+                created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
+                if created_dt >= cutoff_gregorian:
+                    continue
+
+                # لغو رزرو
+                res.capacity_status = 'rejected'
+                res.save(update_fields=['capacity_status'])
+
+                for r_room in ReservationRoom.objects.filter(reservation=res).select_related('room'):
+                    room = Room.objects.select_for_update().get(pk=r_room.room.pk)
+                    room.revert_inventory_for_cancellation(r_room.quantity, auto_approval=r_room.was_auto_approved)
+                    logger.info(
+                        f"Inventory reverted for room {room.id} | qty={r_room.quantity} | auto={r_room.was_auto_approved}"
+                    )
+
+                cache_key_approval = f"reservation_approval_timer_{res.tracking_code}"
+                cache_key_payment = f"reservation_payment_timer_{res.tracking_code}"
+                cache.delete_many([cache_key_approval, cache_key_payment])
+
+                rejected_count += 1
+                logger.info(f"Reservation {res.tracking_code} auto-rejected after {duration_minutes} mins (unpaid/pending)")
         except Exception as e:
-            logger.error(f"Error rejecting reservation {reservation.tracking_code}: {str(e)}")
-    
-    logger.info(f"check_and_reject_expired_reservations completed. Rejected {rejected_count} reservations.")
+            logger.error(f"Error auto-rejecting reservation {reservation.tracking_code}: {e}")
+
+    logger.info(f"Enhanced expiration check complete. Rejected {rejected_count} reservations.")
     return rejected_count
+
+@shared_task
+def auto_cancel_unpaid_reservation(reservation_id):
+    """
+    تسک اختصاصی که هنگام ایجاد رزرو با countdown=15m صف می‌شود.
+    اگر پس از اجرا رزرو هنوز پرداخت نشده باشد، لغو و موجودی برگردانده می‌شود.
+    این رویکرد latency پایین‌تر نسبت به اسکن سراسری دارد.
+    """
+    try:
+        with transaction.atomic():
+            res = Reservationhotel.objects.select_for_update().get(pk=reservation_id)
+            if res.payment_status == 'paid' or res.capacity_status == 'rejected':
+                logger.info(f"Reservation {res.tracking_code} already settled before auto cancel.")
+                return False
+            created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
+            if created_dt > timezone.now() - timezone.timedelta(minutes=15):
+                # هنوز به 15 دقیقه نرسیده؛ رها می‌کنیم (احتمالاً duration تغییر کرده)
+                return False
+
+            res.capacity_status = 'rejected'
+            res.save(update_fields=['capacity_status'])
+            for r_room in ReservationRoom.objects.filter(reservation=res).select_related('room'):
+                room = Room.objects.select_for_update().get(pk=r_room.room.pk)
+                room.revert_inventory_for_cancellation(r_room.quantity, auto_approval=r_room.was_auto_approved)
+            logger.info(f"Reservation {res.tracking_code} auto-cancelled after 15 mins unpaid.")
+            return True
+    except Reservationhotel.DoesNotExist:
+        logger.warning(f"Reservation {reservation_id} not found for auto cancel.")
+        return False
+    except Exception as e:
+        logger.error(f"Error in auto_cancel_unpaid_reservation({reservation_id}): {e}")
+        return False

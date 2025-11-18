@@ -1,4 +1,5 @@
 from collections import defaultdict
+import time
 from decimal import Decimal, InvalidOperation
 import itertools
 import logging
@@ -3233,13 +3234,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 try:
                     return jdatetime.date.fromisoformat(value)
                 except ValueError:
-                    return jdatetime.date.fromgregorian(date=date.fromisoformat(value))
+                    return jdatetime.date.fromgregorian(date=gdate.fromisoformat(value))
             elif isinstance(value, dict):
                 year, month, day = int(value["year"]), int(value["month"]), int(value["day"])
                 if value.get("calendar") == "gregorian":
-                    return jdatetime.date.fromgregorian(date=date(year, month, day))
+                    return jdatetime.date.fromgregorian(date=gdate(year, month, day))
                 return jdatetime.date(year, month, day)
-            elif isinstance(value, date):
+            elif isinstance(value, gdate):
                 return jdatetime.date.fromgregorian(date=value)
             elif isinstance(value, jdatetime.date):
                 return value
@@ -3308,6 +3309,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 reservation=reservation,
                 room=room,
                 quantity=quantity,
+                was_auto_approved=auto_approval,
                 price_per_night=total_price / nights if nights > 0 else total_price,
                 subtotal=total_price,
                 primary_passengers_count=room.room_capacity,
@@ -3354,6 +3356,14 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
+
+        # زمانبندی کنسلی خودکار پس از 15 دقیقه اگر پرداخت نشود
+        try:
+            from reservation.tasks import auto_cancel_unpaid_reservation
+            auto_cancel_unpaid_reservation.apply_async(args=[reservation.id], countdown=900)
+            logger.info(f"⏱ Scheduled auto cancellation task for reservation {tracking_code} in 15 minutes")
+        except Exception as e:
+            logger.error(f"Failed to schedule auto cancellation for {tracking_code}: {e}")
         return Response({"tracking_code": tracking_code})
     
     

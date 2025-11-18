@@ -1702,8 +1702,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         with transaction.atomic():
             for r in rooms:
                 room = Room.objects.select_for_update().get(pk=r.room.pk)
-                is_auto_approved = instance.capacity_status == 'confirmed'
-                room.revert_inventory_for_cancellation(r.quantity, is_auto_approved)
+                room.revert_inventory_for_cancellation(r.quantity, getattr(r, 'was_auto_approved', False))
         cache.delete_many([cache_key_approval, cache_key_payment, cache_key_discount])
         timer = 0
         logger.debug(f"رزرو {instance.tracking_code} رد شد، تایمرها حذف شدند.")
@@ -1870,6 +1869,7 @@ class ReservationRoom(models.Model):
         related_name='reservation_rooms'
     )
     quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
+    was_auto_approved = models.BooleanField(default=False, verbose_name='رزرو خودکار تایید شد؟')
     price_per_night = models.DecimalField(
         'قیمت هر شب',
         max_digits=12,
