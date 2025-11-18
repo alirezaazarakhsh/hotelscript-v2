@@ -188,15 +188,25 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
 
     if instance.payment_status == 'paid':
         logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
+        
+        # دریافت آخرین وضعیت از دیتابیس
+        try:
+            reservation_latest = Reservationhotel.objects.get(pk=instance.pk)
+            logger.info(f"🔍 بررسی شرایط: wallet_withdrawal_amount={reservation_latest.wallet_withdrawal_amount}, wallet_withdrawn={reservation_latest.wallet_withdrawn}")
+        except Reservationhotel.DoesNotExist:
+            logger.error(f"رزرو {instance.tracking_code} در دیتابیس یافت نشد!")
+            reservation_latest = instance
 
         # برداشت از کیف پول (خارج از transaction اصلی - چون خودش transaction دارد)
-        if instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
-            logger.info(f"تلاش برای برداشت کیف پول برای رزرو {instance.tracking_code}...")
-            success = _process_wallet_withdrawal(instance)
+        if reservation_latest.wallet_withdrawal_amount > 0 and not reservation_latest.wallet_withdrawn:
+            logger.info(f"🟢 شروع برداشت کیف پول برای رزرو {reservation_latest.tracking_code}...")
+            success = _process_wallet_withdrawal(reservation_latest)
             if success:
-                logger.info(f"✅ برداشت کیف پول برای رزرو {instance.tracking_code} موفق بود.")
+                logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_latest.tracking_code} موفق بود.")
             else:
-                logger.error(f"❌ برداشت کیف پول برای رزرو {instance.tracking_code} شکست خورد.")
+                logger.error(f"❌ برداشت کیف پول برای رزرو {reservation_latest.tracking_code} شکست خورد.")
+        else:
+            logger.info(f"⚠️ شرایط برداشت کیف پول برقرار نیست: amount={reservation_latest.wallet_withdrawal_amount}, withdrawn={reservation_latest.wallet_withdrawn}")
 
         # مصرف کد تخفیف (خارج از transaction اصلی - چون خودش transaction دارد)
         if instance.applied_discount_code:
