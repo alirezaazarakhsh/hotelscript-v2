@@ -3,6 +3,7 @@ from celery import shared_task
 from django.db import transaction
 from django.core.cache import cache
 from django.utils import timezone
+from datetime import timedelta
 import logging
 
 from authentication import models
@@ -37,7 +38,7 @@ def check_and_reject_expired_reservations():
     approval_duration = ReservationApprovalDuration.objects.first()
     duration_minutes = approval_duration.duration_minutes if approval_duration else 15  # default 15
 
-    cutoff_gregorian = timezone.now() - timezone.timedelta(minutes=duration_minutes)
+    cutoff_gregorian = timezone.now() - timedelta(minutes=duration_minutes)
     # created_at در مدل رزرو jDateTimeField است؛ تبدیل به gregorian برای مقایسه امن
     expired_reservations = []
     for r in Reservationhotel.objects.filter(payment_status__in=['pending','unpaid']).exclude(capacity_status='rejected'):
@@ -97,7 +98,7 @@ def auto_cancel_unpaid_reservation(reservation_id):
                 logger.info(f"Reservation {res.tracking_code} already settled before auto cancel.")
                 return False
             created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
-            if created_dt > timezone.now() - timezone.timedelta(minutes=15):
+            if created_dt > timezone.now() - timedelta(minutes=15):
                 # هنوز به 15 دقیقه نرسیده؛ رها می‌کنیم (احتمالاً duration تغییر کرده)
                 return False
 
