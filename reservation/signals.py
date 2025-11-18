@@ -189,46 +189,36 @@ def handle_reservation_payment_complete(sender, instance, **kwargs):
     if instance.payment_status == 'paid':
         logger.info(f"🔵 پردازش رزرو پرداخت شده: {instance.tracking_code}")
 
-        with transaction.atomic():
-            reservation_refreshed = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-            fields_to_update = []
+        # برداشت از کیف پول (خارج از transaction اصلی - چون خودش transaction دارد)
+        if instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+            logger.info(f"تلاش برای برداشت کیف پول برای رزرو {instance.tracking_code}...")
+            success = _process_wallet_withdrawal(instance)
+            if success:
+                logger.info(f"✅ برداشت کیف پول برای رزرو {instance.tracking_code} موفق بود.")
+            else:
+                logger.error(f"❌ برداشت کیف پول برای رزرو {instance.tracking_code} شکست خورد.")
 
-            # برداشت از کیف پول
-            if reservation_refreshed.wallet_withdrawal_amount > 0 and not reservation_refreshed.wallet_withdrawn:
-                logger.info(f"تلاش برای برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code}...")
-                success = _process_wallet_withdrawal(reservation_refreshed)
+        # مصرف کد تخفیف (خارج از transaction اصلی - چون خودش transaction دارد)
+        if instance.applied_discount_code:
+            # دوباره از دیتابیس بخوانیم تا مطمئن شویم discount_processed آپدیت شده
+            reservation_fresh = Reservationhotel.objects.get(pk=instance.pk)
+            if not reservation_fresh.discount_processed:
+                logger.info(f"تلاش برای پردازش کد تخفیف {reservation_fresh.applied_discount_code} برای رزرو {reservation_fresh.tracking_code}...")
+                success = _process_discount_code_optimized(reservation_fresh)
                 if success:
-                    logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} موفق بود.")
-                    reservation_refreshed.refresh_from_db()
+                    logger.info(f"✅ کد تخفیف برای رزرو {reservation_fresh.tracking_code} پردازش شد.")
                 else:
-                    logger.error(f"❌ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} شکست خورد.")
+                    logger.error(f"❌ خطا در پردازش کد تخفیف رزرو {reservation_fresh.tracking_code}")
 
-            # مصرف کد تخفیف
-            if reservation_refreshed.applied_discount_code and not reservation_refreshed.discount_processed:
-                logger.info(f"تلاش برای پردازش کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code}...")
-                success = _process_discount_code_optimized(reservation_refreshed)
-                if success:
-                    logger.info(f"✅ کد تخفیف برای رزرو {reservation_refreshed.tracking_code} پردازش شد.")
-                    reservation_refreshed.refresh_from_db()
-                else:
-                    logger.error(f"❌ خطا در پردازش کد تخفیف رزرو {reservation_refreshed.tracking_code}")
-
-            # تخصیص امتیاز
-            if not reservation_refreshed.points_assigned:
-                logger.info(f"تلاش برای تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}...")
-                success = _assign_customer_points(reservation_refreshed)
-                if success:
-                    logger.info(f"✅ امتیاز برای رزرو {reservation_refreshed.tracking_code} تخصیص داده شد.")
-                    reservation_refreshed.refresh_from_db()
-                else:
-                    logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_refreshed.tracking_code}.")
-
-            # ذخیره نهایی اگر نیاز به آپدیت فیلدها بود
-            if fields_to_update:
-                reservation_refreshed._skip_price_calculation_on_save = True
-                reservation_refreshed.save(update_fields=fields_to_update)
-                del reservation_refreshed._skip_price_calculation_on_save
-                logger.info(f"✅ ذخیره نهایی رزرو {reservation_refreshed.tracking_code} با فیلدهای {fields_to_update}")
+        # تخصیص امتیاز (خارج از transaction اصلی - چون خودش transaction دارد)
+        reservation_fresh = Reservationhotel.objects.get(pk=instance.pk)
+        if not reservation_fresh.points_assigned:
+            logger.info(f"تلاش برای تخصیص امتیاز برای رزرو {reservation_fresh.tracking_code}...")
+            success = _assign_customer_points(reservation_fresh)
+            if success:
+                logger.info(f"✅ امتیاز برای رزرو {reservation_fresh.tracking_code} تخصیص داده شد.")
+            else:
+                logger.error(f"❌ خطا در تخصیص امتیاز برای رزرو {reservation_fresh.tracking_code}.")
 
     elif instance.capacity_status == 'rejected':
         _handle_rejected_reservation(instance)
