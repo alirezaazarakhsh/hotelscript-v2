@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.conf import settings
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
 from rest_framework.response import Response
@@ -64,13 +65,13 @@ class APILogoutView(APIView):
             response = Response({"detail": _("با موفقیت خارج شدید.")})
             response.delete_cookie(
                 key='access_token',
-                domain='.safarnameh24.com',
-                samesite='None'
+                domain=settings.COOKIE_DOMAIN,
+                samesite=settings.COOKIE_SAMESITE
             )
             response.delete_cookie(
                 key='refresh_token',
-                domain='.safarnameh24.com',
-                samesite='None'
+                domain=settings.COOKIE_DOMAIN,
+                samesite=settings.COOKIE_SAMESITE
             )
             return response
 
@@ -192,9 +193,9 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*24,  # 1 day
             )
         if refresh_token:
@@ -202,9 +203,9 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*7,  # 7 days
             )
         return response
@@ -248,9 +249,9 @@ class TokenRefreshView(JwtTokenRefreshView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*24,  # 1 day
             )
         
@@ -260,9 +261,9 @@ class TokenRefreshView(JwtTokenRefreshView):
                 key='refresh_token',
                 value=new_refresh_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*24*7,  # 7 days
             )
         
@@ -292,9 +293,9 @@ class AdminPanelLoginView(APIView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*24,
             )
         if refresh_token:
@@ -302,9 +303,9 @@ class AdminPanelLoginView(APIView):
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
-                secure=True,
-                samesite='None',
-                domain='.safarnameh24.com',
+                secure=settings.COOKIE_SECURE,
+                samesite=settings.COOKIE_SAMESITE,
+                domain=settings.COOKIE_DOMAIN,
                 max_age=60*60*24*7,
             )
         return response
@@ -323,21 +324,25 @@ class JuridicalProfileListCreateAPIView(APIView):
         }
     )
     def get(self, request):
+        # رفتار سازگار با UI: اگر پروفایل حقوقی وجود نداشت، 200 با ساختار خالی برگردان
         try:
             natural_profile = NaturalProfile.objects.get(base_user=request.user)
+        except NaturalProfile.DoesNotExist:
+            # ایجاد نمونه موقتی بدون ذخیره برای بازگرداندن ساختار خالی
+            temp_natural = NaturalProfile(base_user=request.user)
+            temp_juridical = JuridicalProfile(natural_profile=temp_natural)
+            serializer = JuridicalProfileSerializer(temp_juridical, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        try:
             juridical_profile = JuridicalProfile.objects.get(natural_profile=natural_profile)
             serializer = JuridicalProfileSerializer(juridical_profile, context={'request': request})
-            return Response(serializer.data)
-        except NaturalProfile.DoesNotExist:
-            return Response(
-                {"detail": "پروفایل حقیقی برای این کاربر یافت نشد."},
-                status=404
-            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
         except JuridicalProfile.DoesNotExist:
-            return Response(
-                {"detail": "پروفایل حقوقی برای این کاربر یافت نشد."},
-                status=404
-            )
+            # بازگرداندن ساختار خالی در صورت نبود پروفایل حقوقی
+            temp_juridical = JuridicalProfile(natural_profile=natural_profile)
+            serializer = JuridicalProfileSerializer(temp_juridical, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="ایجاد پروفایل حقوقی",
