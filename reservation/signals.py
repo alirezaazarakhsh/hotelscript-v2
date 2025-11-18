@@ -440,18 +440,30 @@ def _process_wallet_withdrawal(reservation):
                 logger.warning(f"موجودی کیف پول کافی نیست! موجودی: {wallet.balance} | مبلغ درخواستی: {withdrawal_amount}")
                 return False
 
-            # ابتدا ذخیره تیک برداشت کیف پول
-            reservation_refreshed.wallet_withdrawn = True
-            reservation_refreshed._skip_price_calculation_on_save = True
-            reservation_refreshed.save(update_fields=['wallet_withdrawn'])
-            del reservation_refreshed._skip_price_calculation_on_save
-            logger.info(f"✅ فلگ wallet_withdrawn ذخیره شد.")
-
-            # سپس کم کردن موجودی کیف پول
+            # ابتدا کم کردن موجودی کیف پول
             wallet.balance = F('balance') - withdrawal_amount
             wallet.save(update_fields=['balance'])
             wallet.refresh_from_db()
             logger.info(f"✅ موجودی کیف پول پس از برداشت: {wallet.balance}")
+
+            # سپس ذخیره تیک برداشت کیف پول
+            # استفاده از set_skip_points_and_sms برای جلوگیری از فعال شدن سیگنال دوباره
+            set_skip_points_and_sms(True)
+            try:
+                reservation_refreshed.wallet_withdrawn = True
+                reservation_refreshed._skip_price_calculation_on_save = True
+                reservation_refreshed.save(update_fields=['wallet_withdrawn'])
+                del reservation_refreshed._skip_price_calculation_on_save
+                
+                # تأیید ذخیره شدن تیک
+                reservation_refreshed.refresh_from_db()
+                if reservation_refreshed.wallet_withdrawn:
+                    logger.info(f"✅ فلگ wallet_withdrawn با موفقیت ذخیره و تأیید شد: {reservation_refreshed.wallet_withdrawn}")
+                else:
+                    logger.error(f"❌ فلگ wallet_withdrawn ذخیره نشد!")
+                    raise Exception("فلگ wallet_withdrawn ذخیره نشد")
+            finally:
+                set_skip_points_and_sms(False)
 
             logger.info(f"✅ برداشت کیف پول برای رزرو {reservation_refreshed.tracking_code} با موفقیت انجام شد.")
             return True
