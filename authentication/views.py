@@ -65,13 +65,13 @@ class APILogoutView(APIView):
             response = Response({"detail": _("با موفقیت خارج شدید.")})
             response.delete_cookie(
                 key='access_token',
-                domain=settings.COOKIE_DOMAIN,
-                samesite=settings.COOKIE_SAMESITE
+                domain='.safarnameh24.com',
+                samesite='None'
             )
             response.delete_cookie(
                 key='refresh_token',
-                domain=settings.COOKIE_DOMAIN,
-                samesite=settings.COOKIE_SAMESITE
+                domain='.safarnameh24.com',
+                samesite='None'
             )
             return response
 
@@ -193,9 +193,9 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=settings.COOKIE_SECURE,
-                samesite=settings.COOKIE_SAMESITE,
-                domain=settings.COOKIE_DOMAIN,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*24,  # 1 day
             )
         if refresh_token:
@@ -203,9 +203,9 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
-                secure=settings.COOKIE_SECURE,
-                samesite=settings.COOKIE_SAMESITE,
-                domain=settings.COOKIE_DOMAIN,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*7,  # 7 days
             )
         return response
@@ -249,9 +249,9 @@ class TokenRefreshView(JwtTokenRefreshView):
                 key='access_token',
                 value=access_token,
                 httponly=True,
-                secure=settings.COOKIE_SECURE,
-                samesite=settings.COOKIE_SAMESITE,
-                domain=settings.COOKIE_DOMAIN,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*24,  # 1 day
             )
         
@@ -261,13 +261,14 @@ class TokenRefreshView(JwtTokenRefreshView):
                 key='refresh_token',
                 value=new_refresh_token,
                 httponly=True,
-                secure=settings.COOKIE_SECURE,
-                samesite=settings.COOKIE_SAMESITE,
-                domain=settings.COOKIE_DOMAIN,
+                secure=True,
+                samesite='None',
+                domain='.safarnameh24.com',
                 max_age=60*60*24*7,  # 7 days
             )
         
         return response
+
 
 
 class AdminPanelLoginView(APIView):

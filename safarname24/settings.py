@@ -20,11 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
 DEBUG = True
 
-# Cookie domain configuration
-COOKIE_DOMAIN = None if DEBUG else '.safarnameh24.com'
-COOKIE_SECURE = not DEBUG  # False for localhost (HTTP), True for production (HTTPS)
-COOKIE_SAMESITE = 'Lax' if DEBUG else 'None'  # Lax for localhost, None for cross-domain
-
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
