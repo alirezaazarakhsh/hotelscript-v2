@@ -31,10 +31,11 @@ class ReservationConsumer(AsyncWebsocketConsumer):
         # (بازگردانی رفتار قبلی برای اینکه تایمر در وب‌سوکت دیده شود.)
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
         if self.reservation.capacity_status == "pending" and not cache.get(cache_key_approval):
+            # ذخیره زمان شروع بدون timeout تا بعد از انقضاء هم باقی بماند و بتوانیم رزرو را کنسل کنیم.
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
             duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
-            logger.info(f"Auto-start approval timer on connect for {self.tracking_code}: {duration_seconds} seconds")
+            cache.set(cache_key_approval, timezone.now())  # بدون TTL
+            logger.info(f"Auto-start approval timer (persistent) on connect for {self.tracking_code}: {duration_seconds} seconds")
 
         asyncio.create_task(self.timer_loop())
 
@@ -101,15 +102,15 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 "timer": int(remaining) if self.reservation.capacity_status == "pending" else None
             })
         elif action == "start_approval_timer":
-            # شروع تایمر تأیید به صورت صریح از سمت کلاینت
+            # شروع دستی تایمر در صورت عدم آغاز قبلی (بدون TTL)
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
             if not cache.get(cache_key_approval):
                 approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
                 approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
-                cache.set(cache_key_approval, timezone.now(), timeout=approval_duration_seconds)
-                logger.info(f"Approval timer explicitly started for {self.tracking_code}: {approval_duration_seconds} seconds")
+                cache.set(cache_key_approval, timezone.now())
+                logger.info(f"Manual approval timer start (persistent) for {self.tracking_code}: {approval_duration_seconds} seconds")
             else:
-                logger.info(f"Approval timer already exists for {self.tracking_code}; not resetting")
+                logger.info(f"Manual start ignored; timer already exists for {self.tracking_code}")
             remaining = await self.get_remaining_time()
             await self.send_json({
                 "capacity_status": self.reservation.capacity_status,
