@@ -65,12 +65,8 @@ def check_and_reject_expired_reservations():
                 res.capacity_status = 'rejected'
                 res.save(update_fields=['capacity_status'])
 
-                for r_room in ReservationRoom.objects.filter(reservation=res).select_related('room'):
-                    room = Room.objects.select_for_update().get(pk=r_room.room.pk)
-                    room.revert_inventory_for_cancellation(r_room.quantity, auto_approval=r_room.was_auto_approved)
-                    logger.info(
-                        f"Inventory reverted for room {room.id} | qty={r_room.quantity} | auto={r_room.was_auto_approved}"
-                    )
+                # موجودی را اینجا برنمی‌گردانیم؛ سیگنال post_save در models.py پس از تغییر وضعیت به 'rejected'
+                # مسئول بازگشت موجودی است تا از دوباره‌کاری جلوگیری شود.
 
                 cache_key_approval = f"reservation_approval_timer_{res.tracking_code}"
                 cache_key_payment = f"reservation_payment_timer_{res.tracking_code}"
@@ -104,9 +100,7 @@ def auto_cancel_unpaid_reservation(reservation_id):
 
             res.capacity_status = 'rejected'
             res.save(update_fields=['capacity_status'])
-            for r_room in ReservationRoom.objects.filter(reservation=res).select_related('room'):
-                room = Room.objects.select_for_update().get(pk=r_room.room.pk)
-                room.revert_inventory_for_cancellation(r_room.quantity, auto_approval=r_room.was_auto_approved)
+            # بازگشت موجودی به سیگنال واگذار شده است؛ اینجا فقط وضعیت را تغییر دادیم.
             logger.info(f"Reservation {res.tracking_code} auto-cancelled after 15 mins unpaid.")
             return True
     except Reservationhotel.DoesNotExist:

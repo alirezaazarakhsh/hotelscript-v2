@@ -27,8 +27,14 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             await self.send_json({"capacity_status": "not_found", "timer": 0})
             return
 
-        # شروع تایمر را به درخواست صریح کلاینت موکول می‌کنیم (start_approval_timer)
-        # اینجا فقط اتصال را برقرار می‌کنیم.
+        # اگر رزرو pending است و تایمر هنوز شروع نشده، همین حالا از زمان اتصال شروعش می‌کنیم.
+        # (بازگردانی رفتار قبلی برای اینکه تایمر در وب‌سوکت دیده شود.)
+        cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
+        if self.reservation.capacity_status == "pending" and not cache.get(cache_key_approval):
+            approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
+            duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+            cache.set(cache_key_approval, timezone.now(), timeout=duration_seconds)
+            logger.info(f"Auto-start approval timer on connect for {self.tracking_code}: {duration_seconds} seconds")
 
         asyncio.create_task(self.timer_loop())
 
