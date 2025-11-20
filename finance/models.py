@@ -93,13 +93,20 @@ class DepositReceipt(models.Model):
         ('juridical', 'حقوقی'),
     )
 
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='deposit_receipts',
+        null=True,
+        blank=True,
+    )
     profile_type = models.CharField(
         max_length=10,
         choices=PROFILE_TYPE_CHOICES,
         verbose_name=_('نوع پروفایل'),
         null=True,
         blank=True,
-        default=None,
     )
     profile_content_type = models.ForeignKey(
         ContentType,
@@ -109,9 +116,8 @@ class DepositReceipt(models.Model):
         related_name='depositreceipt_profile_content_type',
         null=True,
         blank=True,
-        default=None,
     )
-    profile_object_id = models.PositiveIntegerField(verbose_name=_('شناسه پروفایل'), null=True, blank=True, default=None)
+    profile_object_id = models.PositiveIntegerField(verbose_name=_('شناسه پروفایل'), null=True, blank=True)
     profile = GenericForeignKey('profile_content_type', 'profile_object_id')
 
     card_content_type = models.ForeignKey(
@@ -122,11 +128,17 @@ class DepositReceipt(models.Model):
         related_name='depositreceipt_card_content_type',
         null=True,
         blank=True,
-        default=None,
     )
-    card_object_id = models.PositiveIntegerField(verbose_name=_('شناسه شماره کارت'), null=True, blank=True, default=None)
+    card_object_id = models.PositiveIntegerField(verbose_name=_('شناسه شماره کارت'), null=True, blank=True)
     card = GenericForeignKey('card_content_type', 'card_object_id')
 
+    depositor_name = models.CharField(
+        max_length=255,
+        verbose_name=_("نام واریز کننده"),
+        null=True,
+        blank=True,
+        default=None,
+    )
     tracking_number = models.CharField(
         max_length=12,
         unique=True,
@@ -161,4 +173,32 @@ class DepositReceipt(models.Model):
         verbose_name_plural = _("فیش‌های واریزی کاربران")
 
     def __str__(self):
-        return f"{self.amount} تومان - کارت: {self.card} - پروفایل: {self.profile}"
+        return f"{self.depositor_name} - {self.amount} تومان - {self.tracking_number}"
+    
+    def get_card_info(self):
+        """دریافت اطلاعات شماره کارت و شبا"""
+        if self.card:
+            return {
+                'card_number': self.card.card_number,
+                'iban': self.card.iban,
+                'account_holder': self.card.account_holder_name,
+            }
+        return None
+    
+    def get_profile_info(self):
+        """دریافت اطلاعات پروفایل (حقیقی یا حقوقی)"""
+        if self.profile:
+            if self.profile_type == 'natural':
+                return {
+                    'type': 'حقیقی',
+                    'first_name': self.profile.first_name,
+                    'last_name': self.profile.last_name,
+                    'national_code': self.profile.national_code,
+                }
+            elif self.profile_type == 'juridical':
+                return {
+                    'type': 'حقوقی',
+                    'organization_name': self.profile.organization_name,
+                    'national_id': self.profile.national_id,
+                }
+        return None

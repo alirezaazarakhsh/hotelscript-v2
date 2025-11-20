@@ -382,6 +382,8 @@ class DepositReceiptCreateAPIView(APIView):
         این API به کاربر اجازه می‌دهد فیش واریزی خود را ثبت کند.
         
         فیلدهای مورد نیاز:
+        - نوع پروفایل (natural یا juridical)
+        - شناسه شماره کارت (card_object_id)
         - نام واریز کننده
         - شماره پیگیری ۱۲ رقمی
         - مبلغ واریز
@@ -389,6 +391,7 @@ class DepositReceiptCreateAPIView(APIView):
         - عکس فیش
         
         فیلد تایید (is_approved) فقط توسط ادمین قابل تغییر است.
+        پس از تایید ادمین، مبلغ واریزی به کیف پول کاربر اضافه می‌شود.
         """,
         responses={
             201: DepositReceiptSerializer,
@@ -396,7 +399,7 @@ class DepositReceiptCreateAPIView(APIView):
         }
     )
     def post(self, request):
-        serializer = DepositReceiptSerializer(data=request.data)
+        serializer = DepositReceiptSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)

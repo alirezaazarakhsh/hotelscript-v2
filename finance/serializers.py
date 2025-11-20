@@ -5,6 +5,9 @@ from .models import (
     Wallet,
     WalletPack,
 )
+from authentication.models import CardNumber, JuridicalCardNumber
+from django.contrib.contenttypes.models import ContentType
+import re
 
 class WalletSerializer(serializers.ModelSerializer):
     class Meta:
@@ -37,6 +40,14 @@ class AdminCardSettingsSerializer(serializers.ModelSerializer):
         
 
 class DepositReceiptSerializer(serializers.ModelSerializer):
+    card_info = serializers.SerializerMethodField(read_only=True)
+    profile_info = serializers.SerializerMethodField(read_only=True)
+    
+    def get_card_info(self, obj):
+        return obj.get_card_info()
+    
+    def get_profile_info(self, obj):
+        return obj.get_profile_info()
     
     def validate_tracking_number(self, value):
         if not re.match(r'^\d{12}$', value):
@@ -48,16 +59,68 @@ class DepositReceiptSerializer(serializers.ModelSerializer):
         if not re.match(r'^\d{4}/\d{2}/\d{2}$', value):
             raise serializers.ValidationError("فرمت تاریخ باید YYYY/MM/DD باشد.")
         return value
+    
+    def create(self, validated_data):
+        # دریافت کاربر از request
+        request = self.context.get('request')
+        user = request.user
+        
+        # تنظیم user در instance
+        validated_data['user'] = user
+        
+        # دریافت profile_type از validated_data
+        profile_type = validated_data.get('profile_type')
+        
+        # تنظیم profile_content_type و profile_object_id بر اساس profile_type
+        if profile_type == 'natural':
+            try:
+                natural_profile = user.natural_profile
+                validated_data['profile_content_type'] = ContentType.objects.get_for_model(natural_profile)
+                validated_data['profile_object_id'] = natural_profile.pk
+            except Exception as e:
+                raise serializers.ValidationError({"profile_type": "پروفایل حقیقی برای این کاربر یافت نشد."})
+        elif profile_type == 'juridical':
+            try:
+                juridical_profile = user.natural_profile.juridical_profile
+                validated_data['profile_content_type'] = ContentType.objects.get_for_model(juridical_profile)
+                validated_data['profile_object_id'] = juridical_profile.pk
+            except Exception as e:
+                raise serializers.ValidationError({"profile_type": "پروفایل حقوقی برای این کاربر یافت نشد."})
+        
+        # دریافت card_object_id از validated_data
+        card_id = validated_data.pop('card_object_id', None)
+        if card_id:
+            if profile_type == 'natural':
+                try:
+                    card = CardNumber.objects.get(pk=card_id, profile=user.natural_profile)
+                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                    validated_data['card_object_id'] = card.pk
+                except CardNumber.DoesNotExist:
+                    raise serializers.ValidationError({"card_object_id": "شماره کارت یافت نشد."})
+            elif profile_type == 'juridical':
+                try:
+                    card = JuridicalCardNumber.objects.get(pk=card_id, profile=user.natural_profile.juridical_profile)
+                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                    validated_data['card_object_id'] = card.pk
+                except JuridicalCardNumber.DoesNotExist:
+                    raise serializers.ValidationError({"card_object_id": "شماره کارت حقوقی یافت نشد."})
+        
+        return super().create(validated_data)
 
     class Meta:
         model = DepositReceipt
         fields = [
             'id',
+            'profile_type',
+            'card_object_id',
             'depositor_name',
             'tracking_number',
             'amount',
             'deposit_date_jalali',
             'receipt_image',
             'is_approved',
+            'card_info',
+            'profile_info',
+            'created_at',
         ]
-        read_only_fields = ('is_approved',)  # تایید توسط ادمین انجام می‌شود
+        read_only_fields = ('is_approved', 'card_info', 'profile_info', 'created_at')

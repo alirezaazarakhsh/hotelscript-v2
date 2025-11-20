@@ -129,17 +129,67 @@ class AdminCardSettingsAdmin(admin.ModelAdmin):
 @admin.register(DepositReceipt)
 class DepositReceiptAdmin(admin.ModelAdmin):
     list_display = (
+        'user',
+        'depositor_name',
         'tracking_number',
         'amount',
         'deposit_date_jalali',
+        'profile_type',
         'is_approved',
-        'receipt_image_preview',  # اضافه کردن پیش نمایش عکس
+        'receipt_image_preview',
     )
-    list_filter = ('is_approved',)
-    search_fields = ('tracking_number',)
-    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali')  # نمایش پیش‌نمایش و تاریخ واریز فقط خواندنی
+    list_filter = ('is_approved', 'profile_type')
+    search_fields = ('tracking_number', 'depositor_name', 'user__phone_number')
+    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali', 'user', 'profile_info_display', 'card_info_display', 'created_at')
 
     actions = ['approve_receipts']
+    
+    fieldsets = (
+        ('اطلاعات کاربر', {
+            'fields': ('user', 'profile_type', 'profile_info_display', 'card_info_display')
+        }),
+        ('اطلاعات واریز', {
+            'fields': ('depositor_name', 'tracking_number', 'amount', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
+        }),
+        ('وضعیت', {
+            'fields': ('is_approved', 'description', 'created_at')
+        }),
+    )
+
+    def profile_info_display(self, obj):
+        """نمایش اطلاعات پروفایل"""
+        info = obj.get_profile_info()
+        if info:
+            if obj.profile_type == 'natural':
+                return format_html(
+                    "<b>نوع:</b> {} <br><b>نام:</b> {} {} <br><b>کد ملی:</b> {}",
+                    info.get('type', '-'),
+                    info.get('first_name', '-'),
+                    info.get('last_name', '-'),
+                    info.get('national_code', '-')
+                )
+            elif obj.profile_type == 'juridical':
+                return format_html(
+                    "<b>نوع:</b> {} <br><b>نام سازمان:</b> {} <br><b>شناسه ملی:</b> {}",
+                    info.get('type', '-'),
+                    info.get('organization_name', '-'),
+                    info.get('national_id', '-')
+                )
+        return "-"
+    profile_info_display.short_description = "اطلاعات پروفایل"
+    
+    def card_info_display(self, obj):
+        """نمایش اطلاعات کارت بانکی"""
+        info = obj.get_card_info()
+        if info:
+            return format_html(
+                "<b>شماره کارت:</b> {} <br><b>شبا:</b> {} <br><b>صاحب حساب:</b> {}",
+                info.get('card_number', '-'),
+                info.get('iban', '-'),
+                info.get('account_holder', '-')
+            )
+        return "-"
+    card_info_display.short_description = "اطلاعات کارت"
 
     def receipt_image_preview(self, obj):
         if obj.receipt_image:
@@ -149,5 +199,5 @@ class DepositReceiptAdmin(admin.ModelAdmin):
 
     def approve_receipts(self, request, queryset):
         updated = queryset.update(is_approved=True)
-        self.message_user(request, f"{updated} فیش واریزی تایید شد.")
+        self.message_user(request, f"{updated} فیش واریزی تایید شد و مبلغ به کیف پول کاربران اضافه شد.")
     approve_receipts.short_description = "تایید فیش‌های انتخاب شده"
