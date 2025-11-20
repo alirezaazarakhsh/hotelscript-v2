@@ -1,3 +1,5 @@
+from django.core.validators import MinValueValidator
+from django.utils import timezone
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -6,6 +8,8 @@ from authentication.models import (
     BaseUser,
     NaturalProfile,
 )
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
 from finance.sms.sms import send_wallet_increase_sms
 
 
@@ -84,10 +88,45 @@ class AdminCardSettings(models.Model):
     
 #مدل فیش واریز دستی کاربران 
 class DepositReceipt(models.Model):
-    depositor_name = models.CharField(
-        max_length=255,
-        verbose_name=_("نام واریز کننده"),
+    PROFILE_TYPE_CHOICES = (
+        ('natural', 'حقیقی'),
+        ('juridical', 'حقوقی'),
     )
+
+    profile_type = models.CharField(
+        max_length=10,
+        choices=PROFILE_TYPE_CHOICES,
+        verbose_name=_('نوع پروفایل'),
+        null=True,
+        blank=True,
+        default=None,
+    )
+    profile_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        limit_choices_to={"model__in": ["naturalprofile", "juridicalprofile"]},
+        verbose_name=_('نوع پروفایل'),
+        related_name='depositreceipt_profile_content_type',
+        null=True,
+        blank=True,
+        default=None,
+    )
+    profile_object_id = models.PositiveIntegerField(verbose_name=_('شناسه پروفایل'), null=True, blank=True, default=None)
+    profile = GenericForeignKey('profile_content_type', 'profile_object_id')
+
+    card_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        limit_choices_to={"model__in": ["cardnumber", "juridicalcardnumber"]},
+        verbose_name=_('نوع شماره کارت'),
+        related_name='depositreceipt_card_content_type',
+        null=True,
+        blank=True,
+        default=None,
+    )
+    card_object_id = models.PositiveIntegerField(verbose_name=_('شناسه شماره کارت'), null=True, blank=True, default=None)
+    card = GenericForeignKey('card_content_type', 'card_object_id')
+
     tracking_number = models.CharField(
         max_length=12,
         unique=True,
@@ -98,6 +137,7 @@ class DepositReceipt(models.Model):
         max_digits=12,
         decimal_places=2,
         verbose_name=_("مبلغ واریز"),
+        validators=[MinValueValidator(1)],
     )
     deposit_date_jalali = models.CharField(
         max_length=10,
@@ -108,16 +148,17 @@ class DepositReceipt(models.Model):
         upload_to='deposit_receipts/',
         verbose_name=_("عکس فیش"),
     )
-
     is_approved = models.BooleanField(
         default=False,
         verbose_name=_("تایید شده"),
         help_text=_("آیا این فیش واریز توسط ادمین تایید شده است؟"),
     )
+    description = models.TextField(verbose_name=_('توضیحات'), blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now, verbose_name=_('تاریخ ثبت'))
 
     class Meta:
         verbose_name = _("فیش واریزی")
         verbose_name_plural = _("فیش‌های واریزی کاربران")
 
     def __str__(self):
-        return f"{self.depositor_name} - {self.tracking_number}"
+        return f"{self.amount} تومان - کارت: {self.card} - پروفایل: {self.profile}"

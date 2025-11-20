@@ -129,7 +129,6 @@ class AdminCardSettingsAdmin(admin.ModelAdmin):
 @admin.register(DepositReceipt)
 class DepositReceiptAdmin(admin.ModelAdmin):
     list_display = (
-        'depositor_name',
         'tracking_number',
         'amount',
         'deposit_date_jalali',
@@ -137,8 +136,8 @@ class DepositReceiptAdmin(admin.ModelAdmin):
         'receipt_image_preview',  # اضافه کردن پیش نمایش عکس
     )
     list_filter = ('is_approved',)
-    search_fields = ('depositor_name', 'tracking_number')
-    readonly_fields = ('receipt_image_preview',)  # نمایش پیش‌نمایش در صفحه ویرایش
+    search_fields = ('tracking_number',)
+    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali')  # نمایش پیش‌نمایش و تاریخ واریز فقط خواندنی
 
     actions = ['approve_receipts']
 
