@@ -140,19 +140,19 @@ class DepositReceiptAdmin(admin.ModelAdmin):
     )
     list_filter = ('is_approved', 'profile_type')
     search_fields = ('tracking_number', 'depositor_name', 'user__phone_number')
-    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali', 'user', 'profile_info_display', 'card_info_display', 'created_at')
+    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali', 'user', 'profile_info_display', 'card_info_display', 'card_snapshot_display')
 
     actions = ['approve_receipts']
     
     fieldsets = (
         ('اطلاعات کاربر', {
-            'fields': ('user', 'profile_type', 'profile_info_display', 'card_info_display')
+            'fields': ('user', 'profile_type', 'profile_info_display', 'card_snapshot_display')
         }),
         ('اطلاعات واریز', {
             'fields': ('depositor_name', 'tracking_number', 'amount', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
         }),
         ('وضعیت', {
-            'fields': ('is_approved', 'description', 'created_at')
+            'fields': ('is_approved',)
         }),
     )
 
@@ -190,6 +190,13 @@ class DepositReceiptAdmin(admin.ModelAdmin):
             )
         return "-"
     card_info_display.short_description = "اطلاعات کارت"
+
+    def card_snapshot_display(self, obj):
+        return format_html(
+            "<b>شماره کارت ذخیره‌شده:</b> {}<br><b>شبا ذخیره‌شده:</b> {}",
+            obj.card_number or '-', obj.card_iban or '-'
+        )
+    card_snapshot_display.short_description = 'Snapshot کارت'
 
     def receipt_image_preview(self, obj):
         if obj.receipt_image:

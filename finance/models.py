@@ -1,5 +1,4 @@
-from django.core.validators import MinValueValidator
-from django.utils import timezone
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -165,15 +164,30 @@ class DepositReceipt(models.Model):
         verbose_name=_("تایید شده"),
         help_text=_("آیا این فیش واریز توسط ادمین تایید شده است؟"),
     )
-    description = models.TextField(verbose_name=_('توضیحات'), blank=True, null=True)
-    created_at = models.DateTimeField(default=timezone.now, verbose_name=_('تاریخ ثبت'))
+    # فیلدهای صریح برای شماره کارت و شبا جهت شفافیت و آرشیو مستقل از تغییرات بعدی کارت
+    card_number = models.CharField(
+        max_length=16,
+        verbose_name=_('شماره کارت استفاده‌شده'),
+        null=True,
+        blank=True,
+        help_text=_('شماره کارت دقیقا در لحظه ثبت فیش ذخیره می‌شود.'),
+        validators=[RegexValidator(r'^\d{16}$', _('شماره کارت باید ۱۶ رقم باشد.'))]
+    )
+    card_iban = models.CharField(
+        max_length=24,
+        verbose_name=_('شبا استفاده‌شده'),
+        null=True,
+        blank=True,
+        help_text=_('شبا مرتبط با کارت در لحظه ثبت فیش (اختیاری).'),
+        validators=[RegexValidator(r'^\d{24}$', _('شماره شبا باید ۲۴ رقم باشد.'))]
+    )
 
     class Meta:
         verbose_name = _("فیش واریزی")
         verbose_name_plural = _("فیش‌های واریزی کاربران")
 
     def __str__(self):
-        return f"{self.depositor_name} - {self.amount} تومان - {self.tracking_number}"
+        return f"{self.depositor_name or 'واریز'} - {self.amount} تومان - {self.tracking_number}"
     
     def get_card_info(self):
         """دریافت اطلاعات شماره کارت و شبا"""
@@ -184,6 +198,13 @@ class DepositReceipt(models.Model):
                 'account_holder': self.card.account_holder_name,
             }
         return None
+
+    def save(self, *args, **kwargs):
+        # هنگام ذخیره (اولین بار) اگر کارت ست شده بود و snapshot خالی بود، آن را ذخیره کن
+        if self.card and (not self.card_number):
+            self.card_number = getattr(self.card, 'card_number', None)
+            self.card_iban = getattr(self.card, 'iban', None)
+        super().save(*args, **kwargs)
     
     def get_profile_info(self):
         """دریافت اطلاعات پروفایل (حقیقی یا حقوقی)"""

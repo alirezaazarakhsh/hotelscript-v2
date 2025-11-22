@@ -42,6 +42,8 @@ class AdminCardSettingsSerializer(serializers.ModelSerializer):
 class DepositReceiptSerializer(serializers.ModelSerializer):
     card_info = serializers.SerializerMethodField(read_only=True)
     profile_info = serializers.SerializerMethodField(read_only=True)
+    card_number = serializers.CharField(read_only=True)
+    card_iban = serializers.CharField(read_only=True)
     
     def get_card_info(self, obj):
         return obj.get_card_info()
@@ -119,8 +121,9 @@ class DepositReceiptSerializer(serializers.ModelSerializer):
             'deposit_date_jalali',
             'receipt_image',
             'is_approved',
+            'card_number',
+            'card_iban',
             'card_info',
             'profile_info',
-            'created_at',
         ]
-        read_only_fields = ('is_approved', 'card_info', 'profile_info', 'created_at')
+        read_only_fields = ('is_approved', 'card_info', 'profile_info', 'card_number', 'card_iban')
