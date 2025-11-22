@@ -40,11 +40,12 @@ def deposit_receipt_approved(sender, instance, **kwargs):
         try:
             old_instance = DepositReceipt.objects.get(pk=instance.pk)
             # بررسی: اگر قبلاً تایید نشده بود و حالا تایید شد
-            if not old_instance.is_approved and instance.is_approved:
+            if not old_instance.is_approved and instance.is_approved and instance.user:
                 wallet, created = Wallet.objects.get_or_create(user=instance.user, defaults={'balance': 0})
                 wallet.balance += int(instance.amount)
                 wallet.save()
                 logger.info(f"Deposit approved: Added {instance.amount} to wallet of user {instance.user.phone_number}")
+                print(f"✓ فیش واریز تایید شد. مبلغ {instance.amount:,.0f} تومان به کیف پول کاربر {instance.user.phone_number} اضافه شد.")
         except DepositReceipt.DoesNotExist:
             pass
         except Exception as e:
