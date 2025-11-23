@@ -159,11 +159,15 @@ class DepositReceiptAdmin(admin.ModelAdmin):
 
     def formatted_amount(self, obj):
         """نمایش مبلغ با فرمت ممیزدار در لیست"""
+        if obj.amount is None:
+            return "-"
         return f"{int(obj.amount):,} تومان"
     formatted_amount.short_description = "مبلغ واریز"
     
     def formatted_amount_display(self, obj):
         """نمایش مبلغ با فرمت ممیزدار (فقط خواندنی)"""
+        if obj.amount is None:
+            return "-"
         return format_html(
             '<div style="font-size: 16px; font-weight: bold; color: #28a745;">{:,} تومان</div>',
             int(obj.amount)
@@ -268,11 +272,15 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
     
     def formatted_amount(self, obj):
         """نمایش مبلغ با فرمت ممیزدار در لیست"""
+        if obj.amount is None:
+            return "-"
         return f"{int(obj.amount):,} تومان"
     formatted_amount.short_description = "مبلغ برداشت"
     
     def formatted_amount_display(self, obj):
         """نمایش مبلغ با فرمت ممیزدار (فقط خواندنی)"""
+        if obj.amount is None:
+            return "-"
         return format_html(
             '<div style="font-size: 16px; font-weight: bold; color: #dc3545;">{:,} تومان</div>',
             int(obj.amount)
@@ -357,9 +365,13 @@ class WalletTopUpLogAdmin(admin.ModelAdmin):
     )
 
     def formatted_amount(self, obj):
+        if obj.amount is None:
+            return "-"
         return f"{int(obj.amount):,} تومان"
     formatted_amount.short_description = 'مبلغ'
 
     def formatted_amount_display(self, obj):
+        if obj.amount is None:
+            return "-"
         return format_html('<b style="color:#198754">{:,} تومان</b>', int(obj.amount))
     formatted_amount_display.short_description = 'مبلغ'
