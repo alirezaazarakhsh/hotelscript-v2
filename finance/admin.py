@@ -151,7 +151,7 @@ class DepositReceiptAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display', 'card_snapshot_display')
         }),
         ('اطلاعات واریز', {
-            'fields': ('depositor_name', 'tracking_number', 'formatted_amount_display', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
+            'fields': ('depositor_name', 'tracking_number', 'amount', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
         }),
         ('وضعیت', {
             'fields': ('is_approved',)
@@ -259,7 +259,7 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display')
         }),
         ('اطلاعات برداشت', {
-            'fields': ('formatted_amount_display', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
+            'fields': ('amount', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
         }),
         ('وضعیت', {
             'fields': ('status', 'wallet_debited')
