@@ -236,7 +236,7 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
         'status',
         'profile_type',
         'card_holder_name',
-        'created_at',
+        'created_at_jalali_short',
     )
     list_filter = ('status', 'profile_type', 'created_at')
     search_fields = ('user__phone_number', 'card_number', 'card_holder_name')
@@ -248,7 +248,7 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
         'card_number',
         'card_iban',
         'card_holder_name',
-        'amount',
+        
         'formatted_amount_display',
         'created_at_jalali',
         'wallet_debited',
@@ -296,6 +296,14 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             return jalali_date.strftime('%Y/%m/%d - %H:%M')
         return '-'
     created_at_jalali.short_description = "تاریخ ثبت درخواست"
+    
+    def created_at_jalali_short(self, obj):
+        if obj.created_at:
+            import jdatetime
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.created_at)
+            return jalali_date.strftime('%Y/%m/%d - %H:%M')
+        return '-'
+    created_at_jalali_short.short_description = "تاریخ ثبت"
     
     def profile_info_display(self, obj):
         """نمایش اطلاعات پروفایل"""

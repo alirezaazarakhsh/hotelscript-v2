@@ -91,23 +91,29 @@ class DepositReceiptSerializer(serializers.ModelSerializer):
             except Exception as e:
                 raise serializers.ValidationError({"profile_type": "پروفایل حقوقی برای این کاربر یافت نشد."})
         
-        # دریافت card_object_id از validated_data
-        card_id = validated_data.pop('card_object_id', None)
-        if card_id:
+        # دریافت card_object_id از validated_data (1 = کارت اول، 2 = کارت دوم)
+        card_index = validated_data.pop('card_object_id', None)
+        if card_index:
             if profile_type == 'natural':
-                try:
-                    card = CardNumber.objects.get(pk=card_id, profile=user.natural_profile)
-                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
-                    validated_data['card_object_id'] = card.pk
-                except CardNumber.DoesNotExist:
-                    raise serializers.ValidationError({"card_object_id": "شماره کارت یافت نشد."})
+                cards = CardNumber.objects.filter(profile=user.natural_profile).order_by('id')
+                if card_index == 1 and cards.count() >= 1:
+                    card = cards[0]
+                elif card_index == 2 and cards.count() >= 2:
+                    card = cards[1]
+                else:
+                    raise serializers.ValidationError({"card_object_id": f"کارت شماره {card_index} برای این پروفایل یافت نشد."})
+                validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                validated_data['card_object_id'] = card.pk
             elif profile_type == 'juridical':
-                try:
-                    card = JuridicalCardNumber.objects.get(pk=card_id, profile=user.natural_profile.juridical_profile)
-                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
-                    validated_data['card_object_id'] = card.pk
-                except JuridicalCardNumber.DoesNotExist:
-                    raise serializers.ValidationError({"card_object_id": "شماره کارت حقوقی یافت نشد."})
+                cards = JuridicalCardNumber.objects.filter(profile=user.natural_profile.juridical_profile).order_by('id')
+                if card_index == 1 and cards.count() >= 1:
+                    card = cards[0]
+                elif card_index == 2 and cards.count() >= 2:
+                    card = cards[1]
+                else:
+                    raise serializers.ValidationError({"card_object_id": f"کارت شماره {card_index} برای این پروفایل یافت نشد."})
+                validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                validated_data['card_object_id'] = card.pk
         
         return super().create(validated_data)
 
@@ -180,22 +186,28 @@ class WithdrawalRequestSerializer(serializers.ModelSerializer):
             except Exception as e:
                 raise serializers.ValidationError({'profile_type': 'پروفایل حقوقی برای این کاربر یافت نشد.'})
         
-        card_id = validated_data.pop('card_object_id', None)
-        if card_id:
+        card_index = validated_data.pop('card_object_id', None)
+        if card_index:
             if profile_type == 'natural':
-                try:
-                    card = CardNumber.objects.get(pk=card_id, profile=user.natural_profile)
-                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
-                    validated_data['card_object_id'] = card.pk
-                except CardNumber.DoesNotExist:
-                    raise serializers.ValidationError({'card_object_id': 'شماره کارت یافت نشد.'})
+                cards = CardNumber.objects.filter(profile=user.natural_profile).order_by('id')
+                if card_index == 1 and cards.count() >= 1:
+                    card = cards[0]
+                elif card_index == 2 and cards.count() >= 2:
+                    card = cards[1]
+                else:
+                    raise serializers.ValidationError({'card_object_id': f'کارت شماره {card_index} برای این پروفایل یافت نشد.'})
+                validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                validated_data['card_object_id'] = card.pk
             elif profile_type == 'juridical':
-                try:
-                    card = JuridicalCardNumber.objects.get(pk=card_id, profile=user.natural_profile.juridical_profile)
-                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
-                    validated_data['card_object_id'] = card.pk
-                except JuridicalCardNumber.DoesNotExist:
-                    raise serializers.ValidationError({'card_object_id': 'شماره کارت حقوقی یافت نشد.'})
+                cards = JuridicalCardNumber.objects.filter(profile=user.natural_profile.juridical_profile).order_by('id')
+                if card_index == 1 and cards.count() >= 1:
+                    card = cards[0]
+                elif card_index == 2 and cards.count() >= 2:
+                    card = cards[1]
+                else:
+                    raise serializers.ValidationError({'card_object_id': f'کارت شماره {card_index} برای این پروفایل یافت نشد.'})
+                validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                validated_data['card_object_id'] = card.pk
         
         return super().create(validated_data)
 

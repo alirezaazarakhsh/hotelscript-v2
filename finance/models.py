@@ -187,6 +187,12 @@ class DepositReceipt(models.Model):
         help_text=_('شبا مرتبط با کارت در لحظه ثبت فیش (اختیاری).'),
         validators=[RegexValidator(r'^\d{24}$', _('شماره شبا باید ۲۴ رقم باشد.'))]
     )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_("تاریخ ثبت"),
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = _("فیش واریزی")
