@@ -259,7 +259,7 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display')
         }),
         ('اطلاعات برداشت', {
-            'fields': ('amount', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
+            'fields': ('amount', 'card_info_display')
         }),
         ('وضعیت', {
             'fields': ('status', 'wallet_debited')
