@@ -939,14 +939,23 @@ class CardNumberManagementView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست شماره کارت‌ها",
+        operation_description="می‌توانید `profile_type` را در query (ترجیحی) یا در body ارسال کنید.",
         tags=['cardnumber-profile'],
         manual_parameters=[
-            openapi.Parameter('profile_type', openapi.IN_QUERY, description="نوع پروفایل: natural یا juridical", type=openapi.TYPE_STRING, required=True, enum=['natural', 'juridical'])
+            openapi.Parameter('profile_type', openapi.IN_QUERY, description="نوع پروفایل: natural (حقیقی) یا juridical (حقوقی)", type=openapi.TYPE_STRING, required=False, enum=['natural', 'juridical'])
         ],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'profile_type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع پروفایل (گزینه جایگزین برای query)', enum=['natural', 'juridical'])
+            },
+            required=[]
+        ),
         responses={200: openapi.Response(description="لیست شماره کارت‌ها")}
     )
     def get(self, request):
-        profile_type = request.query_params.get('profile_type')
+        # اولویت با query است؛ در صورت نبود، از body هم پذیرش می‌شود
+        profile_type = request.query_params.get('profile_type') or request.data.get('profile_type')
         if not profile_type or profile_type not in ['natural', 'juridical']:
             return Response({'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'}, status=status.HTTP_400_BAD_REQUEST)
         profile = self.get_profile(request.user, profile_type)
