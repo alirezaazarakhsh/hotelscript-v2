@@ -394,3 +394,56 @@ class JuridicalProfileSerializer(serializers.ModelSerializer):
                     except IntegrityError as e:
                         raise serializers.ValidationError({'card_numbers': _(f'خطا در ایجاد شماره کارت: {str(e)}')})
         return instance
+
+
+# -----------------------------
+# Card Number Management Serializers
+# -----------------------------
+
+class CardNumberSerializer(serializers.ModelSerializer):
+    """
+    سریالایزر برای مدیریت شماره کارت‌های حقیقی
+    """
+    class Meta:
+        model = CardNumber
+        fields = ['id', 'card_number', 'iban', 'account_holder_name']
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        """اعتبارسنجی محدودیت تعداد کارت‌ها"""
+        request = self.context.get('request')
+        profile = self.context.get('profile')
+        
+        # اگر در حال ایجاد هستیم (نه ویرایش)
+        if not self.instance and profile:
+            existing_count = profile.card_numbers.count()
+            if existing_count >= 2:
+                raise serializers.ValidationError(
+                    _('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.')
+                )
+        
+        return attrs
+
+
+class JuridicalCardNumberSerializer(serializers.ModelSerializer):
+    """
+    سریالایزر برای مدیریت شماره کارت‌های حقوقی
+    """
+    class Meta:
+        model = JuridicalCardNumber
+        fields = ['id', 'card_number', 'iban', 'account_holder_name']
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        """اعتبارسنجی محدودیت تعداد کارت‌ها"""
+        profile = self.context.get('profile')
+        
+        # اگر در حال ایجاد هستیم (نه ویرایش)
+        if not self.instance and profile:
+            existing_count = profile.card_numbers.count()
+            if existing_count >= 2:
+                raise serializers.ValidationError(
+                    _('هر پروفایل حقوقی تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.')
+                )
+        
+        return attrs

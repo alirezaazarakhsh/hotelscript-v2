@@ -24,4 +24,7 @@ urlpatterns = [
     # مدارک پروفایل حقوقی
     path('juridical-profile-documents/', views.JuridicalProfileDocumentListCreateAPIView.as_view(), name='juridical_profile_document_list_create'),
     path('juridical-profile-documents/<int:pk>/', views.JuridicalProfileDocumentRetrieveUpdateDestroyAPIView.as_view(), name='juridical_profile_document_detail'),
+
+    # مدیریت شماره کارت‌های حقیقی و حقوقی
+    path('card-numbers/', views.CardNumberManagementView.as_view(), name='card_number_management'),
 ]
