@@ -164,6 +164,12 @@ class DepositReceipt(models.Model):
         verbose_name=_("تایید شده"),
         help_text=_("آیا این فیش واریز توسط ادمین تایید شده است؟"),
     )
+    wallet_credited = models.BooleanField(
+        default=False,
+        verbose_name=_("اضافه شده به کیف پول"),
+        help_text=_("آیا این مبلغ به کیف پول کاربر اضافه شده است؟"),
+        editable=False,
+    )
     # فیلدهای صریح برای شماره کارت و شبا جهت شفافیت و آرشیو مستقل از تغییرات بعدی کارت
     card_number = models.CharField(
         max_length=16,
@@ -223,3 +229,176 @@ class DepositReceipt(models.Model):
                     'national_id': self.profile.national_id,
                 }
         return None
+
+
+#مدل درخواست برداشت از کیف پول
+class WithdrawalRequest(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'در انتظار بررسی'),
+        ('approved', 'تایید شده'),
+        ('rejected', 'رد شده'),
+        ('completed', 'واریز شده'),
+    )
+    
+    PROFILE_TYPE_CHOICES = (
+        ('natural', 'حقیقی'),
+        ('juridical', 'حقوقی'),
+    )
+
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='withdrawal_requests',
+    )
+    
+    profile_type = models.CharField(
+        max_length=10,
+        choices=PROFILE_TYPE_CHOICES,
+        verbose_name=_('نوع پروفایل'),
+    )
+    
+    profile_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        limit_choices_to={"model__in": ["naturalprofile", "juridicalprofile"]},
+        verbose_name=_('نوع پروفایل'),
+        related_name='withdrawalrequest_profile_content_type',
+    )
+    profile_object_id = models.PositiveIntegerField(verbose_name=_('شناسه پروفایل'))
+    profile = GenericForeignKey('profile_content_type', 'profile_object_id')
+
+    card_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        limit_choices_to={"model__in": ["cardnumber", "juridicalcardnumber"]},
+        verbose_name=_('نوع شماره کارت مقصد'),
+        related_name='withdrawalrequest_card_content_type',
+    )
+    card_object_id = models.PositiveIntegerField(verbose_name=_('شناسه شماره کارت مقصد'))
+    card = GenericForeignKey('card_content_type', 'card_object_id')
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name=_("مبلغ برداشت"),
+        validators=[MinValueValidator(1)],
+        help_text=_("مبلغ درخواستی برای برداشت از کیف پول (تومان)"),
+    )
+    
+    # فیلدهای ذخیره اطلاعات کارت در زمان درخواست
+    card_number = models.CharField(
+        max_length=16,
+        verbose_name=_('شماره کارت مقصد'),
+        help_text=_('شماره کارت در لحظه ثبت درخواست ذخیره می‌شود.'),
+        validators=[RegexValidator(r'^\d{16}$', _('شماره کارت باید ۱۶ رقم باشد.'))]
+    )
+    card_iban = models.CharField(
+        max_length=24,
+        verbose_name=_('شبا کارت مقصد'),
+        null=True,
+        blank=True,
+        help_text=_('شبا مرتبط با کارت در لحظه ثبت درخواست.'),
+        validators=[RegexValidator(r'^\d{24}$', _('شماره شبا باید ۲۴ رقم باشد.'))]
+    )
+    card_holder_name = models.CharField(
+        max_length=255,
+        verbose_name=_("نام صاحب کارت مقصد"),
+        help_text=_("نام صاحب حساب در لحظه ثبت درخواست"),
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name=_("وضعیت درخواست"),
+    )
+    
+    wallet_debited = models.BooleanField(
+        default=False,
+        verbose_name=_("کسر شده از کیف پول"),
+        help_text=_("آیا این مبلغ از کیف پول کاربر کسر شده است؟"),
+        editable=False,
+    )
+    
+    admin_note = models.TextField(
+        verbose_name=_("یادداشت ادمین"),
+        blank=True,
+        null=True,
+        help_text=_("توضیحات ادمین درباره این درخواست (در صورت رد یا...)"),
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_("تاریخ ثبت درخواست"),
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_("آخرین بروزرسانی"),
+    )
+
+    class Meta:
+        verbose_name = _("درخواست برداشت")
+        verbose_name_plural = _("درخواست‌های برداشت از کیف پول")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.phone_number} - {self.amount:,.0f} تومان - {self.get_status_display()}"
+    
+    def get_card_info(self):
+        """دریافت اطلاعات شماره کارت مقصد"""
+        if self.card:
+            return {
+                'card_number': self.card.card_number,
+                'iban': getattr(self.card, 'iban', None),
+                'account_holder': self.card.account_holder_name,
+            }
+        return None
+
+    def get_profile_info(self):
+        """دریافت اطلاعات پروفایل (حقیقی یا حقوقی)"""
+        if self.profile:
+            if self.profile_type == 'natural':
+                return {
+                    'type': 'حقیقی',
+                    'first_name': self.profile.first_name,
+                    'last_name': self.profile.last_name,
+                    'national_code': self.profile.national_code,
+                }
+            elif self.profile_type == 'juridical':
+                return {
+                    'type': 'حقوقی',
+                    'organization_name': self.profile.organization_name,
+                    'national_id': self.profile.national_id,
+                }
+        return None
+
+    def save(self, *args, **kwargs):
+        # ذخیره اطلاعات کارت در زمان ایجاد درخواست
+        if not self.pk and self.card:
+            self.card_number = getattr(self.card, 'card_number', '')
+            self.card_iban = getattr(self.card, 'iban', None)
+            self.card_holder_name = getattr(self.card, 'account_holder_name', '')
+        super().save(*args, **kwargs)
+
+
+# لاگ افزایش موجودی از درگاه (همیشه موفق در صورت ثبت)
+class WalletTopUpLog(models.Model):
+    GATEWAY_CHOICES = (
+        ('zarinpal', 'زرین‌پال'),
+        ('iraniangateway', 'ایران‌درگاه'),
+    )
+    user = models.ForeignKey(BaseUser, on_delete=models.CASCADE, related_name='wallet_topups', verbose_name=_('کاربر'))
+    amount = models.PositiveBigIntegerField(verbose_name=_('مبلغ افزایش'), help_text=_('مبلغ افزایش یافته به تومان'))
+    gateway = models.CharField(max_length=32, choices=GATEWAY_CHOICES, verbose_name=_('درگاه'))
+    authority_or_order = models.CharField(max_length=128, blank=True, null=True, verbose_name=_('شناسه تراکنش'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('تاریخ ثبت'))
+
+    class Meta:
+        verbose_name = _('لاگ افزایش موجودی')
+        verbose_name_plural = _('لاگ‌های افزایش موجودی کیف پول')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"TopUp {self.user.phone_number} +{self.amount:,} تومان via {self.gateway}"

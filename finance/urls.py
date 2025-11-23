@@ -35,4 +35,14 @@ urlpatterns = [
         views.DepositReceiptCreateAPIView.as_view(),
         name='deposit-receipt-create'
     ),
+    path(
+        'withdrawal-requests/',
+        views.WithdrawalRequestCreateAPIView.as_view(),
+        name='withdrawal-request-create'
+    ),
+    path(
+        'wallet/operations/',
+        views.FinancialOperationsListAPIView.as_view(),
+        name='wallet-operations'
+    ),
 ]

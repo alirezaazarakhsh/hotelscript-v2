@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from authentication.models import NaturalProfile
-from finance.sms.sms import send_wallet_increase_sms
 from .models import (
     AdminCardSettings,
     DepositReceipt,
     Wallet,
     WalletPack,
+    WithdrawalRequest,
+    WalletTopUpLog,
 )
 
 
@@ -132,7 +133,7 @@ class DepositReceiptAdmin(admin.ModelAdmin):
         'user',
         'depositor_name',
         'tracking_number',
-        'amount',
+        'formatted_amount',
         'deposit_date_jalali',
         'profile_type',
         'is_approved',
@@ -140,7 +141,7 @@ class DepositReceiptAdmin(admin.ModelAdmin):
     )
     list_filter = ('is_approved', 'profile_type')
     search_fields = ('tracking_number', 'depositor_name', 'user__phone_number')
-    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali', 'user', 'profile_info_display', 'card_info_display', 'card_snapshot_display')
+    readonly_fields = ('receipt_image_preview', 'deposit_date_jalali', 'user', 'profile_info_display', 'card_info_display', 'card_snapshot_display', 'formatted_amount_display')
 
     actions = ['approve_receipts']
     
@@ -149,13 +150,26 @@ class DepositReceiptAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display', 'card_snapshot_display')
         }),
         ('اطلاعات واریز', {
-            'fields': ('depositor_name', 'tracking_number', 'amount', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
+            'fields': ('depositor_name', 'tracking_number', 'formatted_amount_display', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
         }),
         ('وضعیت', {
             'fields': ('is_approved',)
         }),
     )
 
+    def formatted_amount(self, obj):
+        """نمایش مبلغ با فرمت ممیزدار در لیست"""
+        return f"{int(obj.amount):,} تومان"
+    formatted_amount.short_description = "مبلغ واریز"
+    
+    def formatted_amount_display(self, obj):
+        """نمایش مبلغ با فرمت ممیزدار (فقط خواندنی)"""
+        return format_html(
+            '<div style="font-size: 16px; font-weight: bold; color: #28a745;">{:,} تومان</div>',
+            int(obj.amount)
+        )
+    formatted_amount_display.short_description = "مبلغ واریز"
+    
     def profile_info_display(self, obj):
         """نمایش اطلاعات پروفایل"""
         info = obj.get_profile_info()
@@ -208,3 +222,144 @@ class DepositReceiptAdmin(admin.ModelAdmin):
         updated = queryset.update(is_approved=True)
         self.message_user(request, f"{updated} فیش واریزی تایید شد و مبلغ به کیف پول کاربران اضافه شد.")
     approve_receipts.short_description = "تایید فیش‌های انتخاب شده"
+
+@admin.register(WithdrawalRequest)
+class WithdrawalRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        'user',
+        'formatted_amount',
+        'status',
+        'profile_type',
+        'card_holder_name',
+        'created_at',
+    )
+    list_filter = ('status', 'profile_type', 'created_at')
+    search_fields = ('user__phone_number', 'card_number', 'card_holder_name')
+    readonly_fields = (
+        'user',
+        'profile_type',
+        'profile_info_display',
+        'card_info_display',
+        'card_number',
+        'card_iban',
+        'card_holder_name',
+        'formatted_amount_display',
+        'created_at',
+        'updated_at',
+        'wallet_debited',
+    )
+    
+    fieldsets = (
+        ('اطلاعات کاربر', {
+            'fields': ('user', 'profile_type', 'profile_info_display')
+        }),
+        ('اطلاعات برداشت', {
+            'fields': ('formatted_amount_display', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
+        }),
+        ('وضعیت', {
+            'fields': ('status', 'wallet_debited', 'admin_note')
+        }),
+        ('تاریخ', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    
+    actions = ['approve_requests', 'reject_requests', 'complete_requests']
+    
+    def formatted_amount(self, obj):
+        """نمایش مبلغ با فرمت ممیزدار در لیست"""
+        return f"{int(obj.amount):,} تومان"
+    formatted_amount.short_description = "مبلغ برداشت"
+    
+    def formatted_amount_display(self, obj):
+        """نمایش مبلغ با فرمت ممیزدار (فقط خواندنی)"""
+        return format_html(
+            '<div style="font-size: 16px; font-weight: bold; color: #dc3545;">{:,} تومان</div>',
+            int(obj.amount)
+        )
+    formatted_amount_display.short_description = "مبلغ برداشت"
+    
+    def profile_info_display(self, obj):
+        """نمایش اطلاعات پروفایل"""
+        info = obj.get_profile_info()
+        if info:
+            if obj.profile_type == 'natural':
+                return format_html(
+                    "<b>نوع:</b> {} <br><b>نام:</b> {} {} <br><b>کد ملی:</b> {}",
+                    info.get('type', '-'),
+                    info.get('first_name', '-'),
+                    info.get('last_name', '-'),
+                    info.get('national_code', '-')
+                )
+            elif obj.profile_type == 'juridical':
+                return format_html(
+                    "<b>نوع:</b> {} <br><b>نام سازمان:</b> {} <br><b>شناسه ملی:</b> {}",
+                    info.get('type', '-'),
+                    info.get('organization_name', '-'),
+                    info.get('national_id', '-')
+                )
+        return "-"
+    profile_info_display.short_description = "اطلاعات پروفایل"
+    
+    def card_info_display(self, obj):
+        """نمایش اطلاعات کارت بانکی"""
+        info = obj.get_card_info()
+        if info:
+            return format_html(
+                "<b>شماره کارت:</b> {} <br><b>شبا:</b> {} <br><b>صاحب حساب:</b> {}",
+                info.get('card_number', '-'),
+                info.get('iban', '-'),
+                info.get('account_holder', '-')
+            )
+        return "-"
+    card_info_display.short_description = "اطلاعات کارت"
+    
+    def approve_requests(self, request, queryset):
+        """تایید درخواست‌های برداشت"""
+        updated = 0
+        for obj in queryset.filter(status='pending'):
+            obj.status = 'approved'
+            obj.save()
+            updated += 1
+        self.message_user(request, f"{updated} درخواست برداشت تایید شد.")
+    approve_requests.short_description = "تایید درخواست‌های انتخاب شده"
+    
+    def reject_requests(self, request, queryset):
+        """رد درخواست‌های برداشت"""
+        updated = 0
+        for obj in queryset.filter(status='pending'):
+            obj.status = 'rejected'
+            obj.save()
+            updated += 1
+        self.message_user(request, f"{updated} درخواست برداشت رد شد.")
+    reject_requests.short_description = "رد درخواست‌های انتخاب شده"
+    
+    def complete_requests(self, request, queryset):
+        """تکمیل و واریز درخواست‌های برداشت"""
+        updated = 0
+        for obj in queryset.filter(status='approved'):
+            obj.status = 'completed'
+            obj.save()
+            updated += 1
+        self.message_user(request, f"{updated} درخواست برداشت تکمیل و واریز شد.")
+    complete_requests.short_description = "تکمیل و واریز درخواست‌های انتخاب شده"
+
+
+@admin.register(WalletTopUpLog)
+class WalletTopUpLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'formatted_amount', 'gateway', 'created_at', 'authority_or_order')
+    search_fields = ('user__phone_number', 'authority_or_order')
+    list_filter = ('gateway', 'created_at')
+    readonly_fields = ('user', 'amount', 'gateway', 'authority_or_order', 'created_at', 'formatted_amount_display')
+
+    fieldsets = (
+        (None, { 'fields': ('user', 'formatted_amount_display', 'gateway', 'authority_or_order', 'created_at') }),
+    )
+
+    def formatted_amount(self, obj):
+        return f"{int(obj.amount):,} تومان"
+    formatted_amount.short_description = 'مبلغ'
+
+    def formatted_amount_display(self, obj):
+        return format_html('<b style="color:#198754">{:,} تومان</b>', int(obj.amount))
+    formatted_amount_display.short_description = 'مبلغ'

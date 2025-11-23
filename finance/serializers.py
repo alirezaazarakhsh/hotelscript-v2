@@ -4,6 +4,7 @@ from .models import (
     DepositReceipt,
     Wallet,
     WalletPack,
+    WithdrawalRequest,
 )
 from authentication.models import CardNumber, JuridicalCardNumber
 from django.contrib.contenttypes.models import ContentType
@@ -127,3 +128,103 @@ class DepositReceiptSerializer(serializers.ModelSerializer):
             'profile_info',
         ]
         read_only_fields = ('is_approved', 'card_info', 'profile_info', 'card_number', 'card_iban')
+
+
+class WithdrawalRequestSerializer(serializers.ModelSerializer):
+    card_info = serializers.SerializerMethodField(read_only=True)
+    profile_info = serializers.SerializerMethodField(read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    def get_card_info(self, obj):
+        return obj.get_card_info()
+    
+    def get_profile_info(self, obj):
+        return obj.get_profile_info()
+    
+    def validate(self, data):
+        request = self.context.get('request')
+        user = request.user
+        amount = data.get('amount')
+        
+        # بررسی موجودی کیف پول
+        try:
+            wallet = user.wallet
+            if wallet.balance < int(amount):
+                raise serializers.ValidationError({
+                    'amount': f'موجودی کیف پول شما کافی نیست. موجودی فعلی: {wallet.balance:,} تومان'
+                })
+        except Wallet.DoesNotExist:
+            raise serializers.ValidationError({'amount': 'کیف پول برای این کاربر یافت نشد.'})
+        
+        return data
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        user = request.user
+        validated_data['user'] = user
+        profile_type = validated_data.get('profile_type')
+        
+        if profile_type == 'natural':
+            try:
+                natural_profile = user.natural_profile
+                validated_data['profile_content_type'] = ContentType.objects.get_for_model(natural_profile)
+                validated_data['profile_object_id'] = natural_profile.pk
+            except Exception as e:
+                raise serializers.ValidationError({'profile_type': 'پروفایل حقیقی برای این کاربر یافت نشد.'})
+        elif profile_type == 'juridical':
+            try:
+                juridical_profile = user.natural_profile.juridical_profile
+                validated_data['profile_content_type'] = ContentType.objects.get_for_model(juridical_profile)
+                validated_data['profile_object_id'] = juridical_profile.pk
+            except Exception as e:
+                raise serializers.ValidationError({'profile_type': 'پروفایل حقوقی برای این کاربر یافت نشد.'})
+        
+        card_id = validated_data.pop('card_object_id', None)
+        if card_id:
+            if profile_type == 'natural':
+                try:
+                    card = CardNumber.objects.get(pk=card_id, profile=user.natural_profile)
+                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                    validated_data['card_object_id'] = card.pk
+                except CardNumber.DoesNotExist:
+                    raise serializers.ValidationError({'card_object_id': 'شماره کارت یافت نشد.'})
+            elif profile_type == 'juridical':
+                try:
+                    card = JuridicalCardNumber.objects.get(pk=card_id, profile=user.natural_profile.juridical_profile)
+                    validated_data['card_content_type'] = ContentType.objects.get_for_model(card)
+                    validated_data['card_object_id'] = card.pk
+                except JuridicalCardNumber.DoesNotExist:
+                    raise serializers.ValidationError({'card_object_id': 'شماره کارت حقوقی یافت نشد.'})
+        
+        return super().create(validated_data)
+
+    class Meta:
+        model = WithdrawalRequest
+        fields = [
+            'id',
+            'profile_type',
+            'card_object_id',
+            'amount',
+            'card_number',
+            'card_iban',
+            'card_holder_name',
+            'status',
+            'status_display',
+            'admin_note',
+            'created_at',
+            'updated_at',
+            'card_info',
+            'profile_info',
+        ]
+        read_only_fields = (
+            'status', 
+            'admin_note', 
+            'created_at', 
+            'updated_at', 
+            'card_info', 
+            'profile_info',
+            'card_number',
+            'card_iban',
+            'card_holder_name',
+            'status_display',
+        )

@@ -14,8 +14,8 @@ from drf_yasg import openapi
 
 from setting_payment.models import IranianGateway, PaymentGatewayPreference, ZarinpalGateway
 
-from .models import  AdminCardSettings, Wallet, WalletPack
-from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer
+from .models import  AdminCardSettings, Wallet, WalletPack, WithdrawalRequest, WalletTopUpLog
+from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer, WithdrawalRequestSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +209,8 @@ class CreatePaymentLinkAPIView(APIView):
                             wallet = Wallet.objects.get(user=request.user)
                             wallet.balance += saved_amount
                             wallet.save()
+                            # ثبت لاگ افزایش موجودی
+                            WalletTopUpLog.objects.create(user=request.user, amount=saved_amount, gateway='zarinpal', authority_or_order=authority)
                             self._clear_session(request)
                             return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
                         # حالت غیر sandbox: verify کامل
@@ -227,6 +229,7 @@ class CreatePaymentLinkAPIView(APIView):
                                 wallet = Wallet.objects.get(user=request.user)
                                 wallet.balance += saved_amount
                                 wallet.save()
+                                WalletTopUpLog.objects.create(user=request.user, amount=saved_amount, gateway='zarinpal', authority_or_order=authority)
                                 self._clear_session(request)
                                 # پرداخت موفق (success)
                                 return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
@@ -255,6 +258,7 @@ class CreatePaymentLinkAPIView(APIView):
                                 wallet = Wallet.objects.get(user=request.user)
                                 wallet.balance += saved_amount
                                 wallet.save()
+                                WalletTopUpLog.objects.create(user=request.user, amount=saved_amount, gateway='iraniangateway', authority_or_order=order_id)
                                 self._clear_session(request)
                                 return self._build_redirect(self.STATUS_SUCCESS, saved_amount)
                 except Exception:
@@ -404,3 +408,137 @@ class DepositReceiptCreateAPIView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# ای پی ای ثبت درخواست برداشت از کیف پول
+class WithdrawalRequestCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        request_body=WithdrawalRequestSerializer,
+        operation_summary="ثبت درخواست برداشت از کیف پول",
+        operation_description="""
+        این API به کاربر اجازه می‌دهد درخواست برداشت از کیف پول خود را ثبت کند.
+        
+        فیلدهای مورد نیاز:
+        - نوع پروفایل (natural یا juridical)
+        - شناسه شماره کارت مقصد (card_object_id)
+        - مبلغ برداشت (به تومان)
+        
+        قبل از ثبت درخواست، موجودی کیف پول بررسی می‌شود.
+        پس از تایید ادمین، مبلغ از کیف پول کسر و به حساب کاربر واریز می‌شود.
+        """,
+        responses={
+            201: WithdrawalRequestSerializer,
+            400: "خطا در داده‌های ورودی یا موجودی ناکافی"
+        }
+    )
+    def post(self, request):
+        serializer = WithdrawalRequestSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# ای پی ای تجمیع همه عملیات مالی (افزایش، برداشت، کارت به کارت دستی)
+class FinancialOperationsListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="لیست عملیات مالی (برداشت / افزایش / کارت به کارت)",
+        operation_description="""
+        خروجی شامل رکوردهای مالی کاربر است با فیلدهای:
+        - service_type (برداشت وجه | افزایش کیف پول | کارت به کارت)
+        - type (withdrawal | wallet_increase | card_to_card)
+        - amount (عدد تومان)
+        - date (تاریخ شمسی YYYY/MM/DD)
+        - status (success یا unsuccess)
+        - status_display (متن فارسی موفق/ناموفق)
+        - id (شناسه رکورد)
+        پجینیشن: page, page_size, total_pages, total_items
+        """,
+        responses={200: "Paginated operations list"}
+    )
+    def get(self, request):
+        user = request.user
+        page = int(request.GET.get('page', 1) or 1)
+        page_size = int(request.GET.get('page_size', 18) or 18)
+        if page_size <= 0:
+            page_size = 18
+
+        operations = []
+
+        from .models import DepositReceipt  # local import
+        import jdatetime
+
+        # Helper: convert Gregorian datetime to Jalali string
+        def to_jalali(dt):
+            try:
+                return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d')
+            except Exception:
+                return ''
+
+        # فیش‌های کارت به کارت
+        deposit_receipts = DepositReceipt.objects.filter(user=user)
+        for receipt in deposit_receipts:
+            operations.append({
+                "id": receipt.id,
+                "type": "card_to_card",
+                "service_type": "کارت به کارت",
+                "amount": int(receipt.amount),
+                "status": "success" if receipt.is_approved else "unsuccess",
+                "status_display": "عملیات موفقیت آمیز بود" if receipt.is_approved else "عملیات ناموفق بود",
+                "date": receipt.deposit_date_jalali,
+            })
+
+        # برداشت‌ها
+        withdrawal_requests = WithdrawalRequest.objects.filter(user=user)
+        for w in withdrawal_requests:
+            success = w.status in ["approved", "completed"]
+            operations.append({
+                "id": w.id,
+                "type": "withdrawal",
+                "service_type": "برداشت وجه",
+                "amount": int(w.amount),
+                "status": "success" if success else "unsuccess",
+                "status_display": "عملیات موفقیت آمیز بود" if success else "عملیات ناموفق بود",
+                "date": to_jalali(w.created_at),
+            })
+
+        # افزایش کیف پول (همیشه موفق)
+        topups = WalletTopUpLog.objects.filter(user=user)
+        for t in topups:
+            operations.append({
+                "id": t.id,
+                "type": "wallet_increase",
+                "service_type": "افزایش کیف پول",
+                "amount": int(t.amount),
+                "status": "success",
+                "status_display": "عملیات موفقیت آمیز بود",
+                "date": to_jalali(t.created_at),
+            })
+
+        # مرتب سازی بر اساس تاریخ (Jalali strings lexicographically) و سپس مقدار id نزولی برای ثبات
+        def sort_key(op):
+            return (op['date'], op['id'])
+        operations.sort(key=sort_key, reverse=True)
+
+        total_items = len(operations)
+        total_pages = (total_items + page_size - 1) // page_size
+        if page > total_pages and total_pages != 0:
+            page = total_pages
+
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_items = operations[start:end]
+
+        return Response({
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "total_items": total_items,
+            "operations": page_items,
+        }, status=status.HTTP_200_OK)
