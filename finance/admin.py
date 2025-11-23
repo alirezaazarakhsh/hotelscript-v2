@@ -292,7 +292,13 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
         """نمایش تاریخ ثبت درخواست به شمسی"""
         if obj.created_at:
             import jdatetime
-            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.created_at)
+            from django.utils import timezone
+            import pytz
+            
+            # Convert to Iran timezone
+            iran_tz = pytz.timezone('Asia/Tehran')
+            iran_time = obj.created_at.astimezone(iran_tz)
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=iran_time)
             return jalali_date.strftime('%Y/%m/%d - %H:%M')
         return '-'
     created_at_jalali.short_description = "تاریخ ثبت درخواست"
@@ -300,7 +306,12 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
     def created_at_jalali_short(self, obj):
         if obj.created_at:
             import jdatetime
-            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.created_at)
+            from django.utils import timezone
+            import pytz
+            
+            iran_tz = pytz.timezone('Asia/Tehran')
+            iran_time = obj.created_at.astimezone(iran_tz)
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=iran_time)
             return jalali_date.strftime('%Y/%m/%d - %H:%M')
         return '-'
     created_at_jalali_short.short_description = "تاریخ ثبت"
@@ -373,14 +384,27 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
 
 @admin.register(WalletTopUpLog)
 class WalletTopUpLogAdmin(admin.ModelAdmin):
-    list_display = ('user', 'formatted_amount', 'gateway', 'created_at', 'authority_or_order')
+    list_display = ('user', 'formatted_amount', 'gateway', 'created_at_jalali', 'authority_or_order')
     search_fields = ('user__phone_number', 'authority_or_order')
     list_filter = ('gateway', 'created_at')
-    readonly_fields = ('user', 'amount', 'gateway', 'authority_or_order', 'created_at', 'formatted_amount_display')
+    readonly_fields = ('user', 'amount', 'gateway', 'authority_or_order', 'created_at_jalali', 'formatted_amount_display')
 
     fieldsets = (
-        (None, { 'fields': ('user', 'formatted_amount_display', 'gateway', 'authority_or_order', 'created_at') }),
+        (None, { 'fields': ('user', 'formatted_amount_display', 'gateway', 'authority_or_order', 'created_at_jalali') }),
     )
+
+    def created_at_jalali(self, obj):
+        if obj.created_at:
+            import jdatetime
+            from django.utils import timezone
+            import pytz
+            
+            iran_tz = pytz.timezone('Asia/Tehran')
+            iran_time = obj.created_at.astimezone(iran_tz)
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=iran_time)
+            return jalali_date.strftime('%Y/%m/%d - %H:%M')
+        return '-'
+    created_at_jalali.short_description = 'تاریخ ثبت'
 
     def formatted_amount(self, obj):
         if obj.amount is None:
@@ -397,8 +421,7 @@ class WalletTopUpLogAdmin(admin.ModelAdmin):
 
 @admin.register(CardToCardInstruction)
 class CardToCardInstructionAdmin(admin.ModelAdmin):
-    list_display = ('short_preview', 'updated_at')
-    readonly_fields = ('updated_at',)
+    list_display = ('short_preview',)
 
     def has_add_permission(self, request):
         # فقط یک رکورد مجاز است

@@ -416,7 +416,6 @@ class CardToCardInstruction(models.Model):
         verbose_name=_('متن توضیحات کارت به کارت'),
         help_text=_('این متن برای راهنمایی کاربر هنگام ثبت فیش کارت به کارت نمایش داده می‌شود.')
     )
-    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('آخرین بروزرسانی'))
 
     class Meta:
         verbose_name = _('توضیحات کارت به کارت')
