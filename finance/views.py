@@ -77,11 +77,13 @@ class WalletPackListAPIView(APIView):
     
     
     
+from django.conf import settings
+
 #ای پی ای افزایش موجودی کیف پول 
 class CreatePaymentLinkAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    REDIRECT_BASE_URL = "https://safarnameh24.com/dashboard/financial/wallet"
+    REDIRECT_BASE_URL = getattr(settings, 'CALLBACK_REDIRECT_BASE_URL', 'https://safarnameh24.com') + "/dashboard/financial/wallet"
     CALLBACK_PATH = "/api/v1/finance/wallet/payment-callback/"
     MIN_TOPUP = 1_000_000
     MAX_TOPUP = 100_000_000

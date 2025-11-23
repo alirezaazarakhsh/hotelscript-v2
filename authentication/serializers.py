@@ -129,7 +129,11 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    card_numbers = CardNumberSerializer(many=True, required=False)
+    card_numbers = serializers.SerializerMethodField()
+
+    def get_card_numbers(self, obj):
+        card_numbers = obj.card_numbers.all()
+        return CardNumberSerializer(card_numbers, many=True).data
     phone_number = serializers.SerializerMethodField()  # فیلد جدید برای شماره موبایل
 
     class Meta:
@@ -283,7 +287,11 @@ class JuridicalCardNumberSerializer(serializers.ModelSerializer):
 class JuridicalProfileSerializer(serializers.ModelSerializer):
     documents = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False, allow_empty_file=False, allow_null=True)
-    card_numbers = JuridicalCardNumberSerializer(many=True, required=False)
+    card_numbers = serializers.SerializerMethodField()
+
+    def get_card_numbers(self, obj):
+        card_numbers = obj.card_numbers.all()
+        return JuridicalCardNumberSerializer(card_numbers, many=True).data
 
     class Meta:
         model = JuridicalProfile

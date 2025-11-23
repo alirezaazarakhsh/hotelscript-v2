@@ -939,19 +939,11 @@ class CardNumberManagementView(APIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست شماره کارت‌ها",
-        operation_description="می‌توانید `profile_type` را در query (ترجیحی) یا در body ارسال کنید.",
+        operation_description="می‌توانید `profile_type` را در query ارسال کنید.",
         tags=['cardnumber-profile'],
         manual_parameters=[
             openapi.Parameter('profile_type', openapi.IN_QUERY, description="نوع پروفایل: natural (حقیقی) یا juridical (حقوقی)", type=openapi.TYPE_STRING, required=False, enum=['natural', 'juridical'])
-        ],
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'profile_type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع پروفایل (گزینه جایگزین برای query)', enum=['natural', 'juridical'])
-            },
-            required=[]
-        ),
-        responses={200: openapi.Response(description="لیست شماره کارت‌ها")}
+        ]
     )
     def get(self, request):
         # اولویت با query است؛ در صورت نبود، از body هم پذیرش می‌شود

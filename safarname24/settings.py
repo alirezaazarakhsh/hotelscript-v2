@@ -300,8 +300,8 @@ TINYMCE_DEFAULT_CONFIG = {
 # safarnameh24/settings.py
 
 # مشخص کردن محیط (local یا production)
-ENVIRONMENT = 'production'  # برای محیط پروداکشن
-# ENVIRONMENT = 'local'  # برای محیط لوکال (برای تست لوکال این را فعال کنید)
+ENVIRONMENT = 'production'  # برای محیط لوکال (برای تست لوکال این را فعال کنید)
+# ENVIRONMENT = 'production'  # برای محیط پروداکشن
 
 # تنظیم URL پایه برای ریدایرکت callback
 if ENVIRONMENT == 'local':

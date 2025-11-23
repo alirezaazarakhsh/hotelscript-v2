@@ -2868,6 +2868,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
     خروجی فقط دو فیلد دارد: min_price و max_price (بر اساس جمع قیمت‌های روزانه با اعمال تخفیف درصدی).
     """
     permission_classes = [AllowAny]
+    swagger_fake_view = True
 
     def get_user_level(self, request):
         """تعیین سطح کاربری"""
