@@ -938,236 +938,108 @@ class CardNumberManagementView(APIView):
         return None
 
     @swagger_auto_schema(
-        operation_summary="مدیریت یکپارچه شماره کارت‌ها",
-        operation_description="""
-        API یکپارچه برای مدیریت کامل شماره کارت‌های حقیقی و حقوقی
-        
-        **پارامترها:**
-        - profile_type: نوع پروفایل (natural یا juridical) - الزامی
-        - action: نوع عملیات (list, add, update, delete) - الزامی
-        - card_id: شناسه شماره کارت (فقط برای update و delete) - اختیاری
-        - card_number: شماره کارت ۱۶ رقمی (برای add و update) - اختیاری
-        - iban: شماره شبا ۲۴ رقمی (برای add و update) - اختیاری
-        - account_holder_name: نام صاحب حساب به فارسی (برای add و update) - اختیاری
-        
-        **نوع عملیات‌ها:**
-        
-        1. مشاهده لیست (list):
-           - فقط profile_type و action=list لازم است
-           - برمی‌گرداند: لیست تمام شماره کارت‌های پروفایل
-        
-        2. افزودن (add):
-           - profile_type, action=add, card_number الزامی
-           - iban و account_holder_name اختیاری
-           - محدودیت: حداکثر ۲ شماره کارت برای هر پروفایل
-        
-        3. ویرایش (update):
-           - profile_type, action=update, card_id الزامی
-           - می‌توانید card_number, iban, account_holder_name را به صورت دلخواه ویرایش کنید
-           - فقط فیلدهای ارسالی تغییر می‌کنند
-        
-        4. حذف (delete):
-           - profile_type, action=delete, card_id الزامی
-           - شماره کارت به طور کامل حذف می‌شود
-        
-        **محدودیت‌ها:**
-        - هر پروفایل حداکثر ۲ شماره کارت
-        - شماره کارت باید یکتا باشد
-        - شماره شبا باید یکتا باشد
-        - نام صاحب حساب فقط شامل حروف فارسی و فاصله
-        
-        **مثال‌های استفاده:**
-        
-        مشاهده لیست:
-        {
-            "profile_type": "natural",
-            "action": "list"
-        }
-        
-        افزودن:
-        {
-            "profile_type": "natural",
-            "action": "add",
-            "card_number": "6037991234567890",
-            "iban": "123456789012345678901234",
-            "account_holder_name": "علی احمدی"
-        }
-        
-        ویرایش:
-        {
-            "profile_type": "natural",
-            "action": "update",
-            "card_id": 1,
-            "iban": "987654321098765432109876"
-        }
-        
-        حذف:
-        {
-            "profile_type": "juridical",
-            "action": "delete",
-            "card_id": 2
-        }
-        """,
+        operation_summary="دریافت لیست شماره کارت‌ها",
+        tags=['cardnumber-profile'],
+        manual_parameters=[
+            openapi.Parameter('profile_type', openapi.IN_QUERY, description="نوع پروفایل: natural یا juridical", type=openapi.TYPE_STRING, required=True, enum=['natural', 'juridical'])
+        ],
+        responses={200: openapi.Response(description="لیست شماره کارت‌ها")}
+    )
+    def get(self, request):
+        profile_type = request.query_params.get('profile_type')
+        if not profile_type or profile_type not in ['natural', 'juridical']:
+            return Response({'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+        profile = self.get_profile(request.user, profile_type)
+        serializer_class = self.get_serializer_class(profile_type)
+        card_numbers = profile.card_numbers.all()
+        serializer = serializer_class(card_numbers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_summary="افزودن شماره کارت جدید",
+        tags=['cardnumber-profile'],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['profile_type', 'action'],
+            required=['profile_type', 'card_number'],
             properties={
-                'profile_type': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='نوع پروفایل',
-                    enum=['natural', 'juridical']
-                ),
-                'action': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='نوع عملیات',
-                    enum=['list', 'add', 'update', 'delete']
-                ),
-                'card_id': openapi.Schema(
-                    type=openapi.TYPE_INTEGER,
-                    description='شناسه شماره کارت (فقط برای update و delete)',
-                    example=1
-                ),
-                'card_number': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='شماره کارت ۱۶ رقمی (برای add و update)',
-                    pattern='^\\d{16}$',
-                    example='6037991234567890'
-                ),
-                'iban': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='شماره شبا ۲۴ رقمی (برای add و update)',
-                    pattern='^\\d{24}$',
-                    example='123456789012345678901234'
-                ),
-                'account_holder_name': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='نام صاحب حساب به فارسی (برای add و update)',
-                    example='علی احمدی'
-                ),
+                'profile_type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع پروفایل', enum=['natural', 'juridical']),
+                'card_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره کارت ۱۶ رقمی', pattern='^\\d{16}$'),
+                'iban': openapi.Schema(type=openapi.TYPE_STRING, description='شماره شبا ۲۴ رقمی', pattern='^\\d{24}$'),
+                'account_holder_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام صاحب حساب به فارسی'),
             }
         ),
-        tags=['cardnumber-profile'],
-        responses={
-            200: openapi.Response(
-                description="عملیات با موفقیت انجام شد",
-                examples={
-                    "application/json": {
-                        "list": [
-                            {
-                                "id": 1,
-                                "card_number": "6037991234567890",
-                                "iban": "123456789012345678901234",
-                                "account_holder_name": "علی احمدی"
-                            }
-                        ],
-                        "add": {
-                            "id": 1,
-                            "card_number": "6037991234567890",
-                            "iban": "123456789012345678901234",
-                            "account_holder_name": "علی احمدی"
-                        },
-                        "update": {
-                            "id": 1,
-                            "card_number": "6037991234567890",
-                            "iban": "987654321098765432109876",
-                            "account_holder_name": "علی احمدی"
-                        },
-                        "delete": {
-                            "detail": "شماره کارت با موفقیت حذف شد."
-                        }
-                    }
-                }
-            ),
-            400: 'داده‌های نامعتبر یا عملیات نامعتبر',
-            404: 'پروفایل یا شماره کارت یافت نشد'
-        }
+        responses={201: openapi.Response(description="شماره کارت با موفقیت اضافه شد")}
     )
     def post(self, request):
-        """مدیریت یکپارچه شماره کارت‌ها"""
         profile_type = request.data.get('profile_type')
-        action = request.data.get('action')
-        
-        # اعتبارسنجی پارامترهای اصلی
         if not profile_type or profile_type not in ['natural', 'juridical']:
-            return Response(
-                {'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not action or action not in ['list', 'add', 'update', 'delete']:
-            return Response(
-                {'detail': 'نوع عملیات (action) باید یکی از موارد list, add, update, delete باشد.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+        profile = self.get_profile(request.user, profile_type)
+        serializer_class = self.get_serializer_class(profile_type)
+        serializer = serializer_class(data=request.data, context={'request': request, 'profile': profile})
+        if serializer.is_valid():
+            serializer.save(profile=profile)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(
+        operation_summary="ویرایش شماره کارت",
+        tags=['cardnumber-profile'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['profile_type', 'card_id'],
+            properties={
+                'profile_type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع پروفایل', enum=['natural', 'juridical']),
+                'card_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه شماره کارت'),
+                'card_number': openapi.Schema(type=openapi.TYPE_STRING, description='شماره کارت ۱۶ رقمی', pattern='^\\d{16}$'),
+                'iban': openapi.Schema(type=openapi.TYPE_STRING, description='شماره شبا ۲۴ رقمی', pattern='^\\d{24}$'),
+                'account_holder_name': openapi.Schema(type=openapi.TYPE_STRING, description='نام صاحب حساب به فارسی'),
+            }
+        ),
+        responses={200: openapi.Response(description="شماره کارت با موفقیت ویرایش شد")}
+    )
+    def put(self, request):
+        profile_type = request.data.get('profile_type')
+        card_id = request.data.get('card_id')
+        if not profile_type or profile_type not in ['natural', 'juridical']:
+            return Response({'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not card_id:
+            return Response({'detail': 'شناسه کارت (card_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
         profile = self.get_profile(request.user, profile_type)
         serializer_class = self.get_serializer_class(profile_type)
         model_class = CardNumber if profile_type == 'natural' else JuridicalCardNumber
-        
-        # مشاهده لیست
-        if action == 'list':
-            card_numbers = profile.card_numbers.all()
-            serializer = serializer_class(card_numbers, many=True)
+        card_number = get_object_or_404(model_class, id=card_id, profile=profile)
+        serializer = serializer_class(card_number, data=request.data, partial=True, context={'request': request, 'profile': profile})
+        if serializer.is_valid():
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        # افزودن شماره کارت جدید
-        elif action == 'add':
-            serializer = serializer_class(
-                data=request.data,
-                context={'request': request, 'profile': profile}
-            )
-            
-            if serializer.is_valid():
-                serializer.save(profile=profile)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # ویرایش شماره کارت
-        elif action == 'update':
-            card_id = request.data.get('card_id')
-            
-            if not card_id:
-                return Response(
-                    {'detail': 'شناسه کارت (card_id) برای ویرایش الزامی است.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            card_number = get_object_or_404(model_class, id=card_id, profile=profile)
-            
-            serializer = serializer_class(
-                card_number,
-                data=request.data,
-                partial=True,
-                context={'request': request, 'profile': profile}
-            )
-            
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # حذف شماره کارت
-        elif action == 'delete':
-            card_id = request.data.get('card_id')
-            
-            if not card_id:
-                return Response(
-                    {'detail': 'شناسه کارت (card_id) برای حذف الزامی است.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            card_number = get_object_or_404(model_class, id=card_id, profile=profile)
-            
-            try:
-                card_number.delete()
-                return Response(
-                    {'detail': 'شماره کارت با موفقیت حذف شد.'},
-                    status=status.HTTP_200_OK
-                )
-            except Exception as e:
-                return Response(
-                    {'detail': f'خطا در حذف شماره کارت: {str(e)}'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(
+        operation_summary="حذف شماره کارت",
+        tags=['cardnumber-profile'],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['profile_type', 'card_id'],
+            properties={
+                'profile_type': openapi.Schema(type=openapi.TYPE_STRING, description='نوع پروفایل', enum=['natural', 'juridical']),
+                'card_id': openapi.Schema(type=openapi.TYPE_INTEGER, description='شناسه شماره کارت'),
+            }
+        ),
+        responses={204: openapi.Response(description="شماره کارت با موفقیت حذف شد")}
+    )
+    def delete(self, request):
+        profile_type = request.data.get('profile_type')
+        card_id = request.data.get('card_id')
+        if not profile_type or profile_type not in ['natural', 'juridical']:
+            return Response({'detail': 'نوع پروفایل (profile_type) باید natural یا juridical باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not card_id:
+            return Response({'detail': 'شناسه کارت (card_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        profile = self.get_profile(request.user, profile_type)
+        model_class = CardNumber if profile_type == 'natural' else JuridicalCardNumber
+        card_number = get_object_or_404(model_class, id=card_id, profile=profile)
+        try:
+            card_number.delete()
+            return Response({'detail': 'شماره کارت با موفقیت حذف شد.'}, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({'detail': f'خطا در حذف شماره کارت: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
