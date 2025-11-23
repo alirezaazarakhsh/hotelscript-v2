@@ -540,15 +540,15 @@ class FinancialOperationsListAPIView(APIView):
                 "status": "success",
                 "status_display": "عملیات موفقیت آمیز بود",
                 "date": to_jalali(t.created_at),
-                    "created_at": t.created_at,
+                "created_at": t.created_at,
             })
 
-            # مرتب سازی بر اساس تاریخ ایجاد (جدیدترین اول)
-            operations.sort(key=lambda op: op['created_at'], reverse=True)
+        # مرتب سازی بر اساس تاریخ ایجاد (جدیدترین اول)
+        operations.sort(key=lambda op: op['created_at'], reverse=True)
         
-            # حذف created_at از خروجی نهایی
-            for op in operations:
-                del op['created_at']
+        # حذف created_at از خروجی نهایی
+        for op in operations:
+            del op['created_at']
 
         total_items = len(operations)
         total_pages = (total_items + page_size - 1) // page_size
