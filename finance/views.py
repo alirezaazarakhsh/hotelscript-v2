@@ -14,8 +14,8 @@ from drf_yasg import openapi
 
 from setting_payment.models import IranianGateway, PaymentGatewayPreference, ZarinpalGateway
 
-from .models import  AdminCardSettings, Wallet, WalletPack, WithdrawalRequest, WalletTopUpLog
-from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer, WithdrawalRequestSerializer
+from .models import  AdminCardSettings, Wallet, WalletPack, WithdrawalRequest, WalletTopUpLog, CardToCardInstruction
+from .serializers import  AdminCardSettingsSerializer, DepositReceiptSerializer, WalletPackSerializer, WalletSerializer, WalletTopUpSerializer, WithdrawalRequestSerializer, CardToCardInstructionSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +442,27 @@ class WithdrawalRequestCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ای پی ای دریافت توضیحات کارت به کارت (متن راهنما)
+class CardToCardInstructionAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="دریافت متن توضیحات کارت به کارت",
+        operation_description="""
+        این API متن تنظیم‌شده توسط ادمین را برای راهنمایی کاربران در ثبت فیش کارت به کارت برمی‌گرداند.
+
+        اگر متنی تنظیم نشده باشد، مقدار رشته خالی بازگردانده می‌شود.
+        """,
+        responses={200: CardToCardInstructionSerializer}
+    )
+    def get(self, request):
+        obj = CardToCardInstruction.objects.first()
+        if not obj:
+            return Response({"text": ""}, status=status.HTTP_200_OK)
+        serializer = CardToCardInstructionSerializer(obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 
 # ای پی ای تجمیع همه عملیات مالی (افزایش، برداشت، کارت به کارت دستی)
 class FinancialOperationsListAPIView(APIView):
@@ -457,8 +478,9 @@ class FinancialOperationsListAPIView(APIView):
         - date (تاریخ شمسی YYYY/MM/DD)
         - status (success یا unsuccess)
         - status_display (متن فارسی موفق/ناموفق)
-        - id (شناسه رکورد)
-        پجینیشن: page, page_size, total_pages, total_items
+        
+            مرتب سازی: جدیدترین عملیات در ابتدای لیست
+            پجینیشن: page, page_size, total_pages, total_items (18 آیتم در هر صفحه)
         """,
         responses={200: "Paginated operations list"}
     )
@@ -485,13 +507,13 @@ class FinancialOperationsListAPIView(APIView):
         deposit_receipts = DepositReceipt.objects.filter(user=user)
         for receipt in deposit_receipts:
             operations.append({
-                "id": receipt.id,
                 "type": "card_to_card",
                 "service_type": "کارت به کارت",
                 "amount": int(receipt.amount),
                 "status": "success" if receipt.is_approved else "unsuccess",
                 "status_display": "عملیات موفقیت آمیز بود" if receipt.is_approved else "عملیات ناموفق بود",
                 "date": receipt.deposit_date_jalali,
+                    "created_at": receipt.created_at,
             })
 
         # برداشت‌ها
@@ -499,32 +521,34 @@ class FinancialOperationsListAPIView(APIView):
         for w in withdrawal_requests:
             success = w.status in ["approved", "completed"]
             operations.append({
-                "id": w.id,
                 "type": "withdrawal",
                 "service_type": "برداشت وجه",
                 "amount": int(w.amount),
                 "status": "success" if success else "unsuccess",
                 "status_display": "عملیات موفقیت آمیز بود" if success else "عملیات ناموفق بود",
                 "date": to_jalali(w.created_at),
+                    "created_at": w.created_at,
             })
 
         # افزایش کیف پول (همیشه موفق)
         topups = WalletTopUpLog.objects.filter(user=user)
         for t in topups:
             operations.append({
-                "id": t.id,
                 "type": "wallet_increase",
                 "service_type": "افزایش کیف پول",
                 "amount": int(t.amount),
                 "status": "success",
                 "status_display": "عملیات موفقیت آمیز بود",
                 "date": to_jalali(t.created_at),
+                    "created_at": t.created_at,
             })
 
-        # مرتب سازی بر اساس تاریخ (Jalali strings lexicographically) و سپس مقدار id نزولی برای ثبات
-        def sort_key(op):
-            return (op['date'], op['id'])
-        operations.sort(key=sort_key, reverse=True)
+            # مرتب سازی بر اساس تاریخ ایجاد (جدیدترین اول)
+            operations.sort(key=lambda op: op['created_at'], reverse=True)
+        
+            # حذف created_at از خروجی نهایی
+            for op in operations:
+                del op['created_at']
 
         total_items = len(operations)
         total_pages = (total_items + page_size - 1) // page_size

@@ -8,6 +8,7 @@ from .models import (
     WalletPack,
     WithdrawalRequest,
     WalletTopUpLog,
+    CardToCardInstruction,
 )
 
 
@@ -150,7 +151,7 @@ class DepositReceiptAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display', 'card_snapshot_display')
         }),
         ('اطلاعات واریز', {
-            'fields': ('depositor_name', 'tracking_number', 'formatted_amount_display', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
+            'fields': ('depositor_name', 'tracking_number', 'amount', 'formatted_amount_display', 'deposit_date_jalali', 'receipt_image', 'receipt_image_preview')
         }),
         ('وضعیت', {
             'fields': ('is_approved',)
@@ -247,9 +248,9 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
         'card_number',
         'card_iban',
         'card_holder_name',
+        'amount',
         'formatted_amount_display',
-        'created_at',
-        'updated_at',
+        'created_at_jalali',
         'wallet_debited',
     )
     
@@ -258,13 +259,13 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             'fields': ('user', 'profile_type', 'profile_info_display')
         }),
         ('اطلاعات برداشت', {
-            'fields': ('formatted_amount_display', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
+            'fields': ('amount', 'formatted_amount_display', 'card_number', 'card_iban', 'card_holder_name', 'card_info_display')
         }),
         ('وضعیت', {
-            'fields': ('status', 'wallet_debited', 'admin_note')
+            'fields': ('status', 'wallet_debited')
         }),
         ('تاریخ', {
-            'fields': ('created_at', 'updated_at')
+            'fields': ('created_at_jalali',)
         }),
     )
     
@@ -286,6 +287,15 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
             int(obj.amount)
         )
     formatted_amount_display.short_description = "مبلغ برداشت"
+    
+    def created_at_jalali(self, obj):
+        """نمایش تاریخ ثبت درخواست به شمسی"""
+        if obj.created_at:
+            import jdatetime
+            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.created_at)
+            return jalali_date.strftime('%Y/%m/%d - %H:%M')
+        return '-'
+    created_at_jalali.short_description = "تاریخ ثبت درخواست"
     
     def profile_info_display(self, obj):
         """نمایش اطلاعات پروفایل"""
@@ -375,3 +385,20 @@ class WalletTopUpLogAdmin(admin.ModelAdmin):
             return "-"
         return format_html('<b style="color:#198754">{:,} تومان</b>', int(obj.amount))
     formatted_amount_display.short_description = 'مبلغ'
+
+
+@admin.register(CardToCardInstruction)
+class CardToCardInstructionAdmin(admin.ModelAdmin):
+    list_display = ('short_preview', 'updated_at')
+    readonly_fields = ('updated_at',)
+
+    def has_add_permission(self, request):
+        # فقط یک رکورد مجاز است
+        if CardToCardInstruction.objects.exists():
+            return False
+        return True
+
+    def short_preview(self, obj):
+        text = (obj.text or '').strip()
+        return (text[:50] + '...') if len(text) > 50 else text or '-'
+    short_preview.short_description = 'پیش‌نمایش متن'

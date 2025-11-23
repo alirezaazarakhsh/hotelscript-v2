@@ -402,3 +402,19 @@ class WalletTopUpLog(models.Model):
 
     def __str__(self):
         return f"TopUp {self.user.phone_number} +{self.amount:,} تومان via {self.gateway}"
+
+
+# توضیحات کارت به کارت (تنظیمات متنی قابل ویرایش توسط ادمین)
+class CardToCardInstruction(models.Model):
+    text = models.TextField(
+        verbose_name=_('متن توضیحات کارت به کارت'),
+        help_text=_('این متن برای راهنمایی کاربر هنگام ثبت فیش کارت به کارت نمایش داده می‌شود.')
+    )
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('آخرین بروزرسانی'))
+
+    class Meta:
+        verbose_name = _('توضیحات کارت به کارت')
+        verbose_name_plural = _('تنظیم توضیحات کارت به کارت')
+
+    def __str__(self):
+        return 'توضیحات کارت به کارت'

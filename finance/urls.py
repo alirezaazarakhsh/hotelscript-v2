@@ -45,4 +45,9 @@ urlpatterns = [
         views.FinancialOperationsListAPIView.as_view(),
         name='wallet-operations'
     ),
+    path(
+        'card-to-card/instruction/',
+        views.CardToCardInstructionAPIView.as_view(),
+        name='card-to-card-instruction'
+    ),
 ]

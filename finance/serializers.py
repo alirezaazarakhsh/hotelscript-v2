@@ -5,6 +5,7 @@ from .models import (
     Wallet,
     WalletPack,
     WithdrawalRequest,
+    CardToCardInstruction,
 )
 from authentication.models import CardNumber, JuridicalCardNumber
 from django.contrib.contenttypes.models import ContentType
@@ -228,3 +229,10 @@ class WithdrawalRequestSerializer(serializers.ModelSerializer):
             'card_holder_name',
             'status_display',
         )
+
+
+class CardToCardInstructionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CardToCardInstruction
+        fields = ['text']
+        read_only_fields = ['text']
