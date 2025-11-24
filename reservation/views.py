@@ -72,6 +72,7 @@ from rest_framework.exceptions import ValidationError
 from django.db import (
     OperationalError,
     DatabaseError,
+    IntegrityError,
     connections,
     transaction,
 )
@@ -1022,12 +1023,22 @@ class PassengerListCreateView(generics.ListCreateAPIView):
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as exc:
+            return Response({
+                "error": "داده‌های ورودی نامعتبر هستند.",
+                "details": exc.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as exc:
+            return Response({
+                "error": "مسافر با این کد شناسایی قبلاً ثبت شده است.",
+                "details": str(exc)
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
             return Response({
                 "error": str(exc),
                 "exception_type": exc.__class__.__name__,
                 "trace": traceback.format_exc(limit=2)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -3955,6 +3966,16 @@ class ReservationRoomDetailAPIView(APIView):
                     national_code=main_passenger['national_code'],
                     is_primary=True
                 )
+                # اضافه کردن به لیست مسافران کاربر اگر وجود ندارد
+                if main_passenger.get('national_code'):
+                    if not Passenger.objects.filter(user=request.user, identification_code=main_passenger['national_code']).exists():
+                        Passenger.objects.create(
+                            user=request.user,
+                            first_name=main_passenger['first_name'],
+                            last_name=main_passenger['last_name'],
+                            identification_code=main_passenger['national_code'],
+                            phone_number=main_passenger['phone_number']
+                        )
 
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
@@ -3968,6 +3989,16 @@ class ReservationRoomDetailAPIView(APIView):
                             national_code=passenger.get('national_code', None),
                             is_primary=False
                         )
+                        # اضافه کردن به لیست مسافران کاربر اگر وجود ندارد و national_code دارد
+                        if passenger.get('national_code') and passenger.get('phone_number'):
+                            if not Passenger.objects.filter(user=request.user, identification_code=passenger['national_code']).exists():
+                                Passenger.objects.create(
+                                    user=request.user,
+                                    first_name=passenger['first_name'],
+                                    last_name=passenger['last_name'],
+                                    identification_code=passenger['national_code'],
+                                    phone_number=passenger['phone_number']
+                                )
 
             # محاسبه و ذخیره قیمت‌های نهایی
             total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
