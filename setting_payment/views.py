@@ -570,13 +570,21 @@ class PaymentVerifyAPIView(APIView):
                             for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
                                 if passenger.national_code and passenger.mobile_number:
                                     if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
-                                        Passenger.objects.create(
-                                            user=reservation.buyer,
-                                            first_name=passenger.first_name,
-                                            last_name=passenger.last_name,
-                                            identification_code=passenger.national_code,
-                                            phone_number=passenger.mobile_number
-                                        )
+                                        try:
+                                            Passenger.objects.create(
+                                                user=reservation.buyer,
+                                                first_name=passenger.first_name,
+                                                last_name=passenger.last_name,
+                                                identification_code=passenger.national_code,
+                                                phone_number=passenger.mobile_number
+                                            )
+                                            logger.info(f"✅ مسافر {passenger.first_name} {passenger.last_name} به لیست اضافه شد.")
+                                        except Exception as e:
+                                            logger.error(f"❌ خطا در اضافه کردن مسافر {passenger.first_name} {passenger.last_name}: {e}")
+                                    else:
+                                        logger.info(f"ℹ️ مسافر {passenger.first_name} {passenger.last_name} قبلاً در لیست وجود دارد.")
+                                else:
+                                    logger.warning(f"⚠️ مسافر {passenger.first_name} {passenger.last_name} کد ملی یا موبایل ندارد، اضافه نشد.")
                         
                         # پردازش کیف پول
                         if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
@@ -647,13 +655,21 @@ class PaymentVerifyAPIView(APIView):
                             for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
                                 if passenger.national_code and passenger.mobile_number:
                                     if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
-                                        Passenger.objects.create(
-                                            user=reservation.buyer,
-                                            first_name=passenger.first_name,
-                                            last_name=passenger.last_name,
-                                            identification_code=passenger.national_code,
-                                            phone_number=passenger.mobile_number
-                                        )
+                                        try:
+                                            Passenger.objects.create(
+                                                user=reservation.buyer,
+                                                first_name=passenger.first_name,
+                                                last_name=passenger.last_name,
+                                                identification_code=passenger.national_code,
+                                                phone_number=passenger.mobile_number
+                                            )
+                                            logger.info(f"✅ مسافر {passenger.first_name} {passenger.last_name} به لیست اضافه شد.")
+                                        except Exception as e:
+                                            logger.error(f"❌ خطا در اضافه کردن مسافر {passenger.first_name} {passenger.last_name}: {e}")
+                                    else:
+                                        logger.info(f"ℹ️ مسافر {passenger.first_name} {passenger.last_name} قبلاً در لیست وجود دارد.")
+                                else:
+                                    logger.warning(f"⚠️ مسافر {passenger.first_name} {passenger.last_name} کد ملی یا موبایل ندارد، اضافه نشد.")
                         
                         # پردازش کیف پول
                         if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
