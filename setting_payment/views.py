@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 
 from safarname24 import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
-from reservation.models import Reservationhotel, Wallet
+from reservation.models import Reservationhotel, Wallet, Passenger, ReservationRoomPassenger
 from django.db.models import F
 
 logger = logging.getLogger(__name__)
@@ -565,6 +565,19 @@ class PaymentVerifyAPIView(APIView):
                         reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         
+                        # اضافه کردن مسافران جدید به لیست مسافران کاربر
+                        for res_room in reservation.reservation_rooms.all():
+                            for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
+                                if passenger.national_code and passenger.mobile_number:
+                                    if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
+                                        Passenger.objects.create(
+                                            user=reservation.buyer,
+                                            first_name=passenger.first_name,
+                                            last_name=passenger.last_name,
+                                            identification_code=passenger.national_code,
+                                            phone_number=passenger.mobile_number
+                                        )
+                        
                         # پردازش کیف پول
                         if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
                             try:
@@ -628,6 +641,19 @@ class PaymentVerifyAPIView(APIView):
                         reservation.payment_status = 'paid'
                         reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
+                        
+                        # اضافه کردن مسافران جدید به لیست مسافران کاربر
+                        for res_room in reservation.reservation_rooms.all():
+                            for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
+                                if passenger.national_code and passenger.mobile_number:
+                                    if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
+                                        Passenger.objects.create(
+                                            user=reservation.buyer,
+                                            first_name=passenger.first_name,
+                                            last_name=passenger.last_name,
+                                            identification_code=passenger.national_code,
+                                            phone_number=passenger.mobile_number
+                                        )
                         
                         # پردازش کیف پول
                         if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
