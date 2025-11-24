@@ -3966,6 +3966,19 @@ class ReservationRoomDetailAPIView(APIView):
                     national_code=main_passenger['national_code'],
                     is_primary=True
                 )
+                # اضافه کردن به لیست مسافران کاربر اگر وجود ندارد و پرداخت نهایی نشده
+                if reservation.payment_status != 'paid' and main_passenger.get('national_code'):
+                    if not Passenger.objects.filter(user=request.user, identification_code=main_passenger['national_code']).exists():
+                        try:
+                            Passenger.objects.create(
+                                user=request.user,
+                                first_name=main_passenger['first_name'],
+                                last_name=main_passenger['last_name'],
+                                identification_code=main_passenger['national_code'],
+                                phone_number=main_passenger['phone_number']
+                            )
+                        except Exception as e:
+                            pass  # ignore errors
 
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
@@ -3979,6 +3992,19 @@ class ReservationRoomDetailAPIView(APIView):
                             national_code=passenger.get('national_code', None),
                             is_primary=False
                         )
+                        # اضافه کردن به لیست مسافران کاربر اگر وجود ندارد و پرداخت نهایی نشده
+                        if reservation.payment_status != 'paid' and passenger.get('national_code') and passenger.get('phone_number'):
+                            if not Passenger.objects.filter(user=request.user, identification_code=passenger['national_code']).exists():
+                                try:
+                                    Passenger.objects.create(
+                                        user=request.user,
+                                        first_name=passenger['first_name'],
+                                        last_name=passenger['last_name'],
+                                        identification_code=passenger['national_code'],
+                                        phone_number=passenger['phone_number']
+                                    )
+                                except Exception as e:
+                                    pass  # ignore errors
 
             # محاسبه و ذخیره قیمت‌های نهایی
             total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
