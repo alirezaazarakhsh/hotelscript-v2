@@ -97,6 +97,7 @@ class Province(models.Model):
 
 
 
+
 # مدل اضافه کردن شهر ها 
 class City(models.Model):
     name = models.CharField(
@@ -2240,6 +2241,29 @@ class UserCancellation(models.Model):
         null=True,
         verbose_name=_('توضیحات')
     )
+    PENALTY_TYPE_CHOICES = (
+        ('hotel_default', _('استفاده از تنظیمات هتل')),
+        ('percentage', _('درصدی')),
+        ('fixed', _('مبلغ ثابت')),
+    )
+
+    # امکان وارد کردن جریمه کنسلی به صورت درصد یا مقدار ثابت برای همین درخواست
+    penalty_type = models.CharField(
+        max_length=20,
+        choices=PENALTY_TYPE_CHOICES,
+        default='hotel_default',
+        verbose_name=_('نوع جریمه'),
+        help_text=_('اگر "استفاده از تنظیمات هتل" انتخاب شود، از مدل CancellationPenalty استفاده می‌شود')
+    )
+
+    penalty_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        verbose_name=_('مقدار جریمه'),
+        help_text=_('برای نوع "درصدی" مقدار بین 0 تا 100 وارد کنید؛ برای "مبلغ ثابت" مبلغ به تومان وارد شود.')
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -2251,6 +2275,24 @@ class UserCancellation(models.Model):
 
     def __str__(self):
         return f"{self.reservation.tracking_code} - {self.status}"
+
+    def clean(self):
+        """Validate penalty fields depending on the selected penalty_type."""
+        super().clean()
+
+        if self.penalty_type == 'percentage':
+            if self.penalty_value is None:
+                raise ValidationError({'penalty_value': _('درصد جریمه مشخص نشده است.')})
+            if self.penalty_value < 0 or self.penalty_value > 100:
+                raise ValidationError({'penalty_value': _('درصد جریمه باید بین 0 تا 100 باشد.')})
+
+        elif self.penalty_type == 'fixed':
+            if self.penalty_value is None:
+                raise ValidationError({'penalty_value': _('مبلغ جریمه مشخص نشده است.')})
+            if self.penalty_value < 0:
+                raise ValidationError({'penalty_value': _('مبلغ جریمه نمی‌تواند منفی باشد.')})
+
+        # if penalty_type == 'hotel_default' then penalty_value may be None or present (ignored)
 
     class Meta:
         verbose_name = _('کنسل رزرو کاربر')
@@ -2274,18 +2316,39 @@ class UserCancellation(models.Model):
         if not hotel:
             raise ValidationError(_('هتل مرتبط با رزرو یافت نشد.'))
 
-        # پیدا کردن تنظیمات جریمه کنسلی هتل
-        try:
-            penalty_obj = CancellationPenalty.objects.get(hotel=hotel)
-        except CancellationPenalty.DoesNotExist:
-            # اگر تنظیمات جریمه وجود نداشت، جریمه صفر در نظر گرفته می‌شود
-            penalty_percentage = Decimal('0')
-        else:
-            penalty_percentage = Decimal(penalty_obj.penalty_percentage) / 100
-
-        # محاسبه مبلغ جریمه
+        # تعیین جریمه بر اساس نوع انتخاب‌شده در درخواست کنسلی
         final_price = reservation.final_price
-        penalty_amount = (final_price * penalty_percentage).quantize(Decimal('1'), rounding=ROUND_UP)
+
+        penalty_amount = Decimal('0')
+
+        if self.penalty_type == 'hotel_default':
+            try:
+                penalty_obj = CancellationPenalty.objects.get(hotel=hotel)
+            except CancellationPenalty.DoesNotExist:
+                penalty_amount = Decimal('0')
+            else:
+                penalty_percentage = Decimal(penalty_obj.penalty_percentage) / 100
+                penalty_amount = (final_price * penalty_percentage).quantize(Decimal('1'), rounding=ROUND_UP)
+
+        elif self.penalty_type == 'percentage':
+            if self.penalty_value is None:
+                raise ValidationError(_('درصد جریمه مشخص نشده است.'))
+            if self.penalty_value < 0 or self.penalty_value > 100:
+                raise ValidationError(_('درصد جریمه باید بین 0 تا 100 باشد.'))
+            penalty_percentage = Decimal(self.penalty_value) / 100
+            penalty_amount = (final_price * penalty_percentage).quantize(Decimal('1'), rounding=ROUND_UP)
+
+        elif self.penalty_type == 'fixed':
+            if self.penalty_value is None:
+                raise ValidationError(_('مبلغ جریمه مشخص نشده است.'))
+            if self.penalty_value < 0:
+                raise ValidationError(_('مبلغ جریمه نمی‌تواند منفی باشد.'))
+            penalty_amount = Decimal(self.penalty_value)
+
+        else:
+            # نوع نامشخص => بدون جریمه
+            penalty_amount = Decimal('0')
+
         refund_amount = final_price - penalty_amount
 
         # اطمینان از اینکه مبلغ برگشتی منفی نشود
