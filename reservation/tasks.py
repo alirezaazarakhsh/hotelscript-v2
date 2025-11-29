@@ -41,7 +41,8 @@ def check_and_reject_expired_reservations():
     now = timezone.now()
     expired_reservations = []
     # بررسی رزروهایی که expiry explicit در cache ست شده است (cache ذخیره‌سازی expiry به صورت epoch timestamp دارد)
-    for r in Reservationhotel.objects.filter(payment_status__in=['pending','unpaid']).exclude(capacity_status='rejected'):
+    # Only consider reservations that are still pending approval.
+    for r in Reservationhotel.objects.filter(capacity_status='pending', payment_status__in=['pending','unpaid']):
         try:
             cache_key_approval = f"reservation_approval_timer_{r.tracking_code}"
             cache_value = cache.get(cache_key_approval)
@@ -68,7 +69,9 @@ def check_and_reject_expired_reservations():
             with transaction.atomic():
                 res = Reservationhotel.objects.select_for_update().get(pk=reservation.pk)
                 # دوباره چک تا race condition کم شود
-                if res.payment_status == 'paid' or res.capacity_status == 'rejected':
+                # If reservation is no longer pending (e.g. confirmed or already rejected)
+                # or has been paid, skip it.
+                if res.payment_status == 'paid' or res.capacity_status != 'pending':
                     continue
 
                 # اگر expiry در cache ست شده، براساس آن تصمیم نهایی را بگیریم
@@ -115,8 +118,9 @@ def auto_cancel_unpaid_reservation(reservation_id):
     try:
         with transaction.atomic():
             res = Reservationhotel.objects.select_for_update().get(pk=reservation_id)
-            if res.payment_status == 'paid' or res.capacity_status == 'rejected':
-                logger.info(f"Reservation {res.tracking_code} already settled before auto cancel.")
+            # If the reservation is already paid or is no longer pending (e.g. confirmed), do not cancel it.
+            if res.payment_status == 'paid' or res.capacity_status != 'pending':
+                logger.info(f"Reservation {res.tracking_code} already settled or not pending before auto cancel.")
                 return False
             # اگر expiry در cache ست شده است از آن استفاده کن (cache حاوی epoch timestamp)
             now = timezone.now()
