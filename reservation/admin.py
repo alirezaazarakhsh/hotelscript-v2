@@ -1076,22 +1076,24 @@ class UserCancellationAdmin(admin.ModelAdmin):
         'id',
         'reservation_tracking_code',
         'show_reasons',
+        'penalty_type',
+        'penalty_value',
         'status',
-        'created_at',
-        'updated_at',
+        'created_jalali',
+        'updated_jalali',
     )
     list_filter = ('status', 'created_at', 'updated_at')
     search_fields = ('reservation__tracking_code', 'reasons__title', 'description')
     autocomplete_fields = ('reservation',)
     filter_horizontal = ('reasons',)
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_jalali', 'updated_jalali')
 
     fieldsets = (
         (None, {
-            'fields': ('reservation', 'reasons', 'description', 'status')
+            'fields': ('reservation', 'reasons', 'description', 'status', 'penalty_type', 'penalty_value')
         }),
         ('تاریخ‌ها', {
-            'fields': ('created_at', 'updated_at')
+            'fields': ('created_jalali', 'updated_jalali')
         }),
     )
 
@@ -1109,6 +1111,20 @@ class UserCancellationAdmin(admin.ModelAdmin):
             ((r.title,) for r in qs)
         )
     show_reasons.short_description = 'دلایل کنسلی'
+
+    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
+    def created_jalali(self, obj):
+        if obj.created_at:
+            dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+        return '-'
+
+    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
+    def updated_jalali(self, obj):
+        if obj.updated_at:
+            dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+        return '-'
 
     def save_model(self, request, obj, form, change):
         """
