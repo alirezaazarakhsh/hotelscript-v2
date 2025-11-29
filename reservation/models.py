@@ -1386,6 +1386,7 @@ class Reservationhotel(models.Model):
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
 
+
     class Meta:
         verbose_name = _('رزرو')
         verbose_name_plural = _('رزرو‌ها')

@@ -38,12 +38,25 @@ def check_and_reject_expired_reservations():
     approval_duration = ReservationApprovalDuration.objects.first()
     duration_minutes = approval_duration.duration_minutes if approval_duration else 15  # default 15
 
-    cutoff_gregorian = timezone.now() - timedelta(minutes=duration_minutes)
-    # created_at در مدل رزرو jDateTimeField است؛ تبدیل به gregorian برای مقایسه امن
+    now = timezone.now()
     expired_reservations = []
+    # بررسی رزروهایی که expiry explicit در cache ست شده است (cache ذخیره‌سازی expiry به صورت epoch timestamp دارد)
     for r in Reservationhotel.objects.filter(payment_status__in=['pending','unpaid']).exclude(capacity_status='rejected'):
         try:
+            cache_key_approval = f"reservation_approval_timer_{r.tracking_code}"
+            cache_value = cache.get(cache_key_approval)
+            if cache_value:
+                try:
+                    expires_at_ts = float(cache_value)
+                    if expires_at_ts <= now.timestamp():
+                        expired_reservations.append(r)
+                    continue
+                except Exception:
+                    logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
+
+            # fallback به منطق قبلی: اگر cache ست نشده، از created_at و duration استفاده کن
             created_dt = r.created_at.togregorian() if hasattr(r.created_at, 'togregorian') else r.created_at
+            cutoff_gregorian = now - timedelta(minutes=duration_minutes)
             if created_dt < cutoff_gregorian:
                 expired_reservations.append(r)
         except Exception:
@@ -57,9 +70,21 @@ def check_and_reject_expired_reservations():
                 # دوباره چک تا race condition کم شود
                 if res.payment_status == 'paid' or res.capacity_status == 'rejected':
                     continue
-                created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
-                if created_dt >= cutoff_gregorian:
-                    continue
+
+                # اگر expiry در cache ست شده، براساس آن تصمیم نهایی را بگیریم
+                cache_key_approval = f"reservation_approval_timer_{res.tracking_code}"
+                cache_value = cache.get(cache_key_approval)
+                if cache_value:
+                    try:
+                        expires_at_ts = float(cache_value)
+                        if expires_at_ts > now.timestamp():
+                            continue
+                    except Exception:
+                        logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
+                else:
+                    created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
+                    if created_dt >= (now - timedelta(minutes=duration_minutes)):
+                        continue
 
                 # لغو رزرو
                 res.capacity_status = 'rejected'
@@ -93,10 +118,22 @@ def auto_cancel_unpaid_reservation(reservation_id):
             if res.payment_status == 'paid' or res.capacity_status == 'rejected':
                 logger.info(f"Reservation {res.tracking_code} already settled before auto cancel.")
                 return False
-            created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
-            if created_dt > timezone.now() - timedelta(minutes=15):
-                # هنوز به 15 دقیقه نرسیده؛ رها می‌کنیم (احتمالاً duration تغییر کرده)
-                return False
+            # اگر expiry در cache ست شده است از آن استفاده کن (cache حاوی epoch timestamp)
+            now = timezone.now()
+            cache_key_approval = f"reservation_approval_timer_{res.tracking_code}"
+            cache_value = cache.get(cache_key_approval)
+            if cache_value:
+                try:
+                    expires_at_ts = float(cache_value)
+                    if expires_at_ts > now.timestamp():
+                        return False
+                except Exception:
+                    logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
+            else:
+                created_dt = res.created_at.togregorian() if hasattr(res.created_at, 'togregorian') else res.created_at
+                if created_dt > now - timedelta(minutes=15):
+                    # هنوز به 15 دقیقه نرسیده؛ رها می‌کنیم (احتمالاً duration تغییر کرده)
+                    return False
 
             res.capacity_status = 'rejected'
             res.save(update_fields=['capacity_status'])
