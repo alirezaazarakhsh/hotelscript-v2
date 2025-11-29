@@ -77,8 +77,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     except Exception:
                         logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
                 else:
-                    # هنوز تایمر توسط کلاینت شروع نشده؛ تایمر نشان داده نمی‌شود و منتظر درخواست فرانت می‌مانیم.
-                    logger.debug(f"Pending state without started timer for {self.tracking_code}; waiting for start_approval_timer")
+                    # هنوز تایمر توسط کلاینت شروع نشده؛ اما برای جلوگیری از مخفی شدن تایمر، مقدار کامل duration را به فرانت نشان می‌دهیم
+                    remaining = approval_duration_seconds
+                    show_timer = True
+                    logger.debug(f"Pending state without started timer for {self.tracking_code}; showing full duration {remaining}s until front starts timer")
 
             await self.send_json({
                 "capacity_status": capacity_status,
@@ -160,6 +162,9 @@ class ReservationConsumer(AsyncWebsocketConsumer):
     @sync_to_async
     def get_remaining_time(self):
         cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
+        approval_duration = ReservationApprovalDuration.objects.first()
+        approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
+
         if self.reservation.capacity_status == "pending":
             cache_value = cache.get(cache_key_approval)
             if cache_value:
@@ -169,6 +174,8 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     return max(0, remaining)
                 except Exception:
                     logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
+            # اگر تایمر هنوز توسط فرانت شروع نشده، برای جلوگیری از مخفی شدن، مدت کامل را نشان بده
+            return approval_duration_seconds
         return 0
 
     async def disconnect(self, close_code):
