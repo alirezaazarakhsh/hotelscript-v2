@@ -2356,6 +2356,8 @@ class UserCancellation(models.Model):
             refund_amount = Decimal('0')
 
         # برگشت وجه به کیف پول کاربر
+        # به‌جای تغییر وضعیت پرداخت، از فِلاگِ thread-local برای جلوگیری از اجرای
+        # سیگنالِ تخصیص امتیاز و ارسال SMS استفاده می‌کنیم تا وضعیت پرداخت دست نخورده بماند.
         with transaction.atomic():
             wallet, created = Wallet.objects.get_or_create(user=reservation.buyer)
             wallet.balance += refund_amount
@@ -2365,11 +2367,16 @@ class UserCancellation(models.Model):
             reservation.cancellation_penalty_applied = penalty_amount
             reservation.cancellation_refunded_amount = refund_amount
             reservation.cancellation_requested = True
-            reservation.save(update_fields=[
-                'cancellation_penalty_applied',
-                'cancellation_refunded_amount',
-                'cancellation_requested'
-            ])
+            # موقتاً سیگنال‌های ارسال امتیاز/SMS را غیرفعال می‌کنیم
+            try:
+                set_skip_points_and_sms(True)
+                reservation.save(update_fields=[
+                    'cancellation_penalty_applied',
+                    'cancellation_refunded_amount',
+                    'cancellation_requested',
+                ])
+            finally:
+                set_skip_points_and_sms(False)
 
         logger.info(
             f"کنسلی رزرو {reservation.tracking_code} پردازش شد: "
