@@ -50,7 +50,7 @@ from django.contrib.postgres.fields import ArrayField
 from django_jalali.db import models as jmodels
 
 # 🧩 برنامه‌های داخلی پروژه
-from bashgah_moshtarian.sms.sms import send_customer_club_sms
+from bashgah_moshtarian.sms.sms import send_customer_club_sms, send_customer_club_deduct_sms
 from config.models import UserLevel
 from finance.models import Wallet
 from icons.models import IconShortcut
@@ -2359,6 +2359,28 @@ class UserCancellation(models.Model):
         # به‌جای تغییر وضعیت پرداخت، از فِلاگِ thread-local برای جلوگیری از اجرای
         # سیگنالِ تخصیص امتیاز و ارسال SMS استفاده می‌کنیم تا وضعیت پرداخت دست نخورده بماند.
         with transaction.atomic():
+            # اگر قبلاً امتیازها تخصیص داده شده‌اند، آن‌ها را بازگردانیم (کاهش دهیم)
+            deducted_points = 0
+            if getattr(reservation, 'points_assigned', False):
+                total_points = 0
+                for res_room in reservation.reservation_rooms.select_related('room').all():
+                    room = res_room.room
+                    quantity = res_room.quantity
+                    points = room.customer_club_points or 0
+                    total_points += points * quantity
+
+                if total_points > 0:
+                    # قفل رکورد امتیاز کاربر برای جلوگیری از race condition
+                    customer_points, created = CustomerClubPoint.objects.select_for_update().get_or_create(
+                        user=reservation.buyer,
+                        defaults={'points': 0}
+                    )
+                    prev = customer_points.points
+                    deducted_points = min(prev, total_points)
+                    customer_points.points = prev - deducted_points
+                    customer_points.save()
+
+            # برگشت وجه به کیف پول کاربر
             wallet, created = Wallet.objects.get_or_create(user=reservation.buyer)
             wallet.balance += refund_amount
             wallet.save()
@@ -2367,16 +2389,39 @@ class UserCancellation(models.Model):
             reservation.cancellation_penalty_applied = penalty_amount
             reservation.cancellation_refunded_amount = refund_amount
             reservation.cancellation_requested = True
-            # موقتاً سیگنال‌های ارسال امتیاز/SMS را غیرفعال می‌کنیم
+            # وقتی کنسلی انجام می‌شود، وضعیت پرداخت رزرو نیز به 'unpaid' تغییر کند
+            reservation.payment_status = 'unpaid'
+            # اگر پیش از این امتیازها تخصیص داده شده بودند، آن فلگ را برداریم
+            if deducted_points > 0:
+                reservation.points_assigned = False
+
+            # موقتاً سیگنال‌های ارسال امتیاز/SMS را غیرفعال می‌کنیم تا هنگام تغییر
+            # وضعیت پرداخت و ذخیره‌ی رزرو، سیگنال تخصیص امتیاز اجرا نشود.
             try:
                 set_skip_points_and_sms(True)
-                reservation.save(update_fields=[
+                update_fields = [
                     'cancellation_penalty_applied',
                     'cancellation_refunded_amount',
                     'cancellation_requested',
-                ])
+                    'payment_status',
+                ]
+                if deducted_points > 0:
+                    update_fields.append('points_assigned')
+                reservation.save(update_fields=update_fields)
             finally:
                 set_skip_points_and_sms(False)
+
+            # ارسال پیامک کسر امتیاز (بیرون از حالت غیرفعالِ سیگنال)
+            if deducted_points > 0:
+                try:
+                    send_customer_club_deduct_sms(
+                        reservation.buyer.phone_number,
+                        reservation.buyer.first_name or reservation.buyer.phone_number,
+                        deducted_points,
+                        customer_points.points
+                    )
+                except Exception:
+                    logger.exception('خطا هنگام ارسال اس‌ام‌اس کسر امتیاز')
 
         logger.info(
             f"کنسلی رزرو {reservation.tracking_code} پردازش شد: "
