@@ -4778,7 +4778,8 @@ class UserReservationListAPIView(APIView):
                 "check_out_date": str(reservation.check_out_date),
                 "total_guests": reservation.total_guests,
                 "payment_status": reservation.payment_status,
-                "cancellation_status": cancellation_status,
+                "cancellation_status": cancellation_status.get('status') if isinstance(cancellation_status, dict) else cancellation_status,
+                "cancellation_status_display": cancellation_status.get('status_display') if isinstance(cancellation_status, dict) else None,
                 "created_at": formatted_created_at,
             })
 
@@ -4846,25 +4847,31 @@ class UserReservationListAPIView(APIView):
             if hasattr(reservation, 'latest_cancellation_status'):
                 latest_status = reservation.latest_cancellation_status
                 print(f"Latest cancellation status from annotation: {latest_status}")
+                # بازگرداندن وضعیت به صورت رشته و نمایش فارسی
                 if latest_status == 'approved':
-                    return True
+                    return {'status': 'approved', 'status_display': 'تأیید شده'}
                 elif latest_status == 'rejected':
-                    return False
+                    return {'status': 'rejected', 'status_display': 'عدم تأیید'}
+                elif latest_status == 'pending':
+                    return {'status': 'pending', 'status_display': 'در انتظار بررسی'}
             
             # fallback: بررسی از طریق relation در صورت عدم وجود annotate
             latest_cancellation = reservation.cancellations.order_by('-created_at').first()
             if latest_cancellation:
                 print(f"Latest cancellation from relation: {latest_cancellation.status}")
-                if latest_cancellation.status == 'approved':
-                    return True
-                elif latest_cancellation.status == 'rejected':
-                    return False
+                status_val = getattr(latest_cancellation, 'status', None)
+                if status_val == 'approved':
+                    return {'status': 'approved', 'status_display': 'تأیید شده'}
+                elif status_val == 'rejected':
+                    return {'status': 'rejected', 'status_display': 'عدم تأیید'}
+                elif status_val == 'pending':
+                    return {'status': 'pending', 'status_display': 'در انتظار بررسی'}
             
             print("No cancellation found")
-            return None
+            return {'status': None, 'status_display': None}
         except Exception as e:
             print(f"Error getting cancellation status: {str(e)}")
-            return None
+            return {'status': None, 'status_display': None}
 
     def format_created_at(self, created_at):
         """فرمت‌دهی تاریخ ایجاد به صورت جلالی"""
