@@ -303,8 +303,23 @@ def validate_phone_number(value):
         raise ValidationError('شماره موبایل باید به فرمت 09xxxxxxxxx باشد')
 
 def validate_national_code(value):
-    if not re.match(r'^\d{10}$', value):
-        raise ValidationError('کد ملی باید 10 رقمی باشد')
+    if not value:
+        raise ValidationError('کد شناسایی نمی‌تواند خالی باشد')
+
+    # کد ملی 10 رقمی => بررسی checksum
+    if re.match(r'^\d{10}$', value):
+        check_digits = int(value[9])
+        total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+
+        if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+            raise ValidationError('کد ملی معتبر نیست')
+        return
+
+    # فرمت پاسپورت: 6 تا 9 حرف یا عدد
+    if re.match(r'^[A-Za-z0-9]{6,9}$', value):
+        return
+
+    raise ValidationError('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت ۶ تا ۹ کاراکتر باشد.')
 
 
 class HotelRoomsView(generics.RetrieveAPIView):
@@ -3880,12 +3895,34 @@ class ReservationRoomDetailAPIView(APIView):
                 main_passenger = passengers.get('main_passenger', {})
                 for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
                     if field not in main_passenger or not main_passenger[field]:
-                        return Response({'detail': f'فیلد {field} برای مسافر اصلی الزامی است (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                        return Response({
+                            'detail': 'خطا در داده‌های ورودی',
+                            'errors': {
+                                'rooms': {
+                                    str(room_entry['id']): {
+                                        'main_passenger': {
+                                            field: [f'فیلد {field} برای مسافر اصلی الزامی است.']
+                                        }
+                                    }
+                                }
+                            }
+                        }, status=status.HTTP_400_BAD_REQUEST)
                 try:
                     validate_phone_number(main_passenger['phone_number'])
                     validate_national_code(main_passenger['national_code'])
                 except ValidationError as e:
-                    return Response({'detail': f'خطا در اعتبارسنجی مسافر اصلی (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({
+                        'detail': 'خطا در داده‌های ورودی',
+                        'errors': {
+                            'rooms': {
+                                str(room_entry['id']): {
+                                    'main_passenger': {
+                                        'non_field_errors': [str(e)]
+                                    }
+                                }
+                            }
+                        }
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
                 if main_passenger['national_code'] in passenger_national_codes:
                     return Response({'detail': f'کد ملی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3930,7 +3967,16 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.reserver_first_name = reserver_data['first_name']
             reservation.reserver_last_name = reserver_data['last_name']
             reservation.reserver_phone_number = reserver_data['phone_number']
-            reservation.reserver_national_code = reserver_data['national_code']
+
+            # validate reserver identification (national code or passport) if provided
+            reserver_code = reserver_data.get('national_code') or None
+            if reserver_code:
+                try:
+                    validate_national_code(reserver_code)
+                except ValidationError as e:
+                    return Response({'detail': f'خطا در کد شناسایی رزروکننده: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+            reservation.reserver_national_code = reserver_code
             reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
             # ذخیره اطلاعات اتاق‌ها و مسافران
@@ -3957,6 +4003,52 @@ class ReservationRoomDetailAPIView(APIView):
 
                 res_room.passengers.all().delete()
                 main_passenger = passengers_data.get('main_passenger', {})
+                # main passenger must provide identification (national code or passport)
+                if not main_passenger.get('national_code'):
+                    return Response({
+                        'detail': 'خطا در داده‌های ورودی',
+                        'errors': {
+                            'rooms': {
+                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                    'main_passenger': {
+                                        'identification': ['کد شناسایی (کد ملی/پاسپورت) برای مسافر اصلی الزامی است.']
+                                    }
+                                }
+                            }
+                        }
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                # validate phone and identification
+                try:
+                    validate_phone_number(main_passenger.get('phone_number') or '')
+                except ValidationError as e:
+                    return Response({
+                        'detail': 'خطا در داده‌های ورودی',
+                        'errors': {
+                            'rooms': {
+                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                    'main_passenger': {
+                                        'phone_number': [str(e)]
+                                    }
+                                }
+                            }
+                        }
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    validate_national_code(main_passenger.get('national_code'))
+                except ValidationError as e:
+                    return Response({
+                        'detail': 'خطا در داده‌های ورودی',
+                        'errors': {
+                            'rooms': {
+                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                    'main_passenger': {
+                                        'identification': [str(e)]
+                                    }
+                                }
+                            }
+                        }
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
                     passenger_type='primary',

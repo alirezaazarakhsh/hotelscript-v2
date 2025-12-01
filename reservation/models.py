@@ -2128,14 +2128,23 @@ class ReservationRoom(models.Model):
         
 # ---------------- ReservationRoomPassenger ----------------
 def validate_national_code(value):
-    if not re.match(r'^\d{10}$', value):
-        raise ValidationError('کد ملی باید 10 رقمی باشد')
+    if not value:
+        raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
 
-    check_digits = int(value[9])
-    total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
+    # اگر کد فقط عددی با طول 10 باشد، آن را به عنوان کد ملی اعتبارسنجی کن
+    if re.match(r'^\d{10}$', value):
+        check_digits = int(value[9])
+        total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
 
-    if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
-        raise ValidationError('کد ملی معتبر نیست')
+        if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
+            raise ValidationError(_('کد ملی معتبر نیست'))
+        return value
+
+    # در غیر این صورت، بررسی فرمت پاسپورت (۶ تا ۹ کاراکتر حروف/اعداد)
+    if re.match(r'^[A-Za-z0-9]{6,9}$', value):
+        return value
+
+    raise ValidationError(_('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت بین ۶ تا ۹ کاراکتر باشد.'))
 
 class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
