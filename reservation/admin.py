@@ -515,9 +515,9 @@ class RoomDateInline(admin.TabularInline):
         'user_level',
         'start_date',
         'end_date',
+        'purchase_price',
         'price',
         'extra_passenger_price',
-        'purchase_price',
         'discount_type',
         'discount_value',
         'discount_date',
@@ -609,8 +609,8 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         'user_level',
         'start_date',
         'end_date',
-        'price',
         'purchase_price',
+        'price',
         'discount_type',
         'discount_value',
         'discount_date',
@@ -639,9 +639,9 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         }),
         (_('قیمت‌گذاری'), {
             'fields': (
+                'purchase_price',
                 'price',
                 'extra_passenger_price',
-                'purchase_price',
             )
         }),
         (_('تخفیف'), {
