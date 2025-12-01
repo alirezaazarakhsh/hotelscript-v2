@@ -21,7 +21,13 @@ from asgiref.sync import async_to_sync
 import jdatetime 
 from itertools import combinations
 from authentication.models import NaturalProfile
-from bashgah_moshtarian.models import CustomerClubPoint, DiscountActivationRecord, HotelDiscountCode, RoomDiscountCode
+from bashgah_moshtarian.models import (
+    CustomerClubPoint,
+    DiscountActivationRecord,
+    HotelDiscountCode,
+    RoomDiscountCode,
+    PersonalDiscountCode,
+)
 from bashgah_moshtarian.sms.sms import send_customer_club_deduct_sms, send_customer_club_sms
 from config.models import UserLevel
 from finance.models import Wallet
@@ -4230,7 +4236,7 @@ class ApplyDiscountCodeAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # پیدا کردن کد تخفیف
+        # پیدا کردن کد تخفیف: اتاق، هتل یا کد اختصاصی کاربر
         discount_obj = None
         discount_type = None
         try:
@@ -4241,45 +4247,62 @@ class ApplyDiscountCodeAPIView(APIView):
                 discount_obj = HotelDiscountCode.objects.get(code__iexact=code)
                 discount_type = 'hotel'
             except HotelDiscountCode.DoesNotExist:
-                return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    discount_obj = PersonalDiscountCode.objects.get(code__iexact=code)
+                    discount_type = 'personal'
+                except PersonalDiscountCode.DoesNotExist:
+                    return Response({"error": "کد تخفیف نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
 
         now_j = jdatetime.datetime.now().date()
 
         # --- اعتبارسنجی‌ها ---
-        if discount_obj.expires_at and discount_obj.expires_at < now_j:
-            return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
+        # اعتبارسنجی‌های مشترک/نوعی
+        # برای کدهای room/hotel ممکن است فیلد expires_at وجود داشته باشد
+        if discount_type in ('room', 'hotel'):
+            if getattr(discount_obj, 'expires_at', None) and discount_obj.expires_at < now_j:
+                return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if discount_obj.users.exists() and request.user not in discount_obj.users.all():
-            return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            if discount_obj.users.exists() and request.user not in discount_obj.users.all():
+                return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
-        if discount_obj.user_level and discount_obj.user_level != user_level:
-            return Response({"error": "سطح کاربری شما مجاز نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
+            if discount_obj.user_level and discount_obj.user_level != user_level:
+                return Response({"error": "سطح کاربری شما مجاز نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # personal: کد مختص به یک کاربر است
+            if discount_obj.user_id != request.user.pk:
+                return Response({"error": "این کد تخفیف متعلق به شما نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی تطابق اتاق/هتل
+        # بررسی تطابق اتاق/هتل (فقط برای room و hotel لازم است)
         if discount_type == 'room':
             if not any(rr.room == discount_obj.room for rr in reservation.reservation_rooms.all()):
                 return Response({"error": "این کد برای اتاق‌های رزرو شده معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
-        else:  # hotel
+        elif discount_type == 'hotel':
             hotel = reservation.reservation_rooms.first().room.hotel
             if hotel != discount_obj.hotel:
                 return Response({"error": "این کد برای این هتل معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی فعال‌سازی توسط کاربر
-        activation_filter = {
-            'user': request.user,
-            'discount_type': discount_type,
-            **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-        }
-        if not DiscountActivationRecord.objects.filter(**activation_filter).exists():
-            return Response({"error": "ابتدا کد تخفیف را در باشگاه مشتریان فعال کنید."}, status=status.HTTP_400_BAD_REQUEST)
+        # بررسی فعال‌سازی و استفاده
+        if discount_type in ('room', 'hotel'):
+            # برای کدهای عمومی باید ابتدا در باشگاه فعال شده باشند
+            activation_filter = {
+                'user': request.user,
+                'discount_type': discount_type,
+                **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
+            }
+            if not DiscountActivationRecord.objects.filter(**activation_filter).exists():
+                return Response({"error": "ابتدا کد تخفیف را در باشگاه مشتریان فعال کنید."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی استفاده قبلی (فقط پس از پرداخت)
-        if request.user in discount_obj.activated_users.all():
-            return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
+            # بررسی اینکه کاربر قبلاً استفاده نکرده باشد
+            if request.user in discount_obj.activated_users.all():
+                return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
 
-        if discount_obj.remaining_uses <= 0:
-            return Response({"error": "دفعات استفاده از این کد به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
+            if discount_obj.remaining_uses <= 0:
+                return Response({"error": "دفعات استفاده از این کد به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            # personal: نیازی به فعال‌سازی نیست؛ فقط بررسی محدودیت تعداد استفاده
+            if discount_obj.uses_count >= discount_obj.usage_limit:
+                return Response({"error": "دفعات استفاده از این کد به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
 
         # --- محاسبه قیمت با تخفیف ---
         with transaction.atomic():
@@ -4312,6 +4335,10 @@ class ApplyDiscountCodeAPIView(APIView):
 
         logger.info(f"کد تخفیف {code} با موفقیت روی رزرو {tracking_code} اعمال شد.")
 
+        # remaining_uses/usage_limit نام فیلدها ممکن است در مدل شخصی متفاوت باشد
+        remaining = getattr(discount_obj, 'remaining_uses', None)
+        usage_lim = getattr(discount_obj, 'usage_limit', None)
+
         return Response({
             "status": "ok",
             "tracking_code": reservation.tracking_code,
@@ -4319,8 +4346,8 @@ class ApplyDiscountCodeAPIView(APIView):
             "discount_value": int(discount_value),
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount),
-            "remaining_uses": discount_obj.remaining_uses,
-            "usage_limit": discount_obj.usage_limit
+            "remaining_uses": int(remaining) if remaining is not None else int(getattr(discount_obj, 'remaining_uses', 0)),
+            "usage_limit": int(usage_lim) if usage_lim is not None else int(getattr(discount_obj, 'usage_limit', 0))
         }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(

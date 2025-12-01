@@ -1,6 +1,7 @@
 from venv import logger
 from django.db import models
-from django.core.validators import RegexValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from authentication.models import BaseUser
 from config.models import UserLevel
@@ -390,6 +391,92 @@ class HotelDiscountCode(models.Model):
     class Meta:
         verbose_name = _("کد تخفیف هتل")
         verbose_name_plural = _("کدهای تخفیف باشگاه مشتری برای هتل‌ها")
+
+
+# کد تخفیف اختصاصی برای هر کاربر — قابل استفاده روی هر هتل/اتاق/رزرو
+class PersonalDiscountCode(models.Model):
+    user = models.ForeignKey(
+        BaseUser,
+        on_delete=models.CASCADE,
+        related_name='personal_discount_codes',
+        verbose_name=_('کاربر')
+    )
+
+    code = models.CharField(
+        max_length=32,
+        unique=True,
+        verbose_name=_('کد تخفیف'),
+        help_text=_('کد تخفیف منحصر به فرد برای این کاربر')
+    )
+
+    discount_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        verbose_name=_('مقدار تخفیف'),
+        help_text=_('مقدار تخفیف به تومان (عدد صحیح)')
+    )
+
+    # محدودیت تعداد استفاده — فقط اعداد بین 1 تا 100 مجاز است
+    usage_limit = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        verbose_name=_('حداکثر دفعات استفاده'),
+        help_text=_('حداکثر دفعات مجاز استفاده از این کد (۱ تا ۱۰۰)')
+    )
+
+    # تعداد دفعاتی که کد تا کنون استفاده شده
+    uses_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_('تعداد دفعات استفاده شده')
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('تاریخ ایجاد')
+    )
+
+    # ما نیاز به فعال‌سازی جداگانه نداریم؛ کد صرفاً متعلق به کاربر است
+
+    def __str__(self):
+        return f"{self.code} - {self.user.phone_number}"
+
+    def clean(self):
+        # اعتبارسنجی مدل: usage_limit باید بین 1 و 100 باشد
+        if self.usage_limit < 1 or self.usage_limit > 100:
+            raise ValidationError({'usage_limit': _('حد استفاده باید بین ۱ تا ۱۰۰ باشد.')})
+
+    def can_use(self, user):
+        """بررسی اینکه آیا کاربر موردنظر می‌تواند این کد را استفاده کند."""
+        if user is None:
+            return False
+        if user.pk != self.user_id:
+            return False
+        return self.uses_count < self.usage_limit
+
+    def apply_use(self, user):
+        """یک بار استفاده را به‌صورت اتمیک ثبت می‌کند؛ در صورت موفقیت True برمی‌گرداند."""
+        if user.pk != self.user_id:
+            raise ValueError('این کد متعلق به کاربر دیگری است.')
+
+        try:
+            with transaction.atomic():
+                obj = PersonalDiscountCode.objects.select_for_update().get(pk=self.pk)
+                if obj.uses_count >= obj.usage_limit:
+                    raise ValueError('تعداد دفعات استفاده به پایان رسیده است.')
+                obj.uses_count += 1
+                obj.save(update_fields=['uses_count'])
+                return True
+        except Exception:
+            raise
+
+    @property
+    def remaining_uses(self):
+        return max(0, self.usage_limit - self.uses_count)
+
+    class Meta:
+        verbose_name = _('کد تخفیف اختصاصی کاربر')
+        verbose_name_plural = _('کدهای تخفیف اختصاصی کاربران')
+
 
 
 # امتیاز باشگاه مشتری کاربران

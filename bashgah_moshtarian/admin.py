@@ -1,6 +1,13 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import CustomerClubPoint, DiscountActivationRecord, RoomDiscountCode, ShoppingCenterDiscountCode, HotelDiscountCode
+from .models import (
+    CustomerClubPoint,
+    DiscountActivationRecord,
+    RoomDiscountCode,
+    ShoppingCenterDiscountCode,
+    HotelDiscountCode,
+    PersonalDiscountCode,
+)
 from reservation.models import Room, Hotel
 from authentication.models import BaseUser
 from config.models import UserLevel
@@ -328,4 +335,47 @@ class DiscountActivationRecordAdmin(admin.ModelAdmin):
             kwargs['queryset'] = ShoppingCenterDiscountCode.objects.all().order_by('code')
         if db_field.name == 'hotel_discount_code':
             kwargs['queryset'] = HotelDiscountCode.objects.all().select_related('hotel').order_by('code')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(PersonalDiscountCode)
+class PersonalDiscountCodeAdmin(admin.ModelAdmin):
+    list_display = (
+        'code',
+        'user',
+        'discount_value',
+        'usage_limit',
+        'uses_count',
+        'remaining_uses_display',
+        'created_at',
+    )
+    search_fields = (
+        'code',
+        'user__phone_number',
+        'user__natural_profile__first_name',
+        'user__natural_profile__last_name',
+    )
+    autocomplete_fields = ('user',)
+    readonly_fields = ('created_at', 'uses_count')
+    list_per_page = 25
+
+    fieldsets = (
+        (_('اطلاعات اصلی'), {
+            'fields': ('user', 'code', 'discount_value'),
+        }),
+        (_('تنظیمات استفاده'), {
+            'fields': ('usage_limit', 'uses_count'),
+        }),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user__natural_profile')
+
+    def remaining_uses_display(self, obj):
+        return obj.remaining_uses
+    remaining_uses_display.short_description = _('دفعات باقی‌مانده')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'user':
+            kwargs['queryset'] = BaseUser.objects.all().select_related('natural_profile').order_by('phone_number')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
