@@ -517,12 +517,22 @@ class RoomDateInline(admin.TabularInline):
         'end_date',
         'price',
         'extra_passenger_price',
+        'purchase_price',
         'discount_type',
         'discount_value',
         'discount_date',
         'is_fixed_discount_one_time',
     )
     ordering = ('start_date',)
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        try:
+            # make sure purchase_price is optional in the inline form
+            formset.form.base_fields['purchase_price'].required = False
+        except Exception:
+            pass
+        return formset
 
 
 class ClosedDateInline(admin.TabularInline):
@@ -600,6 +610,7 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         'start_date',
         'end_date',
         'price',
+        'purchase_price',
         'discount_type',
         'discount_value',
         'discount_date',
@@ -630,6 +641,7 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
             'fields': (
                 'price',
                 'extra_passenger_price',
+                'purchase_price',
             )
         }),
         (_('تخفیف'), {
@@ -642,6 +654,16 @@ class RoomDatePriceAdmin(admin.ModelAdmin):
         }),
     )
     inlines = [ClosedDateInline]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        try:
+            # ensure the admin form treats purchase_price as optional
+            if 'purchase_price' in form.base_fields:
+                form.base_fields['purchase_price'].required = False
+        except Exception:
+            pass
+        return form
 
 
 # @admin.register(ClosedDate)

@@ -1055,6 +1055,11 @@ class RoomDatePrice(models.Model):
         null=False,
         blank=False,
     )
+    purchase_price = models.PositiveBigIntegerField(
+        verbose_name=_('قیمت خرید اتاق (تومان)'),
+        null=True,
+        blank=True,
+    )
     discount_type = models.CharField(
         verbose_name=_('نوع تخفیف'),
         max_length=16,
