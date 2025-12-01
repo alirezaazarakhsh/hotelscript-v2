@@ -17,8 +17,9 @@ def validate_national_code(value):
         raise ValidationError('کد ملی معتبر نیست')
 
 def validate_passport_code(value):
-    if not re.match(r"^[A-Za-z0-9]{6,9}$", value):
-        raise ValidationError('کد پاسپورت معتبر نیست')
+    # passport: allow digits-only (6-9) or optional leading letters followed by digits, total length 6-9
+    if not (6 <= len(value) <= 9 and re.match(r'^[A-Za-z]*\d+$', value)):
+        raise ValidationError('کد پاسپورت معتبر نیست. باید ۶ تا ۹ کاراکتر باشد و در صورت وجود حروف، حروف در ابتدا قرار گیرند.')
 
 def validate_postal_code(value):
     if not re.match(r'^\d{10}$', value):
