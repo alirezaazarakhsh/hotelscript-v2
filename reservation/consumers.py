@@ -5,7 +5,12 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 from django.core.cache import cache
 from django.db import transaction
-from .models import Reservationhotel, ReservationRoom, Room, ReservationApprovalDuration
+from .models import (
+    Reservationhotel,
+    ReservationRoom,
+    Room,
+    ReservationApprovalDuration,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -103,12 +108,34 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             approval_duration = await sync_to_async(ReservationApprovalDuration.objects.first)()
             approval_duration_seconds = approval_duration.duration_minutes * 60 if approval_duration else 300
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
+            # قبول کنید که فرانت ممکن است expiry را در localStorage نگه دارد و پس از رفرش آن را ارسال کند.
+            client_expires_at = data.get("expires_at") or data.get("expires_at_ts")
 
             if not cache.get(cache_key_approval):
-                expires_at_ts = timezone.now().timestamp() + approval_duration_seconds
-                # ذخیره مقدار expiry به عنوان عدد (epoch) و ست کردن timeout تا خودش پاک شود
-                cache.set(cache_key_approval, str(expires_at_ts), timeout=approval_duration_seconds)
-                logger.info(f"Manual approval timer start (cache) for {self.tracking_code}: expires_at_ts={expires_at_ts} ({approval_duration_seconds}s)")
+                now_ts = timezone.now().timestamp()
+                if client_expires_at:
+                    try:
+                        client_expires_at = float(client_expires_at)
+                        remaining_from_client = client_expires_at - now_ts
+                        # حداکثر زمان قابل ست شدن نباید بیشتر از approval_duration_seconds باشد
+                        timeout = int(max(0, min(remaining_from_client, approval_duration_seconds)))
+                        if timeout > 0:
+                            cache.set(cache_key_approval, str(client_expires_at), timeout=timeout)
+                            logger.info(f"Restored approval timer from client for {self.tracking_code}: expires_at_ts={client_expires_at} (timeout={timeout}s)")
+                        else:
+                            # اگر مقدار client منقضی شده است، همان رفتار معمول (سرریز و ریجکت در loop مدیریت می‌شود)
+                            logger.info(f"Client-provided expires_at already expired for {self.tracking_code}: {client_expires_at}")
+                    except Exception:
+                        logger.exception(f"Invalid client_expires_at provided by client for {self.tracking_code}: {client_expires_at}")
+                        # fallback to fresh start below
+                        expires_at_ts = now_ts + approval_duration_seconds
+                        cache.set(cache_key_approval, str(expires_at_ts), timeout=approval_duration_seconds)
+                        logger.info(f"Manual approval timer start (cache fallback) for {self.tracking_code}: expires_at_ts={expires_at_ts} ({approval_duration_seconds}s)")
+                else:
+                    expires_at_ts = now_ts + approval_duration_seconds
+                    # ذخیره مقدار expiry به عنوان عدد (epoch) و ست کردن timeout تا خودش پاک شود
+                    cache.set(cache_key_approval, str(expires_at_ts), timeout=approval_duration_seconds)
+                    logger.info(f"Manual approval timer start (cache) for {self.tracking_code}: expires_at_ts={expires_at_ts} ({approval_duration_seconds}s)")
             else:
                 logger.info(f"Manual start ignored; timer already exists for {self.tracking_code}")
 
@@ -160,6 +187,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             cache_key_payment = f"reservation_payment_timer_{self.tracking_code}"
             cache.delete_many([cache_key_approval, cache_key_payment])
             logger.debug(f"Cache cleared for {self.tracking_code}")
+            # فقط cache را پاک می‌کنیم (DB fallback حذف شده)
 
     @sync_to_async
     def get_remaining_time(self):
