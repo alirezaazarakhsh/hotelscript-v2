@@ -431,9 +431,9 @@ class PersonalDiscountCode(models.Model):
         verbose_name=_('تعداد دفعات استفاده شده')
     )
 
-    created_at = models.DateTimeField(
+    created_at = jmodels.jDateTimeField(
         auto_now_add=True,
-        verbose_name=_('تاریخ ایجاد')
+        verbose_name=_('تاریخ ایجاد (شمسی)')
     )
 
     expires_at = jmodels.jDateField(
