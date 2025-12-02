@@ -406,8 +406,8 @@ class PersonalDiscountCode(models.Model):
         max_length=8,
         unique=True,
         verbose_name=_('کد تخفیف'),
-        help_text=_('کد تخفیف ۸ رقمی (فقط ارقام)؛ بیشتر از ۸ رقم مجاز نیست.'),
-        validators=[RegexValidator(r'^\d{8}$', message=_('کد تخفیف باید دقیقاً ۸ رقم باشد.'))]
+        help_text=_('کد تخفیف ۸ کاراکتری (حروف و ارقام)؛ فقط ۸ کاراکتر مجاز است.'),
+        validators=[RegexValidator(r'^[A-Za-z0-9]{8}$', message=_('کد تخفیف باید دقیقاً ۸ کاراکتر حروف یا رقم باشد.'))]
     )
 
     discount_value = models.DecimalField(
@@ -434,6 +434,13 @@ class PersonalDiscountCode(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name=_('تاریخ ایجاد')
+    )
+
+    expires_at = jmodels.jDateField(
+        null=True,
+        blank=True,
+        verbose_name=_('تاریخ انقضا (شمسی)'),
+        help_text=_('در صورت تنظیم، پس از این تاریخ کد دیگر قابل استفاده نخواهد بود.')
     )
 
     # ما نیاز به فعال‌سازی جداگانه نداریم؛ کد صرفاً متعلق به کاربر است

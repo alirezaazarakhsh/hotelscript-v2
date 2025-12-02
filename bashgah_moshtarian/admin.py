@@ -347,6 +347,7 @@ class PersonalDiscountCodeAdmin(admin.ModelAdmin):
         'usage_limit',
         'uses_count',
         'remaining_uses_display',
+        'expires_at',
         'created_at',
     )
     search_fields = (
@@ -361,7 +362,7 @@ class PersonalDiscountCodeAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (_('اطلاعات اصلی'), {
-            'fields': ('user', 'code', 'discount_value'),
+            'fields': ('user', 'code', 'discount_value', 'expires_at'),
         }),
         (_('تنظیمات استفاده'), {
             'fields': ('usage_limit', 'uses_count'),

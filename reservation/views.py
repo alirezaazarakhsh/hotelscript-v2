@@ -4257,11 +4257,11 @@ class ApplyDiscountCodeAPIView(APIView):
 
         # --- اعتبارسنجی‌ها ---
         # اعتبارسنجی‌های مشترک/نوعی
-        # برای کدهای room/hotel ممکن است فیلد expires_at وجود داشته باشد
-        if discount_type in ('room', 'hotel'):
-            if getattr(discount_obj, 'expires_at', None) and discount_obj.expires_at < now_j:
-                return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
+        # اگر هر مدل فیلد expires_at داشته باشد، آن را چک کن (شامل personal)
+        if getattr(discount_obj, 'expires_at', None) and discount_obj.expires_at < now_j:
+            return Response({"error": "کد تخفیف منقضی شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if discount_type in ('room', 'hotel'):
             if discount_obj.users.exists() and request.user not in discount_obj.users.all():
                 return Response({"error": "این کد تخفیف برای شما در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
