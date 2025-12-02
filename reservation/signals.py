@@ -22,6 +22,7 @@ from .models import (
 from bashgah_moshtarian.models import (
     RoomDiscountCode, HotelDiscountCode, DiscountActivationRecord, CustomerClubPoint
 )
+from bashgah_moshtarian.models import PersonalDiscountCode
 from reservation.sms.sms import send_room_availability_sms
 from bashgah_moshtarian.sms.sms import send_customer_club_add_sms
 from bashgah_moshtarian.sms.sms import send_customer_club_sms
@@ -331,8 +332,16 @@ def _process_discount_code_optimized(reservation):
                     discount_type = 'hotel'
                     logger.info(f"✅ HotelDiscountCode پیدا شد: {discount_obj.code}")
                 except HotelDiscountCode.DoesNotExist:
-                    logger.error(f"❌ کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code} یافت نشد.")
-                    return False
+                    # try personal discount codes (user-specific)
+                    try:
+                        discount_obj = PersonalDiscountCode.objects.select_for_update().get(
+                            code__iexact=reservation_refreshed.applied_discount_code
+                        )
+                        discount_type = 'personal'
+                        logger.info(f"✅ PersonalDiscountCode پیدا شد: {discount_obj.code} for user {getattr(discount_obj.user, 'phone_number', discount_obj.user_id)}")
+                    except PersonalDiscountCode.DoesNotExist:
+                        logger.error(f"❌ کد تخفیف {reservation_refreshed.applied_discount_code} برای رزرو {reservation_refreshed.tracking_code} یافت نشد.")
+                        return False
 
             if discount_obj.expires_at and discount_obj.expires_at < jdatetime.datetime.now().date():
                 logger.warning(f"❌ کد تخفیف {discount_obj.code} منقضی شده است.")
@@ -384,14 +393,28 @@ def _process_discount_code_optimized(reservation):
             
             if discount_type == 'room':
                 RoomDiscountCode.objects.filter(pk=discount_obj.pk).update(remaining_uses=F('remaining_uses') - 1)
-            else:
+                discount_obj.refresh_from_db()
+                discount_obj.activated_users.add(reservation_refreshed.buyer)
+                logger.info(f"🟢 کد تخفیف {discount_obj.code} ذخیره شد - remaining_uses بعد: {discount_obj.remaining_uses}")
+            elif discount_type == 'hotel':
                 HotelDiscountCode.objects.filter(pk=discount_obj.pk).update(remaining_uses=F('remaining_uses') - 1)
-            
-            discount_obj.refresh_from_db()
-            
-            discount_obj.activated_users.add(reservation_refreshed.buyer)
-            
-            logger.info(f"🟢 کد تخفیف {discount_obj.code} ذخیره شد - remaining_uses بعد: {discount_obj.remaining_uses}")
+                discount_obj.refresh_from_db()
+                discount_obj.activated_users.add(reservation_refreshed.buyer)
+                logger.info(f"🟢 کد تخفیف {discount_obj.code} ذخیره شد - remaining_uses بعد: {discount_obj.remaining_uses}")
+            else:  # personal
+                # PersonalDiscountCode uses uses_count/usage_limit instead of remaining_uses
+                if getattr(discount_obj, 'user', None) != reservation_refreshed.buyer:
+                    logger.warning(f"❌ کاربر {reservation_refreshed.buyer.phone_number} مجاز به استفاده از کد شخصی {discount_obj.code} نیست.")
+                    return False
+
+                if discount_obj.uses_count >= discount_obj.usage_limit:
+                    logger.warning(f"❌ دفعات استفاده از کد شخصی {discount_obj.code} به پایان رسیده است. uses_count: {discount_obj.uses_count}, usage_limit: {discount_obj.usage_limit}")
+                    return False
+
+                logger.info(f"🟡 مصرف کد شخصی {discount_obj.code} - uses_count قبل: {discount_obj.uses_count}")
+                PersonalDiscountCode.objects.filter(pk=discount_obj.pk).update(uses_count=F('uses_count') + 1)
+                discount_obj.refresh_from_db()
+                logger.info(f"🟢 کد شخصی {discount_obj.code} ذخیره شد - uses_count بعد: {discount_obj.uses_count}")
             
             activation_record.reward_claimed = True
             set_skip_points_and_sms(True)
