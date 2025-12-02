@@ -856,7 +856,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_refunded_fa',     # جدید: برگشتی
         'cancellation_requested_fa',    # جدید: درخواست
         'capacity_status_colored', 'payment_status_colored',
-        'points_assigned_fa', 'discount_processed_fa', 'created_jalali'
+        'points_assigned_fa', 'discount_processed_fa', 'approval_expires_at_jalali', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
@@ -875,7 +875,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
         'discount_processed_fa', 'ref_id',
-        'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa'  # جدید
+        'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa', 'approval_expires_at_jalali'  # جدید
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -905,9 +905,21 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
         (_('اطلاعات سیستم'), {
             'fields': ('tracking_code', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-                       'created_jalali', 'updated_jalali')
+                       'created_jalali', 'updated_jalali', 'approval_expires_at_jalali')
         }),
     )
+
+    # نمایش زمان انقضای تایید به صورت شمسی (فقط خواندنی)
+    @admin.display(description=_('زمان انقضای تایید (شمسی)'))
+    def approval_expires_at_jalali(self, obj):
+        if getattr(obj, 'approval_expires_at', None):
+            try:
+                dt = obj.approval_expires_at.togregorian() if hasattr(obj.approval_expires_at, 'togregorian') else obj.approval_expires_at
+                return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            except Exception:
+                # fallback to default string
+                return str(obj.approval_expires_at)
+        return '-'
 
     # --- نمایش‌ها ---
     @admin.display(description=_('موبایل خریدار'))
