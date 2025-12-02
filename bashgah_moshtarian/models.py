@@ -403,10 +403,11 @@ class PersonalDiscountCode(models.Model):
     )
 
     code = models.CharField(
-        max_length=32,
+        max_length=8,
         unique=True,
         verbose_name=_('کد تخفیف'),
-        help_text=_('کد تخفیف منحصر به فرد برای این کاربر')
+        help_text=_('کد تخفیف ۸ رقمی (فقط ارقام)؛ بیشتر از ۸ رقم مجاز نیست.'),
+        validators=[RegexValidator(r'^\d{8}$', message=_('کد تخفیف باید دقیقاً ۸ رقم باشد.'))]
     )
 
     discount_value = models.DecimalField(

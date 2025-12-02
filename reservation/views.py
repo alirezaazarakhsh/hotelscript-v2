@@ -3879,8 +3879,8 @@ class ReservationRoomDetailAPIView(APIView):
             reserver_data = data.get('reserver', {})
             rooms_data = data.get('rooms', [])
 
-            # اعتبارسنجی رزروکننده
-            for field in ['first_name', 'last_name', 'phone_number', 'national_code']:
+            # اعتبارسنجی رزروکننده (کد شناسایی برای رزروکننده الزامی نیست)
+            for field in ['first_name', 'last_name', 'phone_number']:
                 if field not in reserver_data or not reserver_data[field]:
                     return Response({'detail': f'فیلد {field} برای رزروکننده الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
