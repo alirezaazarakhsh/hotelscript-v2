@@ -3,9 +3,10 @@ from django.db.models.signals import pre_save, post_save, m2m_changed
 from django.dispatch import receiver
 from threading import Timer, local
 from django.db import transaction
+from django.db.models import F
 from pydantic import ValidationError
 from authentication.models import BaseUser
-from .models import CustomerClubPoint, HotelDiscountCode, RoomDiscountCode, ShoppingCenterDiscountCode, DiscountActivationRecord
+from .models import CustomerClubPoint, HotelDiscountCode, RoomDiscountCode, ShoppingCenterDiscountCode, DiscountActivationRecord, PersonalDiscountCode
 from .sms.sms import send_customer_club_deduct_sms, send_discount_sms
 
 logger = logging.getLogger(__name__)
@@ -266,33 +267,57 @@ def handle_reservation_payment_for_discount(sender, instance, **kwargs):
                             discount_type = 'shopping_center'
                             logger.info(f"🔵 کد تخفیف مرکز خرید یافت شد: {discount_obj.code}")
                         except ShoppingCenterDiscountCode.DoesNotExist:
-                            logger.error(f"🔴 کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code} یافت نشد")
-                            return
+                            # try personal (user-specific) discount codes
+                            try:
+                                discount_obj = PersonalDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
+                                discount_type = 'personal'
+                                logger.info(f"🔵 کد تخفیف شخصی یافت شد: {discount_obj.code}")
+                            except PersonalDiscountCode.DoesNotExist:
+                                logger.error(f"🔴 کد تخفیف {reservation.applied_discount_code} برای رزرو {reservation.tracking_code} یافت نشد")
+                                return
                 
                 # 🔄 بررسی دفعات باقی‌مانده کد تخفیف
-                if discount_obj.remaining_uses <= 0:
-                    logger.warning(f"🔴 کد تخفیف {discount_obj.code} دفعات استفاده‌اش به پایان رسیده است (remaining_uses: {discount_obj.remaining_uses})")
-                    # می‌توانید خطا ایجاد کنید یا اطلاع دهید
-                    return
+                if discount_type == 'personal':
+                    if discount_obj.uses_count >= discount_obj.usage_limit:
+                        logger.warning(f"🔴 کد تخفیف شخصی {discount_obj.code} دفعات استفاده‌اش به پایان رسیده است (uses_count: {discount_obj.uses_count}, usage_limit: {discount_obj.usage_limit})")
+                        return
+                else:
+                    if discount_obj.remaining_uses <= 0:
+                        logger.warning(f"🔴 کد تخفیف {discount_obj.code} دفعات استفاده‌اش به پایان رسیده است (remaining_uses: {discount_obj.remaining_uses})")
+                        # می‌توانید خطا ایجاد کنید یا اطلاع دهید
+                        return
                 
                 # 🔄 بررسی اینکه کاربر قبلاً از این کد استفاده نکرده باشد
                 if reservation.buyer in discount_obj.activated_users.all():
                     logger.warning(f"🔴 کاربر {reservation.buyer.phone_number} قبلاً از کد تخفیف {discount_obj.code} استفاده کرده است")
                     return
                 
-                logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف: remaining_uses={discount_obj.remaining_uses}, activated_users_count={discount_obj.activated_users.count()}")
-                
-                # 🔄 استفاده از متد consume_discount_for_user برای مصرف کد تخفیف
+                logger.info(f"🟡 وضعیت کد تخفیف قبل از مصرف: remaining_uses={getattr(discount_obj, 'remaining_uses', 'N/A')}, activated_users_count={getattr(discount_obj, 'activated_users', []).count() if hasattr(discount_obj, 'activated_users') else 0}")
+
                 try:
-                    success = discount_obj.consume_discount_for_user(reservation.buyer)
-                    
+                    # If model has consume_discount_for_user, use it (room/hotel/shopping)
+                    if hasattr(discount_obj, 'consume_discount_for_user') and discount_type != 'personal':
+                        success = discount_obj.consume_discount_for_user(reservation.buyer)
+                    else:
+                        # personal codes: manual processing
+                        success = True
+                        if discount_type == 'personal':
+                            if discount_obj.user_id != reservation.buyer_id:
+                                logger.warning(f"🔴 کاربر {reservation.buyer.phone_number} مجاز به استفاده از کد شخصی {discount_obj.code} نیست")
+                                success = False
+                            else:
+                                # atomically increment uses_count
+                                PersonalDiscountCode.objects.filter(pk=discount_obj.pk).update(uses_count=F('uses_count') + 1)
+                                discount_obj.refresh_from_db()
+
                     if success:
-                        logger.info(f"🟢 کد تخفیف {discount_obj.code} با موفقیت مصرف شد - remaining_uses جدید: {discount_obj.remaining_uses}")
+                        logger.info(f"🟢 کد تخفیف {discount_obj.code} با موفقیت مصرف شد")
                         
-                        # ایجاد رکورد فعال‌سازی
-                        activation_record = _create_or_update_activation_record(reservation.buyer, discount_obj)
-                        if activation_record:
-                            logger.info(f"🟢 رکورد فعال‌سازی برای کاربر {reservation.buyer.phone_number} ایجاد شد")
+                        # ایجاد رکورد فعال‌سازی برای انواعی که نیاز دارند
+                        if discount_type in ('room', 'hotel', 'shopping_center'):
+                            activation_record = _create_or_update_activation_record(reservation.buyer, discount_obj)
+                            if activation_record:
+                                logger.info(f"🟢 رکورد فعال‌سازی برای کاربر {reservation.buyer.phone_number} ایجاد شد")
                         
                         # علامت‌گذاری رزرو به عنوان پردازش شده
                         reservation.discount_processed = True

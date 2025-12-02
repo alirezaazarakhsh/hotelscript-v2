@@ -556,6 +556,7 @@ def _send_websocket_update(channel_layer, reservation):
 # ===================================================================
 @receiver(post_save, sender=UserCancellation)
 def handle_user_cancellation_approval(sender, instance, created, **kwargs):
+    # Only handle approved cancellations (not newly created or other statuses)
     if created or instance.status != UserCancellation.Status.APPROVED:
         return
 
@@ -565,45 +566,19 @@ def handle_user_cancellation_approval(sender, instance, created, **kwargs):
         return
 
     try:
-        with transaction.atomic():
-            cancellation = UserCancellation.objects.select_for_update().get(pk=instance.pk)
-            reservation = Reservationhotel.objects.select_for_update().get(pk=cancellation.reservation.pk)
-
-            if reservation.cancellation_refunded_amount > 0:
-                cache.set(cache_key, True, 86400)
-                logger.info(f"Cancellation {instance.pk} already has refund amount, skipping further processing.")
-                return
-
-            reservation.capacity_status = 'rejected'
-            reservation.payment_status = 'unpaid'
-            reservation.cancellation_requested = True
-
-            penalty_amount, refund_amount = reservation.calculate_cancellation_refund()
-            reservation.cancellation_penalty_applied = penalty_amount
-            reservation.cancellation_refunded_amount = refund_amount
-
-            if refund_amount > 0:
-                wallet, _ = Wallet.objects.get_or_create(user=reservation.buyer)
-                wallet.balance = F('balance') + int(refund_amount)
-                wallet.save(update_fields=['balance'])
-                wallet.refresh_from_db()
-                logger.info(f"مبلغ {refund_amount:,} به کیف پول کاربر {reservation.buyer.phone_number} برگشت داده شد. موجودی جدید: {wallet.balance:,}")
-            else:
-                logger.info(f"مبلغ برگشتی برای کنسلی {reservation.tracking_code} صفر است.")
-
-            reservation._skip_price_calculation_on_save = True 
-            reservation.save(update_fields=[
-                'capacity_status', 'payment_status', 'cancellation_penalty_applied',
-                'cancellation_refunded_amount', 'cancellation_requested'
-            ])
-            del reservation._skip_price_calculation_on_save
-
-            cache.set(cache_key, True, 86400)
-            logger.info(f"کنسلی تأیید شد: {reservation.tracking_code} | جریمه: {penalty_amount:,} | برگشتی: {refund_amount:,}")
+        # Delegate the actual refund/point-deduction logic to the model method
+        # to avoid duplication and inconsistent behavior.
+        cache.set(cache_key, True, 86400)
+        logger.info(f"Processing approved cancellation {instance.pk} via model method process_cancellation()")
+        try:
+            result = instance.process_cancellation()
+            logger.info(f"UserCancellation {instance.pk} processed: {result}")
+        except Exception as sub_e:
+            logger.error(f"Error while processing cancellation {instance.pk} via process_cancellation: {sub_e}")
+            logger.error(traceback.format_exc())
 
     except Exception as e:
         logger.error(f"🔴 خطا در کنسلی {instance.pk}: {e}", exc_info=True)
         logger.error(f"🔴 جزئیات خطا: {traceback.format_exc()}")
     finally:
-        if cache.get(cache_key) is None:
-            cache.delete(cache_key)
+        cache.delete(cache_key)
