@@ -131,6 +131,18 @@ CHANNEL_LAYERS = {
     },
 }
 
+# Cache backend: prefer Redis so cache keys (used by websocket timer) survive page refresh
+# If REDIS_HOST is set in env (e.g. in Docker), use that host; otherwise default to localhost
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:6379/1",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
+
 # تنظیمات Celery
 CELERY_BROKER_URL = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
 CELERY_RESULT_BACKEND = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
