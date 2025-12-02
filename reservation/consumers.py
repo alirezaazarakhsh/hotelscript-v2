@@ -1,6 +1,5 @@
 import json
 import asyncio
-from datetime import timedelta
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from django.utils import timezone
@@ -78,33 +77,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     except Exception:
                         logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
                 else:
-                    # اگر cache موجود نیست، از فیلد approval_expires_at در دیتابیس به عنوان منبع حقیقت استفاده کن
-                    if getattr(self.reservation, 'approval_expires_at', None):
-                        try:
-                            expires_at = self.reservation.approval_expires_at
-                            # approval_expires_at ممکن است جایی در گذشته قرار گرفته باشد
-                            remaining = max(0, (expires_at - timezone.now()).total_seconds())
-                            show_timer = True
-                            logger.debug(f"Pending timer for {self.tracking_code}: {remaining} seconds remaining (db approval_expires_at={expires_at})")
-                            if remaining <= 0:
-                                logger.info(f"Timer expired for {self.tracking_code} (pending) according to db expiry, rejecting...")
-                                await self.reject_reservation(reason="approval_timeout")
-                                self.reservation = await self.get_reservation(self.tracking_code)
-                                if self.reservation and self.reservation.capacity_status == "rejected":
-                                    logger.info(f"Reservation {self.tracking_code} successfully rejected")
-                                    await self.send_json({"capacity_status": "rejected", "timer": None})
-                                    break
-                                else:
-                                    logger.error(f"Error: Failed to reject {self.tracking_code}, current capacity_status: {self.reservation.capacity_status if self.reservation else 'not found'}")
-                                    await self.send_json({"capacity_status": capacity_status, "timer": None})
-                                    break
-                        except Exception:
-                            logger.exception(f"Invalid reservation.approval_expires_at for {self.tracking_code}: {self.reservation.approval_expires_at}")
-                    else:
-                        # هنوز تایمر توسط فرانت شروع نشده و در DB هم expiry نداریم؛ برای جلوگیری از مخفی شدن تایمر، مقدار کامل duration را به فرانت نشان می‌دهیم
-                        remaining = approval_duration_seconds
-                        show_timer = True
-                        logger.debug(f"Pending state without started timer for {self.tracking_code}; showing full duration {remaining}s until front starts timer")
+                    # هنوز تایمر توسط فرانت شروع نشده؛ اما برای جلوگیری از مخفی شدن تایمر، مقدار کامل duration را به فرانت نشان می‌دهیم
+                    remaining = approval_duration_seconds
+                    show_timer = True
+                    logger.debug(f"Pending state without started timer for {self.tracking_code}; showing full duration {remaining}s until front starts timer")
 
             await self.send_json({
                 "capacity_status": capacity_status,
@@ -129,13 +105,10 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
 
             if not cache.get(cache_key_approval):
-                expires_at = timezone.now() + timedelta(seconds=approval_duration_seconds)
-                expires_at_ts = expires_at.timestamp()
+                expires_at_ts = timezone.now().timestamp() + approval_duration_seconds
                 # ذخیره مقدار expiry به عنوان عدد (epoch) و ست کردن timeout تا خودش پاک شود
                 cache.set(cache_key_approval, str(expires_at_ts), timeout=approval_duration_seconds)
-                # همچنین expiry را در دیتابیس ذخیره کن تا بعد از رفرش صفحه تایمر ادامه یابد
-                await sync_to_async(self._save_reservation_approval_expires)(expires_at)
-                logger.info(f"Manual approval timer start (cache+db) for {self.tracking_code}: expires_at={expires_at} ({approval_duration_seconds}s)")
+                logger.info(f"Manual approval timer start (cache) for {self.tracking_code}: expires_at_ts={expires_at_ts} ({approval_duration_seconds}s)")
             else:
                 logger.info(f"Manual start ignored; timer already exists for {self.tracking_code}")
 
@@ -145,17 +118,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                 "timer": int(remaining) if self.reservation.capacity_status == "pending" else None
             })
 
-    def _save_reservation_approval_expires(self, dt):
-        try:
-            r = Reservationhotel.objects.filter(tracking_code=self.tracking_code).first()
-            if not r:
-                return False
-            r.approval_expires_at = dt
-            r.save(update_fields=["approval_expires_at"])
-            return True
-        except Exception:
-            logger.exception(f"Failed to save approval_expires_at for {self.tracking_code}: {dt}")
-            return False
+    
 
     @sync_to_async
     def get_reservation(self, tracking_code):
@@ -190,9 +153,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
 
             # فقط وضعیت را تغییر می‌دهیم، signal خودش موجودی را برمی‌گرداند
             reservation.capacity_status = "rejected"
-            # پاک کردن expiry در دیتابیس هنگام رد شدن
-            reservation.approval_expires_at = None
-            reservation.save(update_fields=["capacity_status", "approval_expires_at"])
+            reservation.save(update_fields=["capacity_status"])
             logger.info(f"Reservation {self.tracking_code} rejected, inventory will be reverted by signal")
 
             cache_key_approval = f"reservation_approval_timer_{self.tracking_code}"
@@ -215,15 +176,7 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     return max(0, remaining)
                 except Exception:
                     logger.exception(f"Invalid cache value for {cache_key_approval}: {cache_value}")
-            # اگر cache موجود نیست، از فیلد approval_expires_at در دیتابیس استفاده کن
-            try:
-                if getattr(self.reservation, 'approval_expires_at', None):
-                    expires_at = self.reservation.approval_expires_at
-                    remaining = (expires_at - timezone.now()).total_seconds()
-                    return max(0, remaining)
-            except Exception:
-                logger.exception(f"Invalid reservation.approval_expires_at for {self.tracking_code}: {getattr(self.reservation, 'approval_expires_at', None)}")
-            # اگر تایمر هنوز توسط فرانت شروع نشده و در DB هم expiry نداریم، مدت کامل را نشان بده
+            # اگر cache موجود نیست، مدت کامل duration را نشان بده (تا فرانت تایمر را شروع کند)
             return approval_duration_seconds
         return 0
 

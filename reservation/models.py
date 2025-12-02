@@ -1402,8 +1402,7 @@ class Reservationhotel(models.Model):
         help_text=_('مشخص می‌کند که کاربر درخواست کنسلی داده است.')
     )
 
-    # زمان انقضای بازه‌ی تایید رزرو (nullable) — نگهداری سروریِ expiry برای ادامه تایمر بعد از رفرش
-    approval_expires_at = jmodels.jDateTimeField(_('زمان انقضای تایید رزرو'), null=True, blank=True)
+    
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)
     updated_at = jmodels.jDateTimeField(_('تاریخ به‌روزرسانی'), auto_now=True)
@@ -1899,14 +1898,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
     elif instance.capacity_status in ['confirmed', 'rejected']:
         cache.delete_many([cache_key_approval, cache_key_payment, cache_key_discount])
         logger.debug(f"تایمرها برای رزرو {instance.tracking_code} حذف شدند.")
-        try:
-            # پاک کردن expiry ذخیره‌شده در دیتابیس تا تایمر دیگر نمایش داده نشود
-            if getattr(instance, 'approval_expires_at', None):
-                instance.approval_expires_at = None
-                instance.save(update_fields=['approval_expires_at'])
-                logger.debug(f"Cleared approval_expires_at for {instance.tracking_code} due to final state")
-        except Exception:
-            logger.exception(f"Failed to clear approval_expires_at for {instance.tracking_code}")
 
     async_to_sync(channel_layer.group_send)(
         f"reservation_{instance.tracking_code}",
