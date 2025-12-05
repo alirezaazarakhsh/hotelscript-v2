@@ -26,13 +26,9 @@ class MenuManager:
             row = []
             if AccessManager.is_allowed(user_id, 'backup_db') or AccessManager.is_allowed(user_id, 'backup_media'):
                 row.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
-            if AccessManager.is_allowed(user_id, 'list_backups'):
-                row.append(InlineKeyboardButton("🗂 لیست بکاپ‌ها", callback_data="list_backups"))
             if row:
                 keyboard.append(row)
             row = []
-            if AccessManager.is_allowed(user_id, 'restore_db') or AccessManager.is_allowed(user_id, 'restore_media'):
-                row.append(InlineKeyboardButton("🗃 ریستور بکاپ", callback_data="restore_backup"))
             if AccessManager.is_allowed(user_id, 'backup_info'):
                 row.append(InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"))
             if row:

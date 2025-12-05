@@ -36,24 +36,17 @@ class Command(BaseCommand):
                 'description': 'کاربران، پروفایل‌ها، دسترسی‌ها'
             },
             {
-                'name': 'reservations',
-                'display_name': 'رزرواسیون',
-                'icon': '🏨',
-                'order': 4,
-                'description': 'رزرو هتل، مدیریت اتاق‌ها'
-            },
-            {
                 'name': 'settings',
                 'display_name': 'تنظیمات',
                 'icon': '⚙️',
-                'order': 5,
+                'order': 4,
                 'description': 'پیکربندی سیستم، تنظیمات عمومی'
             },
             {
                 'name': 'communication',
                 'display_name': 'ارتباطات',
                 'icon': '💬',
-                'order': 6,
+                'order': 5,
                 'description': 'پیامک، ایمیل، نوتیفیکیشن'
             },
         ]
@@ -92,10 +85,6 @@ class Command(BaseCommand):
             'پشتیبان': {
                 'apps': ['contact', 'notification', 'chat_api'],
                 'permissions': ['add', 'change', 'view']
-            },
-            'مدیر رزرواسیون': {
-                'apps': ['reservation'],
-                'permissions': ['add', 'change', 'view', 'delete']
             },
         }
 

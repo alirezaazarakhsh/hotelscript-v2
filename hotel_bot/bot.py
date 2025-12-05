@@ -70,15 +70,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "backup_media" and not AccessManager.is_allowed(user_id, 'backup_media'):
             await query.edit_message_text("❌ شما مجوز بکاپ‌گیری از مدیا را ندارید!")
             return
-        if data == "list_backups" and not AccessManager.is_allowed(user_id, 'list_backups'):
-            await query.edit_message_text("❌ شما مجوز مشاهده لیست بکاپ‌ها را ندارید!")
-            return
-        if data.startswith("delete_db::") or data.startswith("delete_media::") and not AccessManager.is_allowed(user_id, 'delete_backups'):
-            await query.edit_message_text("❌ شما مجوز حذف بکاپ‌ها را ندارید!")
-            return
-        if data == "restore_backup" and not (AccessManager.is_allowed(user_id, 'restore_db') or AccessManager.is_allowed(user_id, 'restore_media')):
-            await query.edit_message_text("❌ شما مجوز ریستور بکاپ را ندارید!")
-            return
         if data == "backup_info" and not AccessManager.is_allowed(user_id, 'backup_info'):
             await query.edit_message_text("❌ شما مجوز مشاهده اطلاعات بکاپ را ندارید!")
             return
@@ -111,23 +102,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await BackupManager.backup_database(user_id, context)
         elif data == "backup_media":
             await BackupManager.backup_media(user_id, context)
-        elif data == "list_backups":
-            await BackupManager.list_backups(user_id, context)
-        elif data == "list_db_backups":
-            await BackupManager._list_db_backups(user_id, context)
-        elif data == "list_media_backups":
-            await BackupManager._list_media_backups(user_id, context)
-        elif data.startswith("send_db::"):
-            file_path = data.split("::", 1)[1]
-            await BackupManager.send_backup_file(user_id, context, file_path, "db")
-        elif data.startswith("delete_db::"):
-            file_path = data.split("::", 1)[1]
-            await BackupManager.delete_backup(user_id, context, file_path)
-        elif data.startswith("delete_media::"):
-            file_path = data.split("::", 1)[1]
-            await BackupManager.delete_backup(user_id, context, file_path)
-        elif data == "restore_backup":
-            await MenuManager.show_restore_menu(query, user_id, context)
         elif data == "backup_info":
             await MenuManager.show_backup_info(query, user_id, context)
         elif data == "upgrade_requests":
