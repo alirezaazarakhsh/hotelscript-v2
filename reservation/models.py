@@ -1903,28 +1903,26 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     return
 
                 logger.debug(f"استعلام استفاده کنونی: uses_count={getattr(discount_obj, 'uses_count', None)}, usage_limit={getattr(discount_obj, 'usage_limit', None)}")
-                if discount_obj.uses_count >= discount_obj.usage_limit:
-                    logger.warning(f"تعداد دفعات استفاده از کد شخصی {discount_obj.code} به پایان رسیده است")
-                    cache.delete(cache_key_discount)
-                    return
 
-                # اتمیک افزایش uses_count
+                # اتمیک تلاش برای افزایش uses_count؛ اگر قبلاً توسط مسیر دیگری افزایش یافته بود
+                # و به حد استفاده رسیده بود، ما باز هم رزرو را علامت‌گذاری می‌کنیم اما از افزایش مجدد خودداری می‌کنیم.
                 try:
                     with transaction.atomic():
                         pd = PersonalDiscountCode.objects.select_for_update().get(pk=discount_obj.pk)
                         logger.debug(f"پس از select_for_update: pd.uses_count={pd.uses_count}, pd.usage_limit={pd.usage_limit}")
-                        if pd.uses_count >= pd.usage_limit:
-                            logger.warning(f"تعداد دفعات استفاده از کد شخصی {pd.code} هم‌اکنون به پایان رسیده است")
-                            cache.delete(cache_key_discount)
-                            return
-                        pd.uses_count += 1
-                        pd.save(update_fields=['uses_count'])
+                        if pd.uses_count < pd.usage_limit:
+                            pd.uses_count += 1
+                            pd.save(update_fields=['uses_count'])
+                            logger.info(f"uses_count کد شخصی {pd.code} افزایش یافت -> {pd.uses_count}")
+                        else:
+                            logger.warning(f"uses_count کد شخصی {pd.code} قبلاً به حد نهایی رسیده ({pd.uses_count}/{pd.usage_limit}) — افزایش نادیده گرفته شد")
 
+                    # حتی اگر افزایش انجام نشده باشد (چون قبلاً افزایش یافته)، باید رزرو علامت‌گذاری شود
                     reservation.personal_discount_code = pd
                     reservation.personal_discount_used = True
                     reservation.discount_processed = True
                     reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
-                    logger.info(f"کد تخفیف شخصی {discount_obj.code} برای رزرو {reservation.tracking_code} مصرف شد. uses_count: {pd.uses_count}")
+                    logger.info(f"کد تخفیف شخصی {discount_obj.code} برای رزرو {reservation.tracking_code} علامت‌گذاری شد. uses_count: {pd.uses_count}")
                 except Exception as e:
                     logger.error(f"خطا در مصرف کد شخصی {discount_obj.code}: {e}")
                     import traceback
