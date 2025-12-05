@@ -312,17 +312,29 @@ def handle_reservation_payment_for_discount(sender, instance, **kwargs):
 
                     if success:
                         logger.info(f"🟢 کد تخفیف {discount_obj.code} با موفقیت مصرف شد")
-                        
+
                         # ایجاد رکورد فعال‌سازی برای انواعی که نیاز دارند
                         if discount_type in ('room', 'hotel', 'shopping_center'):
                             activation_record = _create_or_update_activation_record(reservation.buyer, discount_obj)
                             if activation_record:
                                 logger.info(f"🟢 رکورد فعال‌سازی برای کاربر {reservation.buyer.phone_number} ایجاد شد")
-                        
+
                         # علامت‌گذاری رزرو به عنوان پردازش شده
-                        reservation.discount_processed = True
-                        reservation.save(update_fields=['discount_processed'])
-                        logger.info(f"🟢 کد تخفیف {discount_obj.code} برای رزرو {reservation.tracking_code} با موفقیت پردازش شد")
+                        # برای کدهای شخصی، علاوه بر flag پردازش، فیلدهای مربوط به کد شخصی را نیز ست کن
+                        if discount_type == 'personal':
+                            try:
+                                reservation.personal_discount_code = discount_obj
+                                reservation.personal_discount_used = True
+                                reservation.discount_processed = True
+                                reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
+                                logger.info(f"🟢 کد تخفیف شخصی {discount_obj.code} برای رزرو {reservation.tracking_code} علامت‌گذاری شد")
+                            except Exception as e:
+                                logger.error(f"خطا در به‌روزرسانی رزرو برای کد شخصی {discount_obj.code}: {e}")
+                                raise
+                        else:
+                            reservation.discount_processed = True
+                            reservation.save(update_fields=['discount_processed'])
+                            logger.info(f"🟢 کد تخفیف {discount_obj.code} برای رزرو {reservation.tracking_code} با موفقیت پردازش شد")
                     else:
                         logger.error(f"🔴 مصرف کد تخفیف {discount_obj.code} ناموفق بود")
                         
