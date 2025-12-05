@@ -1,0 +1,136 @@
+import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from hotel_bot.menu_manager import MenuManager
+from reservation.models import Reservationhotel, ReservationRoomPassenger, Passenger
+
+logger = logging.getLogger(__name__)
+
+class ReservationManager:
+    @staticmethod
+    async def list_pending_reservations(user_id, context):
+        try:
+            # Get pending reservations with related data
+            pending_reservations = Reservationhotel.objects.filter(capacity_status='pending').select_related(
+                'buyer', 'buyer__natural_profile', 'buyer__admin', 'hotel'
+            ).prefetch_related(
+                'reservation_rooms__room',
+                'reservation_rooms__reservation_room_passengers__passenger'
+            ).order_by('-created_at')[:10]  # Limit to 10 for performance
+
+            if not pending_reservations.exists():
+                text = "📋 **لیست رزروهای در انتظار تایید**\n\nهیچ رزروی در انتظار تایید وجود ندارد."
+                keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+                return
+
+            text = "📋 **لیست رزروهای در انتظار تایید**\n\n"
+            keyboard = []
+
+            for res in pending_reservations:
+                text += f"🔹 کد پیگیری: {res.tracking_code}\n"
+                text += f"🏨 هتل: {res.hotel.name if res.hotel else 'نامشخص'}\n"
+                
+                # Buyer info
+                buyer = res.buyer
+                buyer_name = ""
+                if buyer.natural_profile:
+                    buyer_name = f"{buyer.natural_profile.first_name or ''} {buyer.natural_profile.last_name or ''}".strip()
+                elif buyer.admin:
+                    buyer_name = f"{buyer.admin.first_name or ''} {buyer.admin.last_name or ''}".strip()
+                if not buyer_name:
+                    buyer_name = buyer.phone_number
+                text += f"👤 رزرو کننده: {buyer_name} ({buyer.phone_number})\n"
+                
+                # Rooms
+                text += "🏠 اتاق‌ها:\n"
+                for rr in res.reservation_rooms.all():
+                    room_name = rr.room.name if rr.room else 'نامشخص'
+                    text += f"  - {room_name} (تعداد: {rr.quantity})\n"
+                
+                # Passengers
+                main_passenger = None
+                other_passengers = []
+                for rr in res.reservation_rooms.all():
+                    for rrp in rr.reservation_room_passengers.all():
+                        if rrp.is_main_passenger:
+                            main_passenger = rrp.passenger
+                        else:
+                            other_passengers.append(rrp.passenger)
+                
+                if main_passenger:
+                    text += f"🧑 مسافر اصلی: {main_passenger.first_name} {main_passenger.last_name} ({main_passenger.national_code})\n"
+                
+                if other_passengers:
+                    text += "👥 مسافران دیگر:\n"
+                    for p in other_passengers:
+                        text += f"  - {p.first_name} {p.last_name} ({p.national_code})\n"
+                
+                # Room info with half charges
+                total_half_in = 0
+                total_half_out = 0
+                for rr in res.reservation_rooms.all():
+                    total_half_in += rr.half_day_in_charge or 0
+                    total_half_out += rr.half_day_out_charge or 0
+                if total_half_in > 0 or total_half_out > 0:
+                    text += f"🏠 نیم شارژ ورود: {int(total_half_in):,} تومان\n"
+                    text += f"🏠 نیم شارژ خروج: {int(total_half_out):,} تومان\n"
+                
+                text += f"💰 قیمت نهایی: {int(res.final_price or 0):,} تومان\n"
+                text += f"📅 تاریخ ایجاد: {res.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+
+                keyboard.append([
+                    InlineKeyboardButton(f"تایید {res.tracking_code}", callback_data=f"approve_reservation::{res.tracking_code}"),
+                    InlineKeyboardButton(f"رد {res.tracking_code}", callback_data=f"reject_reservation::{res.tracking_code}")
+                ])
+
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+
+        except Exception as e:
+            logger.error(f"Error listing pending reservations: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش لیست رزروها: {str(e)}")
+
+    @staticmethod
+    async def approve_reservation(user_id, context, tracking_code):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            if reservation.capacity_status != 'pending':
+                await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} قبلاً پردازش شده است.")
+                return
+
+            reservation.capacity_status = 'confirmed'
+            reservation.save(update_fields=['capacity_status'])
+
+            await context.bot.send_message(chat_id=user_id, text=f"✅ رزرو {tracking_code} با موفقیت تایید شد.", parse_mode="Markdown")
+
+            # Optionally, send notification to user via WebSocket or SMS
+
+        except Reservationhotel.DoesNotExist:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو با کد {tracking_code} یافت نشد.")
+        except Exception as e:
+            logger.error(f"Error approving reservation {tracking_code}: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در تایید رزرو: {str(e)}")
+
+    @staticmethod
+    async def reject_reservation(user_id, context, tracking_code):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            if reservation.capacity_status != 'pending':
+                await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} قبلاً پردازش شده است.")
+                return
+
+            reservation.capacity_status = 'rejected'
+            reservation.save(update_fields=['capacity_status'])
+
+            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} رد شد.", parse_mode="Markdown")
+
+            # Optionally, send notification to user
+
+        except Reservationhotel.DoesNotExist:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو با کد {tracking_code} یافت نشد.")
+        except Exception as e:
+            logger.error(f"Error rejecting reservation {tracking_code}: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در رد رزرو: {str(e)}")

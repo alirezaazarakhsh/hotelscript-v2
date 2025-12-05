@@ -16,7 +16,7 @@ class MenuManager:
 **امکانات ورژن 1.1 ربات:**
 
 📦 **بکاپ‌گیری دستی** از دیتابیس و پوشه مدیا
-🗂 **نمایش لیست بکاپ‌ها** با امکان حذف
+📋 **لیست رزروها** با امکان تایید یا رد
 📮 **پشتیبانی** ارتباط سریع با ادمین
 📋 **راهنمای بکاپ‌گیری** (در حال توسعه...)
 💰 **شارژ کیف پول** برای دسترسی به خدمات بیشتر
@@ -26,6 +26,8 @@ class MenuManager:
             row = []
             if AccessManager.is_allowed(user_id, 'backup_db') or AccessManager.is_allowed(user_id, 'backup_media'):
                 row.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
+            if AccessManager.is_allowed(user_id, 'view_reservations'):
+                row.append(InlineKeyboardButton("📋 لیست رزروها", callback_data="view_reservations"))
             if row:
                 keyboard.append(row)
             row = []

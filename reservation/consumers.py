@@ -5,6 +5,8 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 from django.core.cache import cache
 from django.db import transaction
+from telegram import Bot
+from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS
 from .models import (
     Reservationhotel,
     ReservationRoom,
@@ -136,6 +138,9 @@ class ReservationConsumer(AsyncWebsocketConsumer):
                     # ذخیره مقدار expiry به عنوان عدد (epoch) و ست کردن timeout تا خودش پاک شود
                     cache.set(cache_key_approval, str(expires_at_ts), timeout=approval_duration_seconds)
                     logger.info(f"Manual approval timer start (cache) for {self.tracking_code}: expires_at_ts={expires_at_ts} ({approval_duration_seconds}s)")
+                    
+                    # Send notification to bot
+                    await self.send_reservation_notification(self.tracking_code)
             else:
                 logger.info(f"Manual start ignored; timer already exists for {self.tracking_code}")
 
@@ -207,6 +212,26 @@ class ReservationConsumer(AsyncWebsocketConsumer):
             # اگر cache موجود نیست، مدت کامل duration را نشان بده (تا فرانت تایمر را شروع کند)
             return approval_duration_seconds
         return 0
+
+    async def send_reservation_notification(self, tracking_code):
+        try:
+            bot = Bot(token=BOT_TOKEN)
+            reservation = await sync_to_async(Reservationhotel.objects.get)(tracking_code=tracking_code)
+            message = f"🔔 **رزرو جدید نیاز به تایید دارد**\n\n"
+            message += f"🔹 کد پیگیری: {reservation.tracking_code}\n"
+            message += f"🏨 هتل: {reservation.hotel.name if reservation.hotel else 'نامشخص'}\n"
+            message += f"👤 کاربر: {reservation.buyer.phone_number}\n"
+            message += f"💰 قیمت نهایی: {int(reservation.final_price or 0):,} تومان\n"
+            message += f"📅 تاریخ ایجاد: {reservation.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+            message += "لطفاً از طریق ربات اقدام به تایید یا رد کنید."
+
+            for admin_id in SUPER_ADMINS:
+                try:
+                    await bot.send_message(chat_id=admin_id, text=message, parse_mode="Markdown")
+                except Exception as e:
+                    logger.error(f"Failed to send notification to admin {admin_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error sending reservation notification for {tracking_code}: {e}")
 
     async def disconnect(self, close_code):
         self.connected = False

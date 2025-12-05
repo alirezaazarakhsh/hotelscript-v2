@@ -21,7 +21,7 @@ from hotel_bot.group_manager import GroupManager
 from hotel_bot.permission_manager import PermissionManager
 from hotel_bot.wallet_manager import WalletManager
 from hotel_bot.receipt_manager import ReceiptManager
-from hotel_bot.user_wallet_manager import UserWalletManager
+from hotel_bot.reservation_manager import ReservationManager
 
 # Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -76,6 +76,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "support" and not AccessManager.is_allowed(user_id, 'support'):
             await query.edit_message_text("❌ شما مجوز دسترسی به پشتیبانی را ندارید!")
             return
+        if data == "view_reservations" and not AccessManager.is_allowed(user_id, 'view_reservations'):
+            await query.edit_message_text("❌ شما مجوز مشاهده رزروها را ندارید!")
+            return
+        if data.startswith("approve_reservation::") and not AccessManager.is_allowed(user_id, 'approve_reservations'):
+            await query.edit_message_text("❌ شما مجوز تایید رزروها را ندارید!")
+            return
+        if data.startswith("reject_reservation::") and not AccessManager.is_allowed(user_id, 'approve_reservations'):
+            await query.edit_message_text("❌ شما مجوز رد رزروها را ندارید!")
+            return
         if data == "view_balance" and not AccessManager.is_allowed(user_id, 'view_balance'):
             await query.edit_message_text("❌ شما مجوز مشاهده موجودی کیف پول را ندارید!")
             return
@@ -104,6 +113,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await BackupManager.backup_media(user_id, context)
         elif data == "backup_info":
             await MenuManager.show_backup_info(query, user_id, context)
+        elif data == "view_reservations":
+            await ReservationManager.list_pending_reservations(user_id, context)
+        elif data.startswith("approve_reservation::"):
+            tracking_code = data.split("::", 1)[1]
+            await ReservationManager.approve_reservation(user_id, context, tracking_code)
+        elif data.startswith("reject_reservation::"):
+            tracking_code = data.split("::", 1)[1]
+            await ReservationManager.reject_reservation(user_id, context, tracking_code)
         elif data == "upgrade_requests":
             await query.edit_message_text(
                 "ویژگی ارتقای تعداد درخواست‌ها به‌زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.\n\n**توضیح**: این ارتقا اجازه بکاپ‌های بیشتر یا ویژگی‌های پیشرفته را فراهم می‌کند.",
