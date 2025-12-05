@@ -1768,6 +1768,45 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         logger.info(f"Processing skipped for {instance.tracking_code} due to lock (points or discount)")
         return
 
+    # Additional safeguard: if payment completed and applied code is a personal code
+    # but reservation.personal_discount_used is still False, try to mark it now.
+    # This ensures that if another signal/path consumed the PersonalDiscountCode
+    # but did not update the reservation, we still mark the reservation as used.
+    if instance.payment_status == 'paid' and instance.applied_discount_code and not instance.personal_discount_used:
+        try:
+            with transaction.atomic():
+                # get fresh reservation row
+                reservation = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+                # re-check under lock
+                if reservation.personal_discount_used:
+                    logger.debug(f"personal_discount_used already set for {reservation.tracking_code}")
+                else:
+                    try:
+                        pd = PersonalDiscountCode.objects.select_for_update().get(code__iexact=reservation.applied_discount_code)
+                    except PersonalDiscountCode.DoesNotExist:
+                        pd = None
+
+                    if pd:
+                        if pd.user_id != reservation.buyer_id:
+                            logger.warning(f"Personal code {pd.code} does not belong to buyer for reservation {reservation.tracking_code}")
+                        else:
+                            # try to increment uses_count if possible
+                            if pd.uses_count < pd.usage_limit:
+                                pd.uses_count += 1
+                                pd.save(update_fields=['uses_count'])
+                                logger.info(f"Incremented uses_count for personal code {pd.code} -> {pd.uses_count}")
+                            else:
+                                logger.warning(f"Personal code {pd.code} already at usage limit ({pd.uses_count}/{pd.usage_limit})")
+
+                            reservation.personal_discount_code = pd
+                            reservation.personal_discount_used = True
+                            reservation.discount_processed = True
+                            reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
+                            logger.info(f"Marked reservation {reservation.tracking_code} as using personal code {pd.code}")
+
+        except Exception as e:
+            logger.error(f"Error while marking personal discount for reservation {instance.tracking_code}: {e}")
+
     if instance.capacity_status == 'rejected':
         rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
         with transaction.atomic():
