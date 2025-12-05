@@ -1411,6 +1411,12 @@ class Reservationhotel(models.Model):
         help_text=_('مشخص می‌کند که کاربر درخواست کنسلی داده است.')
     )
 
+    approval_notification_sent = models.BooleanField(
+        _('اعلان تایید ارسال شده'),
+        default=False,
+        help_text=_('مشخص می‌کند که اعلان تایید رزرو به ادمین ارسال شده است.')
+    )
+
     
 
     created_at = jmodels.jDateTimeField(_('تاریخ ایجاد'), auto_now_add=True)

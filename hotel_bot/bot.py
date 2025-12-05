@@ -1,6 +1,8 @@
 import os
 import logging
 import re
+import sys
+import django
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,6 +12,11 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+
+# Setup Django before importing models
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
+sys.path.insert(0, '/app')
+django.setup()
 
 from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
 from hotel_bot.access_manager import AccessManager
