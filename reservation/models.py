@@ -1375,6 +1375,15 @@ class Reservationhotel(models.Model):
     capacity_status = models.CharField(_('وضعیت ظرفیت'), max_length=20, choices=CAPACITY_STATUS_CHOICES, default='pending')
     payment_status = models.CharField(_('وضعیت پرداخت'), max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
     applied_discount_code = models.CharField(max_length=8, blank=True, null=True, verbose_name=_("کد تخفیف اعمال‌شده"))
+    personal_discount_code = models.ForeignKey(
+        'bashgah_moshtarian.PersonalDiscountCode',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='used_in_reservations',
+        verbose_name=_('کد تخفیف شخصی')
+    )
+    personal_discount_used = models.BooleanField(_("کد تخفیف شخصی استفاده شد"), default=False)
     points_assigned = models.BooleanField(_('امتیازهای باشگاه مشتریان تخصیص داده شده'), default=False)
     discount_processed = models.BooleanField(_('پردازش کد تخفیف انجام شده'), default=False)
     ref_id = models.CharField(max_length=100, blank=True, null=True, verbose_name=_('شناسه ارجاع تراکنش'))
@@ -1616,8 +1625,33 @@ def process_discount_after_payment_v2(self):
             logger.info(f"   - usage_limit: {discount_obj.usage_limit}")
             logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
 
-            # استفاده از متد consume_discount_for_user که از قبل تست شده
+            # برای کدهای شخصی از متد apply_use استفاده کن و فیلدهای رزرو را ست کن
             try:
+                if discount_type == 'personal':
+                    logger.info(f"🔍 پردازش کد شخصی {discount_obj.code} برای رزرو {reservation.tracking_code}")
+                    if discount_obj.user_id != reservation.buyer_id:
+                        logger.warning(f"کد شخصی {discount_obj.code} متعلق به کاربر دیگری است")
+                        return False
+
+                    # استفاده اتمیک از متد apply_use
+                    try:
+                        success = discount_obj.apply_use(reservation.buyer)
+                    except ValueError as e:
+                        logger.warning(f"کد شخصی {discount_obj.code} قابل استفاده نیست: {e}")
+                        return False
+
+                    if success:
+                        reservation.personal_discount_code = discount_obj
+                        reservation.personal_discount_used = True
+                        reservation.discount_processed = True
+                        reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
+                        logger.info(f"🟢 کد شخصی {discount_obj.code} برای رزرو {reservation.tracking_code} مصرف شد")
+                        return True
+                    else:
+                        logger.error(f"❌ apply_use برای کد شخصی {discount_obj.code} False برگرداند")
+                        return False
+
+                # استفاده از متد consume_discount_for_user برای انواع room/hotel
                 success = discount_obj.consume_discount_for_user(reservation.buyer)
                 if success:
                     reservation.discount_processed = True
@@ -1629,8 +1663,12 @@ def process_discount_after_payment_v2(self):
                     # دیباگ وضعیت بعد از مصرف
                     logger.info(f"🟢 وضعیت کد تخفیف بعد از مصرف:")
                     logger.info(f"   - کد: {discount_obj.code}")
-                    logger.info(f"   - remaining_uses: {discount_obj.remaining_uses}")
-                    logger.info(f"   - کاربر در activated_users: {reservation.buyer in discount_obj.activated_users.all()}")
+                    logger.info(f"   - remaining_uses: {getattr(discount_obj, 'remaining_uses', None)}")
+                    if hasattr(discount_obj, 'activated_users'):
+                        in_activated = reservation.buyer in discount_obj.activated_users.all()
+                    else:
+                        in_activated = False
+                    logger.info(f"   - کاربر در activated_users: {in_activated}")
                     logger.info(f"   - discount_processed: {reservation.discount_processed}")
                     
                     logger.info(f"✅ کد تخفیف با موفقیت مصرف شد برای رزرو {reservation.tracking_code}")
@@ -1638,7 +1676,7 @@ def process_discount_after_payment_v2(self):
                 else:
                     logger.error(f"❌ متد consume_discount_for_user False برگرداند")
                     return False
-                    
+
             except ValueError as e:
                 logger.error(f"❌ خطا در مصرف کد تخفیف (ValueError): {e}")
                 return False
@@ -1882,8 +1920,10 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                         pd.uses_count += 1
                         pd.save(update_fields=['uses_count'])
 
+                    reservation.personal_discount_code = pd
+                    reservation.personal_discount_used = True
                     reservation.discount_processed = True
-                    reservation.save(update_fields=['discount_processed'])
+                    reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
                     logger.info(f"کد تخفیف شخصی {discount_obj.code} برای رزرو {reservation.tracking_code} مصرف شد. uses_count: {pd.uses_count}")
                 except Exception as e:
                     logger.error(f"خطا در مصرف کد شخصی {discount_obj.code}: {e}")

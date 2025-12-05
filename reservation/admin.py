@@ -856,16 +856,18 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_refunded_fa',     # جدید: برگشتی
         'cancellation_requested_fa',    # جدید: درخواست
         'capacity_status_colored', 'payment_status_colored',
-        'points_assigned_fa', 'discount_processed_fa', 'created_jalali'
+        'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'
     )
+    search_fields = search_fields + ('personal_discount_code__code',)
     list_filter = (
         'capacity_status', 'payment_status', 'check_in_date', 'check_out_date',
         'cancellation_requested'  # جدید: فیلتر کنسلی
     )
+    list_filter = list_filter + ('personal_discount_used',)
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
     readonly_fields = (
@@ -875,6 +877,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
         'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
         'discount_processed_fa', 'ref_id',
+        'personal_discount_code', 'personal_discount_used',
         'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa'  # جدید
     )
     fieldsets = (
@@ -892,6 +895,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
                 'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
+                'personal_discount_code', 'personal_discount_used',
                 'final_price_fa', 'capacity_status', 'payment_status',
                 'points_assigned_fa', 'discount_processed_fa', 'ref_id'
             )
