@@ -1,5 +1,7 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 from hotel_bot.menu_manager import MenuManager
 from reservation.models import Reservationhotel, ReservationRoomPassenger, Passenger
 
@@ -7,17 +9,22 @@ logger = logging.getLogger(__name__)
 
 class ReservationManager:
     @staticmethod
+    @database_sync_to_async
+    def _get_pending_reservations():
+        return list(Reservationhotel.objects.filter(capacity_status='pending').select_related(
+            'buyer', 'buyer__natural_profile', 'buyer__admin', 'hotel'
+        ).prefetch_related(
+            'reservation_rooms__room',
+            'reservation_rooms__reservation_room_passengers__passenger'
+        ).order_by('-created_at')[:10])
+
+    @staticmethod
     async def list_pending_reservations(user_id, context):
         try:
             # Get pending reservations with related data
-            pending_reservations = Reservationhotel.objects.filter(capacity_status='pending').select_related(
-                'buyer', 'buyer__natural_profile', 'buyer__admin', 'hotel'
-            ).prefetch_related(
-                'reservation_rooms__room',
-                'reservation_rooms__reservation_room_passengers__passenger'
-            ).order_by('-created_at')[:10]  # Limit to 10 for performance
+            pending_reservations = await ReservationManager._get_pending_reservations()
 
-            if not pending_reservations.exists():
+            if not pending_reservations:
                 text = "📋 **لیست رزروهای در انتظار تایید**\n\nهیچ رزروی در انتظار تایید وجود ندارد."
                 keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -94,43 +101,43 @@ class ReservationManager:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش لیست رزروها: {str(e)}")
 
     @staticmethod
-    async def approve_reservation(user_id, context, tracking_code):
+    @database_sync_to_async
+    def _approve_reservation_sync(tracking_code):
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
             if reservation.capacity_status != 'pending':
-                await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} قبلاً پردازش شده است.")
-                return
-
+                return False, f"❌ رزرو {tracking_code} قبلاً پردازش شده است."
             reservation.capacity_status = 'confirmed'
             reservation.save(update_fields=['capacity_status'])
-
-            await context.bot.send_message(chat_id=user_id, text=f"✅ رزرو {tracking_code} با موفقیت تایید شد.", parse_mode="Markdown")
-
-            # Optionally, send notification to user via WebSocket or SMS
-
+            return True, f"✅ رزرو {tracking_code} با موفقیت تایید شد."
         except Reservationhotel.DoesNotExist:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو با کد {tracking_code} یافت نشد.")
+            return False, f"❌ رزرو با کد {tracking_code} یافت نشد."
         except Exception as e:
             logger.error(f"Error approving reservation {tracking_code}: {e}")
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در تایید رزرو: {str(e)}")
+            return False, f"❌ خطا در تایید رزرو: {str(e)}"
+
+    @staticmethod
+    async def approve_reservation(user_id, context, tracking_code):
+        success, message = await ReservationManager._approve_reservation_sync(tracking_code)
+        await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+
+    @staticmethod
+    @database_sync_to_async
+    def _reject_reservation_sync(tracking_code):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            if reservation.capacity_status != 'pending':
+                return False, f"❌ رزرو {tracking_code} قبلاً پردازش شده است."
+            reservation.capacity_status = 'rejected'
+            reservation.save(update_fields=['capacity_status'])
+            return True, f"❌ رزرو {tracking_code} رد شد."
+        except Reservationhotel.DoesNotExist:
+            return False, f"❌ رزرو با کد {tracking_code} یافت نشد."
+        except Exception as e:
+            logger.error(f"Error rejecting reservation {tracking_code}: {e}")
+            return False, f"❌ خطا در رد رزرو: {str(e)}"
 
     @staticmethod
     async def reject_reservation(user_id, context, tracking_code):
-        try:
-            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
-            if reservation.capacity_status != 'pending':
-                await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} قبلاً پردازش شده است.")
-                return
-
-            reservation.capacity_status = 'rejected'
-            reservation.save(update_fields=['capacity_status'])
-
-            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو {tracking_code} رد شد.", parse_mode="Markdown")
-
-            # Optionally, send notification to user
-
-        except Reservationhotel.DoesNotExist:
-            await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو با کد {tracking_code} یافت نشد.")
-        except Exception as e:
-            logger.error(f"Error rejecting reservation {tracking_code}: {e}")
-            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در رد رزرو: {str(e)}")
+        success, message = await ReservationManager._reject_reservation_sync(tracking_code)
+        await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
