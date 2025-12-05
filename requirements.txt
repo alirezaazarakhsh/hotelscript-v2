@@ -102,3 +102,6 @@ yarl==1.20.1
 
 # Swagger/OpenAPI for DRF
 drf-yasg
+channels
+channels-redis
+django-redis
