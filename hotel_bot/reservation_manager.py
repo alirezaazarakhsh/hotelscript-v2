@@ -45,7 +45,7 @@ class ReservationManager:
             
             # Rooms and passengers
             for rr in res.reservation_rooms.all():
-                room_name = rr.room.name if rr.room else 'نامشخص'
+                room_name = rr.room.title if rr.room else 'نامشخص'
                 res_data['rooms'].append(f"{room_name} (تعداد: {rr.quantity})")
                 
                 for rrp in rr.passengers.all():
