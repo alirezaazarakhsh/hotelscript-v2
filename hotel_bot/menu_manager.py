@@ -208,11 +208,39 @@ class MenuManager:
     @staticmethod
     async def show_manage_wallet_menu(query, user_id, context):
         try:
-            text = "💰 **مدیریت کیف پول کاربران**\n\nشماره موبایل کاربر را وارد کنید تا کیف پولش را مدیریت کنید."
-            keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            from authentication.models import BaseUser
+            from finance.models import Wallet
+            from asgiref.sync import sync_to_async
             
-            context.user_data['state'] = 'waiting_for_wallet_phone'
+            # Get all users with their names
+            @sync_to_async
+            def get_users():
+                users = []
+                for user in BaseUser.objects.all()[:50]:  # Limit to 50 users
+                    name = ""
+                    if hasattr(user, 'natural_profile') and user.natural_profile:
+                        name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
+                    elif hasattr(user, 'admin') and user.admin:
+                        name = f"{user.admin.first_name or ''} {user.admin.last_name or ''}".strip()
+                    if not name:
+                        name = user.phone_number
+                    users.append({
+                        'id': user.id,
+                        'phone': user.phone_number,
+                        'name': name
+                    })
+                return users
+            
+            users = await get_users()
+            
+            text = "💰 **مدیریت کیف پول کاربران سایت**\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
+            keyboard = []
+            
+            for user in users:
+                keyboard.append([InlineKeyboardButton(f"{user['name']} ({user['phone']})", callback_data=f"manage_user_wallet:{user['id']}")])
+            
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
             try:
                 await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")

@@ -417,6 +417,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data == "manage_wallet":
             await MenuManager.show_manage_wallet_menu(query, user_id, context)
+        elif data.startswith("manage_user_wallet:"):
+            user_target_id = data.split(":", 1)[1]
+            await WalletManager.show_user_wallet_management(query, user_id, context, user_target_id)
         elif data.startswith("charge_wallet:"):
             phone = data.split(":", 1)[1]
             context.user_data['wallet_phone'] = phone
@@ -708,6 +711,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000 تومان و فقط اعداد.")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+        elif state == 'waiting_for_wallet_adjustment':
+            try:
+                amount = int(text.replace(',', ''))
+                target_user_id = context.user_data.get('managing_wallet_user_id')
+                if not target_user_id:
+                    await update.message.reply_text("❌ کاربر یافت نشد. دوباره شروع کنید.")
+                    context.user_data.clear()
+                    return
+                # Adjust wallet
+                from finance.models import Wallet
+                from authentication.models import BaseUser
+                from asgiref.sync import sync_to_async
+                try:
+                    user = await sync_to_async(BaseUser.objects.get)(id=target_user_id)
+                    wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user, defaults={'balance': 0})
+                    old_balance = wallet.balance
+                    new_balance = old_balance + amount
+                    await sync_to_async(wallet.__class__.objects.filter(pk=wallet.pk).update)(balance=new_balance)
+                    await update.message.reply_text(f"✅ کیف پول کاربر {user.phone_number} به مبلغ {amount:,} تومان {'افزایش' if amount > 0 else 'کاهش'} یافت.\nموجودی قبلی: {old_balance:,} تومان\nموجودی جدید: {new_balance:,} تومان")
+                except BaseUser.DoesNotExist:
+                    await update.message.reply_text("❌ کاربر یافت نشد.")
+                except Exception as e:
+                    logger.error(f"Error adjusting wallet: {e}")
+                    await update.message.reply_text(f"❌ خطا در تنظیم کیف پول: {str(e)}")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+            except ValueError:
+                await update.message.reply_text("❌ مبلغ نامعتبر. فقط اعداد (مثبت برای افزایش، منفی برای کاهش).")
                 context.user_data.clear()
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
     except Exception as e:

@@ -13,7 +13,7 @@ class ReservationManager:
     @database_sync_to_async
     def _get_pending_reservations_data():
         reservations = Reservationhotel.objects.filter(
-            capacity_status__in=['pending', 'confirmed', 'rejected']
+            capacity_status='pending'
         ).select_related(
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(

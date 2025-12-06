@@ -186,3 +186,49 @@ class WalletManager:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش موجودی: {str(e)}")
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
+
+    @staticmethod
+    async def show_user_wallet_management(query, admin_user_id, context, target_user_id):
+        try:
+            from authentication.models import BaseUser
+            from finance.models import Wallet
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def get_user_wallet(target_user_id):
+                try:
+                    user = BaseUser.objects.get(id=target_user_id)
+                    wallet, created = Wallet.objects.get_or_create(user=user)
+                    name = ""
+                    if hasattr(user, 'natural_profile') and user.natural_profile:
+                        name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
+                    elif hasattr(user, 'admin') and user.admin:
+                        name = f"{user.admin.first_name or ''} {user.admin.last_name or ''}".strip()
+                    if not name:
+                        name = user.phone_number
+                    return {
+                        'name': name,
+                        'phone': user.phone_number,
+                        'balance': wallet.balance
+                    }
+                except BaseUser.DoesNotExist:
+                    return None
+            
+            user_data = await get_user_wallet(target_user_id)
+            if not user_data:
+                await query.edit_message_text("❌ کاربر یافت نشد!")
+                return
+            
+            text = f"💰 **مدیریت کیف پول کاربر**\n\nکاربر: {user_data['name']} ({user_data['phone']})\nموجودی فعلی: {user_data['balance']:,} تومان\n\nمبلغی که می‌خواهید اضافه یا کم کنید را وارد کنید (مثبت برای افزایش، منفی برای کاهش)."
+            
+            context.user_data['managing_wallet_user_id'] = target_user_id
+            context.user_data['state'] = 'waiting_for_wallet_adjustment'
+            
+            keyboard = [[InlineKeyboardButton("بازگشت به لیست کاربران", callback_data="manage_wallet")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            
+        except Exception as e:
+            logger.error(f"Error in show_user_wallet_management: {str(e)}")
+            await context.bot.send_message(chat_id=admin_user_id, text=f"❌ خطا در نمایش مدیریت کیف پول: {str(e)}")
