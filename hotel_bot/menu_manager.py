@@ -47,8 +47,8 @@ class MenuManager:
                 row.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
             if AccessManager.is_allowed(user_id, 'view_balance'):
                 row.append(InlineKeyboardButton("💸 مشاهده موجودی", callback_data="view_balance"))
-            if AccessManager.is_allowed(user_id, 'edit_profile'):
-                row.append(InlineKeyboardButton("👤 ویرایش پروفایل", callback_data="edit_profile"))
+            if AccessManager.is_allowed(user_id, 'manage_wallet'):
+                row.append(InlineKeyboardButton("💰 مدیریت کیف پول", callback_data="manage_wallet"))
             if row:
                 keyboard.append(row)
         
@@ -211,3 +211,26 @@ class MenuManager:
             except Exception as e:
                 await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی ویرایش پروفایل: {str(e)}")
                 await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
+
+    @staticmethod
+    async def show_manage_wallet_menu(query, user_id, context):
+        try:
+            text = "💰 **مدیریت کیف پول کاربران**\n\nشماره موبایل کاربر را وارد کنید تا کیف پولش را مدیریت کنید."
+            keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            context.user_data['state'] = 'waiting_for_wallet_phone'
+            
+            try:
+                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception as e:
+                # If editing fails, send a new message
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت کیف پول: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)

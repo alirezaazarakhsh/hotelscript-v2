@@ -4,6 +4,7 @@ from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from hotel_bot.menu_manager import MenuManager
 from reservation.models import Reservationhotel, ReservationRoomPassenger, Passenger
+from finance.models import Wallet, BotWallet
 
 logger = logging.getLogger(__name__)
 
@@ -11,20 +12,27 @@ class ReservationManager:
     @staticmethod
     @database_sync_to_async
     def _get_pending_reservations_data():
-        reservations = Reservationhotel.objects.filter(capacity_status='pending').select_related(
+        reservations = Reservationhotel.objects.filter(
+            capacity_status__in=['pending', 'confirmed', 'rejected']
+        ).select_related(
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
             'reservation_rooms__room__hotel',
             'reservation_rooms__passengers'
-        ).order_by('-created_at')[:10]
+        ).order_by('-created_at')[:20]  # Show more reservations
         
         data = []
         for res in reservations:
             res_data = {
                 'tracking_code': res.tracking_code,
+                'capacity_status': res.capacity_status,
+                'payment_status': res.payment_status,
                 'hotel_name': res.get_hotel().name if res.get_hotel() else 'نامشخص',
                 'buyer_name': '',
                 'buyer_phone': res.buyer.phone_number,
+                'wallet_balance': 0,
+                'bot_wallet_balance': 0,
+                'wallet_withdrawn': res.wallet_withdrawal_amount or 0,
                 'rooms': [],
                 'main_passenger': None,
                 'other_passengers': [],
@@ -42,6 +50,20 @@ class ReservationManager:
                 res_data['buyer_name'] = f"{buyer.admin.first_name or ''} {buyer.admin.last_name or ''}".strip()
             if not res_data['buyer_name']:
                 res_data['buyer_name'] = buyer.phone_number
+            
+            # Get wallet balance
+            try:
+                wallet = Wallet.objects.get(user=buyer)
+                res_data['wallet_balance'] = wallet.balance
+            except Wallet.DoesNotExist:
+                res_data['wallet_balance'] = 0
+            
+            # Get bot wallet balance
+            try:
+                bot_wallet = BotWallet.objects.get(user=buyer)
+                res_data['bot_wallet_balance'] = bot_wallet.balance
+            except BotWallet.DoesNotExist:
+                res_data['bot_wallet_balance'] = 0
             
             # Rooms and passengers
             for rr in res.reservation_rooms.all():
@@ -74,19 +96,23 @@ class ReservationManager:
             pending_reservations = await ReservationManager._get_pending_reservations_data()
 
             if not pending_reservations:
-                text = "📋 **لیست رزروهای در انتظار تایید**\n\nهیچ رزروی در انتظار تایید وجود ندارد."
+                text = "📋 **لیست رزروها**\n\nهیچ رزروی یافت نشد."
                 keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
                 return
 
-            text = "📋 **لیست رزروهای در انتظار تایید**\n\n"
+            text = "📋 **لیست رزروها**\n\n"
             keyboard = []
 
             for res in pending_reservations:
                 text += f"🔹 کد پیگیری: {res['tracking_code']}\n"
                 text += f"🏨 هتل: {res['hotel_name']}\n"
                 text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
+                text += f"💰 موجودی کیف پول سایت: {res['wallet_balance']:,} تومان\n"
+                text += f"🤖 موجودی کیف پول ربات: {res['bot_wallet_balance']:,} تومان\n"
+                if res['wallet_withdrawn'] > 0:
+                    text += f"💸 برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
                 
                 # Rooms
                 text += "🏠 اتاق‌ها:\n"
@@ -108,13 +134,24 @@ class ReservationManager:
                     text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
                     text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
                 
-                text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n"
-                text += f"📅 تاریخ ایجاد: {res['created_at']}\n\n"
+                text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
+                text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
+                text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n\n"
 
-                keyboard.append([
-                    InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"),
-                    InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}")
-                ])
+                # Buttons based on status
+                buttons = []
+                if res['capacity_status'] == 'pending':
+                    buttons.append(InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"))
+                    buttons.append(InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}"))
+                elif res['capacity_status'] == 'confirmed':
+                    buttons.append(InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}"))
+                    buttons.append(InlineKeyboardButton(f"به انتظار {res['tracking_code']}", callback_data=f"pending_reservation::{res['tracking_code']}"))
+                elif res['capacity_status'] == 'rejected':
+                    buttons.append(InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"))
+                    buttons.append(InlineKeyboardButton(f"به انتظار {res['tracking_code']}", callback_data=f"pending_reservation::{res['tracking_code']}"))
+                
+                if buttons:
+                    keyboard.append(buttons)
 
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -128,6 +165,8 @@ class ReservationManager:
     @staticmethod
     @database_sync_to_async
     def _approve_reservation_sync(tracking_code):
+        from reservation.models import set_skip_points_and_sms
+        set_skip_points_and_sms(True)
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
             if reservation.capacity_status != 'pending':
@@ -145,10 +184,22 @@ class ReservationManager:
     async def approve_reservation(user_id, context, tracking_code):
         success, message = await ReservationManager._approve_reservation_sync(tracking_code)
         await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        
+        if success:
+            # Notify super admins
+            from hotel_bot.config import SUPER_ADMINS
+            notification_text = f"✅ رزرو {tracking_code} توسط ادمین تایید شد."
+            for admin_id in SUPER_ADMINS:
+                try:
+                    await context.bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown")
+                except Exception as e:
+                    logger.error(f"Failed to notify admin {admin_id}: {e}")
 
     @staticmethod
     @database_sync_to_async
     def _reject_reservation_sync(tracking_code):
+        from reservation.models import set_skip_points_and_sms
+        set_skip_points_and_sms(True)
         try:
             reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
             if reservation.capacity_status != 'pending':
@@ -163,6 +214,22 @@ class ReservationManager:
             return False, f"❌ خطا در رد رزرو: {str(e)}"
 
     @staticmethod
-    async def reject_reservation(user_id, context, tracking_code):
-        success, message = await ReservationManager._reject_reservation_sync(tracking_code)
+    @database_sync_to_async
+    def _pending_reservation_sync(tracking_code):
+        from reservation.models import set_skip_points_and_sms
+        set_skip_points_and_sms(True)
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            reservation.capacity_status = 'pending'
+            reservation.save(update_fields=['capacity_status'])
+            return True, f"✅ رزرو {tracking_code} به وضعیت در انتظار تغییر یافت."
+        except Reservationhotel.DoesNotExist:
+            return False, f"❌ رزرو با کد {tracking_code} یافت نشد."
+        except Exception as e:
+            logger.error(f"Error setting reservation to pending {tracking_code}: {e}")
+            return False, f"❌ خطا در تغییر وضعیت رزرو: {str(e)}"
+
+    @staticmethod
+    async def pending_reservation(user_id, context, tracking_code):
+        success, message = await ReservationManager._pending_reservation_sync(tracking_code)
         await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")

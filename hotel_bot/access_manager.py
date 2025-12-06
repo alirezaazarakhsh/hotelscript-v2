@@ -42,10 +42,15 @@ class AccessManager:
         try:
             # ایجاد کپی برای جلوگیری از تغییر مستقیم داده‌های اصلی
             saveable = {
-                'admins': data.get('admins', {}),
+                'admins': {},
                 'groups': {gname: list(perms) for gname, perms in data.get('groups', {}).items()},
                 'profiles': data.get('profiles', {})
             }
+            for uid, admin_info in data.get('admins', {}).items():
+                if isinstance(admin_info, str):
+                    saveable['admins'][uid] = {'group': admin_info}
+                else:
+                    saveable['admins'][uid] = admin_info
             with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(saveable, f, ensure_ascii=False, indent=4)
             # به‌روزرسانی کش بعد از ذخیره موفق
@@ -62,9 +67,24 @@ class AccessManager:
         admins = data.get('admins', {})
         if str_uid not in admins:
             return False
-        group = admins.get(str_uid)
+        admin_data = admins.get(str_uid, {})
+        if isinstance(admin_data, str):
+            # Old format, convert to dict
+            admin_data = {'group': admin_data}
+            admins[str_uid] = admin_data
+        group = admin_data.get('group')
         if not group or group not in data.get('groups', {}):
             return False
+        # Check license expiry
+        license_expiry = admin_data.get('license_expiry')
+        if license_expiry:
+            from datetime import datetime
+            try:
+                expiry = datetime.fromisoformat(license_expiry)
+                if datetime.now() > expiry:
+                    return False
+            except ValueError:
+                pass  # Invalid date, allow access
         if permission is None:
             return True
         return permission in data.get('groups', {}).get(group, set())

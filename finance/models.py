@@ -36,7 +36,7 @@ class Wallet(models.Model):
         BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
-        related_name='wallet',
+        related_name='site_wallet',
     )
     balance = models.PositiveBigIntegerField(
         verbose_name=_('موجودی'),
@@ -55,8 +55,107 @@ class Wallet(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        
-        
+
+
+# مدل کیف پول ربات برای موجودی 
+class BotWallet(models.Model):
+    user = models.OneToOneField(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='bot_wallet_rel',
+    )
+    balance = models.PositiveBigIntegerField(
+        verbose_name=_('موجودی ربات'),
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = 'کیف پول ربات'
+        verbose_name_plural = 'کیف پول‌های ربات'
+
+    def __str__(self):
+        try:
+            natural_profile = self.user.natural_profile
+            return f'{natural_profile.first_name or ""} {natural_profile.last_name or ""} (ربات)'.strip()
+        except NaturalProfile.DoesNotExist:
+            return f'{self.user.phone_number} (ربات - بدون پروفایل)'
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+
+# مدل کیف پول کاربر برای موجودی 
+class Wallet(models.Model):
+    user = models.OneToOneField(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('کاربر'),
+        related_name='bot_wallet',
+    )
+    balance = models.PositiveBigIntegerField(
+        verbose_name=_('موجودی ربات'),
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = 'کیف پول ربات'
+        verbose_name_plural = 'کیف پول‌های ربات'
+
+    def __str__(self):
+        try:
+            return f'کیف پول ربات {self.user.phone_number}: {self.balance:,} تومان'
+        except:
+            return f'کیف پول ربات {self.user_id}: {self.balance:,} تومان'
+
+
+# مدل لایسنس ادمین ربات
+class AdminLicense(models.Model):
+    user = models.OneToOneField(
+        BaseUser,
+        on_delete=models.CASCADE,
+        verbose_name=_('ادمین'),
+        related_name='admin_license',
+    )
+    license_cost = models.PositiveBigIntegerField(
+        verbose_name=_('هزینه لایسنس (تومان)'),
+        default=100000,  # 100 هزار تومان
+    )
+    expires_at = models.DateTimeField(
+        verbose_name=_('تاریخ انقضای لایسنس'),
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(
+        verbose_name=_('فعال'),
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = 'لایسنس ادمین'
+        verbose_name_plural = 'لایسنس‌های ادمین'
+
+    def __str__(self):
+        try:
+            return f'لایسنس {self.user.phone_number} - فعال: {self.is_active}'
+        except:
+            return f'لایسنس {self.user_id} - فعال: {self.is_active}'
+
+    def is_expired(self):
+        if not self.expires_at:
+            return False
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+
+    def renew_license(self, months=1):
+        from django.utils import timezone
+        from dateutil.relativedelta import relativedelta
+        if not self.expires_at:
+            self.expires_at = timezone.now() + relativedelta(months=months)
+        else:
+            self.expires_at += relativedelta(months=months)
+        self.is_active = True
+        self.save()
 
 #مدل شماره کارت ادمین 
 class AdminCardSettings(models.Model):

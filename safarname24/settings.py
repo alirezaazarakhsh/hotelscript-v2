@@ -157,6 +157,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
         'schedule': 60.0,  # هر 60 ثانیه (1 دقیقه)
     },
+    'cancel-unpaid-confirmed-reservations': {
+        'task': 'setting_payment.views.cancel_unpaid_reservations',
+        'schedule': 300.0,  # هر 5 دقیقه
+    },
 }
 
 DATABASES = {

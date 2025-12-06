@@ -1,0 +1,20 @@
+{
+    "admins": {
+        "5839876171": {
+            "group": "admin",
+            "license_expiry": "2023-01-01"
+        },
+        "123456789": {
+            "group": "admin",
+            "license_expiry": "2025-12-31"
+        },
+        "987654321": {
+            "group": "admin",
+            "license_expiry": "2023-01-01"
+        }
+    },
+    "groups": {
+        "admin": ["view_reservations", "manage_wallet"]
+    },
+    "profiles": {}
+}

@@ -391,6 +391,27 @@ class PaymentCallbackAPIView(APIView):
                     update_fields.append("ref_id")
                 reservation.save(update_fields=update_fields)
                 
+                # ارسال نوتیف پرداخت به ادمین‌ها
+                from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
+                if reservation.payment_status == 'paid':
+                    notification_text = f"✅ پرداخت رزرو {tracking_code} موفق بود.\n👤 کاربر: {reservation.buyer.phone_number}\n💰 مبلغ: {reservation.final_price:,} تومان"
+                else:
+                    notification_text = f"❌ پرداخت رزرو {tracking_code} ناموفق بود.\n👤 کاربر: {reservation.buyer.phone_number}\n💰 مبلغ: {reservation.final_price:,} تومان"
+                
+                for admin_id in SUPER_ADMINS:
+                    try:
+                        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                        data = {
+                            "chat_id": admin_id,
+                            "text": notification_text,
+                            "parse_mode": "Markdown"
+                        }
+                        response = requests.post(url, data=data, timeout=10)
+                        if response.status_code != 200:
+                            logger.error(f"Failed to send notification to {admin_id}: {response.text}")
+                    except Exception as e:
+                        logger.error(f"Error sending notification to {admin_id}: {e}")
+                
                 # اگر پرداخت موفق بود و کیف پول استفاده شده، آن را پردازش کن
                 if reservation.payment_status == 'paid' and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
                     try:
@@ -761,23 +782,34 @@ class ReservationPaymentStatusAPIView(APIView):
 from celery import shared_task
 
 @shared_task
-def cleanup_expired_payment_links():
-    logger.info("شروع بررسی لینک‌های پرداخت منقضی‌شده")
-    for key in cache.iter_keys("payment_link_*"):
-        payment_data = cache.get(key)
-        if payment_data and payment_data.get("expires_at", 0) < datetime.now().timestamp():
-            tracking_code = key.replace("payment_link_", "")
-            try:
-                with transaction.atomic():
-                    reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
-                    if reservation.payment_status != 'paid':
-                        reservation.payment_status = 'unpaid'
-                        reservation.save(update_fields=['payment_status'])
-                        logger.info(f"رزرو {tracking_code} به دلیل منقضی شدن لینک پرداخت به unpaid تغییر کرد.")
-                cache.delete(key)
-                cache.delete(f"payment_link_authority_{payment_data['authority']}")
-            except Reservationhotel.DoesNotExist:
-                logger.warning(f"رزرو با کد {tracking_code} یافت نشد.")
-                cache.delete(key)
-                cache.delete(f"payment_link_authority_{payment_data['authority']}")
-    logger.info("پایان بررسی لینک‌های پرداخت منقضی‌شده")
+def cancel_unpaid_reservations():
+    logger.info("شروع کنسل رزروهای پرداخت نشده بعد از 15 دقیقه")
+    fifteen_minutes_ago = timezone.now() - timedelta(minutes=15)
+    reservations = Reservationhotel.objects.filter(
+        capacity_status='confirmed',
+        payment_status__in=['pending', 'unpaid'],
+        created_at__lt=fifteen_minutes_ago
+    )
+    for reservation in reservations:
+        with transaction.atomic():
+            reservation.capacity_status = 'rejected'
+            reservation.save(update_fields=['capacity_status'])
+            logger.info(f"رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.")
+            
+            # ارسال نوتیف به ادمین‌ها
+            from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
+            notification_text = f"🚫 رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.\n👤 کاربر: {reservation.buyer.phone_number}"
+            for admin_id in SUPER_ADMINS:
+                try:
+                    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                    data = {
+                        "chat_id": admin_id,
+                        "text": notification_text,
+                        "parse_mode": "Markdown"
+                    }
+                    response = requests.post(url, data=data, timeout=10)
+                    if response.status_code != 200:
+                        logger.error(f"Failed to send notification to {admin_id}: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending notification to {admin_id}: {e}")
+    logger.info("پایان کنسل رزروهای پرداخت نشده")

@@ -92,14 +92,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("reject_reservation::") and not AccessManager.is_allowed(user_id, 'approve_reservations'):
             await query.edit_message_text("❌ شما مجوز رد رزروها را ندارید!")
             return
+        if data.startswith("pending_reservation::") and not AccessManager.is_allowed(user_id, 'approve_reservations'):
+            await query.edit_message_text("❌ شما مجوز تغییر وضعیت رزروها را ندارید!")
+            return
         if data == "view_balance" and not AccessManager.is_allowed(user_id, 'view_balance'):
             await query.edit_message_text("❌ شما مجوز مشاهده موجودی کیف پول را ندارید!")
             return
         if data.startswith("charge_admin_wallet:") and not AccessManager.is_allowed(user_id, 'manage_wallet'):
             await query.edit_message_text("❌ شما مجوز شارژ کیف پول دیگران را ندارید!")
             return
-        if data == "edit_profile" and not AccessManager.is_allowed(user_id, 'edit_profile'):
-            await query.edit_message_text("❌ شما مجوز ویرایش پروفایل را ندارید!")
+        if data == "manage_wallet" and not AccessManager.is_allowed(user_id, 'manage_wallet'):
+            await query.edit_message_text("❌ شما مجوز مدیریت کیف پول کاربران را ندارید!")
             return
         if data.startswith("edit_admin_profile:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز ویرایش پروفایل ادمین را ندارید!")
@@ -128,6 +131,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("reject_reservation::"):
             tracking_code = data.split("::", 1)[1]
             await ReservationManager.reject_reservation(user_id, context, tracking_code)
+        elif data.startswith("pending_reservation::"):
+            tracking_code = data.split("::", 1)[1]
+            await ReservationManager.pending_reservation(user_id, context, tracking_code)
         elif data == "upgrade_requests":
             await query.edit_message_text(
                 "ویژگی ارتقای تعداد درخواست‌ها به‌زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.\n\n**توضیح**: این ارتقا اجازه بکاپ‌های بیشتر یا ویژگی‌های پیشرفته را فراهم می‌کند.",
@@ -395,6 +401,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data == "manage_wallet":
+            await MenuManager.show_manage_wallet_menu(query, user_id, context)
         elif data == "edit_profile":
             await MenuManager.show_profile_edit_menu(query, user_id, context)
         elif data.startswith("edit_profile_field:"):
@@ -624,6 +632,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await MenuManager.show_profile_edit_menu(update.message, user_id, context)
             else:
                 await AdminManager.show_edit_admin_profile(update.message.chat_id, context, target_id)
+        elif state == 'waiting_for_wallet_phone':
+            phone = text.strip()
+            if not phone.isdigit() or len(phone) != 11 or not phone.startswith('09'):
+                await update.message.reply_text("❌ شماره موبایل نامعتبر. باید 11 رقم و با 09 شروع شود.")
+                return
+            context.user_data['wallet_phone'] = phone
+            context.user_data['state'] = 'waiting_for_wallet_amount'
+            await update.message.reply_text("💰 مبلغ شارژ را به تومان وارد کنید (حداقل 1,000 تومان):")
+        elif state == 'waiting_for_wallet_amount':
+            try:
+                amount = int(text.replace(',', ''))
+                if amount < 1000:
+                    raise ValueError("مبلغ کمتر از حداقل مجاز است")
+                phone = context.user_data.get('wallet_phone')
+                if not phone:
+                    await update.message.reply_text("❌ شماره موبایل یافت نشد. دوباره شروع کنید.")
+                    context.user_data.clear()
+                    return
+                # Charge bot wallet
+                from finance.models import BotWallet
+                from authentication.models import BaseUser
+                from asgiref.sync import sync_to_async
+                try:
+                    user = await sync_to_async(BaseUser.objects.get)(phone_number=phone)
+                    bot_wallet, created = await sync_to_async(BotWallet.objects.get_or_create)(user=user, defaults={'balance': 0})
+                    await sync_to_async(bot_wallet.__class__.objects.filter(pk=bot_wallet.pk).update)(balance=bot_wallet.balance + amount)
+                    await update.message.reply_text(f"✅ کیف پول ربات کاربر {phone} به مبلغ {amount:,} تومان شارژ شد.\nموجودی جدید: {(bot_wallet.balance + amount):,} تومان")
+                except BaseUser.DoesNotExist:
+                    await update.message.reply_text("❌ کاربری با این شماره موبایل یافت نشد.")
+                except Exception as e:
+                    logger.error(f"Error charging bot wallet: {e}")
+                    await update.message.reply_text(f"❌ خطا در شارژ کیف پول ربات: {str(e)}")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+            except ValueError:
+                await update.message.reply_text("❌ مبلغ نامعتبر. حداقل 1,000 تومان و فقط اعداد.")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}")
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
