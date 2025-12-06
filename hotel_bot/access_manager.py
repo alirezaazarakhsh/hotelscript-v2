@@ -17,7 +17,18 @@ class AccessManager:
                     data = json.load(f)
                     # تبدیل مقادیر groups به set
                     for gname in data.get('groups', {}):
-                        data['groups'][gname] = set(data['groups'].get(gname, []))
+                        group_data = data['groups'][gname]
+                        if isinstance(group_data, (list, set)):
+                            data['groups'][gname] = set(group_data)
+                        elif isinstance(group_data, dict):
+                            # If it's a dict, extract permissions
+                            perms = group_data.get('permissions', [])
+                            if isinstance(perms, (list, set)):
+                                data['groups'][gname] = set(perms)
+                            else:
+                                data['groups'][gname] = set()
+                        else:
+                            data['groups'][gname] = set()
                     # اطمینان از وجود profiles
                     data['profiles'] = data.get('profiles', {})
                     AccessManager._cached_data = data.copy()
