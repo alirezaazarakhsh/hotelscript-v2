@@ -78,12 +78,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from datetime import datetime
             try:
                 expiry = datetime.fromisoformat(license_expiry)
-                if datetime.now() > expiry:
                     # License expired, only allow wallet operations
-                    if not (data.startswith("wallet_") or data == "go_back" or data.startswith("payment:") or data.startswith("card_to_card") or data.startswith("send_receipt") or data.startswith("cancel_")):
+                    if not (data.startswith("wallet_") or data == "go_back" or data.startswith("payment:") or data.startswith("card_to_card") or data.startswith("send_receipt") or data.startswith("cancel_") or data.startswith("renew_") or data == "subscription_renewal"):
                         await query.edit_message_text(
-                            "⏰ **مدت زمان دسترسی شما به پایان رسیده است**\n\nشما فقط می‌توانید کیف پول خود را شارژ کنید یا سرویس را تمدید کنید.\n\nبرای تمدید، با پشتیبانی تماس بگیرید.",
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
+                            "⏰ **مدت زمان دسترسی شما به پایان رسیده است**\n\nشما فقط می‌توانید کیف پول خود را شارژ کنید یا سرویس را تمدید کنید.",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data=f"subscription_renewal:{user_id}")],
+                                [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge")],
+                                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+                            ])
                         )
                         return
                 else:
@@ -509,13 +512,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
                 parse_mode="Markdown"
             )
-        elif data.startswith("set_expiry:"):
+        elif data.startswith("subscription_renewal:"):
             admin_id = data.split(":", 1)[1]
-            context.user_data['state'] = 'waiting_for_expiry_date'
-            context.user_data['target_admin_id'] = admin_id
+            await AdminManager.show_subscription_renewal(chat_id, context, admin_id, message_id)
+        elif data.startswith("renew_monthly:"):
+            admin_id = data.split(":", 1)[1]
+            await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "monthly")
+        elif data.startswith("renew_yearly:"):
+            admin_id = data.split(":", 1)[1]
+            await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "yearly")
+        elif data == "insufficient_balance":
             await query.edit_message_text(
-                f"⏰ تنظیم مدت زمان دسترسی ادمین {admin_id}\n\nلطفاً تاریخ انقضای دسترسی را به فرمت YYYY-MM-DD وارد کنید.\nبرای دسترسی دائمی، عدد 0 را وارد کنید.\n\n**مثال**: 2025-12-31",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
+                "❌ **موجودی کافی نیست**\n\nبرای تمدید اشتراک، ابتدا کیف پول خود را شارژ کنید.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge")],
+                    [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+                ]),
                 parse_mode="Markdown"
             )
 

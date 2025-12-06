@@ -130,7 +130,10 @@ class AdminManager:
             )
             if perms:
                 for perm in perms:
-                    text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
+                    if isinstance(perm, str) and perm in PERM_DISPLAY:
+                        text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
+                    else:
+                        logger.warning(f"Invalid permission found: {perm} (type: {type(perm)})")
             else:
                 text += "هیچ مجوزی اختصاص نیافته.\n"
             text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول و پروفایل او را مدیریت کنید."
@@ -145,6 +148,9 @@ class AdminManager:
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("📝 ویرایش پروفایل", callback_data=f"edit_admin_profile:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("⏰ تنظیم مدت زمان", callback_data=f"set_expiry:{admin_id}")])
+            keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
+            keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
+
             keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
@@ -170,6 +176,156 @@ class AdminManager:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}"
+            )
+
+    @staticmethod
+    async def show_subscription_renewal(chat_id, context, admin_id, message_id=None):
+        """Show subscription renewal options for admin"""
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins') and str(user_id) != str(admin_id):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز تمدید اشتراک را ندارید!"
+                )
+                return
+
+            # Get current wallet balance
+            wallets = ReceiptManager.load_wallets()
+            wallet_balance = wallets.get(str(admin_id), 0)
+
+            # Subscription prices (in Toman)
+            monthly_price = 500000  # 500,000 Toman per month
+            yearly_price = 5000000  # 5,000,000 Toman per year (10% discount)
+
+            text = f"🔄 **تمدید اشتراک ربات**\n\n**موجودی کیف پول**: {wallet_balance:,} تومان\n\n**طرح‌های اشتراک**:\n"
+            text += f"📅 **ماهانه**: {monthly_price:,} تومان (30 روز)\n"
+            text += f"📅 **سالانه**: {yearly_price:,} تومان (365 روز) - 10% تخفیف\n\n"
+
+            keyboard = []
+            if wallet_balance >= monthly_price:
+                keyboard.append([InlineKeyboardButton(f"📅 تمدید ماهانه ({monthly_price:,} تومان)", callback_data=f"renew_monthly:{admin_id}")])
+            else:
+                keyboard.append([InlineKeyboardButton(f"❌ موجودی کافی نیست - ماهانه ({monthly_price:,} تومان)", callback_data="insufficient_balance")])
+
+            if wallet_balance >= yearly_price:
+                keyboard.append([InlineKeyboardButton(f"📅 تمدید سالانه ({yearly_price:,} تومان)", callback_data=f"renew_yearly:{admin_id}")])
+            else:
+                keyboard.append([InlineKeyboardButton(f"❌ موجودی کافی نیست - سالانه ({yearly_price:,} تومان)", callback_data="insufficient_balance")])
+
+            keyboard.append([InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge")])
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in show_subscription_renewal for admin_id {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش منوی تمدید اشتراک: {str(e)}"
+            )
+
+    @staticmethod
+    async def process_subscription_renewal(chat_id, context, admin_id, renewal_type):
+        """Process subscription renewal payment"""
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins') and str(user_id) != str(admin_id):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز تمدید اشتراک را ندارید!"
+                )
+                return
+
+            # Get renewal prices
+            monthly_price = 500000
+            yearly_price = 5000000
+
+            if renewal_type == "monthly":
+                price = monthly_price
+                days = 30
+            elif renewal_type == "yearly":
+                price = yearly_price
+                days = 365
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ نوع تمدید نامعتبر!"
+                )
+                return
+
+            # Check wallet balance
+            wallets = ReceiptManager.load_wallets()
+            wallet_balance = wallets.get(str(admin_id), 0)
+
+            if wallet_balance < price:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ موجودی کیف پول کافی نیست!\n\nموجودی: {wallet_balance:,} تومان\nمورد نیاز: {price:,} تومان"
+                )
+                return
+
+            # Calculate new expiry date
+            from datetime import datetime, timedelta
+            access_data = AccessManager.load_data()
+            admin_data = access_data.get('admins', {}).get(str(admin_id), {})
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+
+            current_expiry = admin_data.get('license_expiry')
+            if current_expiry:
+                try:
+                    base_date = datetime.fromisoformat(current_expiry)
+                    # If current expiry is in future, extend from there; otherwise from today
+                    if base_date > datetime.now():
+                        new_expiry = base_date + timedelta(days=days)
+                    else:
+                        new_expiry = datetime.now() + timedelta(days=days)
+                except ValueError:
+                    new_expiry = datetime.now() + timedelta(days=days)
+            else:
+                new_expiry = datetime.now() + timedelta(days=days)
+
+            # Update admin data
+            admin_data['license_expiry'] = new_expiry.date().isoformat()
+            access_data['admins'][str(admin_id)] = admin_data
+            AccessManager.save_data(access_data)
+
+            # Deduct from wallet
+            wallets[str(admin_id)] = wallet_balance - price
+            ReceiptManager.save_wallets(wallets)
+
+            # Send confirmation
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ **اشتراک با موفقیت تمدید شد!**\n\nنوع تمدید: {'ماهانه' if renewal_type == 'monthly' else 'سالانه'}\nمدت زمان: {days} روز\nتاریخ انقضا جدید: {new_expiry.date()}\nمبلغ کسر شده: {price:,} تومان\nموجودی جدید: {wallets[str(admin_id)]:,} تومان",
+                parse_mode="Markdown"
+            )
+
+            # If renewing own subscription, show main menu
+            if str(user_id) == str(admin_id):
+                await MenuManager.show_main_menu(user_id, context)
+
+        except Exception as e:
+            logger.error(f"Error in process_subscription_renewal for admin_id {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در پردازش تمدید اشتراک: {str(e)}"
             )
             await MenuManager.show_main_menu(user_id, context)
 
