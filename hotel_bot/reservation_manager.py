@@ -88,13 +88,13 @@ class ReservationManager:
             pending_reservations = await ReservationManager._get_pending_reservations_data()
 
             if not pending_reservations:
-                text = "📋 **لیست رزروها**\n\nهیچ رزروی یافت نشد."
+                text = "📋 **لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\nهیچ رزروی یافت نشد."
                 keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
                 return
 
-            text = "📋 **لیست رزروها**\n\n"
+            text = "📋 **لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
             keyboard = []
             message_parts = []
             current_text = text
@@ -108,7 +108,7 @@ class ReservationManager:
                 if len(current_text + res_text) > 3500:
                     # Send current message
                     message_parts.append((current_text, keyboard))
-                    current_text = "📋 **ادامه لیست رزروها**\n\n" + res_text
+                    current_text = "📋 **ادامه لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n" + res_text
                     keyboard = []
                 else:
                     current_text += res_text

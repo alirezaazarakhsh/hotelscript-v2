@@ -32,18 +32,18 @@ class MenuManager:
                 buttons.append(InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"))
             if AccessManager.is_allowed(user_id, 'support'):
                 buttons.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
-            if AccessManager.is_allowed(user_id, 'manage_admins'):
-                buttons.append(InlineKeyboardButton("⚙️ کنترل پنل", callback_data="control_panel"))
             if AccessManager.is_allowed(user_id, 'wallet_charge'):
-                buttons.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
-            if AccessManager.is_allowed(user_id, 'view_balance'):
-                buttons.append(InlineKeyboardButton("💸 مشاهده موجودی", callback_data="view_balance"))
+                buttons.append(InlineKeyboardButton("💰 شارژ کیف پول بات", callback_data="wallet_charge"))
             if AccessManager.is_allowed(user_id, 'manage_wallet'):
                 buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
             
             # Arrange buttons in rows of 2
             for i in range(0, len(buttons), 2):
                 keyboard.append(buttons[i:i+2])
+            
+            # Add control panel separately at the bottom
+            if AccessManager.is_allowed(user_id, 'manage_admins'):
+                keyboard.append([InlineKeyboardButton("⚙️ کنترل پنل", callback_data="control_panel")])
         
             reply_markup = InlineKeyboardMarkup(keyboard)
         
