@@ -456,10 +456,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data.startswith("wallet_page:"):
-            page = int(data.split(":", 1)[1])
-            await MenuManager.show_manage_wallet_menu(query, user_id, context, page)
+            parts = data.split(":", 2)
+            page = int(parts[1])
+            search_query = parts[2] if len(parts) > 2 and parts[2] else None
+            await MenuManager.show_manage_wallet_menu(query, user_id, context, page, search_query)
         elif data == "manage_wallet":
             await MenuManager.show_manage_wallet_menu(query, user_id, context)
+        elif data == "search_wallet_users":
+            await MenuManager.search_wallet_users(user_id, context)
         elif data.startswith("points_page:"):
             page = int(data.split(":", 1)[1])
             await MenuManager.show_manage_points_menu(query, user_id, context, page)
@@ -872,6 +876,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif state == 'waiting_for_reservation_search':
             search_query = text.strip()
             await ReservationManager.process_reservation_search(user_id, context, search_query)
+            context.user_data.clear()
+        elif state == 'waiting_for_wallet_search':
+            search_query = text.strip()
+            await MenuManager.process_wallet_search(user_id, context, search_query)
             context.user_data.clear()
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}")

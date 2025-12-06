@@ -208,28 +208,48 @@ class MenuManager:
                 await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
 
     @staticmethod
-    async def show_manage_wallet_menu(query, user_id, context, page=1):
+    async def show_manage_wallet_menu(query, user_id, context, page=1, search_query=None):
         try:
             from authentication.models import BaseUser
             from finance.models import Wallet
             from asgiref.sync import sync_to_async
+            from django.db.models import Q
             
             per_page = 5
             offset = (page - 1) * per_page
             
-            # Get total users count
+            # Get total users count with search filter
             @sync_to_async
-            def get_total_users():
+            def get_total_users(search_query):
+                if search_query:
+                    return BaseUser.objects.filter(
+                        Q(phone_number__icontains=search_query) |
+                        Q(natural_profile__first_name__icontains=search_query) |
+                        Q(natural_profile__last_name__icontains=search_query) |
+                        Q(admin__first_name__icontains=search_query) |
+                        Q(admin__last_name__icontains=search_query)
+                    ).count()
                 return BaseUser.objects.count()
             
-            total_users = await get_total_users()
+            total_users = await get_total_users(search_query)
             total_pages = (total_users + per_page - 1) // per_page
             
-            # Get users for this page
+            # Get users for this page with search filter
             @sync_to_async
-            def get_users(offset, per_page):
+            def get_users(offset, per_page, search_query):
                 users = []
-                for user in BaseUser.objects.all()[offset:offset + per_page]:
+                queryset = BaseUser.objects.all()
+                
+                if search_query:
+                    queryset = queryset.filter(
+                        Q(phone_number__icontains=search_query) |
+                        Q(natural_profile__first_name__icontains=search_query) |
+                        Q(natural_profile__last_name__icontains=search_query) |
+                        Q(admin__first_name__icontains=search_query) |
+                        Q(admin__last_name__icontains=search_query)
+                    )
+                
+                for user in queryset[offset:offset + per_page]:
                     name = ""
                     if hasattr(user, 'natural_profile') and user.natural_profile:
                         name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
@@ -244,10 +264,15 @@ class MenuManager:
                     })
                 return users
             
-            users = await get_users(offset, per_page)
+            users = await get_users(offset, per_page, search_query)
             
-            text = f"💰 **مدیریت کیف پول کاربران سایت** (صفحه {page} از {total_pages})\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
+            search_text = f"\n🔍 نتایج جستجو برای: '{search_query}'" if search_query else ""
+            text = f"💰 **مدیریت کیف پول کاربران سایت** (صفحه {page} از {total_pages}){search_text}\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
             keyboard = []
+            
+            # Add search button if not searching
+            if not search_query:
+                keyboard.append([InlineKeyboardButton("🔍 جستجو", callback_data="search_wallet_users")])
             
             for i, user in enumerate(users, start=(page-1)*per_page + 1):
                 keyboard.append([InlineKeyboardButton(f"{i}. {user['name']} - {user['phone']}", callback_data=f"manage_user_wallet:{user['id']}")])
@@ -255,9 +280,9 @@ class MenuManager:
             # Pagination buttons
             pagination_buttons = []
             if page > 1:
-                pagination_buttons.append(InlineKeyboardButton(f"⬅️ صفحه {page-1}", callback_data=f"wallet_page:{page-1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"⬅️ صفحه {page-1}", callback_data=f"wallet_page:{page-1}:{search_query or ''}"))
             if page < total_pages:
-                pagination_buttons.append(InlineKeyboardButton(f"صفحه {page+1} ➡️", callback_data=f"wallet_page:{page+1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"صفحه {page+1} ➡️", callback_data=f"wallet_page:{page+1}:{search_query or ''}"))
             
             if pagination_buttons:
                 keyboard.append(pagination_buttons)
@@ -278,6 +303,41 @@ class MenuManager:
         except Exception as e:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت کیف پول: {str(e)}")
             await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
+
+    @staticmethod
+    async def search_wallet_users(user_id, context):
+        """Start wallet users search"""
+        try:
+            text = "🔍 **جستجوی کاربران کیف پول**\n\nلطفاً نام کاربر یا شماره تلفن را وارد کنید:\n\n📝 مثال: 09123456789 یا ساشا"
+            keyboard = [[InlineKeyboardButton("لغو جستجو", callback_data="manage_wallet")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            # Set state for waiting for search input
+            context.user_data['state'] = 'waiting_for_wallet_search'
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در شروع جستجو: {str(e)}")
+
+    @staticmethod
+    async def process_wallet_search(user_id, context, search_query):
+        """Process wallet users search query"""
+        try:
+            if not search_query or search_query.strip() == "":
+                await context.bot.send_message(chat_id=user_id, text="❌ لطفاً یک عبارت جستجو وارد کنید.")
+                return
+            
+            search_query = search_query.strip()
+            
+            # Create a mock query object for the search
+            class MockQuery:
+                def __init__(self):
+                    self.message = None
+            
+            mock_query = MockQuery()
+            # Search wallet users
+            await MenuManager.show_manage_wallet_menu(mock_query, user_id, context, page=1, search_query=search_query)
+            
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در جستجوی کاربران کیف پول: {str(e)}")
 
     @staticmethod
     async def show_manage_points_menu(query, user_id, context, page=1):
