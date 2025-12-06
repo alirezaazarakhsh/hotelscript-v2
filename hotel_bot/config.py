@@ -1,11 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-# ================= تنظیمات پایه =================
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 # ================= بارگذاری متغیرهای محیطی =================
-ENV_PATH = os.getenv("ENV_PATH", os.path.join(BASE_DIR, 'hotel_bot', '.env'))
+ENV_PATH = os.getenv("ENV_PATH", "/app/hotel_bot/.env")
 if not os.path.exists(ENV_PATH):
     raise FileNotFoundError(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}. لطفاً فایل .env را تنظیم کنید.")
 
@@ -17,7 +14,7 @@ if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN در فایل .env تعریف نشده است. لطفاً یک توکن معتبر تنظیم کنید.")
 
 # ================= تنظیمات پروژه =================
-PROJECT_DIR = os.getenv("PROJECT_DIR", BASE_DIR)
+PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", os.path.join(PROJECT_DIR, "backups/database"))
 MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", os.path.join(PROJECT_DIR, "backups/media"))
 MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.safarnameh24.com/media/")
@@ -37,7 +34,7 @@ except ValueError as e:
     print(f"⚠️ خطا در تعریف SUPER_ADMINS: {str(e)}. لطفاً IDهای معتبر (عدد) وارد کنید.")
 
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", 7))  # حداکثر تعداد بکاپ‌های نگهداری‌شده
-ADMINS_FILE = os.path.join(PROJECT_DIR, "hotel_bot", "admins.json")  # فایل برای ذخیره ادمین‌ها و گروه‌ها
+ADMINS_FILE = os.path.join(PROJECT_DIR, "admins.json")  # فایل برای ذخیره ادمین‌ها و گروه‌ها
 
 # ================= مجوزها =================
 PERMISSIONS = [

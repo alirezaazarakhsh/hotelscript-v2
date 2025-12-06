@@ -3,6 +3,7 @@ from django.utils.html import format_html
 from authentication.models import NaturalProfile
 from .models import (
     AdminCardSettings,
+    AdminLicense,
     DepositReceipt,
     Wallet,
     WalletPack,
@@ -125,9 +126,29 @@ class AdminCardSettingsAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         extra_context['show_save_and_add_another'] = False
         return super().changeform_view(request, object_id, form_url, extra_context)
-    
-    
-    
+
+
+@admin.register(AdminLicense)
+class AdminLicenseAdmin(admin.ModelAdmin):
+    list_display = ('user', 'license_cost', 'expires_at', 'is_active', 'is_expired')
+    list_filter = ('is_active', 'expires_at')
+    search_fields = ('user__phone_number', 'user__natural_profile__first_name', 'user__natural_profile__last_name')
+    readonly_fields = ('is_expired',)
+
+    def is_expired(self, obj):
+        return obj.is_expired()
+    is_expired.boolean = True
+    is_expired.short_description = 'منقضی شده'
+
+    actions = ['renew_license_action']
+
+    def renew_license_action(self, request, queryset):
+        for license_obj in queryset:
+            license_obj.renew_license(months=1)
+        self.message_user(request, f"{queryset.count()} لایسنس تمدید شد.")
+    renew_license_action.short_description = "تمدید لایسنس برای ۱ ماه"
+
+
 @admin.register(DepositReceipt)
 class DepositReceiptAdmin(admin.ModelAdmin):
     list_display = (

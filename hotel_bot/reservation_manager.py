@@ -4,7 +4,7 @@ from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from hotel_bot.menu_manager import MenuManager
 from reservation.models import Reservationhotel, ReservationRoomPassenger, Passenger
-from finance.models import Wallet, BotWallet
+from finance.models import Wallet
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class ReservationManager:
         ).prefetch_related(
             'reservation_rooms__room__hotel',
             'reservation_rooms__passengers'
-        ).order_by('-created_at')[:20]  # Show more reservations
+        ).order_by('-created_at')[:10]  # Show fewer reservations to avoid long messages
         
         data = []
         for res in reservations:
@@ -31,7 +31,6 @@ class ReservationManager:
                 'buyer_name': '',
                 'buyer_phone': res.buyer.phone_number,
                 'wallet_balance': 0,
-                'bot_wallet_balance': 0,
                 'wallet_withdrawn': res.wallet_withdrawal_amount or 0,
                 'rooms': [],
                 'main_passenger': None,
@@ -57,13 +56,6 @@ class ReservationManager:
                 res_data['wallet_balance'] = wallet.balance
             except Wallet.DoesNotExist:
                 res_data['wallet_balance'] = 0
-            
-            # Get bot wallet balance
-            try:
-                bot_wallet = BotWallet.objects.get(user=buyer)
-                res_data['bot_wallet_balance'] = bot_wallet.balance
-            except BotWallet.DoesNotExist:
-                res_data['bot_wallet_balance'] = 0
             
             # Rooms and passengers
             for rr in res.reservation_rooms.all():
@@ -104,39 +96,49 @@ class ReservationManager:
 
             text = "📋 **لیست رزروها**\n\n"
             keyboard = []
+            message_parts = []
+            current_text = text
 
             for res in pending_reservations:
-                text += f"🔹 کد پیگیری: {res['tracking_code']}\n"
-                text += f"🏨 هتل: {res['hotel_name']}\n"
+                res_text = f"🔹 کد پیگیری: {res['tracking_code']}\n"
+                res_text += f"🏨 هتل: {res['hotel_name']}\n"
                 text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
-                text += f"💰 موجودی کیف پول سایت: {res['wallet_balance']:,} تومان\n"
-                text += f"🤖 موجودی کیف پول ربات: {res['bot_wallet_balance']:,} تومان\n"
+                text += f"💰 موجودی کیف پول: {res['wallet_balance']:,} تومان\n"
                 if res['wallet_withdrawn'] > 0:
-                    text += f"💸 برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
+                    res_text += f"💸 برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
                 
                 # Rooms
-                text += "🏠 اتاق‌ها:\n"
+                res_text += "🏠 اتاق‌ها:\n"
                 for room in res['rooms']:
-                    text += f"  - {room}\n"
+                    res_text += f"  - {room}\n"
                 
                 # Passengers
                 if res['main_passenger']:
                     mp = res['main_passenger']
-                    text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
+                    res_text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
                 
                 if res['other_passengers']:
-                    text += "👥 مسافران دیگر:\n"
+                    res_text += "👥 مسافران دیگر:\n"
                     for p in res['other_passengers']:
-                        text += f"  - {p['name']} ({p['national_code']})\n"
+                        res_text += f"  - {p['name']} ({p['national_code']})\n"
                 
                 # Room info with half charges
                 if res['total_half_in'] > 0 or res['total_half_out'] > 0:
-                    text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
-                    text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
+                    res_text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
+                    res_text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
                 
-                text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
-                text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
-                text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n\n"
+                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
+                res_text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
+                res_text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n\n"
+
+                # Check if adding this res_text would exceed limit
+                if len(current_text + res_text) > 3500:
+                    # Send current message
+                    message_parts.append((current_text, keyboard))
+                    current_text = "📋 **ادامه لیست رزروها**\n\n" + res_text
+                    keyboard = []
+                else:
+                    current_text += res_text
 
                 # Buttons based on status
                 buttons = []
@@ -153,10 +155,15 @@ class ReservationManager:
                 if buttons:
                     keyboard.append(buttons)
 
+            # Add the last part
+            message_parts.append((current_text, keyboard))
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            message_parts[-1] = (message_parts[-1][0], keyboard)
 
-            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            # Send all parts
+            for i, (msg_text, msg_keyboard) in enumerate(message_parts):
+                reply_markup = InlineKeyboardMarkup(msg_keyboard) if msg_keyboard else None
+                await context.bot.send_message(chat_id=user_id, text=msg_text, reply_markup=reply_markup, parse_mode="Markdown")
 
         except Exception as e:
             logger.error(f"Error listing pending reservations: {e}")

@@ -57,34 +57,6 @@ class Wallet(models.Model):
         super().save(*args, **kwargs)
 
 
-# مدل کیف پول ربات برای موجودی 
-class BotWallet(models.Model):
-    user = models.OneToOneField(
-        BaseUser,
-        on_delete=models.CASCADE,
-        verbose_name=_('کاربر'),
-        related_name='bot_wallet_rel',
-    )
-    balance = models.PositiveBigIntegerField(
-        verbose_name=_('موجودی ربات'),
-        default=0,
-    )
-
-    class Meta:
-        verbose_name = 'کیف پول ربات'
-        verbose_name_plural = 'کیف پول‌های ربات'
-
-    def __str__(self):
-        try:
-            natural_profile = self.user.natural_profile
-            return f'{natural_profile.first_name or ""} {natural_profile.last_name or ""} (ربات)'.strip()
-        except NaturalProfile.DoesNotExist:
-            return f'{self.user.phone_number} (ربات - بدون پروفایل)'
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-
-
 # مدل کیف پول کاربر برای موجودی 
 class Wallet(models.Model):
     user = models.OneToOneField(
@@ -94,19 +66,19 @@ class Wallet(models.Model):
         related_name='bot_wallet',
     )
     balance = models.PositiveBigIntegerField(
-        verbose_name=_('موجودی ربات'),
+        verbose_name=_('موجودی کیف پول کاربر'),
         default=0,
     )
 
     class Meta:
-        verbose_name = 'کیف پول ربات'
-        verbose_name_plural = 'کیف پول‌های ربات'
+        verbose_name = 'کیف پول کاربر'
+        verbose_name_plural = 'کیف پول‌ کاربران'
 
     def __str__(self):
         try:
-            return f'کیف پول ربات {self.user.phone_number}: {self.balance:,} تومان'
+            return f'کیف پول کاربران {self.user.phone_number}: {self.balance:,} تومان'
         except:
-            return f'کیف پول ربات {self.user_id}: {self.balance:,} تومان'
+            return f'کیف پول کاربران {self.user_id}: {self.balance:,} تومان'
 
 
 # مدل لایسنس ادمین ربات
@@ -156,6 +128,8 @@ class AdminLicense(models.Model):
             self.expires_at += relativedelta(months=months)
         self.is_active = True
         self.save()
+
+
 
 #مدل شماره کارت ادمین 
 class AdminCardSettings(models.Model):

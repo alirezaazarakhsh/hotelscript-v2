@@ -403,6 +403,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data == "manage_wallet":
             await MenuManager.show_manage_wallet_menu(query, user_id, context)
+        elif data.startswith("charge_wallet:"):
+            phone = data.split(":", 1)[1]
+            context.user_data['wallet_phone'] = phone
+            context.user_data['state'] = 'waiting_for_wallet_amount'
+            await query.edit_message_text(
+                "💰 مبلغ افزایش موجودی را به تومان وارد کنید (حداقل 1,000 تومان):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="go_back")]]),
+                parse_mode="Markdown"
+            )
         elif data == "edit_profile":
             await MenuManager.show_profile_edit_menu(query, user_id, context)
         elif data.startswith("edit_profile_field:"):
@@ -637,9 +646,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not phone.isdigit() or len(phone) != 11 or not phone.startswith('09'):
                 await update.message.reply_text("❌ شماره موبایل نامعتبر. باید 11 رقم و با 09 شروع شود.")
                 return
-            context.user_data['wallet_phone'] = phone
-            context.user_data['state'] = 'waiting_for_wallet_amount'
-            await update.message.reply_text("💰 مبلغ شارژ را به تومان وارد کنید (حداقل 1,000 تومان):")
+            # Show wallet balance
+            from finance.models import Wallet
+            from authentication.models import BaseUser
+            from asgiref.sync import sync_to_async
+            try:
+                user = await sync_to_async(BaseUser.objects.get)(phone_number=phone)
+                wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user, defaults={'balance': 0})
+                text = f"💰 **موجودی کیف پول کاربر {phone}**\n\nموجودی فعلی: {wallet.balance:,} تومان\n\nآیا می‌خواهید موجودی را افزایش دهید؟"
+                keyboard = [
+                    [InlineKeyboardButton("✅ بله، افزایش موجودی", callback_data=f"charge_wallet:{phone}")],
+                    [InlineKeyboardButton("❌ خیر، بازگشت", callback_data="go_back")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+            except BaseUser.DoesNotExist:
+                await update.message.reply_text("❌ کاربری با این شماره موبایل یافت نشد.")
+            except Exception as e:
+                logger.error(f"Error getting wallet balance: {e}")
+                await update.message.reply_text(f"❌ خطا در دریافت موجودی: {str(e)}")
+            context.user_data.clear()
         elif state == 'waiting_for_wallet_amount':
             try:
                 amount = int(text.replace(',', ''))
@@ -650,20 +676,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ شماره موبایل یافت نشد. دوباره شروع کنید.")
                     context.user_data.clear()
                     return
-                # Charge bot wallet
-                from finance.models import BotWallet
+                # Charge wallet
+                from finance.models import Wallet
                 from authentication.models import BaseUser
                 from asgiref.sync import sync_to_async
                 try:
                     user = await sync_to_async(BaseUser.objects.get)(phone_number=phone)
-                    bot_wallet, created = await sync_to_async(BotWallet.objects.get_or_create)(user=user, defaults={'balance': 0})
-                    await sync_to_async(bot_wallet.__class__.objects.filter(pk=bot_wallet.pk).update)(balance=bot_wallet.balance + amount)
-                    await update.message.reply_text(f"✅ کیف پول ربات کاربر {phone} به مبلغ {amount:,} تومان شارژ شد.\nموجودی جدید: {(bot_wallet.balance + amount):,} تومان")
+                    wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user, defaults={'balance': 0})
+                    await sync_to_async(wallet.__class__.objects.filter(pk=wallet.pk).update)(balance=wallet.balance + amount)
+                    await update.message.reply_text(f"✅ کیف پول کاربر {phone} به مبلغ {amount:,} تومان شارژ شد.\nموجودی جدید: {(wallet.balance + amount):,} تومان")
                 except BaseUser.DoesNotExist:
                     await update.message.reply_text("❌ کاربری با این شماره موبایل یافت نشد.")
                 except Exception as e:
-                    logger.error(f"Error charging bot wallet: {e}")
-                    await update.message.reply_text(f"❌ خطا در شارژ کیف پول ربات: {str(e)}")
+                    logger.error(f"Error charging wallet: {e}")
+                    await update.message.reply_text(f"❌ خطا در شارژ کیف پول: {str(e)}")
                 context.user_data.clear()
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
             except ValueError:
