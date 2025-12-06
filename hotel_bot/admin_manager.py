@@ -85,7 +85,14 @@ class AdminManager:
             access_data = AccessManager.load_data()
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
             group = admins.get(str(admin_id), "بدون گروه")
-            perms = groups.get(group, set()) if group != "بدون گروه" else set()
+            perms = set()
+            if group != "بدون گروه":
+                group_perms = groups.get(group, set())
+                if isinstance(group_perms, (set, list)):
+                    perms = set(group_perms)
+                elif isinstance(group_perms, dict):
+                    # If it's a dict, get the permissions from it
+                    perms = set(group_perms.get('permissions', []))
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
