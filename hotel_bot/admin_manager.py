@@ -92,7 +92,11 @@ class AdminManager:
                     perms = set(group_perms)
                 elif isinstance(group_perms, dict):
                     # If it's a dict, get the permissions from it
-                    perms = set(group_perms.get('permissions', []))
+                    perm_list = group_perms.get('permissions', [])
+                    if isinstance(perm_list, (set, list)):
+                        perms = set(perm_list)
+                    else:
+                        perms = set()  # Fallback to empty set
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)

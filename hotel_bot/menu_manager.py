@@ -27,16 +27,14 @@ class MenuManager:
 """
             keyboard = []
             buttons = []
-            if AccessManager.is_allowed(user_id, 'backup_db') or AccessManager.is_allowed(user_id, 'backup_media'):
-                buttons.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
-            if AccessManager.is_allowed(user_id, 'view_reservations'):
-                buttons.append(InlineKeyboardButton("📋 لیست رزروها", callback_data="view_reservations"))
-            if AccessManager.is_allowed(user_id, 'backup_info'):
-                buttons.append(InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"))
-            if AccessManager.is_allowed(user_id, 'support'):
-                buttons.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
             if AccessManager.is_allowed(user_id, 'wallet_charge'):
                 buttons.append(InlineKeyboardButton("💰 شارژ کیف پول بات", callback_data="wallet_charge"))
+            if AccessManager.is_allowed(user_id, 'view_reservations'):
+                buttons.append(InlineKeyboardButton("📋 لیست رزروها", callback_data="view_reservations"))
+            if AccessManager.is_allowed(user_id, 'support'):
+                buttons.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
+            if AccessManager.is_allowed(user_id, 'backup_db') or AccessManager.is_allowed(user_id, 'backup_media'):
+                buttons.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
             if AccessManager.is_allowed(user_id, 'manage_wallet'):
                 buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
             if AccessManager.is_allowed(user_id, 'manage_points'):
@@ -67,6 +65,8 @@ class MenuManager:
                 InlineKeyboardButton("دیتابیس", callback_data="backup_db") if AccessManager.is_allowed(user_id, 'backup_db') else None,
                 InlineKeyboardButton("فولدر مدیا", callback_data="backup_media") if AccessManager.is_allowed(user_id, 'backup_media') else None
             ]]
+            if AccessManager.is_allowed(user_id, 'backup_info'):
+                keyboard.append([InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info")])
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
             keyboard = [row for row in keyboard if any(row)]
             reply_markup = InlineKeyboardMarkup(keyboard)
