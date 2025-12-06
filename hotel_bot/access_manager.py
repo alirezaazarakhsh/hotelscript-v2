@@ -8,9 +8,9 @@ class AccessManager:
 
     @staticmethod
     def load_data():
-        if AccessManager._cached_data is not None:
-            return AccessManager._cached_data.copy()
-
+        # Clear cache to ensure fresh data loading
+        AccessManager._cached_data = None
+        
         try:
             if os.path.exists(ADMINS_FILE):
                 with open(ADMINS_FILE, 'r', encoding='utf-8') as f:

@@ -102,6 +102,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     access_data = AccessManager.load_data()
     admins = access_data['admins']
     groups = access_data['groups']
+    # Ensure groups is a dict with set values
+    if not isinstance(groups, dict):
+        groups = {}
+    else:
+        for gname in groups:
+            if not isinstance(groups[gname], set):
+                if isinstance(groups[gname], (list, set)):
+                    groups[gname] = set(groups[gname])
+                else:
+                    groups[gname] = set()
 
     try:
         # Permission checks

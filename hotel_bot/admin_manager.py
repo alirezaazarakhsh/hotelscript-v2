@@ -33,7 +33,14 @@ class AdminManager:
                 keyboard = []
                 row = []
                 for idx, uid in enumerate(admins):
-                    text += f"🆔 {uid} - گروه: {admins.get(uid, 'بدون گروه')}\n"
+                    admin_info = admins.get(uid, {})
+                    if isinstance(admin_info, str):
+                        group_name = admin_info
+                    elif isinstance(admin_info, dict):
+                        group_name = admin_info.get('group', 'بدون گروه')
+                    else:
+                        group_name = 'بدون گروه'
+                    text += f"🆔 {uid} - گروه: {group_name}\n"
                     row.append(InlineKeyboardButton(f"ID: {uid}", callback_data=f"view_admin:{uid}"))
                     if (idx + 1) % 2 == 0:
                         keyboard.append(row)
@@ -84,10 +91,22 @@ class AdminManager:
 
             access_data = AccessManager.load_data()
             profile = access_data.get('profiles', {}).get(str(admin_id), {})
-            group = admins.get(str(admin_id), "بدون گروه")
+            # Ensure profile is a dict
+            if not isinstance(profile, dict):
+                profile = {}
+            admin_data = access_data.get('admins', {}).get(str(admin_id), {})
+            # Ensure admin_data is a dict
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+            elif not isinstance(admin_data, dict):
+                admin_data = {}
+            group = admin_data.get('group', "بدون گروه")
             perms = set()
             if group != "بدون گروه":
                 group_perms = groups.get(group, set())
+                # Ensure group_perms is a set or list
+                if not isinstance(group_perms, (set, list, dict)):
+                    group_perms = set()
                 logger.debug(f"Group perms for {group}: {group_perms}, type: {type(group_perms)}")
                 if isinstance(group_perms, (set, list)):
                     # Filter out any non-string items to ensure hashability
@@ -103,13 +122,16 @@ class AdminManager:
                         perms = set()  # Fallback to empty set
                 else:
                     perms = set()  # Fallback to empty set
-            logger.debug(f"Final perms: {perms}")
+            logger.debug(f"Final perms: {perms}, type: {type(perms)}")
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
             admin_data = access_data.get('admins', {}).get(str(admin_id), {})
+            # Ensure admin_data is a dict
             if isinstance(admin_data, str):
                 admin_data = {'group': admin_data}
+            elif not isinstance(admin_data, dict):
+                admin_data = {}
             license_expiry = admin_data.get('license_expiry', None)
 
             text = (
@@ -134,6 +156,8 @@ class AdminManager:
                         text += f"- **{PERM_DISPLAY[perm]['label']}**: {PERM_DISPLAY[perm]['desc']}\n"
                     else:
                         logger.warning(f"Invalid permission found: {perm} (type: {type(perm)})")
+                        # Skip invalid permissions
+                        continue
             else:
                 text += "هیچ مجوزی اختصاص نیافته.\n"
             text += "\n**توضیح**: می‌توانید گروه دسترسی این ادمین را تغییر دهید، ادمین را حذف کنید یا (در صورت سوپرادمین بودن) کیف پول و پروفایل او را مدیریت کنید."
