@@ -69,13 +69,13 @@ class ReservationManager:
                         res_data['main_passenger'] = {
                             'name': f"{rrp.first_name} {rrp.last_name}",
                             'national_code': rrp.national_code,
-                            'phone': rrp.phone_number
+                            'phone': rrp.mobile_number
                         }
                     else:
                         res_data['other_passengers'].append({
                             'name': f"{rrp.first_name} {rrp.last_name}",
                             'national_code': rrp.national_code,
-                            'phone': rrp.phone_number
+                            'phone': rrp.mobile_number
                         })
                 
                 res_data['total_half_in'] += (rr.half_day_in_price or 0) * rr.quantity
