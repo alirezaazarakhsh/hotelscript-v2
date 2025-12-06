@@ -98,53 +98,31 @@ class ReservationManager:
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
                 return
 
-            text = f"📋 **لیست رزروها (صفحه {current_page} از {total_pages})**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
+            text = "📋 **لیست رزروها**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
             keyboard = []
             message_parts = []
             current_text = text
 
-            for res in reservations_data:
-                # Create button text with buyer name and tracking code
-                button_text = f"رزرو {res['buyer_name']} به شماره {res['tracking_code']}"
+            for i, res in enumerate(reservations_data, start=(current_page-1)*per_page + 1):
+                # Create numbered button text
+                button_text = f"{i}. رزرو {res['tracking_code']}"
                 
-                res_text = f"🔹 کد پیگیری: {res['tracking_code']}\n"
-                res_text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
-                
-                # Add main passenger phone if available
-                if res['main_passenger'] and res['main_passenger']['phone']:
-                    res_text += f"📞 همراه مسافر اصلی: {res['main_passenger']['phone']}\n"
-                
-                res_text += f"🏨 هتل: {res['hotel_name']}\n"
-                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
-                res_text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n\n"
-
-                # Check if adding this res_text would exceed limit
-                if len(current_text + res_text) > 3500:
-                    # Send current message
-                    message_parts.append((current_text, keyboard))
-                    current_text = f"📋 **ادامه لیست رزروها (صفحه {current_page} از {total_pages})**\n\n" + res_text
-                    keyboard = []
-                else:
-                    current_text += res_text
-
-                # Button for details
+                # No additional text for each reservation, just buttons
                 keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_reservation_details::{res['tracking_code']}")])
 
-            # Add the last part
-            message_parts.append((current_text, keyboard))
-            
-            # Add pagination buttons
-            pagination_buttons = []
-            if current_page > 1:
-                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"list_reservations_page::{current_page-1}"))
-            if current_page < total_pages:
-                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"list_reservations_page::{current_page+1}"))
-            
-            if pagination_buttons:
-                keyboard.append(pagination_buttons)
+            # Add pagination buttons if needed
+            if total_pages > 1:
+                pagination_buttons = []
+                if current_page > 1:
+                    pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"list_reservations_page::{current_page-1}"))
+                if current_page < total_pages:
+                    pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"list_reservations_page::{current_page+1}"))
+                
+                if pagination_buttons:
+                    keyboard.append(pagination_buttons)
             
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
-            message_parts[-1] = (message_parts[-1][0], keyboard)
+            message_parts.append((current_text, keyboard))
 
             # Send all parts
             for i, (msg_text, msg_keyboard) in enumerate(message_parts):

@@ -394,7 +394,22 @@ class PaymentCallbackAPIView(APIView):
                 # ارسال نوتیف پرداخت به ادمین‌ها
                 from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
                 if reservation.payment_status == 'paid':
-                    notification_text = f"✅ پرداخت رزرو {tracking_code} موفق بود.\n👤 کاربر: {reservation.buyer.phone_number}\n💰 مبلغ: {reservation.final_price:,} تومان"
+                    # محاسبه امتیاز دریافتی
+                    total_points = sum(
+                        (rr.room.customer_club_points or 0) * rr.quantity
+                        for rr in reservation.reservation_rooms.select_related('room').all()
+                    )
+                    
+                    notification_text = f"""✅ پرداخت رزرو {tracking_code} موفق بود.
+👤 کاربر: {reservation.buyer.phone_number}
+
+📋 **صورتحساب:**
+💰 مبلغ کل: {reservation.total_price:,} تومان
+🏨 مبلغ نیم شارژ ورود و خروج: {reservation.total_half_day_charge:,} تومان
+💳 مبلغ برداشت از کیف پول: {reservation.wallet_withdrawal_amount:,} تومان
+🎫 مبلغ استفاده شده در کد تخفیف: {reservation.discount:,} تومان
+💵 مبلغ نهایی: {reservation.final_price:,} تومان
+💎 امتیاز دریافتی برای اتاق: {total_points:,} امتیاز"""
                 else:
                     notification_text = f"❌ پرداخت رزرو {tracking_code} ناموفق بود.\n👤 کاربر: {reservation.buyer.phone_number}\n💰 مبلغ: {reservation.final_price:,} تومان"
                 
