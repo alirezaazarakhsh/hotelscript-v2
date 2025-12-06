@@ -78,6 +78,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from datetime import datetime
             try:
                 expiry = datetime.fromisoformat(license_expiry)
+                if datetime.now() > expiry:
                     # License expired, only allow wallet operations
                     if not (data.startswith("wallet_") or data == "go_back" or data.startswith("payment:") or data.startswith("card_to_card") or data.startswith("send_receipt") or data.startswith("cancel_") or data.startswith("renew_") or data == "subscription_renewal"):
                         await query.edit_message_text(
@@ -89,11 +90,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             ])
                         )
                         return
-                else:
-                    await query.edit_message_text(
-                        "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
-                    )
-                    return
             except ValueError:
                 pass  # Invalid date, deny access
         else:
