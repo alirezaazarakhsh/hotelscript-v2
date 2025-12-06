@@ -29,6 +29,7 @@ from hotel_bot.permission_manager import PermissionManager
 from hotel_bot.wallet_manager import WalletManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.reservation_manager import ReservationManager
+from hotel_bot.points_manager import PointsManager
 
 # Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -114,6 +115,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if data == "manage_wallet" and not AccessManager.is_allowed(user_id, 'manage_wallet'):
             await query.edit_message_text("❌ شما مجوز مدیریت کیف پول کاربران را ندارید!")
+            return
+        if data == "manage_points" and not AccessManager.is_allowed(user_id, 'manage_points'):
+            await query.edit_message_text("❌ شما مجوز مدیریت امتیازات باشگاه مشتریان را ندارید!")
             return
         if data.startswith("edit_admin_profile:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز ویرایش پروفایل ادمین را ندارید!")
@@ -415,11 +419,22 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
+        elif data.startswith("wallet_page:"):
+            page = int(data.split(":", 1)[1])
+            await MenuManager.show_manage_wallet_menu(query, user_id, context, page)
         elif data == "manage_wallet":
             await MenuManager.show_manage_wallet_menu(query, user_id, context)
+        elif data.startswith("points_page:"):
+            page = int(data.split(":", 1)[1])
+            await MenuManager.show_manage_points_menu(query, user_id, context, page)
+        elif data == "manage_points":
+            await MenuManager.show_manage_points_menu(query, user_id, context)
         elif data.startswith("manage_user_wallet:"):
             user_target_id = data.split(":", 1)[1]
             await WalletManager.show_user_wallet_management(query, user_id, context, user_target_id)
+        elif data.startswith("manage_user_points:"):
+            user_target_id = data.split(":", 1)[1]
+            await PointsManager.show_user_points_management(query, user_id, context, user_target_id)
         elif data.startswith("charge_wallet:"):
             phone = data.split(":", 1)[1]
             context.user_data['wallet_phone'] = phone
@@ -741,6 +756,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
             except ValueError:
                 await update.message.reply_text("❌ مبلغ نامعتبر. فقط اعداد (مثبت برای افزایش، منفی برای کاهش).")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+        elif state == 'waiting_for_points_adjustment':
+            try:
+                points = int(text.replace(',', ''))
+                target_user_id = context.user_data.get('managing_points_user_id')
+                if not target_user_id:
+                    await update.message.reply_text("❌ کاربر یافت نشد. دوباره شروع کنید.")
+                    context.user_data.clear()
+                    return
+                # Adjust points
+                from bashgah_moshtarian.models import CustomerClubPoint
+                from authentication.models import BaseUser
+                from asgiref.sync import sync_to_async
+                try:
+                    user = await sync_to_async(BaseUser.objects.get)(id=target_user_id)
+                    points_obj, created = await sync_to_async(CustomerClubPoint.objects.get_or_create)(user=user, defaults={'points': 0})
+                    old_points = points_obj.points
+                    new_points = old_points + points
+                    if new_points < 0:
+                        new_points = 0
+                    await sync_to_async(points_obj.__class__.objects.filter(pk=points_obj.pk).update)(points=new_points)
+                    await update.message.reply_text(f"✅ امتیازات کاربر {user.phone_number} به مبلغ {points:,} امتیاز {'افزایش' if points > 0 else 'کاهش'} یافت.\nامتیازات قبلی: {old_points:,} امتیاز\nامتیازات جدید: {new_points:,} امتیاز")
+                except BaseUser.DoesNotExist:
+                    await update.message.reply_text("❌ کاربر یافت نشد.")
+                except Exception as e:
+                    logger.error(f"Error adjusting points: {e}")
+                    await update.message.reply_text(f"❌ خطا در تنظیم امتیازات: {str(e)}")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+            except ValueError:
+                await update.message.reply_text("❌ امتیاز نامعتبر. فقط اعداد (مثبت برای افزایش، منفی برای کاهش).")
                 context.user_data.clear()
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
     except Exception as e:

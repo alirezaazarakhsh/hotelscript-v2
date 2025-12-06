@@ -36,6 +36,8 @@ class MenuManager:
                 buttons.append(InlineKeyboardButton("💰 شارژ کیف پول بات", callback_data="wallet_charge"))
             if AccessManager.is_allowed(user_id, 'manage_wallet'):
                 buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
+            if AccessManager.is_allowed(user_id, 'manage_points'):
+                buttons.append(InlineKeyboardButton("⭐ مدیریت امتیازات باشگاه مشتریان", callback_data="manage_points"))
             
             # Arrange buttons in rows of 2
             for i in range(0, len(buttons), 2):
@@ -206,17 +208,28 @@ class MenuManager:
                 await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
 
     @staticmethod
-    async def show_manage_wallet_menu(query, user_id, context):
+    async def show_manage_wallet_menu(query, user_id, context, page=1):
         try:
             from authentication.models import BaseUser
             from finance.models import Wallet
             from asgiref.sync import sync_to_async
             
-            # Get all users with their names
+            per_page = 5
+            offset = (page - 1) * per_page
+            
+            # Get total users count
             @sync_to_async
-            def get_users():
+            def get_total_users():
+                return BaseUser.objects.count()
+            
+            total_users = await get_total_users()
+            total_pages = (total_users + per_page - 1) // per_page
+            
+            # Get users for this page
+            @sync_to_async
+            def get_users(offset, per_page):
                 users = []
-                for user in BaseUser.objects.all()[:50]:  # Limit to 50 users
+                for user in BaseUser.objects.all()[offset:offset + per_page]:
                     name = ""
                     if hasattr(user, 'natural_profile') and user.natural_profile:
                         name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
@@ -231,13 +244,23 @@ class MenuManager:
                     })
                 return users
             
-            users = await get_users()
+            users = await get_users(offset, per_page)
             
-            text = "💰 **مدیریت کیف پول کاربران سایت**\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
+            text = f"💰 **مدیریت کیف پول کاربران سایت** (صفحه {page} از {total_pages})\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
             keyboard = []
             
             for user in users:
                 keyboard.append([InlineKeyboardButton(f"{user['name']} ({user['phone']})", callback_data=f"manage_user_wallet:{user['id']}")])
+            
+            # Pagination buttons
+            pagination_buttons = []
+            if page > 1:
+                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"wallet_page:{page-1}"))
+            if page < total_pages:
+                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"wallet_page:{page+1}"))
+            
+            if pagination_buttons:
+                keyboard.append(pagination_buttons)
             
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -254,4 +277,76 @@ class MenuManager:
                 )
         except Exception as e:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت کیف پول: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
+
+    @staticmethod
+    async def show_manage_points_menu(query, user_id, context, page=1):
+        try:
+            from bashgah_moshtarian.models import CustomerClubPoint
+            from asgiref.sync import sync_to_async
+            
+            per_page = 5
+            offset = (page - 1) * per_page
+            
+            # Get total users count
+            @sync_to_async
+            def get_total_users():
+                return CustomerClubPoint.objects.count()
+            
+            total_users = await get_total_users()
+            total_pages = (total_users + per_page - 1) // per_page
+            
+            # Get users for this page
+            @sync_to_async
+            def get_users(offset, per_page):
+                users = []
+                for point in CustomerClubPoint.objects.select_related('user').all()[offset:offset + per_page]:
+                    name = ""
+                    if hasattr(point.user, 'natural_profile') and point.user.natural_profile:
+                        name = f"{point.user.natural_profile.first_name or ''} {point.user.natural_profile.last_name or ''}".strip()
+                    elif hasattr(point.user, 'admin') and point.user.admin:
+                        name = f"{point.user.admin.first_name or ''} {point.user.admin.last_name or ''}".strip()
+                    if not name:
+                        name = point.user.phone_number
+                    users.append({
+                        'id': point.user.id,
+                        'phone': point.user.phone_number,
+                        'name': name,
+                        'points': point.points
+                    })
+                return users
+            
+            users = await get_users(offset, per_page)
+            
+            text = f"⭐ **مدیریت امتیازات باشگاه مشتریان** (صفحه {page} از {total_pages})\n\nلیست کاربران و امتیازات آن‌ها. روی نام کاربر کلیک کنید تا امتیازاتش را مدیریت کنید.\n\n"
+            keyboard = []
+            
+            for user in users:
+                keyboard.append([InlineKeyboardButton(f"{user['name']} ({user['phone']}) - {user['points']:,} امتیاز", callback_data=f"manage_user_points:{user['id']}")])
+            
+            # Pagination buttons
+            pagination_buttons = []
+            if page > 1:
+                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"points_page:{page-1}"))
+            if page < total_pages:
+                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"points_page:{page+1}"))
+            
+            if pagination_buttons:
+                keyboard.append(pagination_buttons)
+            
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception as e:
+                # If editing fails, send a new message
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت امتیازات: {str(e)}")
             await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)

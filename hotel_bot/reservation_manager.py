@@ -144,6 +144,10 @@ class ReservationManager:
                 'buyer_phone': reservation.buyer.phone_number,
                 'wallet_balance': 0,
                 'wallet_withdrawn': reservation.wallet_withdrawal_amount or 0,
+                'personal_discount_used': reservation.personal_discount_used,
+                'applied_discount_code': reservation.applied_discount_code,
+                'half_day_in_charge': reservation.half_day_in_charge or 0,
+                'half_day_out_charge': reservation.half_day_out_charge or 0,
                 'rooms': [],
                 'main_passenger': None,
                 'other_passengers': [],
@@ -229,6 +233,20 @@ class ReservationManager:
             text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
             text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
             text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n"
+            
+            # Payment details
+            text += "💳 **جزئیات پرداخت**:\n"
+            if res['personal_discount_used']:
+                text += f"  - کد تخفیف شخصی استفاده شده\n"
+            if res['applied_discount_code']:
+                text += f"  - کد تخفیف: {res['applied_discount_code']}\n"
+            if res['half_day_in_charge'] > 0:
+                text += f"  - نیم شارژ ورود: {int(res['half_day_in_charge']):,} تومان\n"
+            if res['half_day_out_charge'] > 0:
+                text += f"  - نیم شارژ خروج: {int(res['half_day_out_charge']):,} تومان\n"
+            if res['wallet_withdrawn'] > 0:
+                text += f"  - برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
+            
             text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n"
 
             # Buttons based on status
