@@ -262,12 +262,14 @@ class ReservationManager:
                     if rrp.is_primary:
                         res_data['main_passenger'] = {
                             'name': f"{rrp.first_name} {rrp.last_name}",
-                            'national_code': rrp.national_code
+                            'national_code': rrp.national_code,
+                            'phone': rrp.mobile_number
                         }
                     else:
                         res_data['other_passengers'].append({
                             'name': f"{rrp.first_name} {rrp.last_name}",
-                            'national_code': rrp.national_code
+                            'national_code': rrp.national_code,
+                            'phone': rrp.mobile_number
                         })
             
             return res_data
@@ -297,12 +299,18 @@ class ReservationManager:
             # Passengers
             if res['main_passenger']:
                 mp = res['main_passenger']
-                text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
+                text += f"🧑 مسافر اصلی: {mp['name']}\n"
+                text += f"   📋 کد ملی: {mp['national_code']}\n"
+                if mp.get('phone'):
+                    text += f"   📞 تلفن: {mp['phone']}\n"
             
             if res['other_passengers']:
                 text += "👥 مسافران دیگر:\n"
                 for p in res['other_passengers']:
-                    text += f"  - {p['name']} ({p['national_code']})\n"
+                    text += f"  - {p['name']}\n"
+                    text += f"    📋 کد ملی: {p['national_code']}\n"
+                    if p.get('phone'):
+                        text += f"    📞 تلفن: {p['phone']}\n"
             
             # Room info with half charges
             if res['total_half_in'] > 0 or res['total_half_out'] > 0:
