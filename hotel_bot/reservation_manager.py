@@ -12,9 +12,9 @@ class ReservationManager:
     @database_sync_to_async
     def _get_pending_reservations():
         return list(Reservationhotel.objects.filter(capacity_status='pending').select_related(
-            'buyer', 'buyer__natural_profile', 'buyer__admin', 'hotel'
+            'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
-            'reservation_rooms__room',
+            'reservation_rooms__room__hotel',
             'reservation_rooms__reservation_room_passengers__passenger'
         ).order_by('-created_at')[:10])
 
@@ -36,7 +36,8 @@ class ReservationManager:
 
             for res in pending_reservations:
                 text += f"🔹 کد پیگیری: {res.tracking_code}\n"
-                text += f"🏨 هتل: {res.hotel.name if res.hotel else 'نامشخص'}\n"
+                hotel = res.get_hotel()
+                text += f"🏨 هتل: {hotel.name if hotel else 'نامشخص'}\n"
                 
                 # Buyer info
                 buyer = res.buyer
