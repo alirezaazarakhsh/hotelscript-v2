@@ -2,6 +2,7 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
+from django.db.models import Q
 from hotel_bot.menu_manager import MenuManager
 from reservation.models import Reservationhotel, ReservationRoomPassenger, Passenger
 from finance.models import Wallet
@@ -11,16 +12,31 @@ logger = logging.getLogger(__name__)
 class ReservationManager:
     @staticmethod
     @database_sync_to_async
-    def _get_all_reservations_data(page=1, per_page=5):
+    def _get_all_reservations_data(page=1, per_page=5, search_query=None):
         offset = (page - 1) * per_page
+        
+        # Base queryset
         reservations = Reservationhotel.objects.all().select_related(
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
             'reservation_rooms__room__hotel',
             'reservation_rooms__passengers'
-        ).order_by('-created_at')[offset:offset + per_page]
+        )
         
-        total_count = Reservationhotel.objects.count()
+        # Apply search filter if provided
+        if search_query:
+            reservations = reservations.filter(
+                Q(buyer__phone_number__icontains=search_query) |
+                Q(buyer__natural_profile__first_name__icontains=search_query) |
+                Q(buyer__natural_profile__last_name__icontains=search_query) |
+                Q(buyer__admin__first_name__icontains=search_query) |
+                Q(buyer__admin__last_name__icontains=search_query) |
+                Q(tracking_code__icontains=search_query)
+            )
+        
+        reservations = reservations.order_by('-created_at')[offset:offset + per_page]
+        
+        total_count = Reservationhotel.objects.count() if not search_query else reservations.count()
         total_pages = (total_count + per_page - 1) // per_page
         
         data = []
@@ -86,19 +102,24 @@ class ReservationManager:
         return data, total_pages, page
 
     @staticmethod
-    async def list_all_reservations(user_id, context, page=1, per_page=5):
+    async def list_all_reservations(user_id, context, page=1, per_page=5, search_query=None):
         try:
-            # Get all reservations data with pagination
-            reservations_data, total_pages, current_page = await ReservationManager._get_all_reservations_data(page, per_page)
+            # Get all reservations data with pagination and search
+            reservations_data, total_pages, current_page = await ReservationManager._get_all_reservations_data(page, per_page, search_query)
 
+            search_text = f"\n🔍 نتایج جستجو برای: '{search_query}'" if search_query else ""
+            
             if not reservations_data:
-                text = "📋 **لیست رزروها**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\nهیچ رزروی یافت نشد."
-                keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
+                text = f"📋 **لیست رزروها**{search_text}\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\nهیچ رزروی یافت نشد."
+                keyboard = [
+                    [InlineKeyboardButton("🔍 جستجو", callback_data="search_reservations")],
+                    [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
                 return
 
-            text = "📋 **لیست رزروها**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
+            text = f"📋 **لیست رزروها**{search_text}\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
             keyboard = []
             message_parts = []
             current_text = text
@@ -114,13 +135,15 @@ class ReservationManager:
             if total_pages > 1:
                 pagination_buttons = []
                 if current_page > 1:
-                    pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"list_reservations_page::{current_page-1}"))
+                    pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"list_reservations_page::{current_page-1}::{search_query or ''}"))
                 if current_page < total_pages:
-                    pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"list_reservations_page::{current_page+1}"))
+                    pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"list_reservations_page::{current_page+1}::{search_query or ''}"))
                 
                 if pagination_buttons:
                     keyboard.append(pagination_buttons)
             
+            # Add search and back buttons
+            keyboard.append([InlineKeyboardButton("🔍 جستجو", callback_data="search_reservations")])
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
             message_parts.append((current_text, keyboard))
 
@@ -132,6 +155,35 @@ class ReservationManager:
         except Exception as e:
             logger.error(f"Error listing all reservations: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش لیست رزروها: {str(e)}")
+
+    async def search_reservations(user_id, context):
+        """Start reservation search"""
+        try:
+            text = "🔍 **جستجوی رزروها**\n\nلطفاً نام کاربر، شماره تلفن یا کد پیگیری رزرو را وارد کنید:\n\n📝 مثال: 09123456789 یا ساشا یا sfa123456"
+            keyboard = [[InlineKeyboardButton("لغو جستجو", callback_data="view_reservations")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            # Set state for waiting for search input
+            context.user_data['state'] = 'waiting_for_reservation_search'
+        except Exception as e:
+            logger.error(f"Error starting reservation search: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در شروع جستجو: {str(e)}")
+
+    async def process_reservation_search(user_id, context, search_query):
+        """Process reservation search query"""
+        try:
+            if not search_query or search_query.strip() == "":
+                await context.bot.send_message(chat_id=user_id, text="❌ لطفاً یک عبارت جستجو وارد کنید.")
+                return
+            
+            search_query = search_query.strip()
+            
+            # Search reservations
+            await ReservationManager.list_all_reservations(user_id, context, page=1, per_page=5, search_query=search_query)
+            
+        except Exception as e:
+            logger.error(f"Error processing reservation search: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در جستجوی رزروها: {str(e)}")
 
     @staticmethod
     @database_sync_to_async

@@ -170,8 +170,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "view_reservations":
             await ReservationManager.list_all_reservations(user_id, context)
         elif data.startswith("list_reservations_page::"):
-            page = int(data.split("::", 1)[1])
-            await ReservationManager.list_all_reservations(user_id, context, page=page)
+            parts = data.split("::")
+            page = int(parts[1])
+            search_query = parts[2] if len(parts) > 2 and parts[2] else None
+            await ReservationManager.list_all_reservations(user_id, context, page=page, search_query=search_query)
+        elif data == "search_reservations":
+            await ReservationManager.search_reservations(user_id, context)
         elif data.startswith("view_reservation_details::"):
             tracking_code = data.split("::", 1)[1]
             await ReservationManager.view_reservation_details(user_id, context, tracking_code)
@@ -865,6 +869,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ امتیاز نامعتبر. فقط اعداد (مثبت برای افزایش، منفی برای کاهش).")
                 context.user_data.clear()
                 await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
+        elif state == 'waiting_for_reservation_search':
+            search_query = text.strip()
+            await ReservationManager.process_reservation_search(user_id, context, search_query)
+            context.user_data.clear()
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}")
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")
