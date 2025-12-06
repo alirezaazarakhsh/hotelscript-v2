@@ -343,7 +343,29 @@ class MenuManager:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در جستجوی کاربران کیف پول: {str(e)}")
 
     @staticmethod
-    async def show_manage_points_menu(query, user_id, context, page=1):
+    async def show_points_main_menu(query, user_id, context):
+        """Show main points management menu"""
+        try:
+            text = "💎 **مدیریت امتیازات باشگاه مشتریان**\n\nاز این بخش می‌توانید امتیازات کاربران باشگاه مشتریان را مدیریت کنید.\n\n**امکانات موجود**:\n• مشاهده لیست کاربران و امتیازات آن‌ها\n• افزودن یا کسر امتیازات کاربران\n• مدیریت امتیازات باشگاه مشتریان"
+            keyboard = [
+                [InlineKeyboardButton("📋 مشاهده لیست کاربران و امتیازات", callback_data="view_points_users")],
+                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="Markdown")
+            except Exception as e:
+                # If editing fails, send a new message
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت امتیازات: {str(e)}")
+            await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
         try:
             from bashgah_moshtarian.models import CustomerClubPoint
             from asgiref.sync import sync_to_async

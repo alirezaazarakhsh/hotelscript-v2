@@ -468,6 +468,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             page = int(data.split(":", 1)[1])
             await MenuManager.show_manage_points_menu(query, user_id, context, page)
         elif data == "manage_points":
+            await MenuManager.show_points_main_menu(query, user_id, context)
+        elif data == "view_points_users":
             await MenuManager.show_manage_points_menu(query, user_id, context)
         elif data.startswith("manage_user_wallet:"):
             user_target_id = data.split(":", 1)[1]

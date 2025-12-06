@@ -94,7 +94,8 @@ class AdminManager:
                     # If it's a dict, get the permissions from it
                     perm_list = group_perms.get('permissions', [])
                     if isinstance(perm_list, (set, list)):
-                        perms = set(perm_list)
+                        # Filter out any non-string items to ensure hashability
+                        perms = set(item for item in perm_list if isinstance(item, str))
                     else:
                         perms = set()  # Fallback to empty set
             wallets = ReceiptManager.load_wallets()
