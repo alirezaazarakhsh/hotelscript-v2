@@ -209,7 +209,17 @@ class ReservationManager:
                 'total_half_in': reservation.half_day_in_charge or 0,
                 'total_half_out': reservation.half_day_out_charge or 0,
                 'final_price': int(reservation.final_price or 0),
-                'created_at': reservation.created_at.strftime('%Y-%m-%d %H:%M')
+                'created_at': reservation.created_at.strftime('%Y-%m-%d %H:%M'),
+                # Invoice details
+                'total_price': int(reservation.total_price or 0),
+                'total_half_day_charge': int(reservation.total_half_day_charge or 0),
+                'discount': int(reservation.discount or 0),
+                'room_fixed_discount': int(reservation.room_fixed_discount or 0),
+                'total_extra_passenger_charge': int(reservation.total_extra_passenger_charge or 0),
+                'cancellation_penalty_applied': int(reservation.cancellation_penalty_applied or 0),
+                'cancellation_refunded_amount': int(reservation.cancellation_refunded_amount or 0),
+                'points_earned': 0,  # Will be calculated
+                'current_customer_points': 0,  # Will be calculated
             }
             
             # Buyer info
@@ -228,6 +238,20 @@ class ReservationManager:
                 res_data['wallet_balance'] = wallet.balance
             except:
                 res_data['wallet_balance'] = 0
+            
+            # Calculate points earned for this reservation
+            res_data['points_earned'] = sum(
+                (rr.room.customer_club_points or 0) * rr.quantity
+                for rr in reservation.reservation_rooms.select_related('room').all()
+            )
+            
+            # Get current customer points
+            try:
+                from bashgah_moshtarian.models import CustomerClubPoint
+                customer_points = CustomerClubPoint.objects.get(user=buyer)
+                res_data['current_customer_points'] = customer_points.points
+            except:
+                res_data['current_customer_points'] = 0
             
             # Rooms and passengers
             for rr in reservation.reservation_rooms.all():
@@ -289,20 +313,26 @@ class ReservationManager:
             text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
             text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n"
             
-            # Payment details
-            text += "💳 **جزئیات پرداخت**:\n"
-            if res['personal_discount_used']:
-                text += f"  - کد تخفیف شخصی استفاده شده\n"
-            if res['applied_discount_code']:
-                text += f"  - کد تخفیف: {res['applied_discount_code']}\n"
-            if res['half_day_in_charge'] > 0:
-                text += f"  - نیم شارژ ورود: {int(res['half_day_in_charge']):,} تومان\n"
-            if res['half_day_out_charge'] > 0:
-                text += f"  - نیم شارژ خروج: {int(res['half_day_out_charge']):,} تومان\n"
+            # Invoice section
+            text += "\n📋 **صورتحساب کامل:**\n"
+            text += f"💰 مبلغ کل: {res['total_price']:,} تومان\n"
+            if res['total_half_day_charge'] > 0:
+                text += f"🏨 مبلغ نیم شارژ ورود و خروج: {res['total_half_day_charge']:,} تومان\n"
+            if res['total_extra_passenger_charge'] > 0:
+                text += f"👥 مبلغ نفرات اضافه: {res['total_extra_passenger_charge']:,} تومان\n"
+            if res['discount'] > 0:
+                text += f"🎫 مبلغ استفاده شده در کد تخفیف: {res['discount']:,} تومان\n"
+            if res['room_fixed_discount'] > 0:
+                text += f"🏠 تخفیف ثابت اتاق‌ها: {res['room_fixed_discount']:,} تومان\n"
             if res['wallet_withdrawn'] > 0:
-                text += f"  - برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
-            
-            text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n"
+                text += f"💳 مبلغ برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
+            if res['cancellation_penalty_applied'] > 0:
+                text += f"⚠️ جریمه کنسلی: {res['cancellation_penalty_applied']:,} تومان\n"
+            if res['cancellation_refunded_amount'] > 0:
+                text += f"💸 مبلغ بازپرداخت کنسلی: {res['cancellation_refunded_amount']:,} تومان\n"
+            text += f"💵 مبلغ نهایی: {res['final_price']:,} تومان\n"
+            text += f"💎 امتیاز دریافتی برای اتاق: {res['points_earned']:,} امتیاز\n"
+            text += f"💎 مجموع امتیاز باشگاه مشتریان: {res['current_customer_points']:,} امتیاز\n"
 
             # Buttons based on status
             buttons = []
