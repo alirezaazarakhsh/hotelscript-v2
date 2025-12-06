@@ -400,8 +400,17 @@ class PaymentCallbackAPIView(APIView):
                         for rr in reservation.reservation_rooms.select_related('room').all()
                     )
                     
+                    # دریافت امتیاز فعلی کاربر
+                    from bashgah_moshtarian.models import CustomerClubPoint
+                    try:
+                        customer_points = CustomerClubPoint.objects.get(user=reservation.buyer)
+                        current_points = customer_points.points
+                    except CustomerClubPoint.DoesNotExist:
+                        current_points = 0
+                    
                     notification_text = f"""✅ پرداخت رزرو {tracking_code} موفق بود.
 👤 کاربر: {reservation.buyer.phone_number}
+💎 مجموع امتیاز باشگاه مشتریان: {current_points:,} امتیاز
 
 📋 **صورتحساب:**
 💰 مبلغ کل: {reservation.total_price:,} تومان
