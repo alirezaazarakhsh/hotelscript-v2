@@ -15,7 +15,7 @@ class ReservationManager:
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
             'reservation_rooms__room__hotel',
-            'reservation_rooms__reservation_room_passengers__passenger'
+            'reservation_rooms__passengers'
         ).order_by('-created_at')[:10])
 
     @staticmethod
@@ -60,11 +60,11 @@ class ReservationManager:
                 main_passenger = None
                 other_passengers = []
                 for rr in res.reservation_rooms.all():
-                    for rrp in rr.reservation_room_passengers.all():
-                        if rrp.is_main_passenger:
-                            main_passenger = rrp.passenger
+                    for rrp in rr.passengers.all():
+                        if rrp.is_primary:
+                            main_passenger = rrp
                         else:
-                            other_passengers.append(rrp.passenger)
+                            other_passengers.append(rrp)
                 
                 if main_passenger:
                     text += f"🧑 مسافر اصلی: {main_passenger.first_name} {main_passenger.last_name} ({main_passenger.national_code})\n"
