@@ -102,8 +102,11 @@ class ReservationManager:
         return data, total_pages, page
 
     @staticmethod
-    async def list_all_reservations(user_id, context, page=1, per_page=5, search_query=None):
+    async def list_all_reservations(user_id, context, page=1, per_page=5, search_query=None, query=None):
         try:
+            # Store current page and search in context for return navigation
+            context.user_data['reservation_page'] = page
+            context.user_data['reservation_search'] = search_query
             # Get all reservations data with pagination and search
             reservations_data, total_pages, current_page = await ReservationManager._get_all_reservations_data(page, per_page, search_query)
 
@@ -125,8 +128,8 @@ class ReservationManager:
             current_text = text
 
             for i, res in enumerate(reservations_data, start=(current_page-1)*per_page + 1):
-                # Create numbered button text
-                button_text = f"{i}. رزرو {res['tracking_code']}"
+                # Create numbered button text with buyer name
+                button_text = f"{i}. {res['buyer_name']} - {res['tracking_code']}"
                 
                 # No additional text for each reservation, just buttons
                 keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_reservation_details::{res['tracking_code']}")])
@@ -150,7 +153,10 @@ class ReservationManager:
             # Send all parts
             for i, (msg_text, msg_keyboard) in enumerate(message_parts):
                 reply_markup = InlineKeyboardMarkup(msg_keyboard) if msg_keyboard else None
-                await context.bot.send_message(chat_id=user_id, text=msg_text, reply_markup=reply_markup, parse_mode="Markdown")
+                if query and i == 0:  # Edit the first message if query exists
+                    await query.edit_message_text(text=msg_text, reply_markup=reply_markup, parse_mode="Markdown")
+                else:
+                    await context.bot.send_message(chat_id=user_id, text=msg_text, reply_markup=reply_markup, parse_mode="Markdown")
 
         except Exception as e:
             logger.error(f"Error listing all reservations: {e}")
@@ -338,6 +344,9 @@ class ReservationManager:
                 text += f"💳 مبلغ برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
             if res['cancellation_penalty_applied'] > 0:
                 text += f"⚠️ جریمه کنسلی: {res['cancellation_penalty_applied']:,} تومان\n"
+                # Show points deducted for cancellation if penalty was applied
+                if res['points_earned'] > 0:
+                    text += f"💎 امتیاز کسر شده به دلیل کنسلی: {res['points_earned']:,} امتیاز\n"
             if res['cancellation_refunded_amount'] > 0:
                 text += f"💸 مبلغ بازپرداخت کنسلی: {res['cancellation_refunded_amount']:,} تومان\n"
             text += f"💵 مبلغ نهایی: {res['final_price']:,} تومان\n"
@@ -356,7 +365,7 @@ class ReservationManager:
                 buttons.append(InlineKeyboardButton(f"تایید", callback_data=f"approve_reservation::{res['tracking_code']}"))
                 buttons.append(InlineKeyboardButton(f"به انتظار", callback_data=f"pending_reservation::{res['tracking_code']}"))
             
-            keyboard = [buttons, [InlineKeyboardButton("بازگشت به لیست", callback_data="view_reservations")]]
+            keyboard = [buttons, [InlineKeyboardButton("بازگشت به لیست", callback_data="view_reservations_return")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
 

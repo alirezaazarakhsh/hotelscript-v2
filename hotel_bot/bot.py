@@ -167,12 +167,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "backup_info":
             await MenuManager.show_backup_info(query, user_id, context)
         elif data == "view_reservations":
-            await ReservationManager.list_all_reservations(user_id, context)
+            await ReservationManager.list_all_reservations(user_id, context, query=query)
+        elif data == "view_reservations_return":
+            # Return to saved page and search
+            saved_page = context.user_data.get('reservation_page', 1)
+            saved_search = context.user_data.get('reservation_search')
+            await ReservationManager.list_all_reservations(user_id, context, page=saved_page, search_query=saved_search, query=query)
         elif data.startswith("list_reservations_page::"):
             parts = data.split("::")
             page = int(parts[1])
             search_query = parts[2] if len(parts) > 2 and parts[2] else None
-            await ReservationManager.list_all_reservations(user_id, context, page=page, search_query=search_query)
+            await ReservationManager.list_all_reservations(user_id, context, page=page, search_query=search_query, query=query)
         elif data == "search_reservations":
             await ReservationManager.search_reservations(user_id, context)
         elif data.startswith("view_reservation_details::"):
