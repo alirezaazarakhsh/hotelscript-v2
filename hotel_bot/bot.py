@@ -68,10 +68,36 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug(f"Received callback data: {query.data}")
 
     if not AccessManager.is_allowed(user_id):
-        await query.edit_message_text(
-            "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
-        )
-        return
+        # Check if license expired but allow wallet operations
+        str_uid = str(user_id)
+        admin_data = access_data.get('admins', {}).get(str_uid, {})
+        if isinstance(admin_data, str):
+            admin_data = {'group': admin_data}
+        license_expiry = admin_data.get('license_expiry')
+        if license_expiry:
+            from datetime import datetime
+            try:
+                expiry = datetime.fromisoformat(license_expiry)
+                if datetime.now() > expiry:
+                    # License expired, only allow wallet operations
+                    if not (data.startswith("wallet_") or data == "go_back" or data.startswith("payment:") or data.startswith("card_to_card") or data.startswith("send_receipt") or data.startswith("cancel_")):
+                        await query.edit_message_text(
+                            "⏰ **مدت زمان دسترسی شما به پایان رسیده است**\n\nشما فقط می‌توانید کیف پول خود را شارژ کنید یا سرویس را تمدید کنید.\n\nبرای تمدید، با پشتیبانی تماس بگیرید.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="go_back")]])
+                        )
+                        return
+                else:
+                    await query.edit_message_text(
+                        "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
+                    )
+                    return
+            except ValueError:
+                pass  # Invalid date, deny access
+        else:
+            await query.edit_message_text(
+                "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
+            )
+            return
 
     data = query.data
     access_data = AccessManager.load_data()
@@ -119,8 +145,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "manage_points" and not AccessManager.is_allowed(user_id, 'manage_points'):
             await query.edit_message_text("❌ شما مجوز مدیریت امتیازات باشگاه مشتریان را ندارید!")
             return
-        if data.startswith("edit_admin_profile:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
+        if data.startswith("edit_admin_profile_field:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
             await query.edit_message_text("❌ شما مجوز ویرایش پروفایل ادمین را ندارید!")
+            return
+        if data.startswith("set_expiry:") and not AccessManager.is_allowed(user_id, 'manage_admins'):
+            await query.edit_message_text("❌ شما مجوز تنظیم مدت زمان را ندارید!")
             return
         if data.startswith("edit_profile_field:") and not AccessManager.is_allowed(user_id, 'edit_profile'):
             await query.edit_message_text("❌ شما مجوز ویرایش این بخش از پروفایل را ندارید!")
@@ -467,6 +496,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
                 parse_mode="Markdown"
             )
+        elif data.startswith("set_expiry:"):
+            admin_id = data.split(":", 1)[1]
+            context.user_data['state'] = 'waiting_for_expiry_date'
+            context.user_data['target_admin_id'] = admin_id
+            await query.edit_message_text(
+                f"⏰ تنظیم مدت زمان دسترسی ادمین {admin_id}\n\nلطفاً تاریخ انقضای دسترسی را به فرمت YYYY-MM-DD وارد کنید.\nبرای دسترسی دائمی، عدد 0 را وارد کنید.\n\n**مثال**: 2025-12-31",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
+                parse_mode="Markdown"
+            )
 
     except Exception as e:
         logger.error(f"Error in button handler: {str(e)}")
@@ -673,6 +711,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await MenuManager.show_profile_edit_menu(update.message, user_id, context)
             else:
                 await AdminManager.show_edit_admin_profile(update.message.chat_id, context, target_id)
+        elif state == 'waiting_for_expiry_date':
+            target_admin_id = context.user_data.get('target_admin_id')
+            if not target_admin_id:
+                await update.message.reply_text("❌ ادمین یافت نشد. دوباره شروع کنید.")
+                context.user_data.clear()
+                return
+            expiry_date = text.strip()
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            if str(target_admin_id) not in admins:
+                await update.message.reply_text("❌ ادمین یافت نشد.")
+                context.user_data.clear()
+                return
+            admin_data = admins.get(str(target_admin_id), {})
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+            if expiry_date == '0':
+                admin_data.pop('license_expiry', None)
+                message = f"✅ دسترسی ادمین {target_admin_id} دائمی تنظیم شد."
+            else:
+                from datetime import datetime
+                try:
+                    datetime.fromisoformat(expiry_date)
+                    admin_data['license_expiry'] = expiry_date
+                    message = f"✅ تاریخ انقضای دسترسی ادمین {target_admin_id} به {expiry_date} تنظیم شد."
+                except ValueError:
+                    await update.message.reply_text("❌ فرمت تاریخ نامعتبر. از فرمت YYYY-MM-DD استفاده کنید.")
+                    return
+            admins[str(target_admin_id)] = admin_data
+            access_data['admins'] = admins
+            AccessManager.save_data(access_data)
+            await update.message.reply_text(message)
+            context.user_data.clear()
+            await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
         elif state == 'waiting_for_wallet_phone':
             phone = text.strip()
             if not phone.isdigit() or len(phone) != 11 or not phone.startswith('09'):

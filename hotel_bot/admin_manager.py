@@ -89,12 +89,17 @@ class AdminManager:
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
+            admin_data = access_data.get('admins', {}).get(str(admin_id), {})
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+            license_expiry = admin_data.get('license_expiry', None)
 
             text = (
                 f"👤 **جزئیات ادمین**\n\n"
                 f"**ID**: {admin_id}\n"
                 f"**گروه دسترسی**: {group}\n"
-                f"**موجودی کیف پول**: {wallet_balance:,} تومان\n\n"
+                f"**موجودی کیف پول**: {wallet_balance:,} تومان\n"
+                f"**مدت زمان دسترسی**: {license_expiry if license_expiry else 'دائمی'}\n\n"
                 f"**مشخصات پروفایل**:\n"
                 f"- نام: {profile.get('name', 'ندارد')}\n"
                 f"- نام خانوادگی: {profile.get('lastname', 'ندارد')}\n"
@@ -121,6 +126,7 @@ class AdminManager:
                 keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("📝 ویرایش پروفایل", callback_data=f"edit_admin_profile:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("⏰ تنظیم مدت زمان", callback_data=f"set_expiry:{admin_id}")])
             keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 

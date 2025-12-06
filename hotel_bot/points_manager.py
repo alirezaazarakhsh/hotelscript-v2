@@ -42,7 +42,7 @@ class PointsManager:
                 await query.edit_message_text("❌ کاربر یافت نشد!")
                 return
             
-            text = f"⭐ **مدیریت امتیازات باشگاه مشتریان**\n\nکاربر: {user_data['name']} ({user_data['phone']})\nامتیازات فعلی: {user_data['points']:,} امتیاز\n\nامتیازی که می‌خواهید اضافه یا کم کنید را وارد کنید (مثبت برای افزایش، منفی برای کاهش)."
+            text = f"💎 **مدیریت امتیازات باشگاه مشتریان**\n\nکاربر: {user_data['name']} ({user_data['phone']})\nامتیازات فعلی: {user_data['points']:,} امتیاز\n\nامتیازی که می‌خواهید اضافه یا کم کنید را وارد کنید (مثبت برای افزایش، منفی برای کاهش)."
             
             context.user_data['managing_points_user_id'] = target_user_id
             context.user_data['state'] = 'waiting_for_points_adjustment'

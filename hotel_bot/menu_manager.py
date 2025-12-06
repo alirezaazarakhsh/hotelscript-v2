@@ -37,7 +37,7 @@ class MenuManager:
             if AccessManager.is_allowed(user_id, 'manage_wallet'):
                 buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
             if AccessManager.is_allowed(user_id, 'manage_points'):
-                buttons.append(InlineKeyboardButton("⭐ مدیریت امتیازات باشگاه مشتریان", callback_data="manage_points"))
+                buttons.append(InlineKeyboardButton("💎 مدیریت امتیازات باشگاه مشتریان", callback_data="manage_points"))
             
             # Arrange buttons in rows of 2
             for i in range(0, len(buttons), 2):
@@ -255,9 +255,9 @@ class MenuManager:
             # Pagination buttons
             pagination_buttons = []
             if page > 1:
-                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"wallet_page:{page-1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"⬅️ صفحه {page-1}", callback_data=f"wallet_page:{page-1}"))
             if page < total_pages:
-                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"wallet_page:{page+1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"صفحه {page+1} ➡️", callback_data=f"wallet_page:{page+1}"))
             
             if pagination_buttons:
                 keyboard.append(pagination_buttons)
@@ -318,7 +318,7 @@ class MenuManager:
             
             users = await get_users(offset, per_page)
             
-            text = f"⭐ **مدیریت امتیازات باشگاه مشتریان** (صفحه {page} از {total_pages})\n\nلیست کاربران و امتیازات آن‌ها. روی نام کاربر کلیک کنید تا امتیازاتش را مدیریت کنید.\n\n"
+            text = f"💎 **مدیریت امتیازات باشگاه مشتریان** (صفحه {page} از {total_pages})\n\nلیست کاربران و امتیازات آن‌ها. روی نام کاربر کلیک کنید تا امتیازاتش را مدیریت کنید.\n\n"
             keyboard = []
             
             for user in users:
@@ -327,9 +327,9 @@ class MenuManager:
             # Pagination buttons
             pagination_buttons = []
             if page > 1:
-                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"points_page:{page-1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"⬅️ صفحه {page-1}", callback_data=f"points_page:{page-1}"))
             if page < total_pages:
-                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"points_page:{page+1}"))
+                pagination_buttons.append(InlineKeyboardButton(f"صفحه {page+1} ➡️", callback_data=f"points_page:{page+1}"))
             
             if pagination_buttons:
                 keyboard.append(pagination_buttons)
