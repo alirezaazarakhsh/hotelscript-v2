@@ -10,19 +10,68 @@ logger = logging.getLogger(__name__)
 class ReservationManager:
     @staticmethod
     @database_sync_to_async
-    def _get_pending_reservations():
-        return list(Reservationhotel.objects.filter(capacity_status='pending').select_related(
+    def _get_pending_reservations_data():
+        reservations = Reservationhotel.objects.filter(capacity_status='pending').select_related(
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
             'reservation_rooms__room__hotel',
             'reservation_rooms__passengers'
-        ).order_by('-created_at')[:10])
+        ).order_by('-created_at')[:10]
+        
+        data = []
+        for res in reservations:
+            res_data = {
+                'tracking_code': res.tracking_code,
+                'hotel_name': res.get_hotel().name if res.get_hotel() else 'نامشخص',
+                'buyer_name': '',
+                'buyer_phone': res.buyer.phone_number,
+                'rooms': [],
+                'main_passenger': None,
+                'other_passengers': [],
+                'total_half_in': 0,
+                'total_half_out': 0,
+                'final_price': int(res.final_price or 0),
+                'created_at': res.created_at.strftime('%Y-%m-%d %H:%M')
+            }
+            
+            # Buyer info
+            buyer = res.buyer
+            if buyer.natural_profile:
+                res_data['buyer_name'] = f"{buyer.natural_profile.first_name or ''} {buyer.natural_profile.last_name or ''}".strip()
+            elif buyer.admin:
+                res_data['buyer_name'] = f"{buyer.admin.first_name or ''} {buyer.admin.last_name or ''}".strip()
+            if not res_data['buyer_name']:
+                res_data['buyer_name'] = buyer.phone_number
+            
+            # Rooms and passengers
+            for rr in res.reservation_rooms.all():
+                room_name = rr.room.name if rr.room else 'نامشخص'
+                res_data['rooms'].append(f"{room_name} (تعداد: {rr.quantity})")
+                
+                for rrp in rr.passengers.all():
+                    if rrp.is_primary:
+                        res_data['main_passenger'] = {
+                            'name': f"{rrp.first_name} {rrp.last_name}",
+                            'national_code': rrp.national_code
+                        }
+                    else:
+                        res_data['other_passengers'].append({
+                            'name': f"{rrp.first_name} {rrp.last_name}",
+                            'national_code': rrp.national_code
+                        })
+                
+                res_data['total_half_in'] += rr.half_day_in_charge or 0
+                res_data['total_half_out'] += rr.half_day_out_charge or 0
+            
+            data.append(res_data)
+        
+        return data
 
     @staticmethod
     async def list_pending_reservations(user_id, context):
         try:
-            # Get pending reservations with related data
-            pending_reservations = await ReservationManager._get_pending_reservations()
+            # Get pending reservations data
+            pending_reservations = await ReservationManager._get_pending_reservations_data()
 
             if not pending_reservations:
                 text = "📋 **لیست رزروهای در انتظار تایید**\n\nهیچ رزروی در انتظار تایید وجود ندارد."
@@ -35,61 +84,36 @@ class ReservationManager:
             keyboard = []
 
             for res in pending_reservations:
-                text += f"🔹 کد پیگیری: {res.tracking_code}\n"
-                hotel = res.get_hotel()
-                text += f"🏨 هتل: {hotel.name if hotel else 'نامشخص'}\n"
-                
-                # Buyer info
-                buyer = res.buyer
-                buyer_name = ""
-                if buyer.natural_profile:
-                    buyer_name = f"{buyer.natural_profile.first_name or ''} {buyer.natural_profile.last_name or ''}".strip()
-                elif buyer.admin:
-                    buyer_name = f"{buyer.admin.first_name or ''} {buyer.admin.last_name or ''}".strip()
-                if not buyer_name:
-                    buyer_name = buyer.phone_number
-                text += f"👤 رزرو کننده: {buyer_name} ({buyer.phone_number})\n"
+                text += f"🔹 کد پیگیری: {res['tracking_code']}\n"
+                text += f"🏨 هتل: {res['hotel_name']}\n"
+                text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
                 
                 # Rooms
                 text += "🏠 اتاق‌ها:\n"
-                for rr in res.reservation_rooms.all():
-                    room_name = rr.room.name if rr.room else 'نامشخص'
-                    text += f"  - {room_name} (تعداد: {rr.quantity})\n"
+                for room in res['rooms']:
+                    text += f"  - {room}\n"
                 
                 # Passengers
-                main_passenger = None
-                other_passengers = []
-                for rr in res.reservation_rooms.all():
-                    for rrp in rr.passengers.all():
-                        if rrp.is_primary:
-                            main_passenger = rrp
-                        else:
-                            other_passengers.append(rrp)
+                if res['main_passenger']:
+                    mp = res['main_passenger']
+                    text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
                 
-                if main_passenger:
-                    text += f"🧑 مسافر اصلی: {main_passenger.first_name} {main_passenger.last_name} ({main_passenger.national_code})\n"
-                
-                if other_passengers:
+                if res['other_passengers']:
                     text += "👥 مسافران دیگر:\n"
-                    for p in other_passengers:
-                        text += f"  - {p.first_name} {p.last_name} ({p.national_code})\n"
+                    for p in res['other_passengers']:
+                        text += f"  - {p['name']} ({p['national_code']})\n"
                 
                 # Room info with half charges
-                total_half_in = 0
-                total_half_out = 0
-                for rr in res.reservation_rooms.all():
-                    total_half_in += rr.half_day_in_charge or 0
-                    total_half_out += rr.half_day_out_charge or 0
-                if total_half_in > 0 or total_half_out > 0:
-                    text += f"🏠 نیم شارژ ورود: {int(total_half_in):,} تومان\n"
-                    text += f"🏠 نیم شارژ خروج: {int(total_half_out):,} تومان\n"
+                if res['total_half_in'] > 0 or res['total_half_out'] > 0:
+                    text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
+                    text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
                 
-                text += f"💰 قیمت نهایی: {int(res.final_price or 0):,} تومان\n"
-                text += f"📅 تاریخ ایجاد: {res.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+                text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n"
+                text += f"📅 تاریخ ایجاد: {res['created_at']}\n\n"
 
                 keyboard.append([
-                    InlineKeyboardButton(f"تایید {res.tracking_code}", callback_data=f"approve_reservation::{res.tracking_code}"),
-                    InlineKeyboardButton(f"رد {res.tracking_code}", callback_data=f"reject_reservation::{res.tracking_code}")
+                    InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"),
+                    InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}")
                 ])
 
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
