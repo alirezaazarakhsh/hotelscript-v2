@@ -3388,6 +3388,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             },
         )
 
+        # Send notification to bot admins
+        try:
+            from hotel_bot.bot import send_reservation_notification
+            buyer_name = reserver_data.get('reserver_first_name', '') + ' ' + reserver_data.get('reserver_last_name', '').strip() or request.user.phone_number
+            hotel_name = reservation.get_hotel().name if reservation.get_hotel() else 'نامشخص'
+            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name)
+        except Exception as e:
+            logger.error(f"Failed to send reservation notification: {e}")
+
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
 
         # زمانبندی کنسلی خودکار پس از 15 دقیقه اگر پرداخت نشود

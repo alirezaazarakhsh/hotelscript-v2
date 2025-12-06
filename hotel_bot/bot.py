@@ -34,6 +34,17 @@ from hotel_bot.reservation_manager import ReservationManager
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Function to send reservation notification
+async def send_reservation_notification(tracking_code, buyer_name, hotel_name):
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
+    notification_text = f"🔔 **رزرو جدید ایجاد شد**\n\nکد پیگیری: {tracking_code}\nرزرو کننده: {buyer_name}\nهتل: {hotel_name}"
+    for admin_id in SUPER_ADMINS:
+        try:
+            await bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send notification to {admin_id}: {e}")
+
 # Handler for /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -125,6 +136,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await MenuManager.show_backup_info(query, user_id, context)
         elif data == "view_reservations":
             await ReservationManager.list_pending_reservations(user_id, context)
+        elif data.startswith("view_reservation_details::"):
+            tracking_code = data.split("::", 1)[1]
+            await ReservationManager.view_reservation_details(user_id, context, tracking_code)
         elif data.startswith("approve_reservation::"):
             tracking_code = data.split("::", 1)[1]
             await ReservationManager.approve_reservation(user_id, context, tracking_code)

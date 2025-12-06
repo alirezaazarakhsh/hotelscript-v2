@@ -101,35 +101,8 @@ class ReservationManager:
 
             for res in pending_reservations:
                 res_text = f"🔹 کد پیگیری: {res['tracking_code']}\n"
-                res_text += f"🏨 هتل: {res['hotel_name']}\n"
-                text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
-                text += f"💰 موجودی کیف پول: {res['wallet_balance']:,} تومان\n"
-                if res['wallet_withdrawn'] > 0:
-                    res_text += f"💸 برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
-                
-                # Rooms
-                res_text += "🏠 اتاق‌ها:\n"
-                for room in res['rooms']:
-                    res_text += f"  - {room}\n"
-                
-                # Passengers
-                if res['main_passenger']:
-                    mp = res['main_passenger']
-                    res_text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
-                
-                if res['other_passengers']:
-                    res_text += "👥 مسافران دیگر:\n"
-                    for p in res['other_passengers']:
-                        res_text += f"  - {p['name']} ({p['national_code']})\n"
-                
-                # Room info with half charges
-                if res['total_half_in'] > 0 or res['total_half_out'] > 0:
-                    res_text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
-                    res_text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
-                
-                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
-                res_text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
-                res_text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n\n"
+                res_text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
+                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n\n"
 
                 # Check if adding this res_text would exceed limit
                 if len(current_text + res_text) > 3500:
@@ -140,20 +113,8 @@ class ReservationManager:
                 else:
                     current_text += res_text
 
-                # Buttons based on status
-                buttons = []
-                if res['capacity_status'] == 'pending':
-                    buttons.append(InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"))
-                    buttons.append(InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}"))
-                elif res['capacity_status'] == 'confirmed':
-                    buttons.append(InlineKeyboardButton(f"رد {res['tracking_code']}", callback_data=f"reject_reservation::{res['tracking_code']}"))
-                    buttons.append(InlineKeyboardButton(f"به انتظار {res['tracking_code']}", callback_data=f"pending_reservation::{res['tracking_code']}"))
-                elif res['capacity_status'] == 'rejected':
-                    buttons.append(InlineKeyboardButton(f"تایید {res['tracking_code']}", callback_data=f"approve_reservation::{res['tracking_code']}"))
-                    buttons.append(InlineKeyboardButton(f"به انتظار {res['tracking_code']}", callback_data=f"pending_reservation::{res['tracking_code']}"))
-                
-                if buttons:
-                    keyboard.append(buttons)
+                # Button for details
+                keyboard.append([InlineKeyboardButton(f"مشاهده جزئیات {res['tracking_code']}", callback_data=f"view_reservation_details::{res['tracking_code']}")])
 
             # Add the last part
             message_parts.append((current_text, keyboard))
@@ -168,6 +129,127 @@ class ReservationManager:
         except Exception as e:
             logger.error(f"Error listing pending reservations: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش لیست رزروها: {str(e)}")
+
+    @staticmethod
+    @database_sync_to_async
+    def _get_reservation_details(tracking_code):
+        try:
+            reservation = Reservationhotel.objects.get(tracking_code=tracking_code)
+            res_data = {
+                'tracking_code': reservation.tracking_code,
+                'capacity_status': reservation.capacity_status,
+                'payment_status': reservation.payment_status,
+                'hotel_name': reservation.get_hotel().name if reservation.get_hotel() else 'نامشخص',
+                'buyer_name': '',
+                'buyer_phone': reservation.buyer.phone_number,
+                'wallet_balance': 0,
+                'wallet_withdrawn': reservation.wallet_withdrawal_amount or 0,
+                'rooms': [],
+                'main_passenger': None,
+                'other_passengers': [],
+                'total_half_in': reservation.half_day_in_charge or 0,
+                'total_half_out': reservation.half_day_out_charge or 0,
+                'final_price': int(reservation.final_price or 0),
+                'created_at': reservation.created_at.strftime('%Y-%m-%d %H:%M')
+            }
+            
+            # Buyer info
+            buyer = reservation.buyer
+            if buyer.natural_profile:
+                res_data['buyer_name'] = f"{buyer.natural_profile.first_name or ''} {buyer.natural_profile.last_name or ''}".strip()
+            elif buyer.admin:
+                res_data['buyer_name'] = f"{buyer.admin.first_name or ''} {buyer.admin.last_name or ''}".strip()
+            if not res_data['buyer_name']:
+                res_data['buyer_name'] = buyer.phone_number
+            
+            # Get wallet balance
+            try:
+                from finance.models import Wallet
+                wallet = Wallet.objects.get(user=buyer)
+                res_data['wallet_balance'] = wallet.balance
+            except:
+                res_data['wallet_balance'] = 0
+            
+            # Rooms and passengers
+            for rr in reservation.reservation_rooms.all():
+                room_name = rr.room.title if rr.room else 'نامشخص'
+                res_data['rooms'].append(f"{room_name} (تعداد: {rr.quantity})")
+                
+                for rrp in rr.passengers.all():
+                    if rrp.is_primary:
+                        res_data['main_passenger'] = {
+                            'name': f"{rrp.first_name} {rrp.last_name}",
+                            'national_code': rrp.national_code
+                        }
+                    else:
+                        res_data['other_passengers'].append({
+                            'name': f"{rrp.first_name} {rrp.last_name}",
+                            'national_code': rrp.national_code
+                        })
+            
+            return res_data
+        except Reservationhotel.DoesNotExist:
+            return None
+
+    @staticmethod
+    async def view_reservation_details(user_id, context, tracking_code):
+        try:
+            res = await ReservationManager._get_reservation_details(tracking_code)
+            if not res:
+                await context.bot.send_message(chat_id=user_id, text=f"❌ رزرو با کد {tracking_code} یافت نشد.")
+                return
+
+            text = f"📋 **جزئیات رزرو {res['tracking_code']}**\n\n"
+            text += f"🏨 هتل: {res['hotel_name']}\n"
+            text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
+            text += f"💰 موجودی کیف پول: {res['wallet_balance']:,} تومان\n"
+            if res['wallet_withdrawn'] > 0:
+                text += f"💸 برداشت از کیف پول: {res['wallet_withdrawn']:,} تومان\n"
+            
+            # Rooms
+            text += "🏠 اتاق‌ها:\n"
+            for room in res['rooms']:
+                text += f"  - {room}\n"
+            
+            # Passengers
+            if res['main_passenger']:
+                mp = res['main_passenger']
+                text += f"🧑 مسافر اصلی: {mp['name']} ({mp['national_code']})\n"
+            
+            if res['other_passengers']:
+                text += "👥 مسافران دیگر:\n"
+                for p in res['other_passengers']:
+                    text += f"  - {p['name']} ({p['national_code']})\n"
+            
+            # Room info with half charges
+            if res['total_half_in'] > 0 or res['total_half_out'] > 0:
+                text += f"🏠 نیم شارژ ورود: {int(res['total_half_in']):,} تومان\n"
+                text += f"🏠 نیم شارژ خروج: {int(res['total_half_out']):,} تومان\n"
+            
+            text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
+            text += f"📊 وضعیت ظرفیت: {dict(Reservationhotel.CAPACITY_STATUS_CHOICES).get(res['capacity_status'], res['capacity_status'])}\n"
+            text += f"💳 وضعیت پرداخت: {dict(Reservationhotel.PAYMENT_STATUS_CHOICES).get(res['payment_status'], res['payment_status'])}\n"
+            text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n"
+
+            # Buttons based on status
+            buttons = []
+            if res['capacity_status'] == 'pending':
+                buttons.append(InlineKeyboardButton(f"تایید", callback_data=f"approve_reservation::{res['tracking_code']}"))
+                buttons.append(InlineKeyboardButton(f"رد", callback_data=f"reject_reservation::{res['tracking_code']}"))
+            elif res['capacity_status'] == 'confirmed':
+                buttons.append(InlineKeyboardButton(f"رد", callback_data=f"reject_reservation::{res['tracking_code']}"))
+                buttons.append(InlineKeyboardButton(f"به انتظار", callback_data=f"pending_reservation::{res['tracking_code']}"))
+            elif res['capacity_status'] == 'rejected':
+                buttons.append(InlineKeyboardButton(f"تایید", callback_data=f"approve_reservation::{res['tracking_code']}"))
+                buttons.append(InlineKeyboardButton(f"به انتظار", callback_data=f"pending_reservation::{res['tracking_code']}"))
+            
+            keyboard = [buttons, [InlineKeyboardButton("بازگشت به لیست", callback_data="view_reservations")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
+
+        except Exception as e:
+            logger.error(f"Error viewing reservation details: {e}")
+            await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش جزئیات رزرو: {str(e)}")
 
     @staticmethod
     @database_sync_to_async

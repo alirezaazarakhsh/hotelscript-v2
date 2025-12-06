@@ -23,34 +23,27 @@ class MenuManager:
 💸 **مشاهده موجودی کیف پول** برای بررسی وضعیت مالی
 """
             keyboard = []
-            row = []
+            buttons = []
             if AccessManager.is_allowed(user_id, 'backup_db') or AccessManager.is_allowed(user_id, 'backup_media'):
-                row.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
+                buttons.append(InlineKeyboardButton("📦 بکاپ‌گیری", callback_data="backup_menu"))
             if AccessManager.is_allowed(user_id, 'view_reservations'):
-                row.append(InlineKeyboardButton("📋 لیست رزروها", callback_data="view_reservations"))
-            if row:
-                keyboard.append(row)
-            row = []
+                buttons.append(InlineKeyboardButton("📋 لیست رزروها", callback_data="view_reservations"))
             if AccessManager.is_allowed(user_id, 'backup_info'):
-                row.append(InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"))
-            if row:
-                keyboard.append(row)
-            row = []
+                buttons.append(InlineKeyboardButton("📋 نحوه بکاپ‌گیری", callback_data="backup_info"))
             if AccessManager.is_allowed(user_id, 'support'):
-                row.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
+                buttons.append(InlineKeyboardButton("📮 پشتیبانی", callback_data="support"))
             if AccessManager.is_allowed(user_id, 'manage_admins'):
-                row.append(InlineKeyboardButton("⚙️ کنترل پنل", callback_data="control_panel"))
-            if row:
-                keyboard.append(row)
-            row = []
+                buttons.append(InlineKeyboardButton("⚙️ کنترل پنل", callback_data="control_panel"))
             if AccessManager.is_allowed(user_id, 'wallet_charge'):
-                row.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
+                buttons.append(InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge"))
             if AccessManager.is_allowed(user_id, 'view_balance'):
-                row.append(InlineKeyboardButton("💸 مشاهده موجودی", callback_data="view_balance"))
+                buttons.append(InlineKeyboardButton("💸 مشاهده موجودی", callback_data="view_balance"))
             if AccessManager.is_allowed(user_id, 'manage_wallet'):
-                row.append(InlineKeyboardButton("💰 مدیریت کیف پول", callback_data="manage_wallet"))
-            if row:
-                keyboard.append(row)
+                buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
+            
+            # Arrange buttons in rows of 2
+            for i in range(0, len(buttons), 2):
+                keyboard.append(buttons[i:i+2])
         
             reply_markup = InlineKeyboardMarkup(keyboard)
         
