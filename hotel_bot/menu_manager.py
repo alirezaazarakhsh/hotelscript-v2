@@ -290,7 +290,7 @@ class MenuManager:
             if pagination_buttons:
                 keyboard.append(pagination_buttons)
             
-            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="manage_points")])
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             try:
@@ -366,6 +366,9 @@ class MenuManager:
         except Exception as e:
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش منوی مدیریت امتیازات: {str(e)}")
             await MenuManager.show_main_menu(user_id, context, query.message.message_id if query.message else None, query.message.chat_id if query.message else user_id)
+
+    @staticmethod
+    async def show_manage_points_menu(query, user_id, context, page=1):
         try:
             from bashgah_moshtarian.models import CustomerClubPoint
             from asgiref.sync import sync_to_async
@@ -419,7 +422,7 @@ class MenuManager:
             if pagination_buttons:
                 keyboard.append(pagination_buttons)
             
-            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
+            keyboard.append([InlineKeyboardButton("بازگشت", callback_data="manage_points")])
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             try:

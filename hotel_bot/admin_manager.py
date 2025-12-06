@@ -88,16 +88,22 @@ class AdminManager:
             perms = set()
             if group != "بدون گروه":
                 group_perms = groups.get(group, set())
+                logger.debug(f"Group perms for {group}: {group_perms}, type: {type(group_perms)}")
                 if isinstance(group_perms, (set, list)):
-                    perms = set(group_perms)
+                    # Filter out any non-string items to ensure hashability
+                    perms = set(item for item in group_perms if isinstance(item, str))
                 elif isinstance(group_perms, dict):
                     # If it's a dict, get the permissions from it
                     perm_list = group_perms.get('permissions', [])
+                    logger.debug(f"Perm list from dict: {perm_list}, type: {type(perm_list)}")
                     if isinstance(perm_list, (set, list)):
                         # Filter out any non-string items to ensure hashability
                         perms = set(item for item in perm_list if isinstance(item, str))
                     else:
                         perms = set()  # Fallback to empty set
+                else:
+                    perms = set()  # Fallback to empty set
+            logger.debug(f"Final perms: {perms}")
             wallets = ReceiptManager.load_wallets()
             logger.debug(f"Loaded wallets: {wallets}")
             wallet_balance = wallets.get(str(admin_id), 0)
