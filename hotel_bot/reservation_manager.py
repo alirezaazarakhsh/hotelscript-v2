@@ -11,15 +11,17 @@ logger = logging.getLogger(__name__)
 class ReservationManager:
     @staticmethod
     @database_sync_to_async
-    def _get_pending_reservations_data():
-        reservations = Reservationhotel.objects.filter(
-            capacity_status='pending'
-        ).select_related(
+    def _get_all_reservations_data(page=1, per_page=5):
+        offset = (page - 1) * per_page
+        reservations = Reservationhotel.objects.all().select_related(
             'buyer', 'buyer__natural_profile', 'buyer__admin', 'personal_discount_code'
         ).prefetch_related(
             'reservation_rooms__room__hotel',
             'reservation_rooms__passengers'
-        ).order_by('-created_at')[:10]  # Show fewer reservations to avoid long messages
+        ).order_by('-created_at')[offset:offset + per_page]
+        
+        total_count = Reservationhotel.objects.count()
+        total_pages = (total_count + per_page - 1) // per_page
         
         data = []
         for res in reservations:
@@ -66,12 +68,14 @@ class ReservationManager:
                     if rrp.is_primary:
                         res_data['main_passenger'] = {
                             'name': f"{rrp.first_name} {rrp.last_name}",
-                            'national_code': rrp.national_code
+                            'national_code': rrp.national_code,
+                            'phone': rrp.phone_number
                         }
                     else:
                         res_data['other_passengers'].append({
                             'name': f"{rrp.first_name} {rrp.last_name}",
-                            'national_code': rrp.national_code
+                            'national_code': rrp.national_code,
+                            'phone': rrp.phone_number
                         })
                 
                 res_data['total_half_in'] += (rr.half_day_in_price or 0) * rr.quantity
@@ -79,45 +83,66 @@ class ReservationManager:
             
             data.append(res_data)
         
-        return data
+        return data, total_pages, page
 
     @staticmethod
-    async def list_pending_reservations(user_id, context):
+    async def list_all_reservations(user_id, context, page=1, per_page=5):
         try:
-            # Get pending reservations data
-            pending_reservations = await ReservationManager._get_pending_reservations_data()
+            # Get all reservations data with pagination
+            reservations_data, total_pages, current_page = await ReservationManager._get_all_reservations_data(page, per_page)
 
-            if not pending_reservations:
-                text = "📋 **لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\nهیچ رزروی یافت نشد."
+            if not reservations_data:
+                text = "📋 **لیست رزروها**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\nهیچ رزروی یافت نشد."
                 keyboard = [[InlineKeyboardButton("بازگشت", callback_data="go_back")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
                 return
 
-            text = "📋 **لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
+            text = f"📋 **لیست رزروها (صفحه {current_page} از {total_pages})**\n\nاین بخش لیست همه رزروها را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n"
             keyboard = []
             message_parts = []
             current_text = text
 
-            for res in pending_reservations:
+            for res in reservations_data:
+                # Create button text with buyer name and tracking code
+                button_text = f"رزرو {res['buyer_name']} به شماره {res['tracking_code']}"
+                
                 res_text = f"🔹 کد پیگیری: {res['tracking_code']}\n"
                 res_text += f"👤 رزرو کننده: {res['buyer_name']} ({res['buyer_phone']})\n"
-                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n\n"
+                
+                # Add main passenger phone if available
+                if res['main_passenger'] and res['main_passenger']['phone']:
+                    res_text += f"📞 همراه مسافر اصلی: {res['main_passenger']['phone']}\n"
+                
+                res_text += f"🏨 هتل: {res['hotel_name']}\n"
+                res_text += f"📅 تاریخ ایجاد: {res['created_at']}\n"
+                res_text += f"💰 قیمت نهایی: {res['final_price']:,} تومان\n\n"
 
                 # Check if adding this res_text would exceed limit
                 if len(current_text + res_text) > 3500:
                     # Send current message
                     message_parts.append((current_text, keyboard))
-                    current_text = "📋 **ادامه لیست رزروها**\n\nاین بخش لیست رزروهای اخیر را نمایش می‌دهد. برای هر رزرو، می‌توانید روی دکمه «مشاهده جزئیات» کلیک کنید تا اطلاعات کامل رزرو، شامل هتل، اتاق‌ها، مسافران و وضعیت پرداخت را ببینید و عملیات تایید یا رد رزرو را انجام دهید.\n\n" + res_text
+                    current_text = f"📋 **ادامه لیست رزروها (صفحه {current_page} از {total_pages})**\n\n" + res_text
                     keyboard = []
                 else:
                     current_text += res_text
 
                 # Button for details
-                keyboard.append([InlineKeyboardButton(f"مشاهده جزئیات {res['tracking_code']}", callback_data=f"view_reservation_details::{res['tracking_code']}")])
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_reservation_details::{res['tracking_code']}")])
 
             # Add the last part
             message_parts.append((current_text, keyboard))
+            
+            # Add pagination buttons
+            pagination_buttons = []
+            if current_page > 1:
+                pagination_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"list_reservations_page::{current_page-1}"))
+            if current_page < total_pages:
+                pagination_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"list_reservations_page::{current_page+1}"))
+            
+            if pagination_buttons:
+                keyboard.append(pagination_buttons)
+            
             keyboard.append([InlineKeyboardButton("بازگشت", callback_data="go_back")])
             message_parts[-1] = (message_parts[-1][0], keyboard)
 
@@ -127,7 +152,7 @@ class ReservationManager:
                 await context.bot.send_message(chat_id=user_id, text=msg_text, reply_markup=reply_markup, parse_mode="Markdown")
 
         except Exception as e:
-            logger.error(f"Error listing pending reservations: {e}")
+            logger.error(f"Error listing all reservations: {e}")
             await context.bot.send_message(chat_id=user_id, text=f"❌ خطا در نمایش لیست رزروها: {str(e)}")
 
     @staticmethod

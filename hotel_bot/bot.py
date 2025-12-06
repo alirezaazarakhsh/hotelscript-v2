@@ -168,7 +168,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "backup_info":
             await MenuManager.show_backup_info(query, user_id, context)
         elif data == "view_reservations":
-            await ReservationManager.list_pending_reservations(user_id, context)
+            await ReservationManager.list_all_reservations(user_id, context)
+        elif data.startswith("list_reservations_page::"):
+            page = int(data.split("::", 1)[1])
+            await ReservationManager.list_all_reservations(user_id, context, page=page)
         elif data.startswith("view_reservation_details::"):
             tracking_code = data.split("::", 1)[1]
             await ReservationManager.view_reservation_details(user_id, context, tracking_code)
