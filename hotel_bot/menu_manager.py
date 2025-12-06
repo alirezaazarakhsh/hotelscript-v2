@@ -249,8 +249,8 @@ class MenuManager:
             text = f"💰 **مدیریت کیف پول کاربران سایت** (صفحه {page} از {total_pages})\n\nلیست کاربران سایت. روی نام کاربر کلیک کنید تا کیف پولش را مدیریت کنید.\n\n"
             keyboard = []
             
-            for user in users:
-                keyboard.append([InlineKeyboardButton(f"{user['name']} ({user['phone']})", callback_data=f"manage_user_wallet:{user['id']}")])
+            for i, user in enumerate(users, start=(page-1)*per_page + 1):
+                keyboard.append([InlineKeyboardButton(f"{i}. {user['name']} - {user['phone']}", callback_data=f"manage_user_wallet:{user['id']}")])
             
             # Pagination buttons
             pagination_buttons = []

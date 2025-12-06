@@ -306,9 +306,11 @@ class ReservationManager:
             
             if res['other_passengers']:
                 text += "👥 مسافران دیگر:\n"
-                for p in res['other_passengers']:
-                    text += f"  - {p['name']}\n"
-                    text += f"    📋 کد ملی: {p['national_code']}\n"
+                for i, p in enumerate(res['other_passengers'], 1):
+                    passenger_name = p.get('name', f'مسافر {i}')
+                    text += f"  - {passenger_name}\n"
+                    if p.get('national_code'):
+                        text += f"    📋 کد ملی: {p['national_code']}\n"
                     if p.get('phone'):
                         text += f"    📞 تلفن: {p['phone']}\n"
             
