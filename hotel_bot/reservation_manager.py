@@ -60,8 +60,8 @@ class ReservationManager:
                             'national_code': rrp.national_code
                         })
                 
-                res_data['total_half_in'] += rr.half_day_in_charge or 0
-                res_data['total_half_out'] += rr.half_day_out_charge or 0
+                res_data['total_half_in'] += (rr.half_day_in_price or 0) * rr.quantity
+                res_data['total_half_out'] += (rr.half_day_out_price or 0) * rr.quantity
             
             data.append(res_data)
         
