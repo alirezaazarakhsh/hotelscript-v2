@@ -253,70 +253,95 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده گروه را ندارید!")
                 return
-            group_name = data.split(":", 1)[1]
-            await GroupManager.show_group_details(chat_id, context, group_name, groups, message_id=message_id)
+            try:
+                group_name = data.split(":", 1)[1]
+                await GroupManager.show_group_details(chat_id, context, group_name, groups, message_id=message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("view_admin:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده ادمین را ندارید!")
                 return
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.show_admin_details(chat_id, context, admin_id, admins, groups, message_id=message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_admin_details(chat_id, context, admin_id, admins, groups, message_id=message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("edit_group_perms:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز ویرایش گروه را ندارید!")
                 return
-            group_name = data.split(":", 1)[1]
-            context.user_data['editing_group'] = group_name
-            context.user_data['selected_perms'] = groups.get(group_name, set())
-            context.user_data['state'] = 'select_group_permissions'
-            await PermissionManager.show_permissions_selection(chat_id, context, group_name, is_group=True, message_id=message_id, show_desc=True)
+            try:
+                group_name = data.split(":", 1)[1]
+                context.user_data['editing_group'] = group_name
+                context.user_data['selected_perms'] = groups.get(group_name, set())
+                context.user_data['state'] = 'select_group_permissions'
+                await PermissionManager.show_permissions_selection(chat_id, context, group_name, is_group=True, message_id=message_id, show_desc=True)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("rename_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز تغییر نام گروه را ندارید!")
                 return
-            group_name = data.split(":", 1)[1]
-            context.user_data['editing_group'] = group_name
-            context.user_data['state'] = 'waiting_for_new_group_name'
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="لطفاً نام جدید گروه را ارسال کنید.\n\n**توضیح**: نام جدید باید منحصر به فرد باشد.",
-                parse_mode="Markdown"
-            )
+            try:
+                group_name = data.split(":", 1)[1]
+                context.user_data['editing_group'] = group_name
+                context.user_data['state'] = 'waiting_for_new_group_name'
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="لطفاً نام جدید گروه را ارسال کنید.\n\n**توضیح**: نام جدید باید منحصر به فرد باشد.",
+                    parse_mode="Markdown"
+                )
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("delete_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز حذف گروه را ندارید!")
                 return
-            group_name = data.split(":", 1)[1]
-            if group_name in groups:
-                del groups[group_name]
-                AccessManager.save_data(access_data)
-                await query.edit_message_text("✅ گروه با موفقیت حذف شد.")
-            else:
-                await query.edit_message_text("❌ گروه یافت نشد!")
-            await GroupManager.show_manage_groups(chat_id, context, groups)
+            try:
+                group_name = data.split(":", 1)[1]
+                if group_name in groups:
+                    del groups[group_name]
+                    AccessManager.save_data(access_data)
+                    await query.edit_message_text("✅ گروه با موفقیت حذف شد.")
+                else:
+                    await query.edit_message_text("❌ گروه یافت نشد!")
+                await GroupManager.show_manage_groups(chat_id, context, groups)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("delete_admin:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز حذف ادمین را ندارید!")
                 return
-            admin_id = data.split(":", 1)[1]
-            if admin_id in admins:
-                del admins[admin_id]
-                AccessManager.save_data(access_data)
-                await query.edit_message_text("✅ ادمین با موفقیت حذف شد.")
-            else:
-                await query.edit_message_text("❌ ادمین یافت نشد!")
-            await AdminManager.show_manage_admins(chat_id, context, admins)
+            try:
+                admin_id = data.split(":", 1)[1]
+                if admin_id in admins:
+                    del admins[admin_id]
+                    AccessManager.save_data(access_data)
+                    await query.edit_message_text("✅ ادمین با موفقیت حذف شد.")
+                else:
+                    await query.edit_message_text("❌ ادمین یافت نشد!")
+                await AdminManager.show_manage_admins(chat_id, context, admins)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("assign_group_menu:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز اختصاص گروه را ندارید!")
                 return
-            admin_id = data.split(":", 1)[1]
-            await PermissionManager.show_group_selection(chat_id, context, admin_id, groups, message_id=message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await PermissionManager.show_group_selection(chat_id, context, admin_id, groups, message_id=message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("toggle_perm:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز تغییر مجوزها را ندارید!")
                 return
-            _, perm, target_type = data.split(":", 2)
+            try:
+                _, perm, target_type = data.split(":", 2)
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+                return
             if target_type != 'group':
                 return
             selected = context.user_data.get('selected_perms', set())
@@ -331,32 +356,40 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز تأیید مجوزها را ندارید!")
                 return
-            target_type = data.split(":", 1)[1]
-            if target_type != 'group':
-                return
-            selected = context.user_data.get('selected_perms', set())
-            group_name = context.user_data.get('new_group_name') or context.user_data.get('editing_group')
-            if group_name:
-                groups[group_name] = selected
-                AccessManager.save_data(access_data)
-                await query.edit_message_text(
-                    f"✅ {'گروه دسترسی با موفقیت ایجاد شد' if context.user_data.get('new_group_name') else 'مجوزهای گروه با موفقیت ویرایش شد'}."
-                )
-            context.user_data.clear()
-            await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+            try:
+                target_type = data.split(":", 1)[1]
+                if target_type != 'group':
+                    return
+                selected = context.user_data.get('selected_perms', set())
+                group_name = context.user_data.get('new_group_name') or context.user_data.get('editing_group')
+                if group_name:
+                    groups[group_name] = selected
+                    AccessManager.save_data(access_data)
+                    await query.edit_message_text(
+                        f"✅ {'گروه دسترسی با موفقیت ایجاد شد' if context.user_data.get('new_group_name') else 'مجوزهای گروه با موفقیت ویرایش شد'}."
+                    )
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("assign_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز اختصاص گروه را ندارید!")
                 return
-            _, group_name, admin_id = data.split(":")
-            if group_name in groups:
-                admins[str(admin_id)] = group_name
-                AccessManager.save_data(access_data)
-                await query.edit_message_text(f"✅ گروه {group_name} با موفقیت به ادمین ID {admin_id} اختصاص یافت.")
-            else:
-                await query.edit_message_text(f"❌ گروه {group_name} یافت نشد!")
-            context.user_data.clear()
-            await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+            try:
+                _, group_name, admin_id = data.split(":")
+                if group_name in groups:
+                    admins[str(admin_id)] = group_name
+                    AccessManager.save_data(access_data)
+                    await query.edit_message_text(f"✅ گروه {group_name} با موفقیت به ادمین ID {admin_id} اختصاص یافت.")
+                else:
+                    await query.edit_message_text(f"❌ گروه {group_name} یافت نشد!")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+                context.user_data.clear()
+                await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "cancel_perms":
             context.user_data.clear()
             await query.edit_message_text("✅ عملیات با موفقیت لغو شد.")
@@ -429,12 +462,15 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(text=msg, parse_mode="Markdown")
             await ReceiptManager.show_pending_receipts(chat_id, context, message_id)
         elif data.startswith("charge_admin_wallet:"):
-            admin_id = data.split(":", 1)[1]
-            await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await UserWalletManager.prompt_for_admin_wallet_charge(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("view_wallet:"):
             if user_id in SUPER_ADMINS:
-                admin_id = data.split(":", 1)[1]
                 try:
+                    admin_id = data.split(":", 1)[1]
                     wallets = ReceiptManager.load_wallets()
                     balance = wallets.get(str(admin_id), 0)
                     await query.edit_message_text(
@@ -444,6 +480,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data=f"view_admin:{admin_id}")]]),
                         parse_mode="Markdown"
                     )
+                except IndexError:
+                    await query.edit_message_text("❌ داده نامعتبر!")
                 except Exception as e:
                     logger.error(f"Error viewing wallet for admin_id {admin_id}: {str(e)}")
                     await query.edit_message_text(
@@ -461,89 +499,128 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         elif data.startswith("modify_wallet:"):
             if user_id in SUPER_ADMINS:
-                admin_id = data.split(":", 1)[1]
-                context.user_data['state'] = 'waiting_for_wallet_modification'
-                context.user_data['target_admin_id'] = admin_id
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="لطفاً مقدار تغییر موجودی (مثبت برای افزایش، منفی برای کاهش) را به تومان وارد کنید.\n\n**مثال**: 500000 برای افزایش 500,000 تومان یا -500000 برای کاهش 500,000 تومان.",
-                    parse_mode="Markdown"
-                )
+                try:
+                    admin_id = data.split(":", 1)[1]
+                    context.user_data['state'] = 'waiting_for_wallet_modification'
+                    context.user_data['target_admin_id'] = admin_id
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="لطفاً مقدار تغییر موجودی (مثبت برای افزایش، منفی برای کاهش) را به تومان وارد کنید.\n\n**مثال**: 500000 برای افزایش 500,000 تومان یا -500000 برای کاهش 500,000 تومان.",
+                        parse_mode="Markdown"
+                    )
+                except IndexError:
+                    await query.edit_message_text("❌ داده نامعتبر!")
             else:
                 await query.edit_message_text("❌ شما مجوز دسترسی ندارید!", parse_mode="Markdown")
         elif data.startswith("wallet_page:"):
-            parts = data.split(":", 2)
-            page = int(parts[1])
-            search_query = parts[2] if len(parts) > 2 and parts[2] else None
-            await MenuManager.show_manage_wallet_menu(query, user_id, context, page, search_query)
+            try:
+                parts = data.split(":", 2)
+                page = int(parts[1])
+                search_query = parts[2] if len(parts) > 2 and parts[2] else None
+                await MenuManager.show_manage_wallet_menu(query, user_id, context, page, search_query)
+            except (ValueError, IndexError):
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "manage_wallet":
             await MenuManager.show_manage_wallet_menu(query, user_id, context)
         elif data == "search_wallet_users":
             await MenuManager.search_wallet_users(user_id, context)
         elif data.startswith("points_page:"):
-            page = int(data.split(":", 1)[1])
-            await MenuManager.show_manage_points_menu(query, user_id, context, page)
+            try:
+                page = int(data.split(":", 1)[1])
+                await MenuManager.show_manage_points_menu(query, user_id, context, page)
+            except (ValueError, IndexError):
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "manage_points":
             await MenuManager.show_points_main_menu(query, user_id, context)
         elif data == "view_points_users":
             await MenuManager.show_manage_points_menu(query, user_id, context)
         elif data.startswith("manage_user_wallet:"):
-            user_target_id = data.split(":", 1)[1]
-            await WalletManager.show_user_wallet_management(query, user_id, context, user_target_id)
+            try:
+                user_target_id = data.split(":", 1)[1]
+                await WalletManager.show_user_wallet_management(query, user_id, context, user_target_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("manage_user_points:"):
-            user_target_id = data.split(":", 1)[1]
-            await PointsManager.show_user_points_management(query, user_id, context, user_target_id)
+            try:
+                user_target_id = data.split(":", 1)[1]
+                await PointsManager.show_user_points_management(query, user_id, context, user_target_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("charge_wallet:"):
-            phone = data.split(":", 1)[1]
-            context.user_data['wallet_phone'] = phone
-            context.user_data['state'] = 'waiting_for_wallet_amount'
-            await query.edit_message_text(
-                "💰 مبلغ افزایش موجودی را به تومان وارد کنید (حداقل 1,000 تومان):",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="go_back")]]),
-                parse_mode="Markdown"
-            )
+            try:
+                phone = data.split(":", 1)[1]
+                context.user_data['wallet_phone'] = phone
+                context.user_data['state'] = 'waiting_for_wallet_amount'
+                await query.edit_message_text(
+                    "💰 مبلغ افزایش موجودی را به تومان وارد کنید (حداقل 1,000 تومان):",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="go_back")]]),
+                    parse_mode="Markdown"
+                )
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "edit_profile":
             await MenuManager.show_profile_edit_menu(query, user_id, context)
         elif data.startswith("edit_profile_field:"):
-            _, field, target_id = data.split(":")
-            context.user_data['state'] = f'waiting_for_{field}'
-            context.user_data['target_id'] = target_id
+            try:
+                _, field, target_id = data.split(":")
+                context.user_data['state'] = f'waiting_for_{field}'
+                context.user_data['target_id'] = target_id
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
             await query.edit_message_text(
                 f"لطفاً {field.replace('_', ' ')} خود را وارد کنید (اختیاری).",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="go_back")]]),
                 parse_mode="Markdown"
             )
         elif data.startswith("edit_admin_profile:"):
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.show_edit_admin_profile(chat_id, context, admin_id, message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_edit_admin_profile(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("edit_admin_profile_field:"):
-            _, field, admin_id = data.split(":")
-            context.user_data['state'] = f'waiting_for_{field}'
-            context.user_data['target_id'] = admin_id
+            try:
+                _, field, admin_id = data.split(":")
+                context.user_data['state'] = f'waiting_for_{field}'
+                context.user_data['target_id'] = admin_id
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
             await query.edit_message_text(
                 f"لطفاً {field.replace('_', ' ')} ادمین {admin_id} را وارد کنید (اختیاری).",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data=f"view_admin:{admin_id}")]]),
                 parse_mode="Markdown"
             )
         elif data.startswith("subscription_renewal:"):
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.show_subscription_renewal(chat_id, context, admin_id, message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_subscription_renewal(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("view_subscription:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده پروفایل اشتراک را ندارید!")
                 return
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.show_subscription_profile(chat_id, context, admin_id, message_id=message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_subscription_profile(chat_id, context, admin_id, message_id=message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "cancel_subscription_setup":
             context.user_data.pop('setting_subscription_for', None)
             context.user_data.pop('subscription_step', None)
             await query.edit_message_text("❌ تنظیم اشتراک لغو شد.")
         elif data.startswith("renew_monthly:"):
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "monthly")
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "monthly")
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("renew_yearly:"):
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "yearly")
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "yearly")
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "insufficient_balance":
             await query.edit_message_text(
                 "❌ **موجودی کافی نیست**\n\nبرای تمدید اشتراک، ابتدا کیف پول خود را شارژ کنید.",
@@ -557,19 +634,19 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == "manage_subscriptions":
             await AdminManager.show_subscription_management(chat_id, context, message_id)
         elif data.startswith("package_details:"):
-            package_id = data.split(":", 1)[1]
-            await AdminManager.show_package_details(chat_id, context, package_id, message_id)
+            try:
+                package_id = data.split(":", 1)[1]
+                await AdminManager.show_package_details(chat_id, context, package_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "create_new_package":
             await AdminManager.create_new_package(chat_id, context, message_id)
-        elif data.startswith("add_perm:"):
-            perm = data.split(":", 1)[1]
-            await AdminManager.manage_package_permissions(chat_id, context, 'add', perm, message_id)
-        elif data.startswith("remove_perm:"):
-            perm = data.split(":", 1)[1]
-            await AdminManager.manage_package_permissions(chat_id, context, 'remove', perm, message_id)
-        elif data.startswith("toggle_perm:"):
-            perm = data.split(":", 1)[1]
-            await AdminManager.manage_package_permissions(chat_id, context, 'toggle', perm, message_id)
+        elif data.startswith("select_package_group:"):
+            try:
+                group_name = data.split(":", 1)[1]
+                await AdminManager.select_package_group(chat_id, context, group_name, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "finish_package_creation":
             await AdminManager.finish_package_creation(chat_id, context)
         elif data == "cancel_create_package":
@@ -577,19 +654,31 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("❌ ایجاد پکیج لغو شد.")
             await AdminManager.show_subscription_management(chat_id, context)
         elif data.startswith("assign_package:"):
-            package_id = data.split(":", 1)[1]
-            await AdminManager.assign_package_to_admin(chat_id, context, package_id, message_id)
+            try:
+                package_id = data.split(":", 1)[1]
+                await AdminManager.assign_package_to_admin(chat_id, context, package_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("confirm_assign:"):
-            _, package_id, admin_id = data.split(":")
-            await AdminManager.confirm_package_assignment(chat_id, context, package_id, admin_id, message_id)
+            try:
+                _, package_id, admin_id = data.split(":")
+                await AdminManager.confirm_package_assignment(chat_id, context, package_id, admin_id, message_id)
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "view_subscription_status":
             await AdminManager.view_subscription_status(chat_id, context, message_id)
         elif data.startswith("upgrade_package:"):
-            admin_id = data.split(":", 1)[1]
-            await AdminManager.upgrade_admin_package(chat_id, context, admin_id, message_id)
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.upgrade_admin_package(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("confirm_upgrade:"):
-            _, admin_id, new_package_id = data.split(":")
-            await AdminManager.confirm_package_upgrade(chat_id, context, admin_id, new_package_id, message_id)
+            try:
+                _, admin_id, new_package_id = data.split(":")
+                await AdminManager.confirm_package_upgrade(chat_id, context, admin_id, new_package_id, message_id)
+            except ValueError:
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "my_subscription_status":
             await AdminManager.show_user_subscription_status(chat_id, context, message_id)
         elif data == "renew_subscription":

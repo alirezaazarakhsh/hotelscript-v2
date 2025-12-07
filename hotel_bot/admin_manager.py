@@ -422,7 +422,9 @@ class AdminManager:
                 keyboard = []
                 row = []
                 for package_id, package in packages.items():
-                    text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان\n"
+                    package_group = package.get('group', 'نامشخص')
+                    group_count = len(access_data.get('groups', {}).get(package_group, set())) if package_group in access_data.get('groups', {}) else 0
+                    text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان (گروه: {package_group}, {group_count} مجوز)\n"
                     row.append(InlineKeyboardButton(package.get('name', package_id), callback_data=f"package_details:{package_id}"))
                     if len(row) == 2:
                         keyboard.append(row)
@@ -477,22 +479,28 @@ class AdminManager:
                 return
 
             package = packages[package_id]
-            permissions = package.get('permissions', [])
+            package_group = package.get('group')
             
             text = f"📋 **پکیج: {package.get('name', package_id)}**\n\n"
             text += f"💰 **قیمت**: {package.get('price', 0):,} تومان\n"
             text += f"⏱️ **مدت**: {package.get('duration_days', 30)} روز\n"
+            text += f"👥 **گروه دسترسی**: {package_group or 'نامشخص'}\n"
             text += f"📝 **توضیحات**: {package.get('description', 'ندارد')}\n\n"
             
-            if permissions:
-                text += "**مجوزهای پکیج**:\n"
-                for perm in permissions:
-                    if perm in PERM_DISPLAY:
-                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
-                    else:
-                        text += f"✅ {perm}\n"
+            # نمایش دسترسی‌های گروه
+            if package_group and package_group in access_data.get('groups', {}):
+                group_permissions = access_data['groups'][package_group]
+                if group_permissions:
+                    text += "**مجوزهای گروه**:\n"
+                    for perm in group_permissions:
+                        if perm in PERM_DISPLAY:
+                            text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+                        else:
+                            text += f"✅ {perm}\n"
+                else:
+                    text += "❌ گروه هیچ مجوزی ندارد.\n"
             else:
-                text += "❌ هیچ مجوزی اختصاص نیافته.\n"
+                text += "❌ گروه دسترسی یافت نشد.\n"
             
             text += "\n**توضیح**: می‌توانید این پکیج را ویرایش، حذف یا به ادمین‌ها اختصاص دهید."
 
@@ -653,28 +661,35 @@ class AdminManager:
 
             elif step == 'description':
                 package_data['data']['description'] = user_input.strip() if user_input.strip() else ""
-                package_data['step'] = 'permissions'
+                package_data['step'] = 'group_selection'
                 
-                # نمایش لیست مجوزها برای انتخاب
-                text = "5️⃣ مجوزهای پکیج را انتخاب کنید:\n\n"
-                text += "**مجوزهای موجود**:\n"
+                # نمایش لیست گروه‌های دسترسی برای انتخاب
+                access_data = AccessManager.load_data()
+                groups = access_data.get('groups', {})
+                
+                if not groups:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ هیچ گروه دسترسی‌ای وجود ندارد. لطفاً ابتدا گروه‌های دسترسی را ایجاد کنید.",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="cancel_create_package")]])
+                    )
+                    return True
+                
+                text = "5️⃣ گروه دسترسی پکیج را انتخاب کنید:\n\n"
+                text += "**گروه‌های دسترسی موجود**:\n"
                 
                 keyboard = []
-                for perm_key, perm_info in PERM_DISPLAY.items():
-                    text += f"• {perm_info['label']}: {perm_info['desc']}\n"
+                for group_name, permissions in groups.items():
+                    perm_count = len(permissions) if isinstance(permissions, set) else 0
+                    text += f"• {group_name}: {perm_count} مجوز\n"
                     keyboard.append([
                         InlineKeyboardButton(
-                            f"✅ {perm_info['label']}", 
-                            callback_data=f"add_perm:{perm_key}"
-                        ),
-                        InlineKeyboardButton(
-                            f"❌ حذف {perm_info['label']}", 
-                            callback_data=f"remove_perm:{perm_key}"
+                            f"انتخاب {group_name}", 
+                            callback_data=f"select_package_group:{group_name}"
                         )
                     ])
                 
                 keyboard.append([
-                    InlineKeyboardButton("✅ تکمیل پکیج", callback_data="finish_package_creation"),
                     InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")
                 ])
                 
@@ -696,6 +711,39 @@ class AdminManager:
             return False
 
     @staticmethod
+    async def select_package_group(chat_id, context, group_name, message_id=None):
+        try:
+            if 'creating_package' not in context.user_data:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ اطلاعات ایجاد پکیج یافت نشد!"
+                )
+                return
+
+            # بررسی وجود گروه
+            access_data = AccessManager.load_data()
+            groups = access_data.get('groups', {})
+            if group_name not in groups:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ گروه دسترسی یافت نشد!"
+                )
+                return
+
+            # ذخیره گروه انتخاب شده
+            context.user_data['creating_package']['data']['group'] = group_name
+            
+            # تکمیل ایجاد پکیج
+            await AdminManager.finish_package_creation(chat_id, context)
+            
+        except Exception as e:
+            logger.error(f"Error in select_package_group: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در انتخاب گروه: {str(e)}"
+            )
+
+    @staticmethod
     async def finish_package_creation(chat_id, context):
         try:
             if 'creating_package' not in context.user_data:
@@ -706,7 +754,14 @@ class AdminManager:
                 return
 
             package_data = context.user_data['creating_package']['data']
-            permissions = package_data.get('permissions', [])
+            group_name = package_data.get('group')
+
+            if not group_name:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ گروه دسترسی انتخاب نشده!"
+                )
+                return
 
             # تولید ID منحصر به فرد برای پکیج
             package_id = f"package_{int(time.time())}_{chat_id}"
@@ -721,7 +776,7 @@ class AdminManager:
                 'price': package_data['price'],
                 'duration_days': package_data['duration_days'],
                 'description': package_data.get('description', ''),
-                'permissions': permissions,
+                'group': group_name,
                 'created_by': context.user_data.get('user_id', chat_id),
                 'created_at': datetime.now().isoformat(),
                 'is_active': True
@@ -732,11 +787,16 @@ class AdminManager:
             # پاک کردن داده‌های موقت
             del context.user_data['creating_package']
 
+            # دریافت اطلاعات گروه
+            groups = access_data.get('groups', {})
+            group_permissions = groups.get(group_name, set())
+            perm_count = len(group_permissions) if isinstance(group_permissions, set) else 0
+
             text = f"✅ **پکیج '{package_data['name']}' با موفقیت ایجاد شد!**\n\n"
             text += f"📋 **شناسه پکیج**: {package_id}\n"
             text += f"💰 **قیمت**: {package_data['price']:,} تومان\n"
             text += f"⏱️ **مدت**: {package_data['duration_days']} روز\n"
-            text += f"🔐 **مجوزها**: {len(permissions)} مورد\n\n"
+            text += f"👥 **گروه دسترسی**: {group_name} ({perm_count} مجوز)\n\n"
             text += "اکنون می‌توانید این پکیج را به ادمین‌ها اختصاص دهید."
 
             keyboard = [
@@ -758,77 +818,6 @@ class AdminManager:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در تکمیل ایجاد پکیج: {str(e)}"
-            )
-
-    @staticmethod
-    async def manage_package_permissions(chat_id, context, action, permission, message_id):
-        try:
-            if 'creating_package' not in context.user_data:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="❌ اطلاعات ایجاد پکیج یافت نشد!"
-                )
-                return
-
-            package_data = context.user_data['creating_package']['data']
-            if 'permissions' not in package_data:
-                package_data['permissions'] = []
-
-            if action == 'add':
-                if permission not in package_data['permissions']:
-                    package_data['permissions'].append(permission)
-                    status = "✅ اضافه شد"
-                else:
-                    status = "⚠️ قبلاً اضافه شده"
-            elif action == 'remove':
-                if permission in package_data['permissions']:
-                    package_data['permissions'].remove(permission)
-                    status = "❌ حذف شد"
-                else:
-                    status = "⚠️ وجود ندارد"
-
-            # به‌روزرسانی پیام با وضعیت جدید
-            text = "5️⃣ مجوزهای پکیج را انتخاب کنید:\n\n"
-            text += f"**وضعیت {PERM_DISPLAY.get(permission, {}).get('label', permission)}**: {status}\n\n"
-            text += "**مجوزهای انتخاب شده فعلی**:\n"
-            
-            if package_data['permissions']:
-                for perm in package_data['permissions']:
-                    if perm in PERM_DISPLAY:
-                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
-            else:
-                text += "❌ هیچ مجوزی انتخاب نشده.\n"
-            
-            text += "\n**مجوزهای موجود**:\n"
-            
-            keyboard = []
-            for perm_key, perm_info in PERM_DISPLAY.items():
-                current_status = "✅" if perm_key in package_data['permissions'] else "⬜"
-                keyboard.append([
-                    InlineKeyboardButton(
-                        f"{current_status} {perm_info['label']}", 
-                        callback_data=f"toggle_perm:{perm_key}"
-                    )
-                ])
-            
-            keyboard.append([
-                InlineKeyboardButton("✅ تکمیل پکیج", callback_data="finish_package_creation"),
-                InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")
-            ])
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text,
-                reply_markup=reply_markup
-            )
-
-        except Exception as e:
-            logger.error(f"Error in manage_package_permissions: {str(e)}", exc_info=True)
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ خطا در مدیریت مجوزها: {str(e)}"
             )
 
     @staticmethod
@@ -951,16 +940,23 @@ class AdminManager:
             admin_data['subscription_assigned_by'] = user_id
             admin_data['subscription_assigned_at'] = datetime.now().isoformat()
 
-            # به‌روزرسانی مجوزهای ادمین بر اساس پکیج
-            admin_data['permissions'] = package.get('permissions', [])
+            # دسترسی‌ها اکنون از گروه پکیج گرفته می‌شود، نیازی به کپی نیست
+            # admin_data['permissions'] = package.get('permissions', [])
 
             AccessManager.save_data(access_data)
+
+            # دریافت اطلاعات گروه پکیج
+            package_group = package.get('group')
+            groups = access_data.get('groups', {})
+            group_permissions = groups.get(package_group, set()) if package_group else set()
+            perm_count = len(group_permissions) if isinstance(group_permissions, set) else 0
 
             text = f"✅ **پکیج با موفقیت اختصاص یافت!**\n\n"
             text += f"👤 **ادمین**: {admin_data.get('name', f'ادمین {admin_id}')}\n"
             text += f"📦 **پکیج**: {package.get('name', package_id)}\n"
+            text += f"👥 **گروه دسترسی**: {package_group or 'نامشخص'}\n"
             text += f"⏰ **تاریخ انقضا**: {expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
-            text += f"🔐 **مجوزها**: {len(package.get('permissions', []))} مورد\n\n"
+            text += f"🔐 **مجوزها**: {perm_count} مورد\n\n"
             text += "ادمین اکنون می‌تواند از امکانات پکیج استفاده کند."
 
             keyboard = [
@@ -1224,8 +1220,10 @@ class AdminManager:
             admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
             admin_data['previous_package'] = old_package_id
 
-            # بروزرسانی مجوزها
-            admin_data['permissions'] = new_package.get('permissions', [])
+            # دسترسی‌ها اکنون از گروه پکیج گرفته می‌شود
+            # admin_data['permissions'] = new_package.get('permissions', [])
+
+            AccessManager.save_data(access_data)
 
             AccessManager.save_data(access_data)
 
@@ -1340,12 +1338,13 @@ class AdminManager:
                 package_name = package.get('name', 'نامشخص')
                 price = package.get('price', 0)
                 duration = package.get('duration_days', 30)
-                permissions = package.get('permissions', [])
+                package_group = package.get('group')
                 
                 text = f"📊 **وضعیت اشتراک شما**\n\n"
                 text += f"📦 **پکیج**: {package_name}\n"
                 text += f"💰 **قیمت**: {price:,} تومان\n"
                 text += f"⏱️ **مدت**: {duration} روز\n"
+                text += f"👥 **گروه دسترسی**: {package_group or 'نامشخص'}\n"
                 
                 if is_active:
                     text += f"🟢 **وضعیت**: فعال\n"
@@ -1354,12 +1353,19 @@ class AdminManager:
                     text += f"🔴 **وضعیت**: منقضی\n"
                     text += f"⚠️ **دسترسی محدود**: فقط کیف پول فعال است\n"
                 
-                text += f"\n🔐 **مجوزهای شما** ({len(permissions)} مورد):\n"
-                for perm in permissions:
-                    if perm in PERM_DISPLAY:
-                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
-                    else:
-                        text += f"✅ {perm}\n"
+                # نمایش دسترسی‌های گروه
+                access_data = AccessManager.load_data()
+                groups = access_data.get('groups', {})
+                if package_group and package_group in groups:
+                    group_permissions = groups[package_group]
+                    text += f"\n🔐 **مجوزهای شما** ({len(group_permissions)} مورد):\n"
+                    for perm in group_permissions:
+                        if perm in PERM_DISPLAY:
+                            text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+                        else:
+                            text += f"✅ {perm}\n"
+                else:
+                    text += f"\n❌ گروه دسترسی یافت نشد.\n"
                 
                 if is_active:
                     keyboard = [
@@ -1812,7 +1818,10 @@ class AdminManager:
             admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
             admin_data['subscription_upgraded_by'] = user_id
             admin_data['previous_package'] = old_package_id
-            admin_data['permissions'] = new_package.get('permissions', [])
+            # دسترسی‌ها اکنون از گروه پکیج گرفته می‌شود
+            # admin_data['permissions'] = new_package.get('permissions', [])
+
+            AccessManager.save_data(access_data)
 
             AccessManager.save_data(access_data)
 
