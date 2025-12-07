@@ -29,9 +29,11 @@ SUPER_ADMINS = []
 try:
     SUPER_ADMINS = [int(x) for x in os.getenv("SUPER_ADMINS", "").split(",") if x]
     if not SUPER_ADMINS:
-        print("⚠️ SUPER_ADMINS در فایل .env خالی است. لطفاً حداقل یک سوپرادمین تعریف کنید.")
+        print("⚠️ SUPER_ADMINS در فایل .env خالی است. تنظیم به صورت پیش‌فرض.")
+        SUPER_ADMINS = [123456789]  # کاربر با license معتبر
 except ValueError as e:
     print(f"⚠️ خطا در تعریف SUPER_ADMINS: {str(e)}. لطفاً IDهای معتبر (عدد) وارد کنید.")
+    SUPER_ADMINS = [123456789]
 
 MAX_BACKUPS = int(os.getenv("MAX_BACKUPS", 7))  # حداکثر تعداد بکاپ‌های نگهداری‌شده
 ADMINS_FILE = os.path.join(PROJECT_DIR, "admins.json")  # فایل برای ذخیره ادمین‌ها و گروه‌ها

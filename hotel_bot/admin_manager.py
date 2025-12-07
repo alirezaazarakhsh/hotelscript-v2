@@ -4,6 +4,7 @@ from hotel_bot.access_manager import AccessManager
 from hotel_bot.menu_manager import MenuManager
 from hotel_bot.receipt_manager import ReceiptManager
 import logging
+import time
 
 
 # تنظیم لاگ برای دیباگ
@@ -23,7 +24,6 @@ class AdminManager:
                 return
 
             if not admins:
-                import time
                 text = f"📋 **مدیریت ادمین‌ها**\n\nهیچ ادمینی وجود ندارد.\n\n**توضیح**: می‌توانید ادمین‌های جدید اضافه کنید یا گروه‌های دسترسی را مدیریت کنید.\n\n_آخرین بروزرسانی: {int(time.time())}_"
                 keyboard = [
                     [InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")],
@@ -409,7 +409,6 @@ class AdminManager:
             packages = access_data.get('subscription_packages', {})
             
             if not packages:
-                import time
                 text = f"📦 **مدیریت پکیج‌های اشتراک**\n\nهیچ پکیج اشتراکی وجود ندارد.\n\n**توضیح**: پکیج‌های اشتراک شامل سطوح مختلف دسترسی و خدمات هستند.\n\n_آخرین بروزرسانی: {int(time.time())}_"
                 keyboard = [
                     [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_new_package")],
@@ -1323,7 +1322,6 @@ class AdminManager:
             is_active, package, days_left = AdminManager.check_subscription_status(user_id)
             
             if not package:
-                import time
                 text = f"📊 **وضعیت اشتراک شما**\n\n"
                 text += "❌ **شما هیچ پکیج اشتراکی ندارید**\n\n"
                 text += f"برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید.\n\n_آخرین بروزرسانی: {int(time.time())}_"
