@@ -23,7 +23,8 @@ class AdminManager:
                 return
 
             if not admins:
-                text = "📋 **مدیریت ادمین‌ها**\n\nهیچ ادمینی وجود ندارد.\n\n**توضیح**: می‌توانید ادمین‌های جدید اضافه کنید یا گروه‌های دسترسی را مدیریت کنید."
+                import time
+                text = f"📋 **مدیریت ادمین‌ها**\n\nهیچ ادمینی وجود ندارد.\n\n**توضیح**: می‌توانید ادمین‌های جدید اضافه کنید یا گروه‌های دسترسی را مدیریت کنید.\n\n_آخرین بروزرسانی: {int(time.time())}_"
                 keyboard = [
                     [InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")],
                     [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
@@ -408,7 +409,8 @@ class AdminManager:
             packages = access_data.get('subscription_packages', {})
             
             if not packages:
-                text = "📦 **مدیریت پکیج‌های اشتراک**\n\nهیچ پکیج اشتراکی وجود ندارد.\n\n**توضیح**: پکیج‌های اشتراک شامل سطوح مختلف دسترسی و خدمات هستند."
+                import time
+                text = f"📦 **مدیریت پکیج‌های اشتراک**\n\nهیچ پکیج اشتراکی وجود ندارد.\n\n**توضیح**: پکیج‌های اشتراک شامل سطوح مختلف دسترسی و خدمات هستند.\n\n_آخرین بروزرسانی: {int(time.time())}_"
                 keyboard = [
                     [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_new_package")],
                     [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
@@ -1321,9 +1323,10 @@ class AdminManager:
             is_active, package, days_left = AdminManager.check_subscription_status(user_id)
             
             if not package:
-                text = "📊 **وضعیت اشتراک شما**\n\n"
+                import time
+                text = f"📊 **وضعیت اشتراک شما**\n\n"
                 text += "❌ **شما هیچ پکیج اشتراکی ندارید**\n\n"
-                text += "برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید."
+                text += f"برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید.\n\n_آخرین بروزرسانی: {int(time.time())}_"
                 
                 keyboard = [
                     [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],

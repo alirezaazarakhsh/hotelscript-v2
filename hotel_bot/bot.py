@@ -614,9 +614,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error in button handler: {str(e)}")
-        await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
+        try:
+            await query.edit_message_text(f"❌ خطایی رخ داد: {str(e)}")
+        except Exception:
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطایی رخ داد: {str(e)}")
         context.user_data.clear()
-        await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
+        await MenuManager.show_main_menu(user_id, context)
 
 # Handler for text and file messages
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
