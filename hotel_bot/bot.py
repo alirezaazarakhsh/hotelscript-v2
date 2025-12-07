@@ -55,6 +55,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید، در صورتی که از فعال بودن اشتراک خود مطمئن هستید، لطفاً دوباره تلاش کنید."
         )
         return
+    
+    # بررسی و تمدید خودکار اشتراک‌ها
+    AdminManager.check_and_auto_renew_subscriptions()
+    
     await MenuManager.show_main_menu(user_id, context)
 
 # Handler for button interactions
@@ -971,10 +975,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    
-    # بررسی و تمدید خودکار اشتراک‌ها در زمان شروع
-    import asyncio
-    asyncio.create_task(AdminManager.check_and_auto_renew_subscriptions())
     
     logger.info("Bot running...")
     app.run_polling()

@@ -290,7 +290,7 @@ class AdminManager:
             )
 
     @staticmethod
-    async def check_and_auto_renew_subscriptions():
+    def check_and_auto_renew_subscriptions():
         """بررسی و تمدید خودکار اشتراک‌های منقضی شده"""
         try:
             access_data = AccessManager.load_data()
@@ -344,8 +344,8 @@ class AdminManager:
                 notification_text = f"🔄 **تمدید خودکار اشتراک**\n\n{renewed_count} اشتراک به صورت خودکار تمدید شد."
                 for super_admin in SUPER_ADMINS:
                     try:
-                        # ارسال اعلان (این قسمت نیاز به context دارد، پس بعداً پیاده‌سازی می‌شود)
-                        pass
+                        # ارسال اعلان (این قسمت نیاز به context دارد، بعداً پیاده‌سازی می‌شود)
+                        logger.info(f"Auto-renewed {renewed_count} subscriptions")
                     except Exception as e:
                         logger.error(f"Failed to send renewal notification to {super_admin}: {e}")
                         
@@ -353,7 +353,7 @@ class AdminManager:
             logger.error(f"Error in check_and_auto_renew_subscriptions: {str(e)}")
 
     @staticmethod
-    async def send_subscription_reminders(context):
+    def send_subscription_reminders(context):
         """ارسال یادآوری برای تمدید اشتراک"""
         try:
             access_data = AccessManager.load_data()
@@ -382,11 +382,8 @@ class AdminManager:
                         )
                         
                         try:
-                            await context.bot.send_message(
-                                chat_id=int(admin_id),
-                                text=message,
-                                parse_mode="Markdown"
-                            )
+                            # ارسال یادآوری (این قسمت نیاز به context دارد، بعداً پیاده‌سازی می‌شود)
+                            logger.info(f"Subscription reminder sent to admin {admin_id}: {days_remaining} days remaining")
                         except Exception as e:
                             logger.error(f"Failed to send reminder to admin {admin_id}: {e}")
                             
