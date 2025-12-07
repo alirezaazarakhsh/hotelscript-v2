@@ -4,6 +4,7 @@ from hotel_bot.access_manager import AccessManager
 from hotel_bot.receipt_manager import ReceiptManager
 import logging
 import time
+from datetime import datetime
 
 
 # تنظیم لاگ برای دیباگ
@@ -660,7 +661,7 @@ class AdminManager:
                 
                 keyboard = []
                 for perm_key, perm_info in PERM_DISPLAY.items():
-                    text += f"• {perm_info['label']}: {perm_info['description']}\n"
+                    text += f"• {perm_info['label']}: {perm_info['desc']}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"✅ {perm_info['label']}", 
@@ -1324,13 +1325,16 @@ class AdminManager:
             is_active, package, days_left = AdminManager.check_subscription_status(user_id)
             
             if not package:
+                from datetime import datetime
                 text = f"📊 **وضعیت اشتراک شما**\n\n"
                 text += "❌ **شما هیچ پکیج اشتراکی ندارید**\n\n"
-                text += f"برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید.\n\n_آخرین بروزرسانی: {int(time.time())}_"
+                text += f"برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید.\n\n"
+                text += f"_آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"
                 
                 keyboard = [
                     [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
-                    [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")]
+                    [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")],
+                    [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="go_back")]
                 ]
             else:
                 package_name = package.get('name', 'نامشخص')
