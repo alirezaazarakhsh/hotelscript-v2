@@ -39,6 +39,8 @@ class MenuManager:
                 buttons.append(InlineKeyboardButton("💰 مدیریت کیف پول کاربران سایت", callback_data="manage_wallet"))
             if AccessManager.is_allowed(user_id, 'manage_points'):
                 buttons.append(InlineKeyboardButton("💎 مدیریت امتیازات باشگاه مشتریان", callback_data="manage_points"))
+            if AccessManager.is_allowed(user_id, 'view_balance'):
+                buttons.append(InlineKeyboardButton("📊 وضعیت اشتراک", callback_data="my_subscription_status"))
             
             # Arrange buttons in rows of 2
             for i in range(0, len(buttons), 2):
@@ -142,13 +144,15 @@ class MenuManager:
     @staticmethod
     async def show_control_panel(query, user_id, context):
         try:
-            text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها، گروه‌های دسترسی و رسیدهای پرداخت را مدیریت کنید."
+            text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها، گروه‌های دسترسی، رسیدهای پرداخت و اشتراک‌ها را مدیریت کنید."
             keyboard = [[
                 InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin"),
                 InlineKeyboardButton("👥 ایجاد گروه دسترسی", callback_data="create_group")
             ],[
                 InlineKeyboardButton("🛠 مدیریت گروه‌های دسترسی", callback_data="manage_groups"),
                 InlineKeyboardButton("👤 مدیریت ادمین‌ها", callback_data="manage_admins")
+            ],[
+                InlineKeyboardButton("📦 مدیریت اشتراک‌ها", callback_data="manage_subscriptions")
             ]]
             if user_id in SUPER_ADMINS:
                 keyboard.append([InlineKeyboardButton("📜 لیست رسیدهای در حال انتظار", callback_data="pending_receipts")])

@@ -43,6 +43,7 @@ PERMISSIONS = [
     'backup_info',      # مشاهده اطلاعات بکاپ
     'support',          # دسترسی به پشتیبانی
     'manage_admins',    # مدیریت ادمین‌ها و گروه‌ها
+    'manage_subscriptions', # مدیریت اشتراک‌ها و پکیج‌ها
     'wallet_charge',    # شارژ کیف پول
     'view_balance',     # مشاهده موجودی کیف پول
     'manage_wallet',    # مدیریت کیف پول دیگران (برای سوپرادمین‌ها)
@@ -50,6 +51,9 @@ PERMISSIONS = [
     'edit_profile',     # ویرایش پروفایل کاربر
     'view_reservations', # مشاهده لیست رزروها
     'approve_reservations', # تایید رزروها
+    'view_reports',     # مشاهده گزارش‌ها و آمار
+    'manage_content',   # مدیریت محتوا (وبلاگ، اخبار)
+    'send_notifications', # ارسال اعلان‌ها
 ]
 
 # نمایش فارسی مجوزها با توضیحات
@@ -73,6 +77,10 @@ PERM_DISPLAY = {
     'manage_admins': {
         'label': 'مدیریت ادمین‌ها',
         'desc': 'مدیریت کاربران ادمین و گروه‌های دسترسی. فقط برای سوپرادمین‌ها.'
+    },
+    'manage_subscriptions': {
+        'label': 'مدیریت اشتراک‌ها',
+        'desc': 'مدیریت پکیج‌های اشتراک، قیمت‌ها و تخصیص به ادمین‌ها.'
     },
     'wallet_charge': {
         'label': 'شارژ کیف پول',
@@ -101,5 +109,17 @@ PERM_DISPLAY = {
     'approve_reservations': {
         'label': 'تایید رزروها',
         'desc': 'اجازه تایید یا رد رزروهای pending از طریق ربات.'
+    },
+    'view_reports': {
+        'label': 'مشاهده گزارش‌ها',
+        'desc': 'دسترسی به گزارش‌های آماری و تحلیلی سیستم.'
+    },
+    'manage_content': {
+        'label': 'مدیریت محتوا',
+        'desc': 'مدیریت محتوا شامل وبلاگ، اخبار و صفحات اطلاعاتی.'
+    },
+    'send_notifications': {
+        'label': 'ارسال اعلان‌ها',
+        'desc': 'ارسال اعلان‌های عمومی به کاربران و ادمین‌ها.'
     },
 }

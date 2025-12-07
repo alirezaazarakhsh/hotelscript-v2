@@ -72,30 +72,29 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.debug(f"Received callback data: {query.data}")
 
     if not AccessManager.is_allowed(user_id):
-        # Check if license expired but allow wallet operations
-        str_uid = str(user_id)
-        admin_data = access_data.get('admins', {}).get(str_uid, {})
-        if isinstance(admin_data, str):
-            admin_data = {'group': admin_data}
-        license_expiry = admin_data.get('license_expiry')
-        if license_expiry:
-            from datetime import datetime
-            try:
-                expiry = datetime.fromisoformat(license_expiry)
-                if datetime.now() > expiry:
-                    # License expired, only allow wallet operations
-                    if not (data.startswith("wallet_") or data == "go_back" or data.startswith("payment:") or data.startswith("card_to_card") or data.startswith("send_receipt") or data.startswith("cancel_") or data.startswith("renew_") or data == "subscription_renewal"):
-                        await query.edit_message_text(
-                            "⏰ **مدت زمان دسترسی شما به پایان رسیده است**\n\nشما فقط می‌توانید کیف پول خود را شارژ کنید یا سرویس را تمدید کنید.",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data=f"subscription_renewal:{user_id}")],
-                                [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge")],
-                                [InlineKeyboardButton("بازگشت", callback_data="go_back")]
-                            ])
-                        )
-                        return
-            except ValueError:
-                pass  # Invalid date, deny access
+        # Check if subscription expired but allow wallet operations
+        from hotel_bot.admin_manager import AdminManager
+        is_active, package, days_left = AdminManager.check_subscription_status(user_id)
+        
+        if not is_active:
+            # Subscription expired, only allow wallet operations and subscription management
+            allowed_callbacks = [
+                "wallet_", "go_back", "payment:", "card_to_card", "send_receipt", 
+                "cancel_", "renew_", "subscription_renewal", "my_subscription_status",
+                "upgrade_my_package", "user_upgrade:", "execute_upgrade:"
+            ]
+            
+            if not any(data.startswith(allowed) for allowed in allowed_callbacks):
+                await query.edit_message_text(
+                    "⏰ **اشتراک شما منقضی شده است**\n\nشما فقط می‌توانید کیف پول خود را شارژ کنید یا اشتراک را تمدید/ارتقا دهید.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="renew_subscription")],
+                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_charge")],
+                        [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="support")]
+                    ]),
+                    parse_mode="Markdown"
+                )
+                return
         else:
             await query.edit_message_text(
                 "💢 دسترسی غیرفعال\n\nمتأسفانه شما مجاز به استفاده از خدمات این ربات نیستید."
@@ -555,6 +554,63 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]),
                 parse_mode="Markdown"
             )
+        # Subscription management callbacks
+        elif data == "manage_subscriptions":
+            await AdminManager.show_subscription_management(chat_id, context, message_id)
+        elif data.startswith("package_details:"):
+            package_id = data.split(":", 1)[1]
+            await AdminManager.show_package_details(chat_id, context, package_id, message_id)
+        elif data == "create_new_package":
+            await AdminManager.create_new_package(chat_id, context, message_id)
+        elif data.startswith("add_perm:"):
+            perm = data.split(":", 1)[1]
+            await AdminManager.manage_package_permissions(chat_id, context, 'add', perm, message_id)
+        elif data.startswith("remove_perm:"):
+            perm = data.split(":", 1)[1]
+            await AdminManager.manage_package_permissions(chat_id, context, 'remove', perm, message_id)
+        elif data.startswith("toggle_perm:"):
+            perm = data.split(":", 1)[1]
+            await AdminManager.manage_package_permissions(chat_id, context, 'toggle', perm, message_id)
+        elif data == "finish_package_creation":
+            await AdminManager.finish_package_creation(chat_id, context)
+        elif data == "cancel_create_package":
+            context.user_data.pop('creating_package', None)
+            await query.edit_message_text("❌ ایجاد پکیج لغو شد.")
+            await AdminManager.show_subscription_management(chat_id, context)
+        elif data.startswith("assign_package:"):
+            package_id = data.split(":", 1)[1]
+            await AdminManager.assign_package_to_admin(chat_id, context, package_id, message_id)
+        elif data.startswith("confirm_assign:"):
+            _, package_id, admin_id = data.split(":")
+            await AdminManager.confirm_package_assignment(chat_id, context, package_id, admin_id, message_id)
+        elif data == "view_subscription_status":
+            await AdminManager.view_subscription_status(chat_id, context, message_id)
+        elif data.startswith("upgrade_package:"):
+            admin_id = data.split(":", 1)[1]
+            await AdminManager.upgrade_admin_package(chat_id, context, admin_id, message_id)
+        elif data.startswith("confirm_upgrade:"):
+            _, admin_id, new_package_id = data.split(":")
+            await AdminManager.confirm_package_upgrade(chat_id, context, admin_id, new_package_id, message_id)
+        elif data == "my_subscription_status":
+            await AdminManager.show_user_subscription_status(chat_id, context, message_id)
+        elif data == "renew_subscription":
+            await AdminManager.renew_subscription(chat_id, context, message_id)
+        elif data == "confirm_renewal":
+            await AdminManager.confirm_subscription_renewal(chat_id, context, message_id)
+        elif data == "cancel_renewal":
+            await query.edit_message_text("❌ تمدید اشتراک لغو شد.")
+            await AdminManager.show_user_subscription_status(chat_id, context)
+        elif data == "upgrade_my_package":
+            await AdminManager.upgrade_user_package(chat_id, context, message_id)
+        elif data.startswith("user_upgrade:"):
+            package_id = data.split(":", 1)[1]
+            await AdminManager.confirm_user_package_upgrade(chat_id, context, package_id, message_id)
+        elif data.startswith("execute_upgrade:"):
+            package_id = data.split(":", 1)[1]
+            await AdminManager.execute_user_package_upgrade(chat_id, context, package_id, message_id)
+        elif data == "assign_package_menu":
+            # Show menu for assigning packages to admins
+            await AdminManager.show_subscription_management(chat_id, context, message_id)
 
     except Exception as e:
         logger.error(f"Error in button handler: {str(e)}")
@@ -964,6 +1020,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             search_query = text.strip()
             await MenuManager.process_wallet_search(user_id, context, search_query)
             context.user_data.clear()
+        # Package creation handlers
+        elif 'creating_package' in context.user_data:
+            processed = await AdminManager.process_package_creation(update.message.chat_id, context, text)
+            if not processed:
+                # If not processed by package creation, continue with other handlers
+                pass
+        else:
+            # Default message handling for unrecognized states
+            await update.message.reply_text(
+                "❌ پیام نامعتبر یا وضعیت ناشناخته. لطفاً از منوی اصلی استفاده کنید.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 منوی اصلی", callback_data="go_back")]])
+            )
+
     except Exception as e:
         logger.error(f"Error in handle_message for user {user_id}: {str(e)}")
         await update.message.reply_text(f"❌ خطایی رخ داد: {str(e)}")

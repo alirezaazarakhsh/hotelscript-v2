@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from hotel_bot.config import SUPER_ADMINS, PERM_DISPLAY
+from hotel_bot.config import SUPER_ADMINS, PERMISSIONS, PERM_DISPLAY
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.menu_manager import MenuManager
 from hotel_bot.receipt_manager import ReceiptManager
@@ -392,6 +392,1462 @@ class AdminManager:
                     
         except Exception as e:
             logger.error(f"Error in send_subscription_reminders: {str(e)}")
+
+    @staticmethod
+    async def show_subscription_management(chat_id, context, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مدیریت اشتراک‌ها را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            
+            if not packages:
+                text = "📦 **مدیریت پکیج‌های اشتراک**\n\nهیچ پکیج اشتراکی وجود ندارد.\n\n**توضیح**: پکیج‌های اشتراک شامل سطوح مختلف دسترسی و خدمات هستند."
+                keyboard = [
+                    [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_subscription_package")],
+                    [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
+                ]
+            else:
+                text = "📦 **مدیریت پکیج‌های اشتراک**\n\n**پکیج‌های موجود**:\n"
+                keyboard = []
+                row = []
+                for package_id, package in packages.items():
+                    text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان\n"
+                    row.append(InlineKeyboardButton(package.get('name', package_id), callback_data=f"view_package:{package_id}"))
+                    if len(row) == 2:
+                        keyboard.append(row)
+                        row = []
+                if row:
+                    keyboard.append(row)
+                keyboard.append([InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_subscription_package")])
+                keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in show_subscription_management: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش مدیریت اشتراک‌ها: {str(e)}"
+            )
+
+    @staticmethod
+    async def show_package_details(chat_id, context, package_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده پکیج اشتراک را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            
+            if package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            package = packages[package_id]
+            permissions = package.get('permissions', [])
+            
+            text = f"📋 **پکیج: {package.get('name', package_id)}**\n\n"
+            text += f"💰 **قیمت**: {package.get('price', 0):,} تومان\n"
+            text += f"⏱️ **مدت**: {package.get('duration_days', 30)} روز\n"
+            text += f"📝 **توضیحات**: {package.get('description', 'ندارد')}\n\n"
+            
+            if permissions:
+                text += "**مجوزهای پکیج**:\n"
+                for perm in permissions:
+                    if perm in PERM_DISPLAY:
+                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+                    else:
+                        text += f"✅ {perm}\n"
+            else:
+                text += "❌ هیچ مجوزی اختصاص نیافته.\n"
+            
+            text += "\n**توضیح**: می‌توانید این پکیج را ویرایش، حذف یا به ادمین‌ها اختصاص دهید."
+
+            keyboard = [
+                [InlineKeyboardButton("✏️ ویرایش پکیج", callback_data=f"edit_package:{package_id}")],
+                [InlineKeyboardButton("🗑️ حذف پکیج", callback_data=f"delete_package:{package_id}")],
+                [InlineKeyboardButton("👥 اختصاص به ادمین", callback_data=f"assign_package:{package_id}")],
+                [InlineKeyboardButton("⬆️ ارتقا پکیج", callback_data=f"upgrade_package:{package_id}")],
+                [InlineKeyboardButton("بازگشت به مدیریت اشتراک‌ها", callback_data="manage_subscriptions")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in show_package_details for package {package_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش جزئیات پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def create_new_package(chat_id, context, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز ایجاد پکیج اشتراک را ندارید!"
+                )
+                return
+
+            text = "📦 **ایجاد پکیج اشتراک جدید**\n\n"
+            text += "لطفاً اطلاعات پکیج را مرحله به مرحله وارد کنید:\n\n"
+            text += "1️⃣ ابتدا نام پکیج را ارسال کنید (مثال: پکیج طلایی)"
+
+            context.user_data['creating_package'] = {
+                'step': 'name',
+                'data': {}
+            }
+
+            keyboard = [
+                [InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in create_new_package: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در ایجاد پکیج جدید: {str(e)}"
+            )
+
+    @staticmethod
+    async def process_package_creation(chat_id, context, user_input):
+        try:
+            if 'creating_package' not in context.user_data:
+                return False
+
+            package_data = context.user_data['creating_package']
+            step = package_data['step']
+
+            if step == 'name':
+                if len(user_input.strip()) < 2:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ نام پکیج باید حداقل ۲ کاراکتر باشد. لطفاً دوباره امتحان کنید:"
+                    )
+                    return True
+
+                package_data['data']['name'] = user_input.strip()
+                package_data['step'] = 'price'
+                
+                text = "2️⃣ قیمت پکیج را به تومان وارد کنید (فقط عدد):\n"
+                text += "مثال: 50000"
+                
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text
+                )
+                return True
+
+            elif step == 'price':
+                try:
+                    price = int(user_input.strip())
+                    if price <= 0:
+                        raise ValueError("قیمت باید مثبت باشد")
+                    
+                    package_data['data']['price'] = price
+                    package_data['step'] = 'duration'
+                    
+                    text = "3️⃣ مدت زمان پکیج را به روز وارد کنید:\n"
+                    text += "مثال: 30 (برای یک ماه)"
+                    
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text
+                    )
+                    return True
+                except ValueError:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ قیمت باید یک عدد مثبت باشد. لطفاً دوباره امتحان کنید:"
+                    )
+                    return True
+
+            elif step == 'duration':
+                try:
+                    duration = int(user_input.strip())
+                    if duration <= 0:
+                        raise ValueError("مدت زمان باید مثبت باشد")
+                    
+                    package_data['data']['duration_days'] = duration
+                    package_data['step'] = 'description'
+                    
+                    text = "4️⃣ توضیحات پکیج را وارد کنید (اختیاری):\n"
+                    text += "می‌توانید توضیحات را خالی بگذارید یا توضیحات مفیدی بنویسید."
+                    
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text
+                    )
+                    return True
+                except ValueError:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ مدت زمان باید یک عدد مثبت باشد. لطفاً دوباره امتحان کنید:"
+                    )
+                    return True
+
+            elif step == 'description':
+                package_data['data']['description'] = user_input.strip() if user_input.strip() else ""
+                package_data['step'] = 'permissions'
+                
+                # نمایش لیست مجوزها برای انتخاب
+                text = "5️⃣ مجوزهای پکیج را انتخاب کنید:\n\n"
+                text += "**مجوزهای موجود**:\n"
+                
+                keyboard = []
+                for perm_key, perm_info in PERM_DISPLAY.items():
+                    text += f"• {perm_info['label']}: {perm_info['description']}\n"
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"✅ {perm_info['label']}", 
+                            callback_data=f"add_perm:{perm_key}"
+                        ),
+                        InlineKeyboardButton(
+                            f"❌ حذف {perm_info['label']}", 
+                            callback_data=f"remove_perm:{perm_key}"
+                        )
+                    ])
+                
+                keyboard.append([
+                    InlineKeyboardButton("✅ تکمیل پکیج", callback_data="finish_package_creation"),
+                    InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")
+                ])
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup
+                )
+                return True
+
+            return False
+        except Exception as e:
+            logger.error(f"Error in process_package_creation: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در پردازش ایجاد پکیج: {str(e)}"
+            )
+            return False
+
+    @staticmethod
+    async def finish_package_creation(chat_id, context):
+        try:
+            if 'creating_package' not in context.user_data:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ اطلاعات ایجاد پکیج یافت نشد!"
+                )
+                return
+
+            package_data = context.user_data['creating_package']['data']
+            permissions = package_data.get('permissions', [])
+
+            # تولید ID منحصر به فرد برای پکیج
+            package_id = f"package_{int(time.time())}_{chat_id}"
+
+            # ذخیره پکیج جدید
+            access_data = AccessManager.load_data()
+            if 'subscription_packages' not in access_data:
+                access_data['subscription_packages'] = {}
+            
+            access_data['subscription_packages'][package_id] = {
+                'name': package_data['name'],
+                'price': package_data['price'],
+                'duration_days': package_data['duration_days'],
+                'description': package_data.get('description', ''),
+                'permissions': permissions,
+                'created_by': context.user_data.get('user_id', chat_id),
+                'created_at': datetime.now().isoformat(),
+                'is_active': True
+            }
+
+            AccessManager.save_data(access_data)
+
+            # پاک کردن داده‌های موقت
+            del context.user_data['creating_package']
+
+            text = f"✅ **پکیج '{package_data['name']}' با موفقیت ایجاد شد!**\n\n"
+            text += f"📋 **شناسه پکیج**: {package_id}\n"
+            text += f"💰 **قیمت**: {package_data['price']:,} تومان\n"
+            text += f"⏱️ **مدت**: {package_data['duration_days']} روز\n"
+            text += f"🔐 **مجوزها**: {len(permissions)} مورد\n\n"
+            text += "اکنون می‌توانید این پکیج را به ادمین‌ها اختصاص دهید."
+
+            keyboard = [
+                [InlineKeyboardButton("👥 اختصاص به ادمین", callback_data=f"assign_package:{package_id}")],
+                [InlineKeyboardButton("📦 مشاهده همه پکیج‌ها", callback_data="manage_subscriptions")],
+                [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_new_package")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+        except Exception as e:
+            logger.error(f"Error in finish_package_creation: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تکمیل ایجاد پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def manage_package_permissions(chat_id, context, action, permission, message_id):
+        try:
+            if 'creating_package' not in context.user_data:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ اطلاعات ایجاد پکیج یافت نشد!"
+                )
+                return
+
+            package_data = context.user_data['creating_package']['data']
+            if 'permissions' not in package_data:
+                package_data['permissions'] = []
+
+            if action == 'add':
+                if permission not in package_data['permissions']:
+                    package_data['permissions'].append(permission)
+                    status = "✅ اضافه شد"
+                else:
+                    status = "⚠️ قبلاً اضافه شده"
+            elif action == 'remove':
+                if permission in package_data['permissions']:
+                    package_data['permissions'].remove(permission)
+                    status = "❌ حذف شد"
+                else:
+                    status = "⚠️ وجود ندارد"
+
+            # به‌روزرسانی پیام با وضعیت جدید
+            text = "5️⃣ مجوزهای پکیج را انتخاب کنید:\n\n"
+            text += f"**وضعیت {PERM_DISPLAY.get(permission, {}).get('label', permission)}**: {status}\n\n"
+            text += "**مجوزهای انتخاب شده فعلی**:\n"
+            
+            if package_data['permissions']:
+                for perm in package_data['permissions']:
+                    if perm in PERM_DISPLAY:
+                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+            else:
+                text += "❌ هیچ مجوزی انتخاب نشده.\n"
+            
+            text += "\n**مجوزهای موجود**:\n"
+            
+            keyboard = []
+            for perm_key, perm_info in PERM_DISPLAY.items():
+                current_status = "✅" if perm_key in package_data['permissions'] else "⬜"
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{current_status} {perm_info['label']}", 
+                        callback_data=f"toggle_perm:{perm_key}"
+                    )
+                ])
+            
+            keyboard.append([
+                InlineKeyboardButton("✅ تکمیل پکیج", callback_data="finish_package_creation"),
+                InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")
+            ])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+
+        except Exception as e:
+            logger.error(f"Error in manage_package_permissions: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در مدیریت مجوزها: {str(e)}"
+            )
+
+    @staticmethod
+    async def assign_package_to_admin(chat_id, context, package_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز اختصاص پکیج را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            
+            if package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            package = packages[package_id]
+            admins = access_data.get('admins', {})
+
+            if not admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ هیچ ادمینی یافت نشد!"
+                )
+                return
+
+            text = f"👥 **اختصاص پکیج '{package.get('name', package_id)}' به ادمین**\n\n"
+            text += "لطفاً ادمینی را برای اختصاص این پکیج انتخاب کنید:\n\n"
+
+            keyboard = []
+            for admin_id, admin_data in admins.items():
+                admin_name = admin_data.get('name', f'ادمین {admin_id}')
+                current_package = admin_data.get('subscription_package')
+                
+                if current_package:
+                    status = f" (پکیج فعلی: {packages.get(current_package, {}).get('name', 'نامشخص')})"
+                else:
+                    status = " (بدون پکیج)"
+                
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{admin_name}{status}", 
+                        callback_data=f"confirm_assign:{package_id}:{admin_id}"
+                    )
+                ])
+
+            keyboard.append([
+                InlineKeyboardButton("بازگشت به جزئیات پکیج", callback_data=f"package_details:{package_id}")
+            ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in assign_package_to_admin for package {package_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در اختصاص پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def confirm_package_assignment(chat_id, context, package_id, admin_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز اختصاص پکیج را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            admins = access_data.get('admins', {})
+
+            if package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            if admin_id not in admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ ادمین یافت نشد!"
+                )
+                return
+
+            package = packages[package_id]
+            admin_data = admins[admin_id]
+
+            # محاسبه تاریخ انقضا
+            duration_days = package.get('duration_days', 30)
+            expiry_date = datetime.now() + timedelta(days=duration_days)
+
+            # اختصاص پکیج به ادمین
+            admin_data['subscription_package'] = package_id
+            admin_data['subscription_expiry'] = expiry_date.isoformat()
+            admin_data['subscription_assigned_by'] = user_id
+            admin_data['subscription_assigned_at'] = datetime.now().isoformat()
+
+            # به‌روزرسانی مجوزهای ادمین بر اساس پکیج
+            admin_data['permissions'] = package.get('permissions', [])
+
+            AccessManager.save_data(access_data)
+
+            text = f"✅ **پکیج با موفقیت اختصاص یافت!**\n\n"
+            text += f"👤 **ادمین**: {admin_data.get('name', f'ادمین {admin_id}')}\n"
+            text += f"📦 **پکیج**: {package.get('name', package_id)}\n"
+            text += f"⏰ **تاریخ انقضا**: {expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
+            text += f"🔐 **مجوزها**: {len(package.get('permissions', []))} مورد\n\n"
+            text += "ادمین اکنون می‌تواند از امکانات پکیج استفاده کند."
+
+            keyboard = [
+                [InlineKeyboardButton("👥 اختصاص پکیج دیگر", callback_data=f"assign_package:{package_id}")],
+                [InlineKeyboardButton("📊 مشاهده وضعیت اشتراک‌ها", callback_data="view_subscription_status")],
+                [InlineKeyboardButton("بازگشت به مدیریت اشتراک‌ها", callback_data="manage_subscriptions")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in confirm_package_assignment for package {package_id} and admin {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تأیید اختصاص پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def view_subscription_status(chat_id, context, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده وضعیت اشتراک‌ها را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            packages = access_data.get('subscription_packages', {})
+
+            if not admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ هیچ ادمینی یافت نشد!"
+                )
+                return
+
+            text = "📊 **وضعیت اشتراک‌های ادمین‌ها**\n\n"
+
+            active_count = 0
+            expired_count = 0
+            no_package_count = 0
+
+            for admin_id, admin_data in admins.items():
+                admin_name = admin_data.get('name', f'ادمین {admin_id}')
+                package_id = admin_data.get('subscription_package')
+                expiry_str = admin_data.get('subscription_expiry')
+
+                if package_id and package_id in packages:
+                    package = packages[package_id]
+                    package_name = package.get('name', package_id)
+                    
+                    if expiry_str:
+                        try:
+                            expiry_date = datetime.fromisoformat(expiry_str)
+                            now = datetime.now()
+                            
+                            if expiry_date > now:
+                                status = "🟢 فعال"
+                                active_count += 1
+                                days_left = (expiry_date - now).days
+                                expiry_info = f"انقضا: {expiry_date.strftime('%Y/%m/%d')} ({days_left} روز مانده)"
+                            else:
+                                status = "🔴 منقضی"
+                                expired_count += 1
+                                days_expired = (now - expiry_date).days
+                                expiry_info = f"منقضی شده: {days_expired} روز پیش"
+                        except:
+                            status = "⚠️ خطا در تاریخ"
+                            expiry_info = "تاریخ نامعتبر"
+                    else:
+                        status = "🟡 بدون تاریخ انقضا"
+                        expiry_info = "تاریخ انقضا تنظیم نشده"
+                else:
+                    status = "⚫ بدون پکیج"
+                    package_name = "ندارد"
+                    expiry_info = "-"
+                    no_package_count += 1
+
+                text += f"👤 **{admin_name}**\n"
+                text += f"📦 پکیج: {package_name}\n"
+                text += f"📅 {expiry_info}\n"
+                text += f"📊 وضعیت: {status}\n\n"
+
+            text += f"📈 **آمار کلی**:\n"
+            text += f"🟢 فعال: {active_count}\n"
+            text += f"🔴 منقضی: {expired_count}\n"
+            text += f"⚫ بدون پکیج: {no_package_count}\n"
+            text += f"👥 مجموع ادمین‌ها: {len(admins)}"
+
+            keyboard = [
+                [InlineKeyboardButton("🔄 بروزرسانی", callback_data="view_subscription_status")],
+                [InlineKeyboardButton("📦 مدیریت پکیج‌ها", callback_data="manage_subscriptions")],
+                [InlineKeyboardButton("👥 اختصاص پکیج", callback_data="assign_package_menu")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in view_subscription_status: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش وضعیت اشتراک‌ها: {str(e)}"
+            )
+
+    @staticmethod
+    async def upgrade_admin_package(chat_id, context, admin_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز ارتقای پکیج را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            packages = access_data.get('subscription_packages', {})
+
+            if admin_id not in admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ ادمین یافت نشد!"
+                )
+                return
+
+            admin_data = admins[admin_id]
+            current_package_id = admin_data.get('subscription_package')
+
+            text = f"⬆️ **ارتقای پکیج ادمین: {admin_data.get('name', f'ادمین {admin_id}')}**\n\n"
+
+            if current_package_id and current_package_id in packages:
+                current_package = packages[current_package_id]
+                text += f"📦 **پکیج فعلی**: {current_package.get('name', current_package_id)}\n"
+                text += f"💰 **قیمت فعلی**: {current_package.get('price', 0):,} تومان\n\n"
+            else:
+                text += "📦 **پکیج فعلی**: ندارد\n\n"
+
+            text += "پکیج جدیدی برای ارتقا انتخاب کنید:\n\n"
+
+            keyboard = []
+            for package_id, package in packages.items():
+                if package_id != current_package_id:  # نمایش پکیج‌های دیگر
+                    package_name = package.get('name', package_id)
+                    price = package.get('price', 0)
+                    duration = package.get('duration_days', 30)
+                    
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"{package_name} - {price:,} تومان ({duration} روز)", 
+                            callback_data=f"confirm_upgrade:{admin_id}:{package_id}"
+                        )
+                    ])
+
+            if not keyboard:
+                text += "❌ هیچ پکیج دیگری موجود نیست!"
+                keyboard = [[InlineKeyboardButton("بازگشت", callback_data="view_subscription_status")]]
+            else:
+                keyboard.append([
+                    InlineKeyboardButton("بازگشت به وضعیت اشتراک‌ها", callback_data="view_subscription_status")
+                ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in upgrade_admin_package for admin {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در ارتقای پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def confirm_package_upgrade(chat_id, context, admin_id, new_package_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_subscriptions'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز ارتقای پکیج را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            packages = access_data.get('subscription_packages', {})
+
+            if admin_id not in admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ ادمین یافت نشد!"
+                )
+                return
+
+            if new_package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج جدید یافت نشد!"
+                )
+                return
+
+            admin_data = admins[admin_id]
+            new_package = packages[new_package_id]
+            old_package_id = admin_data.get('subscription_package')
+
+            # محاسبه تاریخ انقضا جدید
+            duration_days = new_package.get('duration_days', 30)
+            new_expiry_date = datetime.now() + timedelta(days=duration_days)
+
+            # بروزرسانی اطلاعات ادمین
+            admin_data['subscription_package'] = new_package_id
+            admin_data['subscription_expiry'] = new_expiry_date.isoformat()
+            admin_data['subscription_upgraded_by'] = user_id
+            admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
+            admin_data['previous_package'] = old_package_id
+
+            # بروزرسانی مجوزها
+            admin_data['permissions'] = new_package.get('permissions', [])
+
+            AccessManager.save_data(access_data)
+
+            text = f"✅ **پکیج ادمین با موفقیت ارتقا یافت!**\n\n"
+            text += f"👤 **ادمین**: {admin_data.get('name', f'ادمین {admin_id}')}\n"
+            
+            if old_package_id and old_package_id in packages:
+                old_package = packages[old_package_id]
+                text += f"📦 **پکیج قدیمی**: {old_package.get('name', old_package_id)}\n"
+            
+            text += f"⬆️ **پکیج جدید**: {new_package.get('name', new_package_id)}\n"
+            text += f"💰 **قیمت جدید**: {new_package.get('price', 0):,} تومان\n"
+            text += f"⏰ **تاریخ انقضا جدید**: {new_expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
+            text += f"🔐 **مجوزهای جدید**: {len(new_package.get('permissions', []))} مورد\n\n"
+            text += "ادمین اکنون از امکانات پکیج جدید برخوردار است."
+
+            keyboard = [
+                [InlineKeyboardButton("⬆️ ارتقای ادمین دیگر", callback_data="upgrade_package_menu")],
+                [InlineKeyboardButton("📊 مشاهده وضعیت اشتراک‌ها", callback_data="view_subscription_status")],
+                [InlineKeyboardButton("بازگشت به مدیریت اشتراک‌ها", callback_data="manage_subscriptions")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in confirm_package_upgrade for admin {admin_id} to package {new_package_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تأیید ارتقای پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    def check_subscription_status(user_id):
+        """
+        بررسی وضعیت اشتراک کاربر
+        بازگرداندن: (is_active, package_info, days_left)
+        """
+        try:
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            packages = access_data.get('subscription_packages', {})
+
+            if str(user_id) not in admins:
+                return False, None, 0
+
+            admin_data = admins[str(user_id)]
+            package_id = admin_data.get('subscription_package')
+            expiry_str = admin_data.get('subscription_expiry')
+
+            if not package_id or package_id not in packages:
+                return False, None, 0
+
+            package = packages[package_id]
+
+            if not expiry_str:
+                return False, package, 0
+
+            try:
+                expiry_date = datetime.fromisoformat(expiry_str)
+                now = datetime.now()
+                
+                if expiry_date > now:
+                    days_left = (expiry_date - now).days
+                    return True, package, days_left
+                else:
+                    return False, package, 0
+            except:
+                return False, package, 0
+
+        except Exception as e:
+            logger.error(f"Error in check_subscription_status for user {user_id}: {str(e)}", exc_info=True)
+            return False, None, 0
+
+    @staticmethod
+    async def show_user_subscription_status(chat_id, context, message_id=None):
+        """
+        نمایش وضعیت اشتراک برای کاربر فعلی
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            is_active, package, days_left = AdminManager.check_subscription_status(user_id)
+            
+            if not package:
+                text = "📊 **وضعیت اشتراک شما**\n\n"
+                text += "❌ **شما هیچ پکیج اشتراکی ندارید**\n\n"
+                text += "برای دسترسی به امکانات کامل، لطفاً با مدیریت تماس بگیرید."
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
+                    [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")]
+                ]
+            else:
+                package_name = package.get('name', 'نامشخص')
+                price = package.get('price', 0)
+                duration = package.get('duration_days', 30)
+                permissions = package.get('permissions', [])
+                
+                text = f"📊 **وضعیت اشتراک شما**\n\n"
+                text += f"📦 **پکیج**: {package_name}\n"
+                text += f"💰 **قیمت**: {price:,} تومان\n"
+                text += f"⏱️ **مدت**: {duration} روز\n"
+                
+                if is_active:
+                    text += f"🟢 **وضعیت**: فعال\n"
+                    text += f"📅 **روزهای باقی‌مانده**: {days_left} روز\n"
+                else:
+                    text += f"🔴 **وضعیت**: منقضی\n"
+                    text += f"⚠️ **دسترسی محدود**: فقط کیف پول فعال است\n"
+                
+                text += f"\n🔐 **مجوزهای شما** ({len(permissions)} مورد):\n"
+                for perm in permissions:
+                    if perm in PERM_DISPLAY:
+                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+                    else:
+                        text += f"✅ {perm}\n"
+                
+                if is_active:
+                    keyboard = [
+                        [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="renew_subscription")],
+                        [InlineKeyboardButton("⬆️ ارتقای پکیج", callback_data="upgrade_my_package")],
+                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")]
+                    ]
+                else:
+                    keyboard = [
+                        [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="renew_subscription")],
+                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
+                        [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")]
+                    ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in show_user_subscription_status for user {chat_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش وضعیت اشتراک: {str(e)}"
+            )
+
+    @staticmethod
+    async def renew_subscription(chat_id, context, message_id=None):
+        """
+        تمدید اشتراک فعلی کاربر
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            is_active, package, days_left = AdminManager.check_subscription_status(user_id)
+            
+            if not package:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما هیچ پکیج اشتراکی ندارید. لطفاً ابتدا پکیج تهیه کنید."
+                )
+                return
+
+            package_name = package.get('name', 'نامشخص')
+            price = package.get('price', 0)
+            duration = package.get('duration_days', 30)
+
+            text = f"🔄 **تمدید اشتراک**\n\n"
+            text += f"📦 **پکیج فعلی**: {package_name}\n"
+            text += f"💰 **قیمت تمدید**: {price:,} تومان\n"
+            text += f"⏱️ **مدت تمدید**: {duration} روز\n"
+            
+            if is_active:
+                text += f"📅 **روزهای باقی‌مانده**: {days_left} روز\n"
+                text += f"⏰ **تاریخ انقضا پس از تمدید**: {(datetime.now() + timedelta(days=duration + days_left)).strftime('%Y/%m/%d')}\n\n"
+            else:
+                text += f"🔴 **وضعیت**: منقضی\n\n"
+            
+            text += "آیا می‌خواهید اشتراک خود را تمدید کنید؟"
+
+            keyboard = [
+                [InlineKeyboardButton(f"✅ بله، تمدید به قیمت {price:,} تومان", callback_data="confirm_renewal")],
+                [InlineKeyboardButton("❌ خیر، انصراف", callback_data="cancel_renewal")],
+                [InlineKeyboardButton("⬆️ ارتقای پکیج", callback_data="upgrade_my_package")],
+                [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in renew_subscription for user {chat_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تمدید اشتراک: {str(e)}"
+            )
+
+    @staticmethod
+    async def confirm_subscription_renewal(chat_id, context, message_id=None):
+        """
+        تأیید و اجرای تمدید اشتراک
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            is_active, package, days_left = AdminManager.check_subscription_status(user_id)
+            
+            if not package:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            price = package.get('price', 0)
+            duration = package.get('duration_days', 30)
+            package_name = package.get('name', 'نامشخص')
+
+            # بررسی موجودی کیف پول
+            wallet_balance = await WalletManager.get_balance(user_id)
+            
+            if wallet_balance < price:
+                shortage = price - wallet_balance
+                text = f"❌ **موجودی کافی نیست!**\n\n"
+                text += f"💰 **قیمت تمدید**: {price:,} تومان\n"
+                text += f"💵 **موجودی شما**: {wallet_balance:,} تومان\n"
+                text += f"💸 **کمبود**: {shortage:,} تومان\n\n"
+                text += "لطفاً کیف پول خود را شارژ کنید."
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
+                    [InlineKeyboardButton("بازگشت", callback_data="my_subscription_status")]
+                ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                if message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                return
+
+            # کسر مبلغ از کیف پول
+            success = await WalletManager.deduct_balance(user_id, price)
+            if not success:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ خطا در کسر مبلغ از کیف پول!"
+                )
+                return
+
+            # بروزرسانی تاریخ انقضا
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            
+            if str(user_id) in admins:
+                admin_data = admins[str(user_id)]
+                
+                # محاسبه تاریخ انقضا جدید
+                current_expiry = admin_data.get('subscription_expiry')
+                if current_expiry and is_active:
+                    # اگر هنوز فعال است، مدت زمان را اضافه کن
+                    current_expiry_date = datetime.fromisoformat(current_expiry)
+                    new_expiry_date = current_expiry_date + timedelta(days=duration)
+                else:
+                    # اگر منقضی شده، از الان شروع کن
+                    new_expiry_date = datetime.now() + timedelta(days=duration)
+                
+                admin_data['subscription_expiry'] = new_expiry_date.isoformat()
+                admin_data['subscription_renewed_at'] = datetime.now().isoformat()
+                admin_data['subscription_renewed_by'] = user_id
+                
+                AccessManager.save_data(access_data)
+
+                text = f"✅ **اشتراک با موفقیت تمدید شد!**\n\n"
+                text += f"📦 **پکیج**: {package_name}\n"
+                text += f"💰 **مبلغ کسر شده**: {price:,} تومان\n"
+                text += f"⏰ **تاریخ انقضا جدید**: {new_expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
+                text += f"💵 **موجودی باقی‌مانده**: {wallet_balance - price:,} تومان\n\n"
+                text += "از تمامی امکانات پکیج خود استفاده کنید!"
+
+                keyboard = [
+                    [InlineKeyboardButton("📊 وضعیت اشتراک", callback_data="my_subscription_status")],
+                    [InlineKeyboardButton("🏠 منوی اصلی", callback_data="main_menu")]
+                ]
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                if message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ اطلاعات ادمین یافت نشد!"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in confirm_subscription_renewal for user {chat_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تأیید تمدید اشتراک: {str(e)}"
+            )
+
+    @staticmethod
+    async def upgrade_user_package(chat_id, context, message_id=None):
+        """
+        ارتقای پکیج توسط کاربر
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            is_active, current_package, days_left = AdminManager.check_subscription_status(user_id)
+            
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+
+            if not packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ هیچ پکیجی موجود نیست!"
+                )
+                return
+
+            text = f"⬆️ **ارتقای پکیج اشتراک**\n\n"
+            
+            if current_package:
+                text += f"📦 **پکیج فعلی شما**: {current_package.get('name', 'نامشخص')}\n"
+                text += f"💰 **قیمت فعلی**: {current_package.get('price', 0):,} تومان\n\n"
+            else:
+                text += "📦 **پکیج فعلی**: ندارید\n\n"
+            
+            text += "پکیج‌های موجود برای ارتقا:\n\n"
+
+            keyboard = []
+            for package_id, package in packages.items():
+                if not current_package or package_id != current_package.get('id', ''):
+                    package_name = package.get('name', package_id)
+                    price = package.get('price', 0)
+                    duration = package.get('duration_days', 30)
+                    
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"{package_name} - {price:,} تومان ({duration} روز)", 
+                            callback_data=f"user_upgrade:{package_id}"
+                        )
+                    ])
+
+            if not keyboard:
+                text += "❌ هیچ پکیج دیگری برای ارتقا موجود نیست!"
+                keyboard = [[InlineKeyboardButton("بازگشت", callback_data="my_subscription_status")]]
+            else:
+                keyboard.append([
+                    InlineKeyboardButton("بازگشت به وضعیت اشتراک", callback_data="my_subscription_status")
+                ])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in upgrade_user_package for user {chat_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در ارتقای پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def confirm_user_package_upgrade(chat_id, context, package_id, message_id=None):
+        """
+        تأیید ارتقای پکیج توسط کاربر
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            
+            if package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            new_package = packages[package_id]
+            price = new_package.get('price', 0)
+            package_name = new_package.get('name', package_id)
+            duration = new_package.get('duration_days', 30)
+
+            # بررسی موجودی کیف پول
+            wallet_balance = await WalletManager.get_balance(user_id)
+            
+            if wallet_balance < price:
+                shortage = price - wallet_balance
+                text = f"❌ **موجودی کافی نیست!**\n\n"
+                text += f"💰 **قیمت ارتقا**: {price:,} تومان\n"
+                text += f"💵 **موجودی شما**: {wallet_balance:,} تومان\n"
+                text += f"💸 **کمبود**: {shortage:,} تومان\n\n"
+                text += "لطفاً کیف پول خود را شارژ کنید."
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
+                    [InlineKeyboardButton("بازگشت", callback_data="upgrade_my_package")]
+                ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                if message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                return
+
+            text = f"⬆️ **تأیید ارتقای پکیج**\n\n"
+            text += f"📦 **پکیج جدید**: {package_name}\n"
+            text += f"💰 **قیمت**: {price:,} تومان\n"
+            text += f"⏱️ **مدت**: {duration} روز\n"
+            text += f"💵 **موجودی فعلی**: {wallet_balance:,} تومان\n"
+            text += f"💵 **موجودی پس از ارتقا**: {wallet_balance - price:,} تومان\n\n"
+            text += "آیا از ارتقای پکیج اطمینان دارید؟"
+
+            keyboard = [
+                [InlineKeyboardButton("✅ بله، ارتقا بده", callback_data=f"execute_upgrade:{package_id}")],
+                [InlineKeyboardButton("❌ خیر، انصراف", callback_data="upgrade_my_package")],
+                [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in confirm_user_package_upgrade for user {chat_id} and package {package_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تأیید ارتقای پکیج: {str(e)}"
+            )
+
+    @staticmethod
+    async def execute_user_package_upgrade(chat_id, context, package_id, message_id=None):
+        """
+        اجرای ارتقای پکیج توسط کاربر
+        """
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            
+            access_data = AccessManager.load_data()
+            packages = access_data.get('subscription_packages', {})
+            admins = access_data.get('admins', {})
+            
+            if package_id not in packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ پکیج یافت نشد!"
+                )
+                return
+
+            if str(user_id) not in admins:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ اطلاعات ادمین یافت نشد!"
+                )
+                return
+
+            new_package = packages[package_id]
+            price = new_package.get('price', 0)
+            package_name = new_package.get('name', package_id)
+            duration = new_package.get('duration_days', 30)
+            admin_data = admins[str(user_id)]
+
+            # کسر مبلغ از کیف پول
+            success = await WalletManager.deduct_balance(user_id, price)
+            if not success:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ خطا در کسر مبلغ از کیف پول!"
+                )
+                return
+
+            # بروزرسانی اطلاعات اشتراک
+            old_package_id = admin_data.get('subscription_package')
+            new_expiry_date = datetime.now() + timedelta(days=duration)
+            
+            admin_data['subscription_package'] = package_id
+            admin_data['subscription_expiry'] = new_expiry_date.isoformat()
+            admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
+            admin_data['subscription_upgraded_by'] = user_id
+            admin_data['previous_package'] = old_package_id
+            admin_data['permissions'] = new_package.get('permissions', [])
+
+            AccessManager.save_data(access_data)
+
+            # دریافت موجودی جدید
+            new_balance = await WalletManager.get_balance(user_id)
+
+            text = f"✅ **پکیج با موفقیت ارتقا یافت!**\n\n"
+            text += f"📦 **پکیج جدید**: {package_name}\n"
+            text += f"💰 **مبلغ کسر شده**: {price:,} تومان\n"
+            text += f"⏰ **تاریخ انقضا**: {new_expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
+            text += f"💵 **موجودی باقی‌مانده**: {new_balance:,} تومان\n"
+            text += f"🔐 **مجوزهای جدید**: {len(new_package.get('permissions', []))} مورد\n\n"
+            text += "از امکانات جدید پکیج خود لذت ببرید!"
+
+            keyboard = [
+                [InlineKeyboardButton("📊 وضعیت اشتراک", callback_data="my_subscription_status")],
+                [InlineKeyboardButton("🏠 منوی اصلی", callback_data="main_menu")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in execute_user_package_upgrade for user {chat_id} and package {package_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در اجرای ارتقای پکیج: {str(e)}"
+            )
 
     @staticmethod
     async def process_subscription_renewal(chat_id, context, admin_id, renewal_type):
