@@ -410,7 +410,7 @@ class AdminManager:
             if not packages:
                 text = "📦 **مدیریت پکیج‌های اشتراک**\n\nهیچ پکیج اشتراکی وجود ندارد.\n\n**توضیح**: پکیج‌های اشتراک شامل سطوح مختلف دسترسی و خدمات هستند."
                 keyboard = [
-                    [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_subscription_package")],
+                    [InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_new_package")],
                     [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
                 ]
             else:
@@ -419,13 +419,13 @@ class AdminManager:
                 row = []
                 for package_id, package in packages.items():
                     text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان\n"
-                    row.append(InlineKeyboardButton(package.get('name', package_id), callback_data=f"view_package:{package_id}"))
+                    row.append(InlineKeyboardButton(package.get('name', package_id), callback_data=f"package_details:{package_id}"))
                     if len(row) == 2:
                         keyboard.append(row)
                         row = []
                 if row:
                     keyboard.append(row)
-                keyboard.append([InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_subscription_package")])
+                keyboard.append([InlineKeyboardButton("➕ ایجاد پکیج جدید", callback_data="create_new_package")])
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)

@@ -14,7 +14,8 @@
         }
     },
     "groups": {
-        "admin": ["view_reservations", "manage_wallet"]
+        "admin": ["view_reservations", "manage_wallet", "manage_subscriptions"]
     },
-    "profiles": {}
+    "profiles": {},
+    "subscription_packages": {}
 }
