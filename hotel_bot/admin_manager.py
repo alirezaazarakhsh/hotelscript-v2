@@ -1,7 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from hotel_bot.config import SUPER_ADMINS, PERMISSIONS, PERM_DISPLAY
 from hotel_bot.access_manager import AccessManager
-from hotel_bot.menu_manager import MenuManager
 from hotel_bot.receipt_manager import ReceiptManager
 import logging
 import time
@@ -20,6 +19,7 @@ class AdminManager:
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 logger.warning(f"User {user_id} lacks manage_admins permission")
                 await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -74,6 +74,7 @@ class AdminManager:
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش لیست ادمین‌ها: {str(e)}"
             )
+            from hotel_bot.menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -87,6 +88,7 @@ class AdminManager:
                     chat_id=chat_id,
                     text="❌ شما مجوز مشاهده جزئیات ادمین را ندارید!"
                 )
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -2086,6 +2088,7 @@ class AdminManager:
 
             # If renewing own subscription, show main menu
             if str(user_id) == str(admin_id):
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
 
         except Exception as e:
@@ -2094,6 +2097,7 @@ class AdminManager:
                 chat_id=chat_id,
                 text=f"❌ خطا در پردازش تمدید اشتراک: {str(e)}"
             )
+            from hotel_bot.menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -2107,6 +2111,7 @@ class AdminManager:
                     chat_id=chat_id,
                     text="❌ شما مجوز ویرایش پروفایل ادمین را ندارید!"
                 )
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -2166,6 +2171,7 @@ class AdminManager:
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش منوی ویرایش پروفایل ادمین: {str(e)}"
             )
+            from hotel_bot.menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -2179,6 +2185,7 @@ class AdminManager:
                     chat_id=chat_id,
                     text="❌ شما مجوز افزودن ادمین را ندارید!"
                 )
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
@@ -2215,6 +2222,7 @@ class AdminManager:
                 chat_id=chat_id,
                 text=f"❌ خطا در افزودن ادمین: {str(e)}"
             )
+            from hotel_bot.menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
 
     @staticmethod
@@ -2228,6 +2236,7 @@ class AdminManager:
                     chat_id=chat_id,
                     text="❌ شما مجوز حذف ادمین را ندارید!"
                 )
+                from hotel_bot.menu_manager import MenuManager
                 await MenuManager.show_main_menu(user_id, context)
                 return
 
