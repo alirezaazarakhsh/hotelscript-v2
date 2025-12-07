@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 from hotel_bot.config import SUPER_ADMINS
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.receipt_manager import ReceiptManager
+from hotel_bot.menu_manager import MenuManager
 
 
 class UserWalletManager:

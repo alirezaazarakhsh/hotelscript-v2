@@ -2264,4 +2264,5 @@ class AdminManager:
                 chat_id=chat_id,
                 text=f"❌ خطا در حذف ادمین: {str(e)}"
             )
+            from hotel_bot.menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
