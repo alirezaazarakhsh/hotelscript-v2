@@ -55,7 +55,8 @@ class AccessManager:
             saveable = {
                 'admins': {},
                 'groups': {gname: list(perms) for gname, perms in data.get('groups', {}).items()},
-                'profiles': data.get('profiles', {})
+                'profiles': data.get('profiles', {}),
+                'subscription_packages': data.get('subscription_packages', {})
             }
             for uid, admin_info in data.get('admins', {}).items():
                 if isinstance(admin_info, str):
@@ -64,10 +65,11 @@ class AccessManager:
                     saveable['admins'][uid] = admin_info
             with open(ADMINS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(saveable, f, ensure_ascii=False, indent=4)
-            # به‌روزرسانی کش بعد از ذخیره موفق
-            AccessManager._cached_data = data.copy()
+            # پاک کردن کش برای اطمینان از بارگذاری داده‌های جدید
+            AccessManager._cached_data = None
         except Exception as e:
             print(f"Error saving {ADMINS_FILE}: {str(e)}")
+            # در صورت خطا، کش را پاک نکنیم تا داده‌های قبلی حفظ شوند
 
     @staticmethod
     def is_allowed(user_id, permission=None):

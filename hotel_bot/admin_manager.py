@@ -766,11 +766,14 @@ class AdminManager:
             # تولید ID منحصر به فرد برای پکیج
             package_id = f"package_{int(time.time())}_{chat_id}"
 
-            # ذخیره پکیج جدید
+            # بارگذاری داده‌های فعلی
             access_data = AccessManager.load_data()
+            
+            # اطمینان از وجود subscription_packages
             if 'subscription_packages' not in access_data:
                 access_data['subscription_packages'] = {}
             
+            # ایجاد پکیج جدید
             access_data['subscription_packages'][package_id] = {
                 'name': package_data['name'],
                 'price': package_data['price'],
@@ -782,8 +785,9 @@ class AdminManager:
                 'is_active': True
             }
 
-            AccessManager.save_data(access_data)
-
+            # ذخیره پکیج جدید
+            save_result = AccessManager.save_data(access_data)
+            
             # پاک کردن داده‌های موقت
             del context.user_data['creating_package']
 
@@ -831,13 +835,17 @@ class AdminManager:
                 )
                 return
 
+            # بارگذاری تازه داده‌ها
             access_data = AccessManager.load_data()
             packages = access_data.get('subscription_packages', {})
+            
+            logger.debug(f"Looking for package_id: {package_id}")
+            logger.debug(f"Available packages: {list(packages.keys())}")
             
             if package_id not in packages:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="❌ پکیج یافت نشد!"
+                    text=f"❌ پکیج یافت نشد! (ID: {package_id})"
                 )
                 return
 
@@ -909,21 +917,26 @@ class AdminManager:
                 )
                 return
 
+            # بارگذاری تازه داده‌ها
             access_data = AccessManager.load_data()
             packages = access_data.get('subscription_packages', {})
             admins = access_data.get('admins', {})
 
+            logger.debug(f"Confirming assignment - package_id: {package_id}, admin_id: {admin_id}")
+            logger.debug(f"Available packages: {list(packages.keys())}")
+            logger.debug(f"Available admins: {list(admins.keys())}")
+
             if package_id not in packages:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="❌ پکیج یافت نشد!"
+                    text=f"❌ پکیج یافت نشد! (ID: {package_id})"
                 )
                 return
 
             if admin_id not in admins:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="❌ ادمین یافت نشد!"
+                    text=f"❌ ادمین یافت نشد! (ID: {admin_id})"
                 )
                 return
 

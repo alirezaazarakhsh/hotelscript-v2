@@ -14,8 +14,23 @@
         }
     },
     "groups": {
-        "admin": ["view_reservations", "manage_wallet", "manage_subscriptions"]
+        "admin": [
+            "view_reservations",
+            "manage_wallet",
+            "manage_subscriptions"
+        ]
     },
     "profiles": {},
-    "subscription_packages": {}
+    "subscription_packages": {
+        "simple_package": {
+            "name": "پکیج ساده",
+            "price": 100000,
+            "duration_days": 30,
+            "description": "پکیج آزمایشی ساده",
+            "group": "admin",
+            "created_by": 123,
+            "created_at": "2024-01-01T00:00:00",
+            "is_active": true
+        }
+    }
 }
