@@ -73,7 +73,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not AccessManager.is_allowed(user_id):
         # Check if subscription expired but allow wallet operations
-        from hotel_bot.admin_manager import AdminManager
         is_active, package, days_left = AdminManager.check_subscription_status(user_id)
         
         if not is_active:
