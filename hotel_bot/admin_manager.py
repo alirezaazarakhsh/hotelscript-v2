@@ -172,9 +172,7 @@ class AdminManager:
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("📝 ویرایش پروفایل", callback_data=f"edit_admin_profile:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("⏰ تنظیم مدت زمان", callback_data=f"set_expiry:{admin_id}")])
-            keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
-            keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
-
+                keyboard.append([InlineKeyboardButton("📊 پروفایل اشتراک", callback_data=f"view_subscription:{admin_id}")])
             keyboard.append([InlineKeyboardButton("بازگشت به مدیریت ادمین‌ها", callback_data="manage_admins")])
             keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
@@ -200,6 +198,297 @@ class AdminManager:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ خطا در نمایش جزئیات ادمین: {str(e)}"
+            )
+
+    @staticmethod
+    async def show_subscription_profile(chat_id, context, admin_id, message_id=None):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز مشاهده پروفایل اشتراک را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            admin_data = access_data.get('admins', {}).get(str(admin_id), {})
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+
+            subscription_price = admin_data.get('subscription_price', 0)
+            subscription_expiry = admin_data.get('subscription_expiry')
+            auto_renewal = admin_data.get('auto_renewal', False)
+
+            from datetime import datetime
+            days_remaining = 0
+            status = "❌ تنظیم نشده"
+            
+            if subscription_expiry:
+                try:
+                    expiry = datetime.fromisoformat(subscription_expiry)
+                    now = datetime.now()
+                    if expiry > now:
+                        days_remaining = (expiry - now).days
+                        if days_remaining > 30:
+                            status = "✅ فعال"
+                        elif days_remaining > 7:
+                            status = "⚠️ نیاز به تمدید"
+                        else:
+                            status = "🔴 منقضی شدن نزدیک"
+                    else:
+                        status = "❌ منقضی شده"
+                        days_remaining = (now - expiry).days
+                except ValueError:
+                    status = "❌ تاریخ نامعتبر"
+
+            text = (
+                f"📊 **پروفایل اشتراک ادمین {admin_id}**\n\n"
+                f"**وضعیت اشتراک**: {status}\n"
+                f"**مبلغ تمدید**: {subscription_price:,} تومان\n"
+                f"**تاریخ انقضا**: {subscription_expiry if subscription_expiry else 'تنظیم نشده'}\n"
+                f"**روزهای باقی‌مانده**: {days_remaining if subscription_expiry else 'N/A'}\n"
+                f"**تمدید خودکار**: {'✅ فعال' if auto_renewal else '❌ غیرفعال'}\n\n"
+            )
+
+            if auto_renewal and subscription_price > 0:
+                wallets = ReceiptManager.load_wallets()
+                wallet_balance = wallets.get(str(admin_id), 0)
+                text += f"**موجودی کیف پول**: {wallet_balance:,} تومان\n"
+                if wallet_balance >= subscription_price:
+                    text += "💚 **وضعیت تمدید**: آماده تمدید\n"
+                else:
+                    text += "💔 **وضعیت تمدید**: موجودی کافی نیست\n"
+
+            keyboard = [
+                [InlineKeyboardButton("🔄 تمدید ماهانه", callback_data=f"renew_monthly:{admin_id}")],
+                [InlineKeyboardButton("🔄 تمدید سالانه", callback_data=f"renew_yearly:{admin_id}")],
+                [InlineKeyboardButton("بازگشت به جزئیات ادمین", callback_data=f"view_admin:{admin_id}")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Error in show_subscription_profile for admin_id {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در نمایش پروفایل اشتراک: {str(e)}"
+            )
+
+    @staticmethod
+    async def check_and_auto_renew_subscriptions():
+        """بررسی و تمدید خودکار اشتراک‌های منقضی شده"""
+        try:
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            wallets = ReceiptManager.load_wallets()
+            
+            renewed_count = 0
+            for admin_id, admin_data in admins.items():
+                if isinstance(admin_data, str):
+                    continue
+                
+                if not admin_data.get('auto_renewal', False):
+                    continue
+                
+                subscription_expiry = admin_data.get('subscription_expiry')
+                subscription_price = admin_data.get('subscription_price', 0)
+                
+                if not subscription_expiry or subscription_price <= 0:
+                    continue
+                
+                from datetime import datetime, timedelta
+                try:
+                    expiry = datetime.fromisoformat(subscription_expiry)
+                    now = datetime.now()
+                    
+                    # اگر اشتراک منقضی شده یا کمتر از 3 روز باقی مانده
+                    if expiry <= now + timedelta(days=3):
+                        wallet_balance = wallets.get(str(admin_id), 0)
+                        
+                        if wallet_balance >= subscription_price:
+                            # تمدید اشتراک
+                            new_expiry = expiry + timedelta(days=30)  # تمدید ماهانه
+                            admin_data['subscription_expiry'] = new_expiry.isoformat()
+                            
+                            # کسر از کیف پول
+                            wallets[str(admin_id)] = wallet_balance - subscription_price
+                            
+                            renewed_count += 1
+                            logger.info(f"Auto-renewed subscription for admin {admin_id}")
+                        else:
+                            logger.warning(f"Insufficient balance for auto-renewal of admin {admin_id}")
+                except ValueError:
+                    logger.error(f"Invalid subscription expiry date for admin {admin_id}: {subscription_expiry}")
+            
+            if renewed_count > 0:
+                access_data['admins'] = admins
+                AccessManager.save_data(access_data)
+                ReceiptManager.save_wallets(wallets)
+                
+                # ارسال اعلان به سوپر ادمین‌ها
+                notification_text = f"🔄 **تمدید خودکار اشتراک**\n\n{renewed_count} اشتراک به صورت خودکار تمدید شد."
+                for super_admin in SUPER_ADMINS:
+                    try:
+                        # ارسال اعلان (این قسمت نیاز به context دارد، پس بعداً پیاده‌سازی می‌شود)
+                        pass
+                    except Exception as e:
+                        logger.error(f"Failed to send renewal notification to {super_admin}: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Error in check_and_auto_renew_subscriptions: {str(e)}")
+
+    @staticmethod
+    async def send_subscription_reminders(context):
+        """ارسال یادآوری برای تمدید اشتراک"""
+        try:
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            
+            for admin_id, admin_data in admins.items():
+                if isinstance(admin_data, str):
+                    continue
+                
+                subscription_expiry = admin_data.get('subscription_expiry')
+                if not subscription_expiry:
+                    continue
+                
+                from datetime import datetime, timedelta
+                try:
+                    expiry = datetime.fromisoformat(subscription_expiry)
+                    now = datetime.now()
+                    days_remaining = (expiry - now).days
+                    
+                    # ارسال یادآوری اگر کمتر از 7 روز باقی مانده
+                    if 0 < days_remaining <= 7:
+                        message = (
+                            f"⚠️ **یادآوری تمدید اشتراک**\n\n"
+                            f"اشتراک شما {days_remaining} روز دیگر منقضی می‌شود.\n"
+                            f"برای جلوگیری از قطع سرویس، لطفاً اشتراک خود را تمدید کنید."
+                        )
+                        
+                        try:
+                            await context.bot.send_message(
+                                chat_id=int(admin_id),
+                                text=message,
+                                parse_mode="Markdown"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send reminder to admin {admin_id}: {e}")
+                            
+                except ValueError:
+                    logger.error(f"Invalid subscription expiry date for admin {admin_id}: {subscription_expiry}")
+                    
+        except Exception as e:
+            logger.error(f"Error in send_subscription_reminders: {str(e)}")
+
+    @staticmethod
+    async def process_subscription_renewal(chat_id, context, admin_id, renewal_type):
+        try:
+            user_id = context.user_data.get('user_id', chat_id)
+            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ شما مجوز تمدید اشتراک را ندارید!"
+                )
+                return
+
+            access_data = AccessManager.load_data()
+            admins = access_data.get('admins', {})
+            admin_data = admins.get(str(admin_id), {})
+            
+            if isinstance(admin_data, str):
+                admin_data = {'group': admin_data}
+            
+            subscription_price = admin_data.get('subscription_price', 0)
+            if subscription_price <= 0:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ قیمت اشتراک تنظیم نشده است. ابتدا قیمت را تنظیم کنید."
+                )
+                return
+
+            # محاسبه مبلغ بر اساس نوع تمدید
+            if renewal_type == 'monthly':
+                amount = subscription_price
+                days = 30
+            elif renewal_type == 'yearly':
+                amount = subscription_price * 12
+                days = 365
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ نوع تمدید نامعتبر."
+                )
+                return
+
+            wallets = ReceiptManager.load_wallets()
+            wallet_balance = wallets.get(str(admin_id), 0)
+            
+            if wallet_balance < amount:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"❌ موجودی کیف پول کافی نیست.\n💰 موجودی: {wallet_balance:,} تومان\n💸 مبلغ مورد نیاز: {amount:,} تومان",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")],
+                        [InlineKeyboardButton("بازگشت", callback_data=f"view_subscription:{admin_id}")]
+                    ]),
+                    parse_mode="Markdown"
+                )
+                return
+
+            # تمدید اشتراک
+            from datetime import datetime, timedelta
+            current_expiry = admin_data.get('subscription_expiry')
+            if current_expiry:
+                try:
+                    expiry = datetime.fromisoformat(current_expiry)
+                    if expiry < datetime.now():
+                        # اگر منقضی شده، از امروز شروع کن
+                        expiry = datetime.now()
+                except ValueError:
+                    expiry = datetime.now()
+            else:
+                expiry = datetime.now()
+            
+            new_expiry = expiry + timedelta(days=days)
+            admin_data['subscription_expiry'] = new_expiry.isoformat()
+            
+            # کسر از کیف پول
+            wallets[str(admin_id)] = wallet_balance - amount
+            
+            # ذخیره تغییرات
+            admins[str(admin_id)] = admin_data
+            access_data['admins'] = admins
+            AccessManager.save_data(access_data)
+            ReceiptManager.save_wallets(wallets)
+            
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"✅ اشتراک ادمین {admin_id} با موفقیت تمدید شد!\n\n💰 مبلغ کسر شده: {amount:,} تومان\n📅 تاریخ جدید انقضا: {new_expiry.strftime('%Y-%m-%d')}\n💵 موجودی جدید: {(wallet_balance - amount):,} تومان",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت به پروفایل اشتراک", callback_data=f"view_subscription:{admin_id}")]]),
+                parse_mode="Markdown"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in process_subscription_renewal for admin_id {admin_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ خطا در تمدید اشتراک: {str(e)}"
             )
 
     @staticmethod

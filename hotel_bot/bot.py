@@ -526,6 +526,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("subscription_renewal:"):
             admin_id = data.split(":", 1)[1]
             await AdminManager.show_subscription_renewal(chat_id, context, admin_id, message_id)
+        elif data.startswith("view_subscription:"):
+            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+                await query.edit_message_text("❌ شما مجوز مشاهده پروفایل اشتراک را ندارید!")
+                return
+            admin_id = data.split(":", 1)[1]
+            await AdminManager.show_subscription_profile(chat_id, context, admin_id, message_id=message_id)
+        elif data == "cancel_subscription_setup":
+            context.user_data.pop('setting_subscription_for', None)
+            context.user_data.pop('subscription_step', None)
+            await query.edit_message_text("❌ تنظیم اشتراک لغو شد.")
         elif data.startswith("renew_monthly:"):
             admin_id = data.split(":", 1)[1]
             await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "monthly")
@@ -902,6 +912,50 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             search_query = text.strip()
             await ReservationManager.process_reservation_search(user_id, context, search_query)
             context.user_data.clear()
+        elif context.user_data.get('subscription_step') == 'price':
+            try:
+                price = int(text.replace(',', ''))
+                if price <= 0:
+                    raise ValueError("مبلغ باید مثبت باشد")
+                admin_id = context.user_data['setting_subscription_for']
+                context.user_data['subscription_price'] = price
+                context.user_data['subscription_step'] = 'expiry'
+                await update.message.reply_text(
+                    f"💰 قیمت پکیج تمدید: {price:,} تومان\n\nمرحله ۲ از ۲: تاریخ انقضای اشتراک را به فرمت YYYY-MM-DD وارد کنید:",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("لغو", callback_data="cancel_subscription_setup")]]),
+                    parse_mode="Markdown"
+                )
+            except ValueError:
+                await update.message.reply_text("❌ مبلغ نامعتبر. فقط اعداد مثبت وارد کنید.")
+        elif context.user_data.get('subscription_step') == 'expiry':
+            from datetime import datetime
+            try:
+                expiry_date = datetime.fromisoformat(text.strip())
+                admin_id = context.user_data['setting_subscription_for']
+                price = context.user_data['subscription_price']
+                
+                access_data = AccessManager.load_data()
+                admins = access_data['admins']
+                if str(admin_id) not in admins:
+                    admins[str(admin_id)] = {}
+                elif isinstance(admins[str(admin_id)], str):
+                    admins[str(admin_id)] = {'group': admins[str(admin_id)]}
+                
+                admins[str(admin_id)]['subscription_price'] = price
+                admins[str(admin_id)]['subscription_expiry'] = expiry_date.isoformat()
+                admins[str(admin_id)]['auto_renewal'] = True
+                
+                access_data['admins'] = admins
+                AccessManager.save_data(access_data)
+                
+                await update.message.reply_text(
+                    f"✅ اشتراک ادمین {admin_id} تنظیم شد:\n💰 قیمت تمدید: {price:,} تومان\n📅 تاریخ انقضا: {expiry_date.strftime('%Y-%m-%d')}\n🔄 تمدید خودکار: فعال",
+                    parse_mode="Markdown"
+                )
+                context.user_data.clear()
+                await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
+            except ValueError:
+                await update.message.reply_text("❌ فرمت تاریخ نامعتبر. از فرمت YYYY-MM-DD استفاده کنید (مثال: 2025-12-31).")
         elif state == 'waiting_for_wallet_search':
             search_query = text.strip()
             await MenuManager.process_wallet_search(user_id, context, search_query)
@@ -917,5 +971,10 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
+    
+    # بررسی و تمدید خودکار اشتراک‌ها در زمان شروع
+    import asyncio
+    asyncio.create_task(AdminManager.check_and_auto_renew_subscriptions())
+    
     logger.info("Bot running...")
     app.run_polling()
