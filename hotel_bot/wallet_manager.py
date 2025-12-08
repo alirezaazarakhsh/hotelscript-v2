@@ -4,6 +4,8 @@ from hotel_bot.config import SUPER_ADMINS
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.menu_manager import MenuManager
+from finance.models import Wallet
+from asgiref.sync import sync_to_async
 import logging
 
 
@@ -233,3 +235,23 @@ class WalletManager:
         except Exception as e:
             logger.error(f"Error in show_user_wallet_management: {str(e)}")
             await context.bot.send_message(chat_id=admin_user_id, text=f"❌ خطا در نمایش مدیریت کیف پول: {str(e)}")
+
+    @staticmethod
+    async def get_balance(user_id):
+        try:
+            wallet = await sync_to_async(Wallet.objects.get)(user_id=user_id)
+            return wallet.balance
+        except Wallet.DoesNotExist:
+            return 0
+
+    @staticmethod
+    async def deduct_balance(user_id, amount):
+        try:
+            wallet = await sync_to_async(Wallet.objects.get)(user_id=user_id)
+            if wallet.balance >= amount:
+                wallet.balance -= amount
+                await sync_to_async(wallet.save)()
+                return True
+            return False
+        except Wallet.DoesNotExist:
+            return False

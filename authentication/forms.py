@@ -87,7 +87,10 @@ class AdminForm(forms.ModelForm):
         if password and admin.base_user:
             # رمز پنل گرافیکی
             admin.set_panel_password(password)
-            admin.save(update_fields=['panel_password'])
+            if admin.pk:  # اگر object ذخیره شده، update_fields استفاده کن
+                admin.save(update_fields=['panel_password'])
+            else:
+                admin.save()
             
             # رمز پنل جنگو
             admin.base_user.set_password(password)

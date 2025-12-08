@@ -303,8 +303,8 @@ ZARINPAL_CONFIG = {
 
 TINYMCE_DEFAULT_CONFIG = {
     "height": 600,
-    "plugins": "advlist anchor autolink charmap code fullscreen help image insertdatetime link lists media preview searchreplace table visualblocks wordcount",
-    "toolbar": "undo redo | styleselect | bold italic underline | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image media | table | charmap insertdatetime anchor | searchreplace code preview | fullscreen help",
+    "plugins": "advlist anchor autolink charmap code fullscreen help image insertdatetime link lists media preview searchreplace table visualblocks wordcount textcolor",
+    "toolbar": "undo redo | styleselect | bold italic underline | forecolor backcolor | fontsize | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image media | table | charmap insertdatetime anchor | searchreplace code preview | fullscreen help",
     "menubar": "file edit view insert format tools table help",
     "extended_valid_elements": "script[src|type], iframe[src|width|height|frameborder|allowfullscreen], video[controls|preload|width|height|src|poster|autoplay|muted|loop]",
     "content_style": "body { font-family: Arial, sans-serif; font-size: 14px }",

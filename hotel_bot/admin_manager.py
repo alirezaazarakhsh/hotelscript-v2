@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from hotel_bot.config import SUPER_ADMINS, PERMISSIONS, PERM_DISPLAY
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.receipt_manager import ReceiptManager
+from hotel_bot.wallet_manager import WalletManager
 import logging
 import time
 from datetime import datetime, timedelta

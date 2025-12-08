@@ -267,7 +267,10 @@ class Admin(models.Model):
         def setter(raw_password):
             self.set_panel_password(raw_password)
             self._password = None
-            self.save(update_fields=["panel_password"])
+            if self.pk:  # اگر object ذخیره شده، update_fields استفاده کن
+                self.save(update_fields=["panel_password"])
+            else:
+                self.save()
         return check_password(raw_password, self.panel_password, setter)
     
     
