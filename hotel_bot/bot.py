@@ -1018,8 +1018,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     user = await sync_to_async(BaseUser.objects.get)(id=target_user_id)
                     wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user, defaults={'balance': 0})
                     old_balance = wallet.balance
-                    new_balance = old_balance + amount
-                    await sync_to_async(wallet.__class__.objects.filter(pk=wallet.pk).update)(balance=new_balance)
+                    wallet.balance += amount
+                    await sync_to_async(wallet.save)()
+                    new_balance = wallet.balance
                     await update.message.reply_text(f"✅ کیف پول کاربر {user.phone_number} به مبلغ {amount:,} تومان {'افزایش' if amount > 0 else 'کاهش'} یافت.\nموجودی قبلی: {old_balance:,} تومان\nموجودی جدید: {new_balance:,} تومان")
                 except BaseUser.DoesNotExist:
                     await update.message.reply_text("❌ کاربر یافت نشد.")

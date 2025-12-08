@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .admin import tinymce_upload
 
 app_name = 'authentication'
 
@@ -27,4 +28,7 @@ urlpatterns = [
 
     # مدیریت شماره کارت‌های حقیقی و حقوقی
     path('card-numbers/', views.CardNumberManagementView.as_view(), name='card_number_management'),
+
+    # آپلود TinyMCE
+    path('tinymce/upload/', tinymce_upload, name='tinymce-upload'),
 ]

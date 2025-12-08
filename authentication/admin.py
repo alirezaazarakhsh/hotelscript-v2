@@ -397,3 +397,20 @@ class OTPAdmin(admin.ModelAdmin):
     ordering = (
         '-id',
     )
+
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+import os
+
+@csrf_exempt
+def tinymce_upload(request):
+    if request.method == 'POST' and request.FILES.get('file'):
+        file = request.FILES['file']
+        # ذخیره فایل در media
+        file_name = default_storage.save(f'tinymce/{file.name}', ContentFile(file.read()))
+        file_url = default_storage.url(file_name)
+        return JsonResponse({'location': file_url})
+    return JsonResponse({'error': 'Invalid request'}, status=400)
