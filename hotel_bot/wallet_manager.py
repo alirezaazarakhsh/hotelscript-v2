@@ -160,8 +160,7 @@ class WalletManager:
             if not AccessManager.is_allowed(user_id, 'view_balance'):
                 await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز مشاهده موجودی کیف پول را ندارید!")
                 return
-            wallets = ReceiptManager.load_wallets()
-            balance = wallets.get(str(user_id), 0)
+            balance = await WalletManager.get_balance(user_id)
             text = f"💰 موجودی کیف پول شما: {balance:,} تومان"
             keyboard = [
                 [InlineKeyboardButton("شارژ کیف پول", callback_data="wallet_charge")],
@@ -254,4 +253,14 @@ class WalletManager:
                 return True
             return False
         except Wallet.DoesNotExist:
+            return False
+
+    @staticmethod
+    async def charge_balance(user_id, amount):
+        try:
+            wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user_id=user_id, defaults={'balance': 0})
+            wallet.balance += amount
+            await sync_to_async(wallet.save)()
+            return True
+        except Exception:
             return False

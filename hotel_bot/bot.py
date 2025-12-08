@@ -403,7 +403,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ شما مجوز شارژ کیف پول را ندارید!")
                 return
             amount = int(data.split(":")[1])
-            text = f"💸 در حال هدایت به درگاه پرداخت برای مبلغ {amount:,} تومان...\nلینک پرداخت: [لینک درگاه پرداخت - نیاز به API دارد]"
+            # شارژ کیف پول
+            success = await WalletManager.charge_balance(user_id, amount)
+            if success:
+                text = f"✅ کیف پول شما به مبلغ {amount:,} تومان شارژ شد!\n💰 موجودی جدید: {(await WalletManager.get_balance(user_id)):,} تومان"
+            else:
+                text = "❌ خطا در شارژ کیف پول. لطفاً دوباره تلاش کنید."
             await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
         elif data == "card_to_card":
             await WalletManager.prompt_for_amount(chat_id, context)

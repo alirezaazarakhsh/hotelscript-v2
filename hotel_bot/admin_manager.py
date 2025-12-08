@@ -1387,13 +1387,15 @@ class AdminManager:
                     keyboard = [
                         [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="renew_subscription")],
                         [InlineKeyboardButton("⬆️ ارتقای پکیج", callback_data="upgrade_my_package")],
-                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")]
+                        [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
+                        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="go_back")]
                     ]
                 else:
                     keyboard = [
                         [InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="renew_subscription")],
                         [InlineKeyboardButton("💰 شارژ کیف پول", callback_data="wallet_menu")],
-                        [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")]
+                        [InlineKeyboardButton("📞 تماس با پشتیبانی", callback_data="contact_support")],
+                        [InlineKeyboardButton("🏠 بازگشت به منوی اصلی", callback_data="go_back")]
                     ]
 
             reply_markup = InlineKeyboardMarkup(keyboard)
