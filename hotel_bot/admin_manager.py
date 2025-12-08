@@ -1082,13 +1082,18 @@ class AdminManager:
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             if message_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode="Markdown"
+                    )
+                except Exception as edit_error:
+                    # اگر پیام تغییر نکرده، خطا می‌دهد، پس پیام جدیدی نمی‌فرستیم
+                    if "Message is not modified" not in str(edit_error):
+                        raise edit_error
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,

@@ -253,7 +253,7 @@ class RuleSerializer(serializers.ModelSerializer):
         fields = ('tab_title', 'text', 'order')
 
     def get_text(self, obj):
-        return strip_tags(obj.text)
+        return obj.text
 
 
 
