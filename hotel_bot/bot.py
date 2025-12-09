@@ -37,13 +37,21 @@ logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(
 logger = logging.getLogger(__name__)
 
 # Function to send reservation notification
-async def send_reservation_notification(tracking_code, buyer_name, hotel_name):
+async def send_reservation_notification(tracking_code, buyer_name, hotel_name, capacity_status):
     from telegram import Bot
     bot = Bot(token=BOT_TOKEN)
     notification_text = f"🔔 **رزرو جدید ایجاد شد**\n\nکد پیگیری: {tracking_code}\nرزرو کننده: {buyer_name}\nهتل: {hotel_name}"
+    
+    keyboard = None
+    if capacity_status == 'pending':
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ تایید رزرو", callback_data=f"approve_reservation::{tracking_code}")],
+            [InlineKeyboardButton("❌ رد رزرو", callback_data=f"reject_reservation::{tracking_code}")]
+        ])
+    
     for admin_id in SUPER_ADMINS:
         try:
-            await bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown")
+            await bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown", reply_markup=keyboard)
         except Exception as e:
             logger.error(f"Failed to send notification to {admin_id}: {e}")
 

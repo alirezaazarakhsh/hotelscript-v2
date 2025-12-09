@@ -3410,7 +3410,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             from hotel_bot.bot import send_reservation_notification
             buyer_name = reserver_data.get('reserver_first_name', '') + ' ' + reserver_data.get('reserver_last_name', '').strip() or request.user.phone_number
             hotel_name = reservation.get_hotel().name if reservation.get_hotel() else 'نامشخص'
-            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name)
+            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name, reservation.capacity_status)
         except Exception as e:
             logger.error(f"Failed to send reservation notification: {e}")
 
@@ -4768,7 +4768,7 @@ class UserReservationListAPIView(APIView):
         - hotel_name
         - check_in_date (جلالی)
         - check_out_date (جلالی)
-        - total_guests
+        - total_guests (لیست تعداد مسافران هر اتاق)
         - payment_status
         - cancellation_status (وضعیت کنسلی: true=تایید شده, false=عدم تایید, null=بدون درخواست)
         - created_at (جلالی: 1403/06/15 14:30)
@@ -4791,7 +4791,7 @@ class UserReservationListAPIView(APIView):
                                 "hotel_name": "هتل آزادی تهران",
                                 "check_in_date": "1403-07-01",
                                 "check_out_date": "1403-07-05",
-                                "total_guests": 4,
+                                "total_guests": [2, 3],
                                 "payment_status": "paid",
                                 "cancellation_status": True,
                                 "created_at": "1403/06/15 14:30"
@@ -4947,12 +4947,21 @@ class UserReservationListAPIView(APIView):
             cancellation_status = self.get_cancellation_status(reservation)
             formatted_created_at = self.format_created_at(reservation.created_at)
 
+            # محاسبه تعداد مسافران هر اتاق
+            room_guests = []
+            for room in reservation.reservation_rooms.all():
+                main_count = 1 if room.main_passenger else 0
+                other_count = room.other_passengers.count()
+                extra_count = room.extra_capacity_passengers.count()
+                total_room_guests = main_count + other_count + extra_count
+                room_guests.append(total_room_guests)
+
             data.append({
                 "tracking_code": reservation.tracking_code,
                 "hotel_name": hotel_name,
                 "check_in_date": str(reservation.check_in_date),
                 "check_out_date": str(reservation.check_out_date),
-                "total_guests": reservation.total_guests,
+                "total_guests": room_guests,
                 "payment_status": reservation.payment_status,
                 "cancellation_status": cancellation_status.get('status') if isinstance(cancellation_status, dict) else cancellation_status,
                 "cancellation_status_display": cancellation_status.get('status_display') if isinstance(cancellation_status, dict) else None,

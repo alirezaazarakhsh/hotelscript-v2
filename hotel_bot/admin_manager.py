@@ -169,7 +169,13 @@ class AdminManager:
                 [InlineKeyboardButton("تغییر گروه دسترسی", callback_data=f"assign_group_menu:{admin_id}")],
                 [InlineKeyboardButton("حذف ادمین", callback_data=f"delete_admin:{admin_id}")],
             ]
-            if user_id in SUPER_ADMINS:
+            if user_id in SUPER_ADMINS or str(user_id) == str(admin_id):
+                logger.debug(f"User {user_id} is super admin or viewing own profile, adding wallet and profile options for admin_id {admin_id}")
+                keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("📝 ویرایش پروفایل", callback_data=f"edit_admin_profile:{admin_id}")])
+                keyboard.append([InlineKeyboardButton("📊 مدیریت اشتراک", callback_data=f"manage_subscription:{admin_id}")])
+            elif user_id in SUPER_ADMINS:
                 logger.debug(f"User {user_id} is super admin, adding wallet and profile options for admin_id {admin_id}")
                 keyboard.append([InlineKeyboardButton("🔧 تغییر موجودی", callback_data=f"modify_wallet:{admin_id}")])
                 keyboard.append([InlineKeyboardButton("💸 شارژ کیف پول", callback_data=f"charge_admin_wallet:{admin_id}")])
@@ -206,7 +212,7 @@ class AdminManager:
     async def manage_subscription_profile(chat_id, context, admin_id, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
-            if not AccessManager.is_allowed(user_id, 'manage_admins'):
+            if not AccessManager.is_allowed(user_id, 'manage_admins') and str(user_id) != str(admin_id):
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="❌ شما مجوز مدیریت اشتراک را ندارید!"
