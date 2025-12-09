@@ -3238,6 +3238,21 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ایجاد یک رزرو موقت برای کاربر و کاهش موقت موجودی اتاق‌ها.
         - اگر اتاق در حالت auto_approved باشد، رزرو مستقیماً confirmed می‌شود.
         - اگر نیاز به تأیید ادمین داشته باشد، capacity_status = pending.
+
+        **نمونه درخواست:**
+        ```json
+        {
+            "hotel_id": 1,
+            "room": [
+                {"id": 10, "number": 2},
+                {"id": 11, "number": 1}
+            ],
+            "date": {
+                "enter": "2025-12-15",
+                "exit": "2025-12-17"
+            }
+        }
+        ```
         """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -3308,15 +3323,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         hotel_id = data.get('hotel_id')
-        room_ids = data.get('room_id', [])
+        rooms = data.get('room', [])
         nights = reservation.nights_count
         all_auto_approved = True
 
         reservation_rooms = []
 
-        for room_id in room_ids:
+        for room_data in rooms:
+            room_id = room_data['id']
+            quantity = room_data['number']
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
-            quantity = 1
 
             auto_approval = False
             if room.auto_approved_count >= quantity:
