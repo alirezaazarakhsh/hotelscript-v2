@@ -223,7 +223,11 @@ class DepositReceiptAdmin(admin.ModelAdmin):
     receipt_image_preview.short_description = "پیش نمایش فیش"
 
     def approve_receipts(self, request, queryset):
-        updated = queryset.update(is_approved=True)
+        updated = 0
+        for receipt in queryset.filter(is_approved=False):
+            receipt.is_approved = True
+            receipt.save()  # This will trigger the signal
+            updated += 1
         self.message_user(request, f"{updated} فیش واریزی تایید شد و مبلغ به کیف پول کاربران اضافه شد.")
     approve_receipts.short_description = "تایید فیش‌های انتخاب شده"
 
