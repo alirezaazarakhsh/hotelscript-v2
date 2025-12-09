@@ -238,7 +238,7 @@ class WalletManager:
     @staticmethod
     async def get_balance(user_id):
         try:
-            wallet = await sync_to_async(Wallet.objects.get)(user_id=user_id)
+            wallet = await sync_to_async(Wallet.objects.get)(user=user_id)
             return wallet.balance
         except Wallet.DoesNotExist:
             return 0
@@ -246,7 +246,7 @@ class WalletManager:
     @staticmethod
     async def deduct_balance(user_id, amount):
         try:
-            wallet = await sync_to_async(Wallet.objects.get)(user_id=user_id)
+            wallet = await sync_to_async(Wallet.objects.get)(user=user_id)
             if wallet.balance >= amount:
                 wallet.balance -= amount
                 await sync_to_async(wallet.save)()
@@ -258,7 +258,7 @@ class WalletManager:
     @staticmethod
     async def charge_balance(user_id, amount):
         try:
-            wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user_id=user_id, defaults={'balance': 0})
+            wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user_id, defaults={'balance': 0})
             wallet.balance += amount
             await sync_to_async(wallet.save)()
             return True
