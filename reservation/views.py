@@ -3918,7 +3918,6 @@ class ReservationRoomDetailAPIView(APIView):
                     return Response({'detail': f'خطا در کد شناسایی رزروکننده: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
             # اعتبارسنجی اتاق‌ها و مسافران
-            passenger_national_codes = []
             for room_entry in rooms_data:
                 room_id = room_entry['id']
                 # چک کردن وجود اتاق
@@ -3960,9 +3959,6 @@ class ReservationRoomDetailAPIView(APIView):
                                 }
                             }
                         }, status=status.HTTP_400_BAD_REQUEST)
-                    if main_passenger['national_code'] in passenger_national_codes:
-                        return Response({'detail': f'کد شناسایی {main_passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
-                    passenger_national_codes.append(main_passenger['national_code'])
 
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     for passenger in passengers.get(p_type, []):
@@ -3978,9 +3974,6 @@ class ReservationRoomDetailAPIView(APIView):
                                 validate_national_code(passenger['national_code'])
                             except ValidationError as e:
                                 return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_id}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-                            if passenger['national_code'] in passenger_national_codes:
-                                return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
-                            passenger_national_codes.append(passenger['national_code'])
 
                 # اعتبارسنجی و تنظیم نیم‌شارژها
                 hotel = Room.objects.get(id=room_id).hotel

@@ -2310,12 +2310,6 @@ class ReservationRoomPassenger(models.Model):
     class Meta:
         verbose_name = 'مسافر'
         verbose_name_plural = 'مسافرها'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['reservation_room', 'national_code'],
-                name='unique_national_code_per_room'
-            )
-        ]
 
     def clean(self):
         # الزامی بودن فیلدها برای مسافر اصلی
@@ -2328,15 +2322,7 @@ class ReservationRoomPassenger(models.Model):
                 raise ValidationError(f'برای مسافر اصلی، فیلدهای {missing_fields} الزامی هستند.')
 
         # یکتایی کد ملی در همان اتاق
-        if self.national_code:
-            qs = ReservationRoomPassenger.objects.filter(
-                reservation_room=self.reservation_room,
-                national_code=self.national_code
-            )
-            if self.pk:
-                qs = qs.exclude(pk=self.pk)
-            if qs.exists():
-                raise ValidationError('کد ملی باید برای هر مسافر در همان اتاق یکتا باشد.')
+        # چک یکتایی برداشته شد
 
     def save(self, *args, **kwargs):
         self.is_primary = self.passenger_type == 'primary'
