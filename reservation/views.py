@@ -3916,11 +3916,12 @@ class ReservationRoomDetailAPIView(APIView):
                 return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
             # اعتبارسنجی اتاق‌ها و مسافران
-            reservation_room_ids = [r.room.id for r in reservation.reservation_rooms.all() if r.room]
             passenger_national_codes = []
             for room_entry in rooms_data:
-                if room_entry['id'] not in reservation_room_ids:
-                    return Response({'detail': f'اتاق {room_entry["id"]} به این رزرو تعلق ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+                room_id = room_entry['id']
+                # چک کردن وجود اتاق
+                if not Room.objects.filter(id=room_id).exists():
+                    return Response({'detail': f'اتاق {room_id} یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
 
                 passengers = room_entry.get('passengers', {})
                 main_passenger = passengers.get('main_passenger', {})
@@ -3930,7 +3931,7 @@ class ReservationRoomDetailAPIView(APIView):
                             'detail': 'خطا در داده‌های ورودی',
                             'errors': {
                                 'rooms': {
-                                    str(room_entry['id']): {
+                                    str(room_id): {
                                         'main_passenger': {
                                             field: [f'فیلد {field} برای مسافر اصلی الزامی است.']
                                         }
@@ -3946,7 +3947,7 @@ class ReservationRoomDetailAPIView(APIView):
                         'detail': 'خطا در داده‌های ورودی',
                         'errors': {
                             'rooms': {
-                                str(room_entry['id']): {
+                                str(room_id): {
                                     'main_passenger': {
                                         'non_field_errors': [str(e)]
                                     }
@@ -3962,24 +3963,23 @@ class ReservationRoomDetailAPIView(APIView):
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     for passenger in passengers.get(p_type, []):
                         if not passenger.get('first_name') or not passenger.get('last_name'):
-                            return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
+                            return Response({'detail': f'نام و نام خانوادگی برای مسافر الزامی است (اتاق {room_id}).'}, status=status.HTTP_400_BAD_REQUEST)
                         if passenger.get('phone_number'):
                             try:
                                 validate_phone_number(passenger['phone_number'])
                             except ValidationError as e:
-                                return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'خطا در شماره موبایل مسافر (اتاق {room_id}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                         if passenger.get('national_code'):
                             try:
                                 validate_national_code(passenger['national_code'])
                             except ValidationError as e:
-                                return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_entry["id"]}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                                return Response({'detail': f'خطا در کد ملی مسافر (اتاق {room_id}): {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
                             if passenger['national_code'] in passenger_national_codes:
                                 return Response({'detail': f'کد ملی {passenger["national_code"]} تکراری است.'}, status=status.HTTP_400_BAD_REQUEST)
                             passenger_national_codes.append(passenger['national_code'])
 
                 # اعتبارسنجی و تنظیم نیم‌شارژها
-                res_room = reservation.reservation_rooms.filter(room_id=room_entry['id']).first()
-                hotel = res_room.room.hotel if res_room and res_room.room else None
+                hotel = Room.objects.get(id=room_id).hotel
                 if hotel:
                     half_charges = room_entry.get('half_charges', {})
                     for charge_type in ['enter', 'exit']:
@@ -3987,12 +3987,7 @@ class ReservationRoomDetailAPIView(APIView):
                         enabled = charge.get('enabled', False)
                         is_half_charge_supported = hotel.has_check_in_half_day_charge if charge_type == 'enter' else hotel.has_check_out_half_day_charge
                         if enabled and not is_half_charge_supported:
-                            return Response({'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_entry["id"]}).'}, status=status.HTTP_400_BAD_REQUEST)
-                        # تنظیم مقدار enabled
-                        if charge_type == 'enter':
-                            res_room.half_day_in_selected = enabled and is_half_charge_supported
-                        else:
-                            res_room.half_day_out_selected = enabled and is_half_charge_supported
+                            return Response({'detail': f'نیم‌شارژ {charge_type} برای این هتل پشتیبانی نمی‌شود (اتاق {room_id}).'}, status=status.HTTP_400_BAD_REQUEST)
 
             # ذخیره اطلاعات رزروکننده
             reservation.reserver_first_name = reserver_data['first_name']
@@ -4012,16 +4007,35 @@ class ReservationRoomDetailAPIView(APIView):
 
             # ذخیره اطلاعات اتاق‌ها و مسافران
             res_rooms_list = list(reservation.reservation_rooms.all())
-            for room_data, res_room in zip(rooms_data, res_rooms_list):
+            used_res_rooms = []
+            for room_data in rooms_data:
+                room_id = room_data['id']
+                # پیدا کردن res_room موجود برای این room_id
+                res_room = None
+                for r in res_rooms_list:
+                    if r.room_id == room_id and r not in used_res_rooms:
+                        res_room = r
+                        used_res_rooms.append(r)
+                        break
+                if not res_room:
+                    # ایجاد res_room جدید
+                    try:
+                        room = Room.objects.get(id=room_id)
+                    except Room.DoesNotExist:
+                        return Response({'detail': f'اتاق {room_id} یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
+                    res_room = ReservationRoom.objects.create(reservation=reservation, room=room)
+
                 passengers_data = room_data.get('passengers', {})
                 half_charges = room_data.get('half_charges', {})
 
                 # تنظیم نیم‌شارژها
-                res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', res_room.half_day_in_selected) and hotel.has_check_in_half_day_charge
-                res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', res_room.half_day_out_selected) and hotel.has_check_out_half_day_charge
-                res_room.calculate_half_day_prices()  # محاسبه مجدد قیمت‌های نیم‌شارژ
-                res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', res_room.half_day_in_price))
-                res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', res_room.half_day_out_price))
+                hotel = res_room.room.hotel if res_room.room else None
+                if hotel:
+                    res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', res_room.half_day_in_selected) and hotel.has_check_in_half_day_charge
+                    res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', res_room.half_day_out_selected) and hotel.has_check_out_half_day_charge
+                    res_room.calculate_half_day_prices()  # محاسبه مجدد قیمت‌های نیم‌شارژ
+                    res_room.half_day_in_price = int(half_charges.get('enter', {}).get('price', res_room.half_day_in_price))
+                    res_room.half_day_out_price = int(half_charges.get('exit', {}).get('price', res_room.half_day_out_price))
                 res_room.extra_passenger_price = int(room_data.get('extra_capacity_price', res_room.extra_passenger_price or 0))
                 res_room.fixed_discount = int(room_data.get('discount_on_purchase', res_room.fixed_discount or 0))
                 res_room.calculate_room_prices()
@@ -4040,7 +4054,7 @@ class ReservationRoomDetailAPIView(APIView):
                         'detail': 'خطا در داده‌های ورودی',
                         'errors': {
                             'rooms': {
-                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                str(res_room.room_id): {
                                     'main_passenger': {
                                         'identification': ['کد شناسایی (کد ملی/پاسپورت) برای مسافر اصلی الزامی است.']
                                     }
@@ -4056,7 +4070,7 @@ class ReservationRoomDetailAPIView(APIView):
                         'detail': 'خطا در داده‌های ورودی',
                         'errors': {
                             'rooms': {
-                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                str(res_room.room_id): {
                                     'main_passenger': {
                                         'phone_number': [str(e)]
                                     }
@@ -4071,7 +4085,7 @@ class ReservationRoomDetailAPIView(APIView):
                         'detail': 'خطا در داده‌های ورودی',
                         'errors': {
                             'rooms': {
-                                str(res_room.room_id or (res_room.room.id if getattr(res_room, 'room', None) else 'unknown')): {
+                                str(res_room.room_id): {
                                     'main_passenger': {
                                         'identification': [str(e)]
                                     }
@@ -4128,6 +4142,11 @@ class ReservationRoomDetailAPIView(APIView):
                                     )
                                 except Exception as e:
                                     pass  # ignore errors
+
+            # حذف res_rooms که استفاده نشده‌اند
+            for res_room in res_rooms_list:
+                if res_room not in used_res_rooms:
+                    res_room.delete()
 
             # محاسبه و ذخیره قیمت‌های نهایی
             total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()

@@ -759,8 +759,8 @@ class ReservationhotelAdminForm(forms.ModelForm):
 # --- اینلاین مسافران ---
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 8
-    max_num = 8
+    extra = 10
+    max_num = 10
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = True
     autocomplete_fields = ()
@@ -774,8 +774,8 @@ class ReservationRoomPassengerInline(NestedTabularInline):
 # --- اینلاین اتاق‌ها ---
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 3
-    max_num = 3
+    extra = 10
+    max_num = 10
     fields = (
         'room', 'price_per_night', 'extra_passenger_price', 'fixed_discount', 'subtotal',
         'primary_passengers_count', 'extra_passengers_count',
