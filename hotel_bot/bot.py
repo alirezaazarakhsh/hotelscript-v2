@@ -3,6 +3,7 @@ import logging
 import re
 import sys
 import django
+from jdatetime import datetime as jdatetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -587,13 +588,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await AdminManager.show_subscription_renewal(chat_id, context, admin_id, message_id)
             except IndexError:
                 await query.edit_message_text("❌ داده نامعتبر!")
-        elif data.startswith("view_subscription:"):
+        elif data.startswith("manage_subscription:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
-                await query.edit_message_text("❌ شما مجوز مشاهده پروفایل اشتراک را ندارید!")
+                await query.edit_message_text("❌ شما مجوز مدیریت اشتراک را ندارید!")
                 return
             try:
                 admin_id = data.split(":", 1)[1]
-                await AdminManager.show_subscription_profile(chat_id, context, admin_id, message_id=message_id)
+                await AdminManager.manage_subscription_profile(chat_id, context, admin_id, message_id=message_id)
             except IndexError:
                 await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "cancel_subscription_setup":
@@ -610,6 +611,52 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 admin_id = data.split(":", 1)[1]
                 await AdminManager.process_subscription_renewal(chat_id, context, admin_id, "yearly")
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("change_package:"):
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_package_selection(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("set_expiry_date:"):
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.prompt_expiry_date(chat_id, context, admin_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("toggle_auto_renewal:"):
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.toggle_auto_renewal(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("cancel_subscription:"):
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.cancel_subscription(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("set_subscription_status:"):
+            try:
+                admin_id = data.split(":", 1)[1]
+                await AdminManager.show_status_options(chat_id, context, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("set_status:"):
+            try:
+                parts = data.split(":")
+                status = parts[1]
+                admin_id = parts[2]
+                await AdminManager.set_subscription_status(chat_id, context, status, admin_id, message_id)
+            except IndexError:
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("select_package:"):
+            try:
+                parts = data.split(":")
+                admin_id = parts[1]
+                package_id = parts[2]
+                await AdminManager.change_package(chat_id, context, admin_id, package_id, message_id)
             except IndexError:
                 await query.edit_message_text("❌ داده نامعتبر!")
         elif data == "insufficient_balance":
@@ -1099,6 +1146,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await AdminManager.show_manage_admins(update.message.chat_id, context, admins)
             except ValueError:
                 await update.message.reply_text("❌ فرمت تاریخ نامعتبر. از فرمت YYYY-MM-DD استفاده کنید (مثال: 2025-12-31).")
+        elif 'setting_expiry_for' in context.user_data:
+            from datetime import datetime
+            try:
+                expiry_str = text.strip()
+                # Parse the datetime string
+                expiry_date = datetime.fromisoformat(expiry_str)
+                admin_id = context.user_data['setting_expiry_for']
+                
+                access_data = AccessManager.load_data()
+                admins = access_data.get('admins', {})
+                if str(admin_id) not in admins:
+                    await update.message.reply_text("❌ ادمین یافت نشد!")
+                    context.user_data.pop('setting_expiry_for', None)
+                    return
+                
+                admin_data = admins[str(admin_id)]
+                if isinstance(admin_data, str):
+                    admin_data = {'group': admin_data}
+                
+                admin_data['subscription_expiry'] = expiry_date.isoformat()
+                
+                AccessManager.save_data(access_data)
+                
+                jalali_expiry = jdatetime.fromgregorian(datetime=expiry_date)
+                expiry_str_jalali = jalali_expiry.strftime('%Y/%m/%d %H:%M')
+                
+                await update.message.reply_text(
+                    f"✅ تاریخ انقضای ادمین {admin_id} تنظیم شد:\n⏰ تاریخ جدید: {expiry_str_jalali}",
+                    parse_mode="Markdown"
+                )
+                context.user_data.pop('setting_expiry_for', None)
+                await AdminManager.manage_subscription_profile(update.message.chat_id, context, admin_id)
+            except ValueError:
+                await update.message.reply_text("❌ فرمت تاریخ نامعتبر. از فرمت YYYY-MM-DD HH:MM استفاده کنید (مثال: 2025-12-31 23:59).")
         elif state == 'waiting_for_wallet_search':
             search_query = text.strip()
             await MenuManager.process_wallet_search(user_id, context, search_query)
