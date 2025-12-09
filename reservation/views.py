@@ -3243,12 +3243,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ```json
         {
             "hotel_id": 1,
-            "rooms": [
-                {
-                    "room_id": 10,
-                    "room_number": 2
-                }
-            ],
+            "room_id": 10,
+            "room_number": 2,
             "date": {
                 "enter": "2025-12-15",
                 "exit": "2025-12-17"
@@ -3325,15 +3321,17 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         hotel_id = data.get('hotel_id')
-        rooms = data.get('rooms')
+        room_id = data.get('room_id')
+        room_number = data.get('room_number')
+        rooms = [{"id": room_id, "number": room_number}]
         nights = reservation.nights_count
         all_auto_approved = True
 
         reservation_rooms = []
 
         for room_data in rooms:
-            room_id = room_data['room_id']
-            quantity = room_data['room_number']
+            room_id = room_data['id']
+            quantity = room_data['number']
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
 
             auto_approval = False
