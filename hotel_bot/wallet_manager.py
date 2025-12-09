@@ -4,8 +4,6 @@ from hotel_bot.config import SUPER_ADMINS
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.menu_manager import MenuManager
-from finance.models import Wallet
-from asgiref.sync import sync_to_async
 import logging
 
 
@@ -20,7 +18,6 @@ class WalletManager:
             user_id = context.user_data.get('user_id', chat_id)
             text = "💰 **شارژ کیف پول**\n\nبرای شارژ کیف پول خود یا مشاهده موجودی، یکی از گزینه‌های زیر را انتخاب کنید. شارژ کیف پول به شما امکان استفاده از خدمات بیشتر را می‌دهد.\n\n**نکته**: حداقل مبلغ شارژ 1,000,000 تومان است."
             keyboard = [
-                [InlineKeyboardButton("شارژ حساب با درگاه پرداخت", callback_data="payment_gateway")],
                 [InlineKeyboardButton("شارژ حساب با کارت به کارت", callback_data="card_to_card")],
                 [InlineKeyboardButton("مشاهده موجودی", callback_data="view_balance")],
                 [InlineKeyboardButton("بازگشت", callback_data="go_back")]
@@ -35,32 +32,6 @@ class WalletManager:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش منوی شارژ کیف پول: {str(e)}")
             from menu_manager import MenuManager
             await MenuManager.show_main_menu(user_id, context)
-
-    @staticmethod
-    async def show_payment_packages(chat_id, context, message_id=None):
-        try:
-            user_id = context.user_data.get('user_id', chat_id)
-            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
-                await context.bot.send_message(chat_id=chat_id, text="❌ شما مجوز شارژ کیف پول را ندارید!")
-                return
-            text = "💸 **انتخاب مبلغ برای شارژ از طریق درگاه پرداخت**\n\nلطفاً یکی از پکیج‌های زیر را انتخاب کنید. پس از انتخاب، به درگاه پرداخت هدایت می‌شوید."
-            keyboard = [
-                [InlineKeyboardButton("۱ میلیون تومان", callback_data="payment:1000000")],
-                [InlineKeyboardButton("۲ میلیون تومان", callback_data="payment:2000000")],
-                [InlineKeyboardButton("۵ میلیون تومان", callback_data="payment:5000000")],
-                [InlineKeyboardButton("۱۰ میلیون تومان", callback_data="payment:10000000")],
-                [InlineKeyboardButton("۲۰ میلیون تومان", callback_data="payment:20000000")],
-                [InlineKeyboardButton("بازگشت", callback_data="wallet_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            if message_id:
-                await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
-            else:
-                await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"Error in show_payment_packages: {str(e)}")
-            await context.bot.send_message(chat_id=chat_id, text=f"❌ خطا در نمایش پکیج‌های پرداخت: {str(e)}")
-            await WalletManager.show_wallet_menu(chat_id, context)
 
     @staticmethod
     async def prompt_for_amount(chat_id, context):
@@ -238,29 +209,31 @@ class WalletManager:
     @staticmethod
     async def get_balance(user_id):
         try:
-            wallet = await sync_to_async(Wallet.objects.get)(user=user_id)
-            return wallet.balance
-        except Wallet.DoesNotExist:
+            wallets = ReceiptManager.load_wallets()
+            return wallets.get(str(user_id), 0)
+        except Exception:
             return 0
 
     @staticmethod
+    @staticmethod
     async def deduct_balance(user_id, amount):
         try:
-            wallet = await sync_to_async(Wallet.objects.get)(user=user_id)
-            if wallet.balance >= amount:
-                wallet.balance -= amount
-                await sync_to_async(wallet.save)()
+            wallets = ReceiptManager.load_wallets()
+            current = wallets.get(str(user_id), 0)
+            if current >= amount:
+                wallets[str(user_id)] = current - amount
+                ReceiptManager.save_wallets(wallets)
                 return True
             return False
-        except Wallet.DoesNotExist:
+        except Exception:
             return False
 
     @staticmethod
     async def charge_balance(user_id, amount):
         try:
-            wallet, created = await sync_to_async(Wallet.objects.get_or_create)(user=user_id, defaults={'balance': 0})
-            wallet.balance += amount
-            await sync_to_async(wallet.save)()
+            wallets = ReceiptManager.load_wallets()
+            wallets[str(user_id)] = wallets.get(str(user_id), 0) + amount
+            ReceiptManager.save_wallets(wallets)
             return True
         except Exception:
             return False

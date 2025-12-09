@@ -396,20 +396,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "wallet_charge":
             await WalletManager.show_wallet_menu(chat_id, context, message_id)
-        elif data == "payment_gateway":
-            await WalletManager.show_payment_packages(chat_id, context, message_id)
-        elif data.startswith("payment:"):
-            if not AccessManager.is_allowed(user_id, 'wallet_charge'):
-                await query.edit_message_text("❌ شما مجوز شارژ کیف پول را ندارید!")
-                return
-            amount = int(data.split(":")[1])
-            # شارژ کیف پول
-            success = await WalletManager.charge_balance(user_id, amount)
-            if success:
-                text = f"✅ کیف پول شما به مبلغ {amount:,} تومان شارژ شد!\n💰 موجودی جدید: {(await WalletManager.get_balance(user_id)):,} تومان"
-            else:
-                text = "❌ خطا در شارژ کیف پول. لطفاً دوباره تلاش کنید."
-            await query.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode="Markdown")
         elif data == "card_to_card":
             await WalletManager.prompt_for_amount(chat_id, context)
         elif data == "send_receipt":
