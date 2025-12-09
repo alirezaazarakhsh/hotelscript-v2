@@ -3243,8 +3243,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         ```json
         {
             "hotel_id": 1,
-            "room_id": 10,
-            "room_number": 2,
+            "rooms": [
+                {
+                    "room_id": 10,
+                    "room_number": 2
+                }
+            ],
             "date": {
                 "enter": "2025-12-15",
                 "exit": "2025-12-17"
@@ -3321,17 +3325,15 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         )
 
         hotel_id = data.get('hotel_id')
-        room_id = data.get('room_id')
-        room_number = data.get('room_number')
-        rooms = [{"id": room_id, "number": room_number}]
+        rooms = data.get('rooms')
         nights = reservation.nights_count
         all_auto_approved = True
 
         reservation_rooms = []
 
         for room_data in rooms:
-            room_id = room_data['id']
-            quantity = room_data['number']
+            room_id = room_data['room_id']
+            quantity = room_data['room_number']
             room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
 
             auto_approval = False
@@ -3354,17 +3356,18 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 ).first()
                 total_price += Decimal(price.price) if price else Decimal('0')
 
-            res_room = ReservationRoom(
-                reservation=reservation,
-                room=room,
-                quantity=quantity,
-                was_auto_approved=auto_approval,
-                price_per_night=total_price / nights if nights > 0 else total_price,
-                subtotal=total_price,
-                primary_passengers_count=room.room_capacity,
-                extra_passengers_count=room.extra_capacity,
-            )
-            reservation_rooms.append(res_room)
+            for _ in range(quantity):
+                res_room = ReservationRoom(
+                    reservation=reservation,
+                    room=room,
+                    quantity=1,
+                    was_auto_approved=auto_approval,
+                    price_per_night=total_price / nights if nights > 0 else total_price,
+                    subtotal=total_price / quantity,
+                    primary_passengers_count=room.room_capacity,
+                    extra_passengers_count=room.extra_capacity,
+                )
+                reservation_rooms.append(res_room)
 
         ReservationRoom.objects.bulk_create(reservation_rooms)
 
