@@ -407,6 +407,21 @@ class ReservationManager:
                     logger.error(f"Failed to notify admin {admin_id}: {e}")
 
     @staticmethod
+    async def reject_reservation(user_id, context, tracking_code):
+        success, message = await ReservationManager._reject_reservation_sync(tracking_code)
+        await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        
+        if success:
+            # Notify super admins
+            from hotel_bot.config import SUPER_ADMINS
+            notification_text = f"❌ رزرو {tracking_code} توسط ادمین رد شد."
+            for admin_id in SUPER_ADMINS:
+                try:
+                    await context.bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown")
+                except Exception as e:
+                    logger.error(f"Failed to notify admin {admin_id}: {e}")
+
+    @staticmethod
     @database_sync_to_async
     def _reject_reservation_sync(tracking_code):
         from reservation.models import set_skip_points_and_sms
