@@ -253,11 +253,22 @@ class AdminManager:
             packages = access_data.get('subscription_packages', {})
             package_name = packages.get(subscription_package, {}).get('name', 'نامشخص') if subscription_package else 'تنظیم نشده'
 
+            # تبدیل تاریخ به Jalali
+            expiry_display = subscription_expiry
+            if subscription_expiry:
+                try:
+                    from datetime import datetime
+                    expiry_dt = datetime.fromisoformat(subscription_expiry)
+                    jalali_expiry = jdatetime.fromgregorian(datetime=expiry_dt)
+                    expiry_display = jalali_expiry.strftime('%Y/%m/%d %H:%M')
+                except:
+                    pass
+
             text = (
                 f"📊 **مدیریت اشتراک ادمین {admin_id}**\n\n"
                 f"**وضعیت اشتراک**: {status}\n"
                 f"**پکیج فعلی**: {package_name}\n"
-                f"**تاریخ انقضا**: {subscription_expiry if subscription_expiry else 'تنظیم نشده'}\n"
+                f"**تاریخ انقضا**: {expiry_display if subscription_expiry else 'تنظیم نشده'}\n"
                 f"**روزهای باقی‌مانده**: {days_remaining if subscription_expiry else 'N/A'}\n"
                 f"**تمدید خودکار**: {'✅ فعال' if auto_renewal else '❌ غیرفعال'}\n\n"
             )
@@ -272,8 +283,6 @@ class AdminManager:
                 [InlineKeyboardButton("⏰ تنظیم تاریخ انقضا", callback_data=f"set_expiry_date:{admin_id}")],
                 [InlineKeyboardButton("🔄 فعال/غیرفعال کردن تمدید خودکار", callback_data=f"toggle_auto_renewal:{admin_id}")],
                 [InlineKeyboardButton("📊 تنظیم وضعیت اشتراک", callback_data=f"set_subscription_status:{admin_id}")],
-                [InlineKeyboardButton("🔄 تمدید ماهانه", callback_data=f"renew_monthly:{admin_id}")],
-                [InlineKeyboardButton("🔄 تمدید سالانه", callback_data=f"renew_yearly:{admin_id}")],
                 [InlineKeyboardButton("❌ لغو اشتراک", callback_data=f"cancel_subscription:{admin_id}")],
                 [InlineKeyboardButton("بازگشت به جزئیات ادمین", callback_data=f"view_admin:{admin_id}")]
             ]
@@ -444,7 +453,7 @@ class AdminManager:
             logger.error(f"Error in cancel_subscription: {str(e)}", exc_info=True)
 
     @staticmethod
-    async def change_package(chat_id, context, admin_id, package_id, message_id=None):
+    async def change_package(chat_id, context, admin_id, package_id=None, message_id=None):
         try:
             user_id = context.user_data.get('user_id', chat_id)
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
@@ -458,13 +467,6 @@ class AdminManager:
             packages = access_data.get('subscription_packages', {})
             admins = access_data.get('admins', {})
 
-            if package_id not in packages:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="❌ پکیج یافت نشد!"
-                )
-                return
-
             if str(admin_id) not in admins:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -472,36 +474,119 @@ class AdminManager:
                 )
                 return
 
-            new_package = packages[package_id]
             admin_data = admins[str(admin_id)]
             if isinstance(admin_data, str):
                 admin_data = {'group': admin_data}
 
-            # بروزرسانی پکیج
-            old_package = admin_data.get('subscription_package')
-            duration = new_package.get('duration_days', 30)
-            new_expiry = datetime.now() + timedelta(days=duration)
+            current_package_id = admin_data.get('subscription_package')
 
-            admin_data['subscription_package'] = package_id
-            admin_data['subscription_expiry'] = new_expiry.isoformat()
-            admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
-            admin_data['subscription_upgraded_by'] = user_id
-            admin_data['previous_package'] = old_package
+            # اگر package_id مشخص شده، مستقیم تغییر بده
+            if package_id:
+                if package_id not in packages:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="❌ پکیج یافت نشد!"
+                    )
+                    return
 
-            AccessManager.save_data(access_data)
+                new_package = packages[package_id]
+                
+                # بروزرسانی پکیج
+                old_package = current_package_id
+                duration = new_package.get('duration_days', 30)
+                new_expiry = datetime.now() + timedelta(days=duration)
 
-            package_name = new_package.get('name', package_id)
-            jalali_expiry = jdatetime.fromgregorian(datetime=new_expiry)
-            expiry_str = jalali_expiry.strftime('%Y/%m/%d %H:%M')
+                admin_data['subscription_package'] = package_id
+                admin_data['subscription_expiry'] = new_expiry.isoformat()
+                admin_data['subscription_upgraded_at'] = datetime.now().isoformat()
+                admin_data['subscription_upgraded_by'] = user_id
+                admin_data['previous_package'] = old_package
 
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"📦 **پکیج ادمین {admin_id} به {package_name} تغییر یافت.**\n⏰ تاریخ انقضا جدید: {expiry_str}",
-                parse_mode="Markdown"
-            )
+                AccessManager.save_data(access_data)
 
-            # بازگشت به مدیریت اشتراک
-            await AdminManager.manage_subscription_profile(chat_id, context, admin_id, message_id)
+                package_name = new_package.get('name', package_id)
+                jalali_expiry = jdatetime.fromgregorian(datetime=new_expiry)
+                expiry_str = jalali_expiry.strftime('%Y/%m/%d %H:%M')
+
+                # تعیین نوع تغییر (ارتقا یا کاهش)
+                change_type = "تغییر"
+                if old_package and old_package in packages:
+                    old_price = packages[old_package].get('price', 0)
+                    new_price = new_package.get('price', 0)
+                    if new_price > old_price:
+                        change_type = "ارتقا"
+                    elif new_price < old_price:
+                        change_type = "کاهش رتبه"
+
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"📦 **پکیج ادمین {admin_id} {change_type} یافت به {package_name}.**\n⏰ تاریخ انقضا جدید: {expiry_str}",
+                    parse_mode="Markdown"
+                )
+
+                # بازگشت به مدیریت اشتراک
+                await AdminManager.manage_subscription_profile(chat_id, context, admin_id, message_id)
+                return
+
+            # اگر package_id مشخص نشده، لیست پکیج‌ها را نمایش بده
+            if not packages:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ هیچ پکیجی تعریف نشده است!"
+                )
+                return
+
+            text = f"📦 **انتخاب پکیج جدید برای ادمین {admin_id}**\n\n"
+            
+            if current_package_id and current_package_id in packages:
+                current_package = packages[current_package_id]
+                text += f"📋 **پکیج فعلی**: {current_package.get('name', current_package_id)}\n"
+                text += f"💰 **قیمت فعلی**: {current_package.get('price', 0):,} تومان\n\n"
+            else:
+                text += "📋 **پکیج فعلی**: ندارد\n\n"
+            
+            text += "**پکیج‌های موجود**:\n\n"
+            keyboard = []
+
+            for pkg_id, package_data in packages.items():
+                name = package_data.get('name', pkg_id)
+                price = package_data.get('price', 0)
+                duration = package_data.get('duration_days', 30)
+                permissions = package_data.get('permissions', [])
+                perm_count = len(permissions) if isinstance(permissions, list) else 0
+                
+                # نشان دادن نوع تغییر
+                change_indicator = ""
+                if current_package_id and current_package_id in packages:
+                    current_price = packages[current_package_id].get('price', 0)
+                    if price > current_price:
+                        change_indicator = "⬆️ "
+                    elif price < current_price:
+                        change_indicator = "⬇️ "
+                    else:
+                        change_indicator = "➡️ "
+                
+                text += f"{change_indicator}**{name}**\n💰 {price:,} تومان - ⏰ {duration} روز - 🔐 {perm_count} مجوز\n\n"
+                keyboard.append([InlineKeyboardButton(f"{change_indicator}{name}", callback_data=f"select_package:{admin_id}:{pkg_id}")])
+
+            keyboard.append([InlineKeyboardButton("بازگشت به مدیریت اشتراک", callback_data=f"manage_subscription:{admin_id}")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            if message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
         except Exception as e:
             logger.error(f"Error in change_package: {str(e)}", exc_info=True)
 
@@ -737,9 +822,9 @@ class AdminManager:
                 keyboard = []
                 row = []
                 for package_id, package in packages.items():
-                    package_group = package.get('group', 'نامشخص')
-                    group_count = len(access_data.get('groups', {}).get(package_group, set())) if package_group in access_data.get('groups', {}) else 0
-                    text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان (گروه: {package_group}, {group_count} مجوز)\n"
+                    package_permissions = package.get('permissions', [])
+                    perm_count = len(package_permissions) if isinstance(package_permissions, list) else 0
+                    text += f"📋 {package.get('name', package_id)} - {package.get('price', 0):,} تومان ({perm_count} مجوز)\n"
                     row.append(InlineKeyboardButton(package.get('name', package_id), callback_data=f"package_details:{package_id}"))
                     if len(row) == 2:
                         keyboard.append(row)
@@ -795,27 +880,23 @@ class AdminManager:
 
             package = packages[package_id]
             package_group = package.get('group')
+            package_permissions = package.get('permissions', [])
             
             text = f"📋 **پکیج: {package.get('name', package_id)}**\n\n"
             text += f"💰 **قیمت**: {package.get('price', 0):,} تومان\n"
             text += f"⏱️ **مدت**: {package.get('duration_days', 30)} روز\n"
-            text += f"👥 **گروه دسترسی**: {package_group or 'نامشخص'}\n"
             text += f"📝 **توضیحات**: {package.get('description', 'ندارد')}\n\n"
             
-            # نمایش دسترسی‌های گروه
-            if package_group and package_group in access_data.get('groups', {}):
-                group_permissions = access_data['groups'][package_group]
-                if group_permissions:
-                    text += "**مجوزهای گروه**:\n"
-                    for perm in group_permissions:
-                        if perm in PERM_DISPLAY:
-                            text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
-                        else:
-                            text += f"✅ {perm}\n"
-                else:
-                    text += "❌ گروه هیچ مجوزی ندارد.\n"
+            # نمایش دسترسی‌های مستقیم پکیج
+            if package_permissions:
+                text += "**مجوزهای پکیج**:\n"
+                for perm in package_permissions:
+                    if perm in PERM_DISPLAY:
+                        text += f"✅ {PERM_DISPLAY[perm]['label']}\n"
+                    else:
+                        text += f"✅ {perm}\n"
             else:
-                text += "❌ گروه دسترسی یافت نشد.\n"
+                text += "❌ پکیج هیچ مجوزی ندارد.\n"
             
             text += "\n**توضیح**: می‌توانید این پکیج را ویرایش، حذف یا به ادمین‌ها اختصاص دهید."
 
@@ -993,37 +1074,58 @@ class AdminManager:
 
             elif step == 'description':
                 package_data['data']['description'] = user_input.strip() if user_input.strip() else ""
-                package_data['step'] = 'group_selection'
+                package_data['step'] = 'permissions'
                 
-                # نمایش لیست گروه‌های دسترسی برای انتخاب
-                access_data = AccessManager.load_data()
-                groups = access_data.get('groups', {})
+                text = "4️⃣ مجوزهای پکیج را وارد کنید (با کاما جدا کنید):\n"
+                text += "مثال: view_reservations,manage_wallet,manage_subscriptions\n\n"
+                text += "**مجوزهای موجود**:\n"
+                for perm_key, perm_info in PERM_DISPLAY.items():
+                    text += f"• {perm_key}: {perm_info['label']}\n"
                 
-                if not groups:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=text
+                )
+                return True
+
+            elif step == 'permissions':
+                permissions = [p.strip() for p in user_input.split(',') if p.strip()]
+                # اعتبارسنجی مجوزها
+                valid_permissions = []
+                invalid_permissions = []
+                
+                for perm in permissions:
+                    if perm in PERM_DISPLAY:
+                        valid_permissions.append(perm)
+                    else:
+                        invalid_permissions.append(perm)
+                
+                if invalid_permissions:
+                    text = f"❌ مجوزهای نامعتبر: {', '.join(invalid_permissions)}\n\n"
+                    text += "لطفاً مجدداً مجوزهای معتبر را وارد کنید:"
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text="❌ هیچ گروه دسترسی‌ای وجود ندارد. لطفاً ابتدا گروه‌های دسترسی را ایجاد کنید.",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بازگشت", callback_data="cancel_create_package")]])
+                        text=text
                     )
                     return True
                 
-                text = "5️⃣ گروه دسترسی پکیج را انتخاب کنید:\n\n"
-                text += "**گروه‌های دسترسی موجود**:\n"
+                package_data['data']['permissions'] = valid_permissions
+                package_data['step'] = 'confirm'
                 
-                keyboard = []
-                for group_name, permissions in groups.items():
-                    perm_count = len(permissions) if isinstance(permissions, set) else 0
-                    text += f"• {group_name}: {perm_count} مجوز\n"
-                    keyboard.append([
-                        InlineKeyboardButton(
-                            f"انتخاب {group_name}", 
-                            callback_data=f"select_package_group:{group_name}"
-                        )
-                    ])
+                # نمایش خلاصه پکیج
+                data = package_data['data']
+                text = f"✅ **مرور پکیج جدید**\n\n"
+                text += f"📦 نام: {data['name']}\n"
+                text += f"💰 قیمت: {data['price']:,} تومان\n"
+                text += f"⏱️ مدت: {data['duration_days']} روز\n"
+                text += f"📝 توضیحات: {data.get('description', 'ندارد')}\n"
+                text += f"🔐 مجوزها: {', '.join([PERM_DISPLAY.get(p, {}).get('label', p) for p in valid_permissions])}\n\n"
+                text += "آیا این اطلاعات صحیح است؟"
                 
-                keyboard.append([
-                    InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")
-                ])
+                keyboard = [
+                    [InlineKeyboardButton("✅ تأیید و ایجاد", callback_data="confirm_create_package")],
+                    [InlineKeyboardButton("❌ لغو", callback_data="cancel_create_package")]
+                ]
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await context.bot.send_message(
@@ -1086,12 +1188,12 @@ class AdminManager:
                 return
 
             package_data = context.user_data['creating_package']['data']
-            group_name = package_data.get('group')
+            permissions = package_data.get('permissions', [])
 
-            if not group_name:
+            if not permissions:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="❌ گروه دسترسی انتخاب نشده!"
+                    text="❌ مجوزها انتخاب نشده!"
                 )
                 return
 
@@ -1111,7 +1213,7 @@ class AdminManager:
                 'price': package_data['price'],
                 'duration_days': package_data['duration_days'],
                 'description': package_data.get('description', ''),
-                'group': group_name,
+                'permissions': permissions,
                 'created_by': context.user_data.get('user_id', chat_id),
                 'created_at': datetime.now().isoformat(),
                 'is_active': True
@@ -1123,16 +1225,14 @@ class AdminManager:
             # پاک کردن داده‌های موقت
             del context.user_data['creating_package']
 
-            # دریافت اطلاعات گروه
-            groups = access_data.get('groups', {})
-            group_permissions = groups.get(group_name, set())
-            perm_count = len(group_permissions) if isinstance(group_permissions, set) else 0
+            # دریافت اطلاعات مجوزها
+            perm_count = len(permissions)
 
             text = f"✅ **پکیج '{package_data['name']}' با موفقیت ایجاد شد!**\n\n"
             text += f"📋 **شناسه پکیج**: {package_id}\n"
             text += f"💰 **قیمت**: {package_data['price']:,} تومان\n"
             text += f"⏱️ **مدت**: {package_data['duration_days']} روز\n"
-            text += f"👥 **گروه دسترسی**: {group_name} ({perm_count} مجوز)\n\n"
+            text += f"🔐 **مجوزها**: {perm_count} مورد\n\n"
             text += "اکنون می‌توانید این پکیج را به ادمین‌ها اختصاص دهید."
 
             keyboard = [
@@ -1285,22 +1385,22 @@ class AdminManager:
             admin_data['subscription_assigned_by'] = user_id
             admin_data['subscription_assigned_at'] = datetime.now().isoformat()
 
-            # دسترسی‌ها اکنون از گروه پکیج گرفته می‌شود، نیازی به کپی نیست
+            # دسترسی‌ها اکنون از پکیج گرفته می‌شود، نیازی به کپی نیست
             # admin_data['permissions'] = package.get('permissions', [])
 
             AccessManager.save_data(access_data)
 
-            # دریافت اطلاعات گروه پکیج
-            package_group = package.get('group')
-            groups = access_data.get('groups', {})
-            group_permissions = groups.get(package_group, set()) if package_group else set()
-            perm_count = len(group_permissions) if isinstance(group_permissions, set) else 0
+            # دریافت اطلاعات پکیج
+            package_permissions = package.get('permissions', [])
+            perm_count = len(package_permissions) if isinstance(package_permissions, list) else 0
+
+            jalali_expiry = jdatetime.fromgregorian(datetime=expiry_date)
+            expiry_str = jalali_expiry.strftime('%Y/%m/%d %H:%M')
 
             text = f"✅ **پکیج با موفقیت اختصاص یافت!**\n\n"
             text += f"👤 **ادمین**: {admin_data.get('name', f'ادمین {admin_id}')}\n"
             text += f"📦 **پکیج**: {package.get('name', package_id)}\n"
-            text += f"👥 **گروه دسترسی**: {package_group or 'نامشخص'}\n"
-            text += f"⏰ **تاریخ انقضا**: {expiry_date.strftime('%Y/%m/%d %H:%M')}\n"
+            text += f"⏰ **تاریخ انقضا**: {expiry_str}\n"
             text += f"🔐 **مجوزها**: {perm_count} مورد\n\n"
             text += "ادمین اکنون می‌تواند از امکانات پکیج استفاده کند."
 
@@ -1380,12 +1480,14 @@ class AdminManager:
                                 status = "🟢 فعال"
                                 active_count += 1
                                 days_left = (expiry_date - now).days
-                                expiry_info = f"انقضا: {expiry_date.strftime('%Y/%m/%d')} ({days_left} روز مانده)"
+                                jalali_expiry = jdatetime.fromgregorian(datetime=expiry_date)
+                                expiry_info = f"انقضا: {jalali_expiry.strftime('%Y/%m/%d')} ({days_left} روز مانده)"
                             else:
                                 status = "🔴 منقضی"
                                 expired_count += 1
                                 days_expired = (now - expiry_date).days
-                                expiry_info = f"منقضی شده: {days_expired} روز پیش"
+                                jalali_expiry = jdatetime.fromgregorian(datetime=expiry_date)
+                                expiry_info = f"منقضی شده: {jalali_expiry.strftime('%Y/%m/%d')} ({days_expired} روز پیش)"
                         except:
                             status = "⚠️ خطا در تاریخ"
                             expiry_info = "تاریخ نامعتبر"

@@ -104,24 +104,29 @@ class AccessManager:
         subscription_package = admin_data.get('subscription_package')
         if subscription_package and subscription_package in packages:
             package = packages[subscription_package]
-            package_group = package.get('group')
-            if package_group and package_group in data.get('groups', {}):
-                # Check if subscription is active
-                subscription_expiry = admin_data.get('subscription_expiry')
-                if subscription_expiry:
-                    from datetime import datetime
-                    try:
-                        expiry = datetime.fromisoformat(subscription_expiry)
-                        if datetime.now() > expiry:
-                            # Subscription expired, fall back to regular group
+            # Check if subscription is active
+            subscription_expiry = admin_data.get('subscription_expiry')
+            if subscription_expiry:
+                from datetime import datetime
+                try:
+                    expiry = datetime.fromisoformat(subscription_expiry)
+                    if datetime.now() > expiry:
+                        # Subscription expired, fall back to regular group
+                        pass
+                    else:
+                        # Subscription active, use package permissions directly
+                        package_permissions = package.get('permissions', [])
+                        if isinstance(package_permissions, list):
+                            package_permissions = set(package_permissions)
+                        elif isinstance(package_permissions, set):
                             pass
                         else:
-                            # Subscription active, use package group permissions
-                            if permission is None:
-                                return True
-                            return permission in data.get('groups', {}).get(package_group, set())
-                    except ValueError:
-                        pass  # Invalid date, fall back to regular group
+                            package_permissions = set()
+                        if permission is None:
+                            return True
+                        return permission in package_permissions
+                except ValueError:
+                    pass  # Invalid date, fall back to regular group
         
         # Fall back to regular group permissions
         group = admin_data.get('group')
