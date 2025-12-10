@@ -31,6 +31,7 @@ from hotel_bot.wallet_manager import WalletManager
 from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.reservation_manager import ReservationManager
 from hotel_bot.points_manager import PointsManager
+from hotel_bot.user_wallet_manager import UserWalletManager
 
 # Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
