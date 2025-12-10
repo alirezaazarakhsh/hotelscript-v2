@@ -392,7 +392,8 @@ class PaymentCallbackAPIView(APIView):
                 reservation.save(update_fields=update_fields)
                 
                 # ارسال نوتیف پرداخت به ادمین‌ها
-                from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
+                from hotel_bot.bot import send_payment_receipt_notification
+                from asgiref.sync import async_to_sync
                 if reservation.payment_status == 'paid':
                     # محاسبه امتیاز دریافتی
                     total_points = sum(
@@ -408,33 +409,27 @@ class PaymentCallbackAPIView(APIView):
                     except CustomerClubPoint.DoesNotExist:
                         current_points = 0
                     
-                    notification_text = f"""✅ پرداخت رزرو {tracking_code} موفق بود.
-👤 کاربر: {reservation.buyer.phone_number}
-💎 مجموع امتیاز باشگاه مشتریان: {current_points:,} امتیاز
-
-📋 **صورتحساب:**
-💰 مبلغ کل: {reservation.total_price:,} تومان
-🏨 مبلغ نیم شارژ ورود و خروج: {reservation.total_half_day_charge:,} تومان
-💳 مبلغ برداشت از کیف پول: {reservation.wallet_withdrawal_amount:,} تومان
-🎫 مبلغ استفاده شده در کد تخفیف: {reservation.discount:,} تومان
-💵 مبلغ نهایی: {reservation.final_price:,} تومان
-💎 امتیاز دریافتی برای اتاق: {total_points:,} امتیاز"""
+                    async_to_sync(send_payment_receipt_notification)(
+                        reservation.tracking_code,
+                        reservation.buyer.phone_number,
+                        int(reservation.total_price),
+                        int(reservation.total_half_day_charge),
+                        int(reservation.wallet_withdrawal_amount),
+                        int(reservation.discount),
+                        int(reservation.final_price),
+                        int(total_points),
+                        int(current_points),
+                        success=True
+                    )
                 else:
-                    notification_text = f"❌ پرداخت رزرو {tracking_code} ناموفق بود.\n👤 کاربر: {reservation.buyer.phone_number}\n💰 مبلغ: {reservation.final_price:,} تومان"
-                
-                for admin_id in SUPER_ADMINS:
-                    try:
-                        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                        data = {
-                            "chat_id": admin_id,
-                            "text": notification_text,
-                            "parse_mode": "Markdown"
-                        }
-                        response = requests.post(url, data=data, timeout=10)
-                        if response.status_code != 200:
-                            logger.error(f"Failed to send notification to {admin_id}: {response.text}")
-                    except Exception as e:
-                        logger.error(f"Error sending notification to {admin_id}: {e}")
+                    async_to_sync(send_payment_receipt_notification)(
+                        reservation.tracking_code,
+                        reservation.buyer.phone_number,
+                        0, 0, 0, 0,
+                        int(reservation.final_price),
+                        0, 0,
+                        success=False
+                    )
                 
                 # اگر پرداخت موفق بود و کیف پول استفاده شده، آن را پردازش کن
                 if reservation.payment_status == 'paid' and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:

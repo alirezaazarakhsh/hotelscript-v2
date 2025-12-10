@@ -55,6 +55,32 @@ async def send_reservation_notification(tracking_code, buyer_name, hotel_name, c
         except Exception as e:
             logger.error(f"Failed to send notification to {admin_id}: {e}")
 
+# Function to send payment receipt notification
+async def send_payment_receipt_notification(tracking_code, buyer_phone, total_price, half_charge, wallet_withdrawal, discount, final_price, total_points, current_points, success=True):
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
+    
+    if success:
+        notification_text = f"""✅ پرداخت رزرو {tracking_code} موفق بود.
+👤 کاربر: {buyer_phone}
+💎 مجموع امتیاز باشگاه مشتریان: {current_points:,} امتیاز
+
+📋 **صورتحساب:**
+💰 مبلغ کل: {total_price:,} تومان
+🏨 مبلغ نیم شارژ ورود و خروج: {half_charge:,} تومان
+💳 مبلغ برداشت از کیف پول: {wallet_withdrawal:,} تومان
+🎫 مبلغ استفاده شده در کد تخفیف: {discount:,} تومان
+💵 مبلغ نهایی: {final_price:,} تومان
+💎 امتیاز دریافتی برای اتاق: {total_points:,} امتیاز"""
+    else:
+        notification_text = f"❌ پرداخت رزرو {tracking_code} ناموفق بود.\n👤 کاربر: {buyer_phone}\n💰 مبلغ: {final_price:,} تومان"
+    
+    for admin_id in SUPER_ADMINS:
+        try:
+            await bot.send_message(chat_id=admin_id, text=notification_text, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send payment notification to {admin_id}: {e}")
+
 # Handler for /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
