@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 # ================= بارگذاری متغیرهای محیطی =================
-ENV_PATH = os.getenv("ENV_PATH", "/app/hotel_bot/.env")
+ENV_PATH = os.getenv("ENV_PATH", os.path.join(os.path.dirname(__file__), ".env"))
 if not os.path.exists(ENV_PATH):
     raise FileNotFoundError(f"⚠️ فایل .env پیدا نشد در مسیر {ENV_PATH}. لطفاً فایل .env را تنظیم کنید.")
 
@@ -20,9 +20,13 @@ MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", os.path.join(PROJECT_DIR, "back
 MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.safarnameh24.com/media/")
 
 # ایجاد دایرکتوری‌های بکاپ در صورت عدم وجود
-for directory in [DB_BACKUP_DIR, MEDIA_BACKUP_DIR]:
-    if not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)
+try:
+    for directory in [DB_BACKUP_DIR, MEDIA_BACKUP_DIR]:
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+except PermissionError:
+    # اگر دسترسی برای ایجاد دایرکتوری وجود ندارد، ادامه بده
+    pass
 
 # مدیریت SUPER_ADMINS
 SUPER_ADMINS = []
