@@ -288,6 +288,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'level',
         'total_purchase',
         'expiration_date',
+        'auto_renewal_enabled',
     )
     search_fields = (
         'base_user__phone_number',
@@ -311,7 +312,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
             'fields': ('base_user', 'first_name', 'last_name', 'email', 'national_code', 'image', 'postal_code', 'address')
         }),
         ('سطح کاربری', {
-            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level'),
+            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level', 'auto_renewal_enabled'),
             'description': 'سطح کاربری کاربر. expiration_date برای سطوح موقتی (مثل خرید پکیج). previous_level سطح قبلی قبل از ارتقای موقتی.',
         }),
     )
