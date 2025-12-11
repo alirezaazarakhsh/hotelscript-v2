@@ -289,6 +289,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'total_purchase_formatted',
         'expiration_date',
         'auto_renewal_enabled',
+        'manual_level_override',
     )
     search_fields = (
         'base_user__phone_number',
@@ -309,7 +310,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     
     def total_purchase_formatted(self, obj):
         if obj.total_purchase:
-            return f"{obj.total_purchase:,} تومان"
+            return f"{int(obj.total_purchase)} تومان"
         return "0 تومان"
     total_purchase_formatted.short_description = 'مجموع خرید'
     
@@ -318,8 +319,8 @@ class NaturalProfileAdmin(admin.ModelAdmin):
             'fields': ('base_user', 'first_name', 'last_name', 'email', 'national_code', 'image', 'postal_code', 'address')
         }),
         ('سطح کاربری', {
-            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level', 'auto_renewal_enabled'),
-            'description': 'سطح کاربری کاربر. expiration_date برای سطوح موقتی (مثل خرید پکیج). previous_level سطح قبلی قبل از ارتقای موقتی.',
+            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level', 'auto_renewal_enabled', 'manual_level_override'),
+            'description': 'سطح کاربری کاربر. expiration_date برای سطوح موقتی (مثل خرید پکیج). previous_level سطح قبلی قبل از ارتقای موقتی. manual_level_override برای جلوگیری از آپدیت خودکار سطح بر اساس خرید.',
         }),
     )
 

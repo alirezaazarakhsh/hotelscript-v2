@@ -374,6 +374,11 @@ class NaturalProfile(models.Model):
         verbose_name=_('تمدید خودکار اشتراک'),
         help_text=_('اگر فعال باشد، اشتراک به صورت خودکار از کیف پول تمدید می‌شود'),
     )
+    manual_level_override = models.BooleanField(
+        default=False,
+        verbose_name=_('بازنویسی دستی سطح'),
+        help_text=_('اگر فعال باشد، سطح کاربری بر اساس خرید آپدیت نمی‌شود و سطح دستی حفظ می‌گردد'),
+    )
 
     class Meta:
         verbose_name = "پروفایل حقیقی"
@@ -383,6 +388,10 @@ class NaturalProfile(models.Model):
         """به‌روزرسانی سطح کاربری بر اساس مجموع خرید"""
         from config.models import UserLevel
         from django.utils import timezone
+        
+        # اگر بازنویسی دستی فعال باشد، سطح را تغییر نده
+        if self.manual_level_override:
+            return
         
         # اول چک انقضا
         if self.expiration_date and self.expiration_date < timezone.now() and self.previous_level:
