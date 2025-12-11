@@ -1865,6 +1865,16 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                 reservation.points_assigned = True
                 reservation.save(update_fields=['points_assigned'])
 
+            # اضافه کردن مبلغ پرداخت شده به total_purchase پروفایل کاربر
+            if hasattr(reservation.buyer, 'natural_profile') and reservation.buyer.natural_profile:
+                profile = reservation.buyer.natural_profile
+                total_paid = reservation.total_price_after_discount or reservation.total_price
+                profile.total_purchase += total_paid
+                profile.save(update_fields=['total_purchase'])
+                logger.info(f"مجموع خرید کاربر {reservation.buyer.phone_number} به مبلغ {total_paid} تومان افزایش یافت. مجموع فعلی: {profile.total_purchase}")
+                # آپدیت سطح کاربری بر اساس مجموع خرید جدید
+                profile.update_level()
+
             cache.delete(cache_key_points)
 
     elif instance.payment_status == 'paid' and instance.applied_discount_code and not instance.discount_processed:
