@@ -29,7 +29,7 @@ ALLOWED_HOSTS = [
     "www.cps.safarnameh24.com",
     "chatbot.safarnameh24.com",
     "www.chatbot.safarnameh24.com",
-    "91.107.134.107",
+    "91.107.172.215",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
