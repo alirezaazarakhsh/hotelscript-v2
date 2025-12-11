@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'favorite',
     'settingchatbot',
     'chat_api',
+    'user_subscription_settings',
     
     'channels',
     'nested_admin',

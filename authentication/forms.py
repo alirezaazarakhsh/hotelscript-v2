@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import Group
+from jalali_date.widgets import AdminJalaliDateWidget
 from .models import (
     Admin,
     JuridicalProfile,
@@ -110,6 +111,9 @@ class NaturalProfileForm(forms.ModelForm):
     class Meta:
         model = NaturalProfile
         fields = '__all__'
+        widgets = {
+            'expiration_date': AdminJalaliDateWidget(),
+        }
 
     def __init__(self, *args, **kwargs):
         super(NaturalProfileForm, self).__init__(*args, **kwargs)

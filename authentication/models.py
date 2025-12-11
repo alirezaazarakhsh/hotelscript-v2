@@ -347,10 +347,67 @@ class NaturalProfile(models.Model):
         related_name='natural_profile',
         null=True,
     )
+    total_purchase = models.DecimalField(
+        verbose_name=_('مجموع خرید'),
+        max_digits=15,
+        decimal_places=0,
+        default=0,
+        help_text=_('مجموع مبلغ خریدهای موفق (تومان)'),
+    )
+    expiration_date = jmodels.jDateTimeField(
+        verbose_name=_('تاریخ انقضای سطح'),
+        null=True,
+        blank=True,
+        help_text=_('اگر خالی باشد، سطح دائمی است. در غیر این صورت، پس از این تاریخ سطح به قبلی برمی‌گردد.'),
+    )
+    previous_level = models.ForeignKey(
+        UserLevel,
+        on_delete=models.SET_NULL,
+        verbose_name=_('سطح قبلی'),
+        related_name='previous_natural_profile',
+        null=True,
+        blank=True,
+        help_text=_('سطح قبلی کاربر قبل از ارتقای موقتی'),
+    )
+    auto_renewal_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_('تمدید خودکار اشتراک'),
+        help_text=_('اگر فعال باشد، اشتراک به صورت خودکار از کیف پول تمدید می‌شود'),
+    )
 
     class Meta:
         verbose_name = "پروفایل حقیقی"
         verbose_name_plural = "پروفایل‌ های حقیقی"
+    
+    def update_level(self):
+        """به‌روزرسانی سطح کاربری بر اساس مجموع خرید"""
+        from config.models import UserLevel
+        from django.utils import timezone
+        
+        # اول چک انقضا
+        if self.expiration_date and self.expiration_date < timezone.now() and self.previous_level:
+            self.level = self.previous_level
+            self.previous_level = None
+            self.expiration_date = None
+            self.save(update_fields=['level', 'previous_level', 'expiration_date'])
+            return
+        
+        # سپس ارتقا بر اساس خرید
+        try:
+            if self.total_purchase >= 500000000:  # ۵۰۰ میلیون
+                level_title = 'طلایی'
+            elif self.total_purchase >= 300000000:  # ۳۰۰ میلیون
+                level_title = 'نقره‌ای'
+            else:
+                level_title = 'میهمان'
+            
+            level = UserLevel.objects.get(title=level_title)
+            if self.level != level:
+                self.level = level
+                self.save(update_fields=['level'])
+        except UserLevel.DoesNotExist:
+            # اگر سطح وجود ندارد، لاگ کن یا چیزی
+            pass
     
     def __str__(self):
         return f'{self.base_user}'

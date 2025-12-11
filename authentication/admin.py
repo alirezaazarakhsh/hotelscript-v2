@@ -285,6 +285,9 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'last_name',
         'email',
         'national_code',
+        'level',
+        'total_purchase',
+        'expiration_date',
     )
     search_fields = (
         'base_user__phone_number',
@@ -293,9 +296,25 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'email',
         'national_code',
     )
-    autocomplete_fields = ['base_user']   
+    autocomplete_fields = ['base_user', 'level', 'previous_level']   
     ordering = ('-id',)
     inlines = [CardNumberInline]
+    list_filter = ('level', 'expiration_date')
+    readonly_fields = ('total_purchase',)  # مجموع خرید فقط خواندنی
+    
+    formfield_overrides = {
+        jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
+    }
+    
+    fieldsets = (
+        ('اطلاعات پایه', {
+            'fields': ('base_user', 'first_name', 'last_name', 'email', 'national_code', 'image', 'postal_code', 'address')
+        }),
+        ('سطح کاربری', {
+            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level'),
+            'description': 'سطح کاربری کاربر. expiration_date برای سطوح موقتی (مثل خرید پکیج). previous_level سطح قبلی قبل از ارتقای موقتی.',
+        }),
+    )
 
     def base_user__phone_number(self, obj):
         return obj.base_user.phone_number
