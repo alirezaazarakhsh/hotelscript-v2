@@ -405,9 +405,13 @@ class NaturalProfile(models.Model):
             if self.level != level:
                 self.level = level
                 self.save(update_fields=['level'])
-        except UserLevel.DoesNotExist:
-            # اگر سطح وجود ندارد، لاگ کن یا چیزی
-            pass
+        except Exception as e:
+            # اگر سطح وجود ندارد یا خطای دیگری رخ داد، لاگ کن
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"خطا در آپدیت سطح برای کاربر {self.base_user.phone_number}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def __str__(self):
         return f'{self.base_user}'
