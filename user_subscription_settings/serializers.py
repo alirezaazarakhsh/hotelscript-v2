@@ -23,10 +23,11 @@ class SubscriptionOptionSerializer(serializers.ModelSerializer):
 class SubscriptionPackageSerializer(serializers.ModelSerializer):
     options = SubscriptionOptionSerializer(many=True, read_only=True)
     upgrade_to_level = serializers.StringRelatedField()
+    period_fk = serializers.StringRelatedField()
 
     class Meta:
         model = SubscriptionPackage
-        fields = ('id', 'name', 'short_description', 'monthly_cost', 'color', 'options', 'upgrade_to_level', 'period', 'period_fk')
+        fields = ('id', 'name', 'short_description', 'monthly_cost', 'color', 'options', 'upgrade_to_level', 'period_fk')
 
 
 class SubscriptionPaymentRequestSerializer(serializers.ModelSerializer):
