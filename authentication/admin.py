@@ -286,7 +286,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'email',
         'national_code',
         'level',
-        'total_purchase',
+        'total_purchase_formatted',
         'expiration_date',
         'auto_renewal_enabled',
     )
@@ -306,6 +306,12 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
     }
+    
+    def total_purchase_formatted(self, obj):
+        if obj.total_purchase:
+            return f"{obj.total_purchase:,} تومان"
+        return "0 تومان"
+    total_purchase_formatted.short_description = 'مجموع خرید'
     
     fieldsets = (
         ('اطلاعات پایه', {

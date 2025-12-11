@@ -130,6 +130,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     card_numbers = serializers.SerializerMethodField()
+    total_purchase_formatted = serializers.SerializerMethodField()
 
     def get_card_numbers(self, obj):
         card_numbers = obj.card_numbers.all()
@@ -150,6 +151,7 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
             'level_name',
             'card_numbers',
             'phone_number',  # اضافه کردن phone_number به فیلدها
+            'total_purchase_formatted',
         ]
         extra_kwargs = {
             'email': {'required': False, 'allow_null': True},
@@ -167,6 +169,14 @@ class NaturalProfileSerializer(serializers.ModelSerializer):
         استخراج شماره موبایل از base_user.
         """
         return obj.base_user.phone_number if obj.base_user else None
+
+    def get_total_purchase_formatted(self, obj):
+        """
+        فرمت کردن مجموع خرید با کاما و تومان.
+        """
+        if obj.total_purchase:
+            return f"{obj.total_purchase:,} تومان"
+        return "0 تومان"
 
     def get_image(self, obj):
         request = self.context.get('request')
