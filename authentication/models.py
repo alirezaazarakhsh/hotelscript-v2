@@ -425,17 +425,43 @@ class NaturalProfile(models.Model):
         
         # سپس ارتقا بر اساس خرید
         try:
-            if self.total_purchase >= 500000000:  # ۵۰۰ میلیون
-                level_title = 'طلایی'
-            elif self.total_purchase >= 300000000:  # ۳۰۰ میلیون
-                level_title = 'نقره‌ای'
+            # اگر progress_target وجود داشته باشد، بر اساس آن ارتقا بده
+            if self.progress_target and self.progress_deadline and timezone.now().date() <= self.progress_deadline:
+                if self.total_purchase >= self.progress_target:
+                    if self.level.title == 'میهمان':
+                        level_title = 'نقره‌ای'
+                    elif self.level.title == 'نقره‌ای':
+                        level_title = 'طلایی'
+                    else:
+                        level_title = self.level.title  # بدون تغییر
+                else:
+                    level_title = self.level.title  # بدون تغییر
             else:
-                level_title = 'میهمان'
+                # ارتقا بر اساس مجموع خرید (منطق قدیمی)
+                if self.total_purchase >= 500000000:  # ۵۰۰ میلیون
+                    level_title = 'طلایی'
+                elif self.total_purchase >= 300000000:  # ۳۰۰ میلیون
+                    level_title = 'نقره‌ای'
+                else:
+                    level_title = 'میهمان'
             
             level = UserLevel.objects.get(title=level_title)
             if self.level != level:
                 self.level = level
                 self.save(update_fields=['level'])
+            
+            # تنظیم هدف پیشرفت بر اساس سطح فعلی
+            from datetime import timedelta
+            if self.level.title == 'میهمان':
+                self.progress_target = 300000000  # ۳۰۰ میلیون برای ارتقا به نقره‌ای
+                self.progress_deadline = timezone.now().date() + timedelta(days=30)
+            elif self.level.title == 'نقره‌ای':
+                self.progress_target = 500000000  # ۵۰۰ میلیون برای ارتقا به طلایی
+                self.progress_deadline = timezone.now().date() + timedelta(days=30)
+            else:
+                self.progress_target = None
+                self.progress_deadline = None
+            self.save(update_fields=['progress_target', 'progress_deadline'])
         except Exception as e:
             # اگر سطح وجود ندارد یا خطای دیگری رخ داد، لاگ کن
             import logging

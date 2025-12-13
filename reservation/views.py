@@ -3410,7 +3410,13 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             from hotel_bot.bot import send_reservation_notification
             buyer_name = reserver_data.get('reserver_first_name', '') + ' ' + reserver_data.get('reserver_last_name', '').strip() or request.user.phone_number
             hotel_name = reservation.get_hotel().name if reservation.get_hotel() else 'نامشخص'
-            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name, reservation.capacity_status)
+            # جزئیات اتاق‌ها
+            rooms_details = []
+            for res_room in reservation.reservation_rooms.all():
+                rooms_details.append(f"{res_room.room.title} (تعداد: {res_room.quantity})")
+            rooms_text = ', '.join(rooms_details) if rooms_details else 'بدون اتاق'
+            final_price = reservation.final_price or 0
+            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name, reservation.capacity_status, rooms_text, final_price)
         except Exception as e:
             logger.error(f"Failed to send reservation notification: {e}")
 

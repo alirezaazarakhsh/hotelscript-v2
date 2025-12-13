@@ -38,16 +38,23 @@ logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(
 logger = logging.getLogger(__name__)
 
 # Function to send reservation notification
-async def send_reservation_notification(tracking_code, buyer_name, hotel_name, capacity_status):
+async def send_reservation_notification(tracking_code, buyer_name, hotel_name, capacity_status, rooms_text, final_price):
     from telegram import Bot
-    bot = Bot(token=BOT_TOKEN)
-    notification_text = f"🔔 **رزرو جدید ایجاد شد**\n\nکد پیگیری: {tracking_code}\nرزرو کننده: {buyer_name}\nهتل: {hotel_name}"
+    notification_text = f"""🔔 **رزرو جدید ایجاد شد**
+
+کد پیگیری: {tracking_code}
+رزرو کننده: {buyer_name}
+هتل: {hotel_name}
+اتاق‌ها: {rooms_text}
+قیمت نهایی: {final_price:,} تومان"""
     
     keyboard = None
     if capacity_status == 'pending':
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ تایید رزرو", callback_data=f"approve_reservation::{tracking_code}")],
-            [InlineKeyboardButton("❌ رد رزرو", callback_data=f"reject_reservation::{tracking_code}")]
+            [InlineKeyboardButton("❌ رد رزرو", callback_data=f"reject_reservation::{tracking_code}")],
+            [InlineKeyboardButton("📋 نمایش جزئیات کامل", callback_data=f"view_reservation_details::{tracking_code}")],
+            [InlineKeyboardButton("🔙 برگشت", callback_data=f"back::{tracking_code}")]
         ])
     
     for admin_id in SUPER_ADMINS:
@@ -237,9 +244,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data.startswith("reject_reservation::"):
             tracking_code = data.split("::", 1)[1]
             await ReservationManager.reject_reservation(user_id, context, tracking_code)
-        elif data.startswith("pending_reservation::"):
+        elif data.startswith("view_full_details::"):
             tracking_code = data.split("::", 1)[1]
-            await ReservationManager.pending_reservation(user_id, context, tracking_code)
+            await ReservationManager.view_reservation_details(user_id, context, tracking_code)
+        elif data.startswith("back::"):
+            tracking_code = data.split("::", 1)[1]
+            # شاید پیام را حذف کند یا چیزی، اما برای سادگی، به منوی اصلی برود
+            await MenuManager.show_main_menu(user_id, context, message_id=message_id, chat_id=chat_id)
         elif data == "upgrade_requests":
             await query.edit_message_text(
                 "ویژگی ارتقای تعداد درخواست‌ها به‌زودی در دسترس خواهد بود، برای جزئیات بیشتر می‌توانید با پشتیبانی در ارتباط باشید.\n\n**توضیح**: این ارتقا اجازه بکاپ‌های بیشتر یا ویژگی‌های پیشرفته را فراهم می‌کند.",
