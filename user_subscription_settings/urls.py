@@ -39,4 +39,19 @@ urlpatterns = [
         views.UserLevelDowngradeView.as_view(),
         name='user-level-downgrade'
     ),
+    path(
+        'renewal-request/',
+        views.RenewalRequestCreateView.as_view(),
+        name='renewal-request-create'
+    ),
+    path(
+        'subscription-info/',
+        views.SubscriptionInfoView.as_view(),
+        name='subscription-info'
+    ),
+    path(
+        'daily-purchases/',
+        views.UserDailyPurchasesView.as_view(),
+        name='user-daily-purchases'
+    ),
 ]

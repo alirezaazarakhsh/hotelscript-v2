@@ -38,3 +38,13 @@ class SubscriptionPaymentRequestSerializer(serializers.ModelSerializer):
         model = SubscriptionPaymentRequest
         fields = ('id', 'user', 'package', 'full_name', 'phone_number', 'national_id', 'receipt', 'approved')
         read_only_fields = ('approved',)
+
+
+class RenewalRequestSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    package = serializers.StringRelatedField(read_only=True)  # نمایش نام پکیج
+
+    class Meta:
+        model = SubscriptionPaymentRequest
+        fields = ('id', 'user', 'package', 'full_name', 'phone_number', 'national_id', 'receipt', 'approved')
+        read_only_fields = ('approved', 'package')

@@ -68,20 +68,37 @@ class SubscriptionPaymentRequestAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         from datetime import timedelta
         from django.utils import timezone
-        if change and obj.approved and obj.package.upgrade_to_level:
-            # ارتقای سطح کاربری با تاریخ انقضا
+        if change and obj.approved:
             profile = obj.user.natural_profile
             if profile:
-                profile.previous_level = profile.level
-                profile.level = obj.package.upgrade_to_level
-                # تنظیم تاریخ انقضا بر اساس period
-                if obj.package.period == 'monthly':
-                    profile.expiration_date = (timezone.now() + timedelta(days=30)).date()
-                elif obj.package.period == 'yearly':
-                    profile.expiration_date = (timezone.now() + timedelta(days=365)).date()
-                else:
-                    profile.expiration_date = None  # اگر period نامشخص، دائمی نکن
-                # غیرفعال کردن تمدید خودکار پس از خرید دستی
-                profile.auto_renewal_enabled = False
-                profile.save()
+                if obj.is_renewal:
+                    # تمدید اشتراک فعلی
+                    if profile.expiration_date:
+                        if obj.package.period == 'monthly':
+                            profile.expiration_date = (profile.expiration_date + timedelta(days=30))
+                        elif obj.package.period == 'yearly':
+                            profile.expiration_date = (profile.expiration_date + timedelta(days=365))
+                        # اگر period نامشخص، تمدید نکن
+                    if not profile.subscription_package:
+                        profile.subscription_package = obj.package
+                    profile.save()
+                elif obj.package.upgrade_to_level:
+                    # ارتقای سطح کاربری با تاریخ انقضا
+                    profile.previous_level = profile.level
+                    profile.level = obj.package.upgrade_to_level
+                    profile.subscription_package = obj.package
+                    # تنظیم تاریخ انقضا بر اساس period
+                    if obj.package.period == 'monthly':
+                        profile.expiration_date = (timezone.now() + timedelta(days=30)).date()
+                    elif obj.package.period == 'yearly':
+                        profile.expiration_date = (timezone.now() + timedelta(days=365)).date()
+                    else:
+                        profile.expiration_date = None  # اگر period نامشخص، دائمی نکن
+                    # غیرفعال کردن تمدید خودکار پس از خرید دستی
+                    profile.auto_renewal_enabled = False
+                    # تنظیم هدف پیشرفت برای سطح نقره‌ای
+                    if profile.level.title == 'نقره‌ای':
+                        profile.progress_target = 500000000  # 500 میلیون
+                        profile.progress_deadline = profile.expiration_date
+                    profile.save()
         super().save_model(request, obj, form, change)

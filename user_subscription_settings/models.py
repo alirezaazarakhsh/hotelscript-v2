@@ -65,6 +65,7 @@ class SubscriptionPaymentRequest(models.Model):
     national_id = models.CharField(max_length=10, verbose_name="کد ملی")
     receipt = models.ImageField(upload_to='subscription_receipts/', verbose_name="فیش واریزی")
     approved = models.BooleanField(default=False, verbose_name="تایید شده")
+    is_renewal = models.BooleanField(default=False, verbose_name="درخواست تمدید")
 
     class Meta:
         verbose_name = "درخواست پرداخت اشتراک"

@@ -379,6 +379,28 @@ class NaturalProfile(models.Model):
         verbose_name=_('بازنویسی دستی سطح'),
         help_text=_('اگر فعال باشد، سطح کاربری بر اساس خرید آپدیت نمی‌شود و سطح دستی حفظ می‌گردد'),
     )
+    subscription_package = models.ForeignKey(
+        'user_subscription_settings.SubscriptionPackage',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('پکیج اشتراک فعلی'),
+        help_text=_('پکیج اشتراکی که کاربر خریداری کرده'),
+    )
+    progress_target = models.DecimalField(
+        verbose_name=_('هدف پیشرفت خرید'),
+        max_digits=15,
+        decimal_places=0,
+        null=True,
+        blank=True,
+        help_text=_('مبلغ هدف برای ارتقای سطح در دوره زمانی مشخص'),
+    )
+    progress_deadline = models.DateField(
+        verbose_name=_('ددلاین پیشرفت'),
+        null=True,
+        blank=True,
+        help_text=_('تاریخ پایان دوره پیشرفت'),
+    )
 
     class Meta:
         verbose_name = "پروفایل حقیقی"
