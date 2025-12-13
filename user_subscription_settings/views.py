@@ -53,7 +53,7 @@ class ActiveSubscriptionUsersListView(ListAPIView):
 
     def get_queryset(self):
         from django.utils import timezone
-        return NaturalProfile.objects.filter(expiration_date__gt=timezone.now())
+        return NaturalProfile.objects.filter(expiration_date__gt=timezone.now().date())
 
     def list(self, request, *args, **kwargs):
         users = self.get_queryset()

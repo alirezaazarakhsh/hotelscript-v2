@@ -354,7 +354,7 @@ class NaturalProfile(models.Model):
         default=0,
         help_text=_('مجموع مبلغ خریدهای موفق (تومان)'),
     )
-    expiration_date = jmodels.jDateTimeField(
+    expiration_date = jmodels.jDateField(
         verbose_name=_('تاریخ انقضای سطح'),
         null=True,
         blank=True,
@@ -416,7 +416,7 @@ class NaturalProfile(models.Model):
             return
         
         # اول چک انقضا
-        if self.expiration_date and self.expiration_date < timezone.now() and self.previous_level:
+        if self.expiration_date and self.expiration_date < timezone.now().date() and self.previous_level:
             self.level = self.previous_level
             self.previous_level = None
             self.expiration_date = None

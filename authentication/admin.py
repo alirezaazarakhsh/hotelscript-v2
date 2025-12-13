@@ -308,7 +308,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('total_purchase', 'progress_target', 'progress_deadline')  # مجموع خرید فقط خواندنی
     
     formfield_overrides = {
-        jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
+        jmodels.jDateField: {'widget': AdminJalaliDateWidget},
     }
     
     def total_purchase_formatted(self, obj):
