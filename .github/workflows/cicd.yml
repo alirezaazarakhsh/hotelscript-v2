@@ -9,7 +9,7 @@ on:
       - master
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     services:
@@ -18,18 +18,21 @@ jobs:
         ports:
           - 5432:5432
         env:
-          POSTGRES_DB: mydatabase
-          POSTGRES_USER: myuser
-          POSTGRES_PASSWORD: mypassword
+          POSTGRES_DB: safarname24
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v2
 
-      - name: 🔐 Load .env file
+      - name: 🔐 Load .env file (optional)
         run: |
-          echo "Loading .env file"
-          cp ./safarname24/.env .env || echo "⚠️ .env file not found, skipping..."
+          if [ -f ./safarname24/.env ]; then
+            cp ./safarname24/.env .env
+          else
+            echo "⚠️ .env file not found, skipping..."
+          fi
 
       - name: 🛠 Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -48,45 +51,39 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: 🏗 Build Docker image
-        run: |
-          docker-compose -f docker-compose.yml build
+      - name: 🏗 Build Docker images
+        run: docker-compose -f docker-compose.yml build
 
-      - name: 📦 Install Python dependencies
-        run: |
-          docker-compose -f docker-compose.yml run --rm web pip install --no-cache-dir -r /app/requirements.txt
+      - name: 📦 Install Python dependencies inside container
+        run: docker-compose -f docker-compose.yml run --rm web pip install --no-cache-dir -r /app/requirements.txt
 
-      - name: 🔃 Run Django migrations
-        run: |
-          docker-compose -f docker-compose.yml run --rm web python manage.py migrate
+      - name: 🔃 Run Django migrations inside container
+        run: docker-compose -f docker-compose.yml run --rm web python manage.py migrate
 
-      - name: 🎨 Collect static files
-        run: |
-          docker-compose -f docker-compose.yml run --rm web python manage.py collectstatic --noinput
+      - name: 🎨 Collect static files inside container
+        run: docker-compose -f docker-compose.yml run --rm web python manage.py collectstatic --noinput
 
-      - name: ✅ Run Django tests
-        run: |
-          docker-compose -f docker-compose.yml run --rm web python manage.py test
+      - name: ✅ Run Django tests inside container
+        run: docker-compose -f docker-compose.yml run --rm web python manage.py test
 
-      - name: 🧹 Clean up (optional)
+      - name: 🧹 Clean up Docker containers and volumes
         if: always()
-        run: |
-          docker-compose down -v
+        run: docker-compose down -v
 
       - name: 🔐 Setup SSH for deployment
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          printf "%s\n" "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p 2394 -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
           echo "SSH key and known_hosts configured"
-      
+
       - name: 🚀 Deploy to server
         run: |
           ssh -i ~/.ssh/id_rsa -p 2394 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
             cd /var/hotelscript-v2 || { echo "Directory not found!"; exit 1; }
-            echo "Pulling latest code..."
+            echo "Pulling latest code from git..."
             git pull origin master
             echo "Stopping old containers..."
             docker-compose down || true
