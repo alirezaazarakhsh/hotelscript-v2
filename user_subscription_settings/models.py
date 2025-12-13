@@ -33,6 +33,10 @@ class SubscriptionPackage(models.Model):
     upgrade_to_level = models.ForeignKey(UserLevel, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="ارتقا به سطح کاربری")
     period_fk = models.ForeignKey(SubscriptionPeriod, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="دوره پرداخت")
 
+    @property
+    def period(self):
+        return self.period_fk.name if self.period_fk else None
+
     class Meta:
         verbose_name = "پکیج اشتراک"
         verbose_name_plural = "پکیج‌های اشتراک"
