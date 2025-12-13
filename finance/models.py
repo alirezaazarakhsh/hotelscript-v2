@@ -36,7 +36,7 @@ class Wallet(models.Model):
         BaseUser,
         on_delete=models.CASCADE,
         verbose_name=_('کاربر'),
-        related_name='bot_wallet',
+        related_name='wallet',
     )
     balance = models.PositiveBigIntegerField(
         verbose_name=_('موجودی کیف پول کاربر'),
