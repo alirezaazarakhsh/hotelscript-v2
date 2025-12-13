@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 # Function to send reservation notification
 async def send_reservation_notification(tracking_code, buyer_name, hotel_name, capacity_status, rooms_text, final_price):
     from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
     notification_text = f"""🔔 **رزرو جدید ایجاد شد**
 
 کد پیگیری: {tracking_code}
