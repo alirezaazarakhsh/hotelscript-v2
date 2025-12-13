@@ -223,8 +223,67 @@ class SubscriptionInfoView(RetrieveAPIView):
         operation_description="این API تاریخ انقضا، نوع اشتراک و مبلغ تمدید را برمی‌گرداند.",
         tags=['sub_panel']
     )
-    def get(self, request, *args, **kwargs):
-        return self.get(request)
+    def get(self, request):
+        from django.utils import timezone
+        profile = request.user.natural_profile
+        if not profile:
+            return Response({"error": "پروفایل یافت نشد"}, status=404)
+        
+        # بررسی ارتقای خودکار
+        if (profile.progress_target and 
+            profile.total_purchase >= profile.progress_target and 
+            timezone.now().date() <= profile.progress_deadline):
+            try:
+                gold_level = UserLevel.objects.get(title='طلایی')
+                gold_package = SubscriptionPackage.objects.filter(upgrade_to_level=gold_level).first()
+                profile.level = gold_level
+                profile.subscription_package = gold_package
+                profile.progress_target = None
+                profile.progress_deadline = None
+                profile.save()
+            except UserLevel.DoesNotExist:
+                pass  # اگر سطح طلایی وجود ندارد، ارتقا نکن
+        
+        # تعیین نوع
+        if profile.subscription_package:
+            subscription_type = "auto" if profile.auto_renewal_enabled else "manual"
+            expiration_date = profile.expiration_date
+            renewal_cost = profile.subscription_package.monthly_cost
+            purchased_amount = None
+            progress = {
+                "current": int(profile.total_purchase),
+                "target": int(profile.progress_target) if profile.progress_target else None,
+                "deadline": profile.progress_deadline
+            } if profile.progress_target else None
+        else:
+            subscription_type = "ارتقا"
+            expiration_date = None  # بدون تاریخ
+            renewal_cost = None
+            purchased_amount = int(profile.total_purchase)
+            # پیشرفت برای ارتقا
+            if profile.total_purchase >= 500000000:
+                progress = None  # طلایی، پیشرفت تمام
+            elif profile.total_purchase >= 300000000:
+                progress = {
+                    "current": int(profile.total_purchase),
+                    "target": 500000000,
+                    "next_level": "طلایی"
+                }
+            else:
+                progress = {
+                    "current": int(profile.total_purchase),
+                    "target": 300000000,
+                    "next_level": "نقره‌ای"
+                }
+        
+        data = {
+            "expiration_date": expiration_date,
+            "subscription_type": subscription_type,
+            "renewal_cost": renewal_cost,
+            "purchased_amount": purchased_amount,
+            "progress": progress
+        }
+        return Response(data)
 
 
 from django.db.models import Sum

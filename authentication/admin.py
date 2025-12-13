@@ -290,6 +290,9 @@ class NaturalProfileAdmin(admin.ModelAdmin):
         'expiration_date',
         'auto_renewal_enabled',
         'manual_level_override',
+        'subscription_package',
+        'progress_target',
+        'progress_deadline',
     )
     search_fields = (
         'base_user__phone_number',
@@ -302,7 +305,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
     ordering = ('-id',)
     inlines = [CardNumberInline]
     list_filter = ('level', 'expiration_date')
-    readonly_fields = ('total_purchase',)  # مجموع خرید فقط خواندنی
+    readonly_fields = ('total_purchase', 'progress_target', 'progress_deadline')  # مجموع خرید فقط خواندنی
     
     formfield_overrides = {
         jmodels.jDateTimeField: {'widget': AdminJalaliDateWidget},
@@ -319,7 +322,7 @@ class NaturalProfileAdmin(admin.ModelAdmin):
             'fields': ('base_user', 'first_name', 'last_name', 'email', 'national_code', 'image', 'postal_code', 'address')
         }),
         ('سطح کاربری', {
-            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level', 'auto_renewal_enabled', 'manual_level_override'),
+            'fields': ('level', 'total_purchase', 'expiration_date', 'previous_level', 'auto_renewal_enabled', 'manual_level_override', 'subscription_package', 'progress_target', 'progress_deadline'),
             'description': 'سطح کاربری کاربر. expiration_date برای سطوح موقتی (مثل خرید پکیج). previous_level سطح قبلی قبل از ارتقای موقتی. manual_level_override برای جلوگیری از آپدیت خودکار سطح بر اساس خرید.',
         }),
     )
