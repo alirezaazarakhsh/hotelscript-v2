@@ -22,7 +22,7 @@ services:
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
       MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,chatbot.safarname24.com,www.chatbot.safarnameh24.com, 91.107.183.166"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,chatbot.safarname24.com,www.chatbot.safarnameh24.com, 91.107.143.26"
       CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com, http://chatbot.safarnameh24.com,https://chatbot.safarnameh24.com,http://www.chatbot.safarnameh24.com,https://www.chatbot.safarnameh24.com"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
