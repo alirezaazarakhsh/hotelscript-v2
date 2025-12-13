@@ -68,6 +68,9 @@ services:
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
       - ./hotel_bot/.env:/app/hotel_bot/.env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       ENV_PATH: "/app/hotel_bot/.env"
       DB_NAME: "safarname24"
