@@ -604,8 +604,9 @@ class NearbyPlace(models.Model):
 
 # مدل سوالات متداول برای هر هتل
 class HotelFAQ(models.Model):
-    question = models.TextField(
+    question = models.CharField(
         verbose_name=_('سوال'),
+        max_length=500,
     )
     answer = models.TextField(
         verbose_name=_('جواب'),
