@@ -243,6 +243,30 @@ class SEOMetaInline(admin.StackedInline):
     }
 
 
+# Inline برای سوالات متداول هتل
+class HotelFAQInline(admin.StackedInline):
+    model = HotelFAQ
+    extra = 1
+    verbose_name = 'سوال متداول'
+    verbose_name_plural = 'سوالات متداول هتل'
+    fields = ('question', 'answer', 'icon', 'icon_preview')
+    readonly_fields = ('icon_preview',)
+    autocomplete_fields = ('icon',)
+
+    def icon_preview(self, obj):
+        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
+            return format_html(
+                '<div style="display:flex; align-items:center;">'
+                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
+                '<span>{}</span>'
+                '</div>',
+                obj.icon.svg_icon.url,
+                obj.icon.title_icon
+            )
+        return "-"
+    icon_preview.short_description = "آیکون انتخاب‌شده"
+
+
 # Admin اصلی هتل
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
@@ -307,7 +331,7 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
 
     # اضافه شدن inline ها
-    inlines = [HotelTagPublicInline, SEOMetaInline]
+    inlines = [HotelTagPublicInline, SEOMetaInline, HotelFAQInline]
 
     # نمایش لوگو
     def logo_preview(self, obj):
