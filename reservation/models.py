@@ -1306,7 +1306,7 @@ class BestHotels(models.Model):
         verbose_name=_("عنوان لوگو"),
         max_length=128
     )
-    image_logo_hotel = models.ImageField(
+    image_logo_hotel = models.FileField(
         verbose_name=_("عکس لوگو هتل"),
         upload_to="images/best_hotels/"
     )
