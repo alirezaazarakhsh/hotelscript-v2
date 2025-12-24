@@ -60,7 +60,7 @@ class ProvinceSerializer(serializers.ModelSerializer):
 
 class CitySerializer(serializers.ModelSerializer):
     province = serializers.SerializerMethodField()
-    hotels_number = serializers.IntegerField(source='hotels.count', read_only=True)
+    hotels_number = serializers.SerializerMethodField()
 
     class Meta:
         model = City
@@ -68,6 +68,9 @@ class CitySerializer(serializers.ModelSerializer):
 
     def get_province(self, obj):
         return obj.province.name if obj.province else None
+
+    def get_hotels_number(self, obj):
+        return obj.hotels.filter(is_draft=False).count()
 
 class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:
