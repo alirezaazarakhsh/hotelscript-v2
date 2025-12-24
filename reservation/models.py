@@ -459,15 +459,18 @@ class Hotel(models.Model):
         verbose_name=_('پرفروش‌ترین‌های صفحه اصلی'),
         default=False,
     )
-    is_draft = models.BooleanField(
-        default=True,
-        verbose_name=_('پیش‌نویس'),
-        help_text=_('اگر فعال باشد، هتل نمایش داده نمی‌شود. اگر غیرفعال باشد، نمایش داده می‌شود.'),
+    STATUS_CHOICES = [
+        ('draft', _('پیش‌نویس')),
+        ('published', _('منتشر شده')),
+    ]
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='draft',
+        verbose_name=_('وضعیت انتشار'),
+        help_text=_('اگر "پیش‌نویس" انتخاب شود، هتل در API نمایش داده نمی‌شود. اگر "منتشر شده" انتخاب شود، هتل نمایش داده می‌شود.'),
     )
-    is_published = models.BooleanField(
-        default=False,
-        verbose_name=_('منتشر شده'),
-    )
+
     rules = models.TextField(
         verbose_name=_('قوانین و مقررات هتل'),
     )

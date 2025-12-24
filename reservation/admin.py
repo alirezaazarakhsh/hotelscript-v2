@@ -310,12 +310,10 @@ class HotelAdmin(admin.ModelAdmin):
                 'further_description',
                 'rules',
                 'important_notes',
-                'is_published',
             )
         }),
-        ('پیش‌نویس', {
-            'fields': ('is_draft',),
-            'classes': ('collapse',),
+        ('وضعیت انتشار هتل', {
+            'fields': ('status',),
         }),
     )
 
@@ -332,7 +330,7 @@ class HotelAdmin(admin.ModelAdmin):
         'stars',
         'rating',
         'type',
-        'is_published',
+        'status',
         'floors_count',
         'logo_preview',
         'show_public_tags',
@@ -340,7 +338,7 @@ class HotelAdmin(admin.ModelAdmin):
 
     search_fields = ('name', 'address', 'public_tags__title')
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
-    list_filter = ('city', 'type', 'stars', 'is_draft', 'is_published')
+    list_filter = ('city', 'type', 'stars', 'status')
 
     # اضافه شدن inline ها
     inlines = [HotelTagPublicInline, SEOMetaInline, HotelFAQInline]
@@ -379,7 +377,7 @@ class DraftHotelAdmin(HotelAdmin):
 @admin.register(PublishedHotel)
 class PublishedHotelAdmin(HotelAdmin):
     def get_queryset(self, request):
-        return self.model.objects.filter(is_published=True)
+        return self.model.objects.filter(status='published')
 
 
 class HotelGalleryImageInline(admin.TabularInline):

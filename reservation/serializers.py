@@ -70,7 +70,7 @@ class CitySerializer(serializers.ModelSerializer):
         return obj.province.name if obj.province else None
 
     def get_hotels_number(self, obj):
-        return obj.hotels.filter(is_draft=False).count()
+        return obj.hotels.filter(status='published').count()
 
 class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:

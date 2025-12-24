@@ -4,6 +4,17 @@ from django.utils.safestring import mark_safe
 
 
 class HotelAdminForm(forms.ModelForm):
+    STATUS_CHOICES = [
+        ('draft', 'پیش‌نویس (هتل نمایش داده نمی‌شود)'),
+        ('published', 'منتشر شده (هتل نمایش داده می‌شود)'),
+    ]
+    status = forms.ChoiceField(
+        choices=STATUS_CHOICES,
+        widget=forms.RadioSelect,
+        label='وضعیت انتشار',
+        help_text='اگر "پیش‌نویس" انتخاب شود، هتل در لیست‌ها نمایش داده نمی‌شود. اگر "منتشر شده" انتخاب شود، هتل نمایش داده می‌شود.',
+    )
+
     class Meta:
         model = Hotel
         fields = '__all__'
