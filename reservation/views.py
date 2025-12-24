@@ -2049,7 +2049,7 @@ class HotelSearchAPI(ListCreateAPIView):
                 "name": city.name,
                 "province": {"name": city.province.name},
                 "slug": city.slug,
-                "hotels_number": city.hotels.count()
+                "hotels_number": city.hotels.filter(is_draft=False).count()
             }
             for city in queryset["cities"]
         ]

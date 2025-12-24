@@ -299,8 +299,6 @@ class HotelAdmin(admin.ModelAdmin):
         'is_special_offer',
         'is_flash_sale',
         'is_best_seller',
-        'is_draft',
-        'is_published',
         'main_image',
         'image1',
         'image2',
@@ -311,6 +309,8 @@ class HotelAdmin(admin.ModelAdmin):
         'further_description',
         'rules',
         'important_notes',
+        'is_draft',
+        'is_published',
     )
 
     readonly_fields = ('logo_preview',)

@@ -462,6 +462,7 @@ class Hotel(models.Model):
     is_draft = models.BooleanField(
         default=True,
         verbose_name=_('پیش‌نویس'),
+        help_text=_('اگر فعال باشد، هتل نمایش داده نمی‌شود. اگر غیرفعال باشد، نمایش داده می‌شود.'),
     )
     is_published = models.BooleanField(
         default=False,
