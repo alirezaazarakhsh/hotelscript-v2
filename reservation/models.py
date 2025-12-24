@@ -318,40 +318,58 @@ class Hotel(models.Model):
     name = models.CharField(
         verbose_name=_('نام'),
         max_length=256,
+        blank=True,
+        default='',
     )
     slug = models.SlugField(
         verbose_name=_('اسلاگ'),
         max_length=256,
         unique=True,
+        blank=True,
+        default='',
     )
     city = models.ForeignKey(
         'City',
         on_delete=models.CASCADE,
         verbose_name=_('شهر'),
         related_name='hotels',
+        null=True,
+        blank=True,
     )
     address = models.TextField(
         verbose_name=_('آدرس'),
+        blank=True,
+        default='',
     )
     main_image = models.ImageField(
         verbose_name=_('تصویر اصلی'),
         upload_to=hotel_image_upload_to,
+        null=True,
+        blank=True,
     )
     image1 = models.ImageField(
         verbose_name=_('تصویر 1'),
         upload_to=hotel_image_upload_to,
+        null=True,
+        blank=True,
     )
     image2 = models.ImageField(
         verbose_name=_('تصویر 2'),
         upload_to=hotel_image_upload_to,
+        null=True,
+        blank=True,
     )
     image3 = models.ImageField(
         verbose_name=_('تصویر 3'),
         upload_to=hotel_image_upload_to,
+        null=True,
+        blank=True,
     )
     image4 = models.ImageField(
         verbose_name=_('تصویر 4'),
         upload_to=hotel_image_upload_to,
+        null=True,
+        blank=True,
     )
     
     best_logo = models.ForeignKey(
@@ -365,6 +383,8 @@ class Hotel(models.Model):
     
     stars = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد ستاره'),
+        null=True,
+        blank=True,
     )
     rating = models.DecimalField(
         verbose_name=_('امتیاز هتل'),
@@ -386,9 +406,13 @@ class Hotel(models.Model):
         on_delete=models.CASCADE,
         verbose_name=_('نوع اقامتگاه'),
         related_name='hotels',
+        null=True,
+        blank=True,
     )
     description = models.TextField(
         verbose_name=_('توضیحات هتل'),
+        blank=True,
+        default='',
     )
     further_description = models.TextField(
         verbose_name=_('توضیحات تکمیلی'),
@@ -397,16 +421,24 @@ class Hotel(models.Model):
     )
     floors_count = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد طبقات هتل'),
+        null=True,
+        blank=True,
     )
     rooms_count = models.PositiveSmallIntegerField(
         verbose_name=_('تعداد اتاق‌های هتل'),
         default=1,
+        null=True,
+        blank=True,
     )
     check_in_time = models.TimeField(
         verbose_name=_('ساعت ورود به هتل'),
+        null=True,
+        blank=True,
     )
     check_out_time = models.TimeField(
         verbose_name=_('ساعت خروج از هتل'),
+        null=True,
+        blank=True,
     )
     has_check_in_half_day_charge = models.BooleanField(
         verbose_name=_('نیم شارژ ورود'),
@@ -422,6 +454,8 @@ class Hotel(models.Model):
             MinValueValidator(Decimal('-90.000000')),
             MaxValueValidator(Decimal('90.000000')),
         ],
+        null=True,
+        blank=True,
     )
     longitude = models.DecimalField(
         verbose_name=_('طول جغرافیایی'),
@@ -431,21 +465,26 @@ class Hotel(models.Model):
             MinValueValidator(Decimal('-180.000000')),
             MaxValueValidator(Decimal('180.000000')),
         ],
+        null=True,
+        blank=True,
     )
     tags = models.ManyToManyField(
         'HotelTag',
         verbose_name=_('برچسب های هتل'),
         related_name='hotels',
+        blank=True,
     )
     facilities = models.ManyToManyField(
         'Facilities',
         verbose_name=_('امکانات رفاهی و تفریحی'),
         related_name='hotels',
+        blank=True,
     )
     room_facilities = models.ManyToManyField(
         'RoomFacilities',
         verbose_name=_('امکانات داخل اتاق'),
         related_name='hotels',
+        blank=True,
     )
     is_special_offer = models.BooleanField(
         verbose_name=_('پیشنهاد ویژه صفحه اصلی'),
@@ -473,6 +512,8 @@ class Hotel(models.Model):
 
     rules = models.TextField(
         verbose_name=_('قوانین و مقررات هتل'),
+        blank=True,
+        default='',
     )
     important_notes = models.TextField(
         verbose_name=_('نکات ضروری هتل'),
@@ -484,8 +525,21 @@ class Hotel(models.Model):
         verbose_name = 'هتل'
         verbose_name_plural = 'هتل ها'
 
+    def clean(self):
+        super().clean()
+        if self.status == 'published':
+            required_fields = [
+                'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
+                'description', 'floors_count', 'rooms_count', 'check_in_time',
+                'check_out_time', 'latitude', 'longitude', 'rules'
+            ]
+            for field in required_fields:
+                value = getattr(self, field)
+                if not value:
+                    raise ValidationError({field: f'این فیلد برای هتل منتشر شده ضروری است.'})
+
     def __str__(self):
-        return self.name
+        return self.name or 'هتل بدون نام'
 
 
 class DraftHotel(Hotel):
