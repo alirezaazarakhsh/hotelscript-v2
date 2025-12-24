@@ -459,6 +459,14 @@ class Hotel(models.Model):
         verbose_name=_('پرفروش‌ترین‌های صفحه اصلی'),
         default=False,
     )
+    is_draft = models.BooleanField(
+        default=True,
+        verbose_name=_('پیش‌نویس'),
+    )
+    is_published = models.BooleanField(
+        default=False,
+        verbose_name=_('منتشر شده'),
+    )
     rules = models.TextField(
         verbose_name=_('قوانین و مقررات هتل'),
     )
@@ -474,6 +482,20 @@ class Hotel(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class DraftHotel(Hotel):
+    class Meta:
+        proxy = True
+        verbose_name = 'هتل پیش‌نویس'
+        verbose_name_plural = 'هتل‌های پیش‌نویس'
+
+
+class PublishedHotel(Hotel):
+    class Meta:
+        proxy = True
+        verbose_name = 'هتل منتشر شده'
+        verbose_name_plural = 'هتل‌های منتشر شده'
 
 
     def has_active_date_prices(self):

@@ -32,6 +32,8 @@ from .models import (
     RoomDatePrice,
     RoomFacilities,
     Hotel,
+    DraftHotel,
+    PublishedHotel,
     HotelGallery,
     HotelGalleryImage,
     NearbyPlace,
@@ -356,7 +358,19 @@ class HotelAdmin(admin.ModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
-    
+
+
+@admin.register(DraftHotel)
+class DraftHotelAdmin(HotelAdmin):
+    def get_queryset(self, request):
+        return self.model.objects.filter(is_draft=True)
+
+
+@admin.register(PublishedHotel)
+class PublishedHotelAdmin(HotelAdmin):
+    def get_queryset(self, request):
+        return self.model.objects.filter(is_published=True)
+
 
 class HotelGalleryImageInline(admin.TabularInline):
     model = HotelGalleryImage
