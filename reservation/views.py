@@ -1300,7 +1300,7 @@ class SuggesteHotelListView(BaseHotelListView):
         today = jdatetime.date.today()
 
         # هتل‌های پیشنهادی
-        hotels = Hotel.objects.filter(is_special_offer=True).select_related('city', 'type').distinct()
+        hotels = Hotel.objects.filter(status='published', is_special_offer=True).select_related('city', 'type').distinct()
         if not hotels.exists():
             return Response([])
 
@@ -1448,7 +1448,7 @@ class AmazingHotelsListView(BaseHotelListView):
         today = jdatetime.date.today()
 
         # هتل‌های فروش شگفت‌انگیز
-        hotels = Hotel.objects.filter(is_flash_sale=True).select_related('city', 'type').distinct()
+        hotels = Hotel.objects.filter(status='published', is_flash_sale=True).select_related('city', 'type').distinct()
         if not hotels.exists():
             return Response([])
 
@@ -1596,7 +1596,7 @@ class BestSellersListView(BaseHotelListView):
         today = jdatetime.date.today()
 
         # هتل‌های پرفروش
-        hotels = Hotel.objects.filter(is_best_seller=True).select_related('city', 'type').distinct()
+        hotels = Hotel.objects.filter(status='published', is_best_seller=True).select_related('city', 'type').distinct()
         if not hotels.exists():
             return Response([])
 
@@ -2757,7 +2757,7 @@ class BestHotelspageAPI(ListAPIView):
         except ValueError:
             return Response({'detail': 'پارامترهای عددی معتبر نیستند.'}, status=400)
 
-        hotels_qs = Hotel.objects.all().select_related('city__province', 'type').prefetch_related(
+        hotels_qs = Hotel.objects.filter(status='published').select_related('city__province', 'type').prefetch_related(
             'public_tags',
             Prefetch('rooms', queryset=Room.objects.prefetch_related(
                 Prefetch('date_prices', queryset=RoomDatePrice.objects.select_related('room', 'user_level'))
@@ -4956,10 +4956,10 @@ class UserReservationListAPIView(APIView):
             # محاسبه تعداد مسافران هر اتاق
             room_guests = []
             for room in reservation.reservation_rooms.all():
-                main_count = 1 if room.main_passenger else 0
-                other_count = room.other_passengers.count()
-                extra_count = room.extra_capacity_passengers.count()
-                total_room_guests = main_count + other_count + extra_count
+                main_count = room.passengers.filter(is_primary=True).count()
+                primary_count = room.passengers.filter(passenger_type='primary').count()
+                extra_count = room.passengers.filter(passenger_type='extra').count()
+                total_room_guests = max(main_count, primary_count) + extra_count
                 room_guests.append(total_room_guests)
 
             data.append({
