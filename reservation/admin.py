@@ -299,6 +299,8 @@ class HotelAdmin(admin.ModelAdmin):
         'is_special_offer',
         'is_flash_sale',
         'is_best_seller',
+        'is_draft',
+        'is_published',
         'main_image',
         'image1',
         'image2',
@@ -324,6 +326,7 @@ class HotelAdmin(admin.ModelAdmin):
         'stars',
         'rating',
         'type',
+        'is_published',
         'floors_count',
         'logo_preview',
         'show_public_tags',
@@ -331,6 +334,7 @@ class HotelAdmin(admin.ModelAdmin):
 
     search_fields = ('name', 'address', 'public_tags__title')
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
+    list_filter = ('city', 'type', 'stars', 'is_draft', 'is_published')
 
     # اضافه شدن inline ها
     inlines = [HotelTagPublicInline, SEOMetaInline, HotelFAQInline]
