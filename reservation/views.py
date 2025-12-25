@@ -1995,7 +1995,7 @@ class HotelSearchAPI(ListCreateAPIView):
         query = self.request.query_params.get('query', '').lower()
         if query:
             # وقتی کوئری وجود دارد، هم هتل‌ها و هم شهرها جستجو می‌شوند
-            hotels = Hotel.objects.filter(name__icontains=query).select_related('city__province')
+            hotels = Hotel.objects.filter(name__icontains=query, status='published').select_related('city__province')
             cities = City.objects.filter(name__icontains=query).select_related('province')
         else:
             # در حالت دیفالت، فقط ۱۰ شهر اول (بر اساس ID) و هیچ هتلی
