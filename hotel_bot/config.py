@@ -13,6 +13,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN در فایل .env تعریف نشده است. لطفاً یک توکن معتبر تنظیم کنید.")
 
+PROXY = os.getenv("PROXY")
+
 # ================= تنظیمات پروژه =================
 PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", os.path.join(PROJECT_DIR, "backups/database"))

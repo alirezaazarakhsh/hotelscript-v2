@@ -19,7 +19,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
 sys.path.insert(0, '/app')
 django.setup()
 
-from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS
+from hotel_bot.config import BOT_TOKEN, SUPER_ADMINS, DB_BACKUP_DIR, MEDIA_BACKUP_DIR, MAX_BACKUPS, PROXY
 from hotel_bot.access_manager import AccessManager
 from hotel_bot.backup_manager import BackupManager
 from hotel_bot.file_manager import FileManager
@@ -1251,7 +1251,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await MenuManager.show_main_menu(user_id, context, chat_id=update.message.chat_id)
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    builder = ApplicationBuilder().token(BOT_TOKEN)
+    if PROXY:
+        builder = builder.request_kwargs({'proxy': PROXY})
+    app = builder.build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
