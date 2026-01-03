@@ -1252,8 +1252,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == "__main__":
     builder = ApplicationBuilder().token(BOT_TOKEN)
+    request_kwargs = {'timeout': 30.0}
     if PROXY:
-        builder = builder.request_kwargs({'proxy': PROXY})
+        request_kwargs['proxy'] = PROXY
+    builder = builder.request_kwargs(request_kwargs)
     app = builder.build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
