@@ -11,6 +11,9 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"  
@@ -61,9 +64,8 @@ services:
   bot:
     build: .
     container_name: telegram_bot
-    command: python -m hotel_bot.bot
+    command: python hotel_bot/bot.py
     volumes:
-      - /var/hotelscript-v2:/app
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
