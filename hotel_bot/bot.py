@@ -32,6 +32,7 @@ from hotel_bot.receipt_manager import ReceiptManager
 from hotel_bot.reservation_manager import ReservationManager
 from hotel_bot.points_manager import PointsManager
 from hotel_bot.user_wallet_manager import UserWalletManager
+from hotel_bot.otp_manager import OTPManager
 
 # Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -297,6 +298,38 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ شما مجوز مدیریت ادمین‌ها را ندارید!")
                 return
             await AdminManager.show_manage_admins(chat_id, context, admins, message_id=message_id)
+        elif data == "otp_menu":
+            await OTPManager.show_admin_otp_menu(chat_id, context, message_id=message_id)
+        elif data.startswith("otp_admin:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await OTPManager.show_admin_otp_options(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("create_static_token:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await OTPManager.create_static_token(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("view_static_tokens:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await OTPManager.view_static_tokens(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("refresh_static_tokens:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await OTPManager.refresh_static_tokens(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("delete_static_tokens:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await OTPManager.delete_static_tokens(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("view_group:"):
             if not AccessManager.is_allowed(user_id, 'manage_admins'):
                 await query.edit_message_text("❌ شما مجوز مشاهده گروه را ندارید!")

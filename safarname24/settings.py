@@ -63,6 +63,12 @@ INSTALLED_APPS = [
     'tinymce',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
+    
+    # Django OTP apps
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+    'django_otp.plugins.otp_static',
+    
     'authentication',
     'config',
     'contact',
@@ -93,6 +99,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -106,7 +114,7 @@ ROOT_URLCONF = 'safarname24.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -207,6 +215,11 @@ AUTHENTICATION_BACKENDS = (
 
 AUTH_USER_MODEL = "authentication.BaseUser"
 OTP_VALID_TIME = 1
+
+LOGIN_URL = 'admin:login'
+LOGIN_REDIRECT_URL = '/admin/'
+LOGOUT_REDIRECT_URL = '/admin/'
+TWO_FACTOR_PATCH_ADMIN = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

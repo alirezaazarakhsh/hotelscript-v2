@@ -49,6 +49,7 @@ class AdminManager:
                 if row:
                     keyboard.append(row)
                 keyboard.append([InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")])
+                keyboard.append([InlineKeyboardButton("📱 مدیریت توکن‌های OTP", callback_data="otp_menu")])
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)

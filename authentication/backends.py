@@ -5,18 +5,17 @@ from .models import BaseUser, OTP
 
 class AdminAuthBackend(ModelBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if request and request.path.startswith('/admin/'):
-            try:
-                username_field = BaseUser.USERNAME_FIELD
-                if username:
-                    user = BaseUser.objects.get(**{username_field: username})
+        try:
+            username_field = BaseUser.USERNAME_FIELD
+            if username and password:
+                user = BaseUser.objects.get(**{username_field: username})
 
-                    # بررسی وجود password و is_staff (ادمین معمولی یا سوپر یوزر)
-                    if user.is_staff and user.password:
-                        if user.check_password(password):
-                            return user
-            except BaseUser.DoesNotExist:
-                return None
+                # بررسی وجود password و is_staff (ادمین معمولی یا سوپر یوزر)
+                if user.is_staff and user.password:
+                    if user.check_password(password):
+                        return user
+        except BaseUser.DoesNotExist:
+            return None
     
     def user_can_authenticate(self, user):
         # هر کسی که is_staff باشد (ادمین معمولی یا سوپر یوزر) می‌تواند authenticate شود

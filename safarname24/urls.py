@@ -6,6 +6,11 @@ from drf_yasg import openapi
 from django.conf import settings
 from django.conf.urls.static import static
 from reservation import views as reservation_views
+from authentication.admin_forms import AdminOTPAuthenticationForm
+
+# Configure admin site to use custom login form
+admin.site.login_form = AdminOTPAuthenticationForm
+admin.site.login_template = 'admin/login.html'
 
 schema_view = get_schema_view(
     openapi.Info(
