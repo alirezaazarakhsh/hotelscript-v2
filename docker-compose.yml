@@ -11,14 +11,6 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     ports:
       - "8000:8000"
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"  
@@ -47,11 +39,6 @@ services:
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "your-secure-secret-key-here"
@@ -80,14 +67,6 @@ services:
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
       - /var/hotelscript-v2/media:/app/media
       - ./hotel_bot/.env:/app/hotel_bot/.env
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     environment:
       ENV_PATH: "/app/hotel_bot/.env"
       DB_NAME: "safarname24"
@@ -148,11 +127,6 @@ services:
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "your-secure-secret-key-here"
@@ -179,11 +153,6 @@ services:
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_SECRET_KEY: "your-secure-secret-key-here"
