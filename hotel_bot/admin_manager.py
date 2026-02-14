@@ -30,7 +30,7 @@ class AdminManager:
                     [InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")]
                 ]
             else:
-                text = "📋 **مدیریت ادمین‌ها**\n\n**لیست ادمین‌ها**:\n"
+                text = "📋 **مدیریت ادمین‌ها**\n\n**لیست ادمین‌های ربات**:\n"
                 keyboard = []
                 row = []
                 for idx, uid in enumerate(admins):
@@ -49,7 +49,7 @@ class AdminManager:
                 if row:
                     keyboard.append(row)
                 keyboard.append([InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin")])
-                keyboard.append([InlineKeyboardButton("📱 مدیریت توکن‌های OTP", callback_data="otp_menu")])
+                keyboard.append([InlineKeyboardButton("📱 مدیریت توکن‌های OTP (ادمین‌های سایت)", callback_data="otp_menu")])
                 keyboard.append([InlineKeyboardButton("بازگشت به کنترل پنل", callback_data="control_panel")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)

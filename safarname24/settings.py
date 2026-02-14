@@ -263,6 +263,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://chatbot.safarnameh24.com",
     "http://www.chatbot.safarnameh24.com",
     "https://www.chatbot.safarnameh24.com",
+    "http://addmins.safarnameh24.com",
+    "https://addmins.safarnameh24.com",
+    
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -144,13 +144,15 @@ class MenuManager:
     @staticmethod
     async def show_control_panel(query, user_id, context):
         try:
-            text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌ها، گروه‌های دسترسی، رسیدهای پرداخت و اشتراک‌ها را مدیریت کنید."
+            text = "⚙️ **کنترل پنل ربات**\n\n**توضیح**: در این بخش می‌توانید ادمین‌های ربات، ادمین‌های وبسایت، گروه‌های دسترسی، رسیدهای پرداخت و اشتراک‌ها را مدیریت کنید."
             keyboard = [[
-                InlineKeyboardButton("➕ اضافه کردن ادمین", callback_data="add_admin"),
+                InlineKeyboardButton("➕ اضافه کردن ادمین بات", callback_data="add_admin"),
                 InlineKeyboardButton("👥 ایجاد گروه دسترسی", callback_data="create_group")
             ],[
                 InlineKeyboardButton("🛠 مدیریت گروه‌های دسترسی", callback_data="manage_groups"),
-                InlineKeyboardButton("👤 مدیریت ادمین‌ها", callback_data="manage_admins")
+                InlineKeyboardButton("👤 مدیریت ادمین‌های بات", callback_data="manage_admins")
+            ],[
+                InlineKeyboardButton("🌐 مدیریت ادمین‌های وبسایت Django", callback_data="django_admins_menu"),
             ],[
                 InlineKeyboardButton("📦 مدیریت اشتراک‌ها", callback_data="manage_subscriptions")
             ]]

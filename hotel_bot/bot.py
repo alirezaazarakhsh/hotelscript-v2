@@ -33,6 +33,7 @@ from hotel_bot.reservation_manager import ReservationManager
 from hotel_bot.points_manager import PointsManager
 from hotel_bot.user_wallet_manager import UserWalletManager
 from hotel_bot.otp_manager import OTPManager
+from hotel_bot.django_admin_manager import DjangoAdminManager
 
 # Setup logging
 logging.basicConfig(filename='/var/log/bot.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -328,6 +329,61 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 base_user_id = int(data.split(":", 1)[1])
                 await OTPManager.delete_static_tokens(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        # Django Admin Management Handlers
+        elif data == "django_admins_menu":
+            await DjangoAdminManager.show_django_admins_menu(chat_id, context, message_id=message_id)
+        elif data.startswith("django_admin_detail:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.show_django_admin_detail(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("manage_django_admin_groups:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.manage_admin_groups(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("toggle_group:"):
+            try:
+                parts = data.split(":")
+                base_user_id = int(parts[1])
+                group_id = int(parts[2])
+                await DjangoAdminManager.toggle_admin_group(chat_id, context, base_user_id, group_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("toggle_django_admin:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.toggle_admin_status(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data == "django_groups_menu":
+            await DjangoAdminManager.show_django_groups_menu(chat_id, context, message_id=message_id)
+        elif data.startswith("django_group_detail:"):
+            try:
+                group_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.show_django_group_detail(chat_id, context, group_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("manage_django_admin_perms:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.manage_django_admin_permissions(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("make_staff:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.make_staff(chat_id, context, base_user_id, message_id=message_id)
+            except (IndexError, ValueError):
+                await query.edit_message_text("❌ داده نامعتبر!")
+        elif data.startswith("make_superuser:"):
+            try:
+                base_user_id = int(data.split(":", 1)[1])
+                await DjangoAdminManager.make_superuser(chat_id, context, base_user_id, message_id=message_id)
             except (IndexError, ValueError):
                 await query.edit_message_text("❌ داده نامعتبر!")
         elif data.startswith("view_group:"):
