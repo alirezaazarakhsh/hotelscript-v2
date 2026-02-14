@@ -1,4 +1,5 @@
 import os
+from asgiref.sync import sync_to_async
 import logging
 import re
 import sys
@@ -119,7 +120,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not AccessManager.is_allowed(user_id):
         # Check if subscription expired but allow wallet operations
-        is_active, package, days_left = AdminManager.check_subscription_status(user_id)
+        is_active, package, days_left = await sync_to_async(AdminManager.check_subscription_status)(user_id)
         
         if not is_active:
             # Subscription expired, only allow wallet operations and subscription management
