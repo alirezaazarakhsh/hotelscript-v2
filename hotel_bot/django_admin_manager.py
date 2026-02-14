@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from hotel_bot.config import SUPER_ADMINS
 from hotel_bot.access_manager import AccessManager
 import logging
+from asgiref.sync import sync_to_async
 import django
 import os
 import sys
@@ -35,12 +36,12 @@ class DjangoAdminManager:
                 return
             
             # دریافت لیست ادمین‌های Django
-            admins = Admin.objects.select_related('base_user').all()
+            admins = await sync_to_async(lambda: list(Admin.objects.select_related('base_user').all()))()
             
             text = "👥 **مدیریت ادمین‌های وبسایت Django**\n\n"
-            text += f"📊 تعداد کل ادمین‌ها: {admins.count()}\n\n"
+            text += f"📊 تعداد کل ادمین‌ها: {len(admins)}\n\n"
             
-            if not admins.exists():
+            if not admins:
                 text += "❌ هیچ ادمینی در سیستم وجود ندارد"
                 keyboard = [
                     [InlineKeyboardButton("➕ ایجاد ادمین جدید", callback_data="create_django_admin")],
@@ -112,8 +113,8 @@ class DjangoAdminManager:
                 await context.bot.send_message(chat_id=chat_id, text="❌ دسترسی رد شد!")
                 return
             
-            base_user = BaseUser.objects.get(id=base_user_id)
-            admin = Admin.objects.get(base_user=base_user)
+            base_user = await sync_to_async(BaseUser.objects.get)(id=base_user_id)
+            admin = await sync_to_async(Admin.objects.get)(base_user=base_user)
             
             phone = base_user.phone_number
             name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "بدون نام"
