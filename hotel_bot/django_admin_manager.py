@@ -43,47 +43,23 @@ class DjangoAdminManager:
             
             if not admins:
                 text += "❌ هیچ ادمینی در سیستم وجود ندارد"
-                keyboard = [
-                    [InlineKeyboardButton("➕ ایجاد ادمین جدید", callback_data="create_django_admin")],
-                    [InlineKeyboardButton("🔙 بازگشت", callback_data="control_panel")]
-                ]
+                keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="control_panel")]]
             else:
                 text += "📋 **لیست ادمین‌ها:**\n\n"
-                
                 keyboard = []
-                for admin in admins[:15]:  # نمایش حداکثر 15 ادمین
+                for admin in admins[:15]:
                     phone = admin.base_user.phone_number
                     name = f"{admin.first_name or ''} {admin.last_name or ''}".strip() or "بدون نام"
-                    
-                    # بررسی وضعیت
-                    is_active = admin.base_user.is_active
-                    is_staff = admin.base_user.is_staff
-                    is_superuser = admin.base_user.is_superuser
-                    
-                    status = ""
-                    if is_superuser:
-                        status = "👑 "
-                    elif is_staff:
-                        status = "⭐ "
-                    elif is_active:
-                        status = "✅ "
-                    else:
-                        status = "❌ "
-                    
+                    status = "✅ " if admin.base_user.is_active else "❌ "
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{status}{name} ({phone})",
                             callback_data=f"django_admin_detail:{admin.base_user.id}"
                         )
                     ])
-                
-                keyboard.append([InlineKeyboardButton("➕ ایجاد ادمین جدید", callback_data="create_django_admin")])
-                keyboard.append([InlineKeyboardButton("👥 مدیریت گروه‌های Django", callback_data="django_groups_menu")])
                 keyboard.append([InlineKeyboardButton("📱 مدیریت توکن‌های OTP", callback_data="otp_menu")])
                 keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="control_panel")])
-            
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
             if message_id:
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -154,16 +130,7 @@ class DjangoAdminManager:
                 text += "بدون مجوز مستقیم\n"
             
             keyboard = [
-                [InlineKeyboardButton("👥 مدیریت گروه‌ها", callback_data=f"manage_django_admin_groups:{base_user_id}")],
-                [InlineKeyboardButton("🔐 مدیریت مجوزها", callback_data=f"manage_django_admin_perms:{base_user_id}")],
                 [InlineKeyboardButton("📱 مدیریت OTP", callback_data=f"otp_admin:{base_user_id}")],
-                [
-                    InlineKeyboardButton(
-                        "❌ غیرفعال کردن" if base_user.is_active else "✅ فعال کردن",
-                        callback_data=f"toggle_django_admin:{base_user_id}"
-                    )
-                ],
-                [InlineKeyboardButton("🗑️ حذف ادمین", callback_data=f"delete_django_admin:{base_user_id}")],
                 [InlineKeyboardButton("🔙 بازگشت", callback_data="django_admins_menu")]
             ]
             
