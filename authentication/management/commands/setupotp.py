@@ -43,8 +43,12 @@ class Command(BaseCommand):
             confirmed=True
         )
         
-        # Generate provisioning URI
-        uri = device.config_url
+        # Generate provisioning URI with issuer and account name
+        from urllib.parse import quote
+        issuer = "safarnameh24.com"
+        account = phone_number
+        secret = device.key
+        uri = f"otpauth://totp/{quote(issuer)}:{quote(account)}?secret={secret}&issuer={quote(issuer)}"
         
         self.stdout.write(self.style.SUCCESS(f'\nTOTP device created for {phone_number}'))
         self.stdout.write(f'Device ID: {device.id}')

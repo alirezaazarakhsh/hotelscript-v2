@@ -1,4 +1,3 @@
-import os
 from asgiref.sync import sync_to_async
 import logging
 import re
@@ -15,6 +14,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
+import os
 # Setup Django before importing models
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
 sys.path.insert(0, '/app')
@@ -104,7 +104,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # بررسی و تمدید خودکار اشتراک‌ها
-    AdminManager.check_and_auto_renew_subscriptions()
+    await sync_to_async(AdminManager.check_and_auto_renew_subscriptions)()
     
     await MenuManager.show_main_menu(user_id, context)
 
