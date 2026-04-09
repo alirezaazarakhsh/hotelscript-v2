@@ -54,27 +54,18 @@ class Command(BaseCommand):
         self.stdout.write(f'Device ID: {device.id}')
         self.stdout.write(f'Key: {device.key}\n')
         
-        # Generate QR code
+        # Generate QR code and save as PNG for better scanning
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=1,
-            border=2,
+            box_size=8,
+            border=4,
         )
         qr.add_data(uri)
         qr.make(fit=True)
-        
-        # Print QR code
-        f = StringIO()
-        qr.print_ascii(out=f, invert=True)
-        f.seek(0)
-        
-        self.stdout.write('\n' + '='*70)
-        self.stdout.write('📱 QR Code - اسکن کنید با Google Authenticator')
-        self.stdout.write('='*70 + '\n')
-        self.stdout.write(f.read())
-        self.stdout.write('='*70)
-        self.stdout.write('='*70)
+        img = qr.make_image(fill_color="black", back_color="white")
+        img.save("otp-qr.png")
+        self.stdout.write(self.style.SUCCESS('✅ فایل QR با نام otp-qr.png ذخیره شد. با موبایل اسکن کنید.'))
         
         self.stdout.write('\n' + '='*70)
         self.stdout.write('🔑 یا این اطلاعات را دستی وارد کنید:')
