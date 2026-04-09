@@ -43,11 +43,13 @@ class Command(BaseCommand):
             confirmed=True
         )
         
-        # Generate provisioning URI with issuer and account name
+        # Generate provisioning URI with issuer and account name, using base32 secret for iOS compatibility
+        import base64
         from urllib.parse import quote
         issuer = "safarnameh24.com"
         account = phone_number
-        secret = device.key
+        # device.bin_key is the raw key, must be base32 encoded for QR
+        secret = base64.b32encode(device.bin_key).decode('utf-8').replace('=', '')
         uri = f"otpauth://totp/{quote(issuer)}:{quote(account)}?secret={secret}&issuer={quote(issuer)}"
         
         self.stdout.write(self.style.SUCCESS(f'\nTOTP device created for {phone_number}'))
