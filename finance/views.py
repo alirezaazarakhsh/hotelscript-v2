@@ -108,8 +108,13 @@ class CreatePaymentLinkAPIView(APIView):
             request.session.pop(key, None)
         request.session.save()
 
-    def _build_redirect(self, status_key, amount=0):
-        return redirect(f"{self.REDIRECT_BASE_URL}?payment_status={status_key}&amount={amount}")
+    def _build_response(self, status_key, amount=0):
+        """JSON برمی‌گرداند تا فرانت بهتر مدیریت کند"""
+        return Response({
+            "status": status_key,
+            "amount": amount,
+            "redirect_url": f"{self.REDIRECT_BASE_URL}?payment_status={status_key}&amount={amount}"
+        })
 
     def _get_user(self, request):
         if request.user.is_authenticated:
@@ -124,18 +129,17 @@ class CreatePaymentLinkAPIView(APIView):
                 pass
         return None
 
-    # POST: تشخیص بین ایجاد لینک و کال‌بک تست
+    # POST: ایجاد لینک پرداخت
     @swagger_auto_schema(
         operation_summary="ایجاد لینک پرداخت برای افزایش موجودی کیف پول کاربر",
         request_body=WalletTopUpSerializer,
         responses={200: "Payment link created"}
     )
     def post(self, request):
-        # اگر درخواست به کال‌بک آمد (تست دستی)
+        # تشخیص کال‌بک تست
         if "/payment-callback/" in request.path:
             return self._handle_payment_callback(request)
 
-        # درخواست عادی ایجاد لینک پرداخت
         serializer = WalletTopUpSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
@@ -162,6 +166,11 @@ class CreatePaymentLinkAPIView(APIView):
     def get(self, request, *args, **kwargs):
         return self._handle_payment_callback(request)
 
+    def post(self, request, *args, **kwargs):   # تست دستی کال‌بک
+        if "/payment-callback/" in request.path:
+            return self._handle_payment_callback(request)
+        return self.post(request)  # fallback
+
     def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority") or request.data.get("Authority")
         status_param = request.GET.get("Status") or request.GET.get("status") or request.data.get("status")
@@ -173,7 +182,7 @@ class CreatePaymentLinkAPIView(APIView):
         if not user:
             logger.error("Callback: User not found")
             self._clear_session(request)
-            return self._build_redirect(self.STATUS_FAILURE, saved_amount)
+            return self._build_response(self.STATUS_FAILURE, saved_amount)
 
         if authority and status_param == "OK":
             return self._verify_zarinpal(request, user, authority, saved_amount)
@@ -182,9 +191,8 @@ class CreatePaymentLinkAPIView(APIView):
             return self._verify_iraniangateway(request, user, order_id, saved_amount)
 
         self._clear_session(request)
-        return self._build_redirect(self.STATUS_FAILURE, saved_amount)
+        return self._build_response(self.STATUS_FAILURE, saved_amount)
 
-    # بقیه متدها (verify و ایجاد پرداخت) بدون تغییر نسبت به نسخه قبلی
     def _verify_zarinpal(self, request, user, authority, amount_toman):
         try:
             gateway = ZarinpalGateway.objects.first()
@@ -195,7 +203,7 @@ class CreatePaymentLinkAPIView(APIView):
                 logger.info("Sandbox: Payment accepted")
                 self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
                 self._clear_session(request)
-                return self._build_redirect(self.STATUS_SUCCESS, amount_toman)
+                return self._build_response(self.STATUS_SUCCESS, amount_toman)
 
             amount_riel = amount_toman * 10
             resp = requests.post(
@@ -209,12 +217,12 @@ class CreatePaymentLinkAPIView(APIView):
                 if result.get("data", {}).get("code") == 100:
                     self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
                     self._clear_session(request)
-                    return self._build_redirect(self.STATUS_SUCCESS, amount_toman)
+                    return self._build_response(self.STATUS_SUCCESS, amount_toman)
         except Exception as e:
             logger.error(f"Zarinpal verify error: {e}")
 
         self._clear_session(request)
-        return self._build_redirect(self.STATUS_FAILURE, amount_toman)
+        return self._build_response(self.STATUS_FAILURE, amount_toman)
 
     def _verify_iraniangateway(self, request, user, order_id, amount_toman):
         try:
@@ -232,12 +240,12 @@ class CreatePaymentLinkAPIView(APIView):
                 if result.get("success"):
                     self._update_wallet_and_log(user, amount_toman, 'iraniangateway', order_id)
                     self._clear_session(request)
-                    return self._build_redirect(self.STATUS_SUCCESS, amount_toman)
+                    return self._build_response(self.STATUS_SUCCESS, amount_toman)
         except Exception as e:
             logger.error(f"IranianGateway verify error: {e}")
 
         self._clear_session(request)
-        return self._build_redirect(self.STATUS_FAILURE, amount_toman)
+        return self._build_response(self.STATUS_FAILURE, amount_toman)
 
     def _update_wallet_and_log(self, user, amount, gateway_name, authority_or_order):
         wallet = Wallet.objects.get(user=user)
@@ -332,7 +340,7 @@ class CreatePaymentLinkAPIView(APIView):
         return result.get("payment_url"), result.get("order_id")
 
 
-# بقیه کلاس‌ها (بدون هیچ تغییری)
+# بقیه ویوها بدون تغییر
 class AdminCardSettingsAPIView(APIView):
     """
     API برای دریافت تنظیمات شماره کارت ادمین
@@ -362,20 +370,13 @@ class AdminCardSettingsAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
 
-#ای پی ای فیش واریز دستی کاربران
 class DepositReceiptCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         request_body=DepositReceiptSerializer,
         operation_summary="ثبت فیش واریزی",
-        operation_description="""
-        این API به کاربر اجازه می‌دهد فیش واریزی خود را ثبت کند.
-        """,
-        responses={
-            201: DepositReceiptSerializer,
-            400: "خطا در داده‌های ورودی"
-        }
+        responses={201: DepositReceiptSerializer, 400: "خطا در داده‌های ورودی"}
     )
     def post(self, request):
         serializer = DepositReceiptSerializer(data=request.data, context={'request': request})
@@ -385,17 +386,13 @@ class DepositReceiptCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ای پی ای ثبت درخواست برداشت از کیف پول
 class WithdrawalRequestCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         request_body=WithdrawalRequestSerializer,
         operation_summary="ثبت درخواست برداشت از کیف پول",
-        responses={
-            201: WithdrawalRequestSerializer,
-            400: "خطا در داده‌های ورودی یا موجودی ناکافی"
-        }
+        responses={201: WithdrawalRequestSerializer, 400: "خطا در داده‌های ورودی"}
     )
     def post(self, request):
         serializer = WithdrawalRequestSerializer(data=request.data, context={'request': request})
@@ -405,14 +402,10 @@ class WithdrawalRequestCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ای پی ای دریافت توضیحات کارت به کارت
 class CardToCardInstructionAPIView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(
-        operation_summary="دریافت متن توضیحات کارت به کارت",
-        responses={200: CardToCardInstructionSerializer}
-    )
+    @swagger_auto_schema(operation_summary="دریافت متن توضیحات کارت به کارت")
     def get(self, request):
         obj = CardToCardInstruction.objects.first()
         if not obj:
@@ -421,8 +414,6 @@ class CardToCardInstructionAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-
-# ای پی ای تجمیع همه عملیات مالی
 class FinancialOperationsListAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
