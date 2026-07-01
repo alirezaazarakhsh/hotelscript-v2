@@ -89,7 +89,11 @@ class CreatePaymentLinkAPIView(APIView):
     STATUS_FAILURE = "unsuccessfull"
 
     def get_permissions(self):
-        if getattr(self, 'request', None) and self.request.method in ['GET', 'POST']:
+        # برای متد GET (کال‌بک بانک) اجازه دسترسی همگانی می‌دهیم
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        # برای متد POST اگر مسیر کال‌بک باشد اجازه همگانی، در غیر این صورت احراز هویت
+        if "/payment-callback/" in self.request.path:
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -109,7 +113,6 @@ class CreatePaymentLinkAPIView(APIView):
         request.session.save()
 
     def _build_response(self, status_key, amount=0):
-        """JSON برمی‌گرداند تا فرانت بهتر مدیریت کند"""
         return Response({
             "status": status_key,
             "amount": amount,
@@ -129,17 +132,18 @@ class CreatePaymentLinkAPIView(APIView):
                 pass
         return None
 
-    # POST: ایجاد لینک پرداخت
+    # تنها یک متد POST برای کل کلاس
     @swagger_auto_schema(
-        operation_summary="ایجاد لینک پرداخت برای افزایش موجودی کیف پول کاربر",
+        operation_summary="ایجاد لینک پرداخت یا مدیریت کال‌بک",
         request_body=WalletTopUpSerializer,
-        responses={200: "Payment link created"}
+        responses={200: "Payment link created or Callback processed"}
     )
-    def post(self, request):
-        # تشخیص کال‌بک تست
+    def post(self, request, *args, **kwargs):
+        # ۱. بررسی اینکه آیا این درخواست کال‌بک است (برخی درگاه‌ها POST می‌زنند)
         if "/payment-callback/" in request.path:
             return self._handle_payment_callback(request)
 
+        # ۲. اگر کال‌بک نبود، پس درخواست ایجاد لینک پرداخت است
         serializer = WalletTopUpSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
@@ -150,7 +154,7 @@ class CreatePaymentLinkAPIView(APIView):
         except ValidationError as ve:
             return Response(ve.detail, status=400)
 
-        # ذخیره مبلغ و کاربر در session
+        # ذخیره اطلاعات در سشن برای مرحله تایید (Verify)
         self._store_session(request, wallet_user_id=request.user.id, wallet_amount=amount_toman)
 
         pref = PaymentGatewayPreference.objects.first()
@@ -164,14 +168,9 @@ class CreatePaymentLinkAPIView(APIView):
         else:
             return Response({"error": "Unsupported gateway"}, status=500)
 
+    # متد GET برای کال‌بک درگاه‌های پرداخت
     def get(self, request, *args, **kwargs):
         return self._handle_payment_callback(request)
-
-    def post(self, request, *args, **kwargs):   # تست دستی کال‌بک
-        if "/payment-callback/" in request.path:
-            return self._handle_payment_callback(request)
-        # fallback به متد اصلی
-        return self.post(request)
 
     def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority") or request.data.get("Authority")
@@ -182,14 +181,14 @@ class CreatePaymentLinkAPIView(APIView):
         user = self._get_user(request)
 
         if not user:
-            logger.error("Callback: User not found")
+            logger.error("Callback: User not found in session")
             self._clear_session(request)
             return self._build_response(self.STATUS_FAILURE, saved_amount)
 
         if authority and status_param == "OK":
             return self._verify_zarinpal(request, user, authority, saved_amount)
 
-        if order_id and status_param and status_param.lower() in ["success", "ok", "1"]:
+        if order_id and status_param and str(status_param).lower() in ["success", "ok", "1"]:
             return self._verify_iraniangateway(request, user, order_id, saved_amount)
 
         self._clear_session(request)
@@ -202,7 +201,6 @@ class CreatePaymentLinkAPIView(APIView):
                 raise Exception("Zarinpal not configured")
 
             if gateway.mode == "sandbox":
-                logger.info("Sandbox: Payment accepted")
                 self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
                 self._clear_session(request)
                 return self._build_response(self.STATUS_SUCCESS, amount_toman)
@@ -250,7 +248,7 @@ class CreatePaymentLinkAPIView(APIView):
         return self._build_response(self.STATUS_FAILURE, amount_toman)
 
     def _update_wallet_and_log(self, user, amount, gateway_name, authority_or_order):
-        wallet = Wallet.objects.get(user=user)
+        wallet, _ = Wallet.objects.get_or_create(user=user)
         wallet.balance += amount
         wallet.save()
 
@@ -270,7 +268,7 @@ class CreatePaymentLinkAPIView(APIView):
         try:
             amount_riel = amount_toman * 10
             payment_link, authority = self._create_zarinpal_payment(gateway, amount_riel, request)
-            self._store_session(request, wallet_amount=amount_toman, wallet_authority=authority, active_gateway="zarinpal")
+            self._store_session(request, wallet_authority=authority, active_gateway="zarinpal")
             return Response({
                 "gateway": "zarinpal",
                 "amount": amount_toman,
@@ -286,7 +284,7 @@ class CreatePaymentLinkAPIView(APIView):
 
         try:
             payment_link, order_id = self._create_iraniangateway_payment(gateway, amount_toman, request)
-            self._store_session(request, wallet_amount=amount_toman, wallet_order_id=order_id, active_gateway="iraniangateway")
+            self._store_session(request, wallet_order_id=order_id, active_gateway="iraniangateway")
             return Response({
                 "gateway": "iraniangateway",
                 "amount": amount_toman,
@@ -340,7 +338,6 @@ class CreatePaymentLinkAPIView(APIView):
             raise Exception(result.get('message', 'Unknown error'))
 
         return result.get("payment_url"), result.get("order_id")
-
 
 # بقیه ویوها بدون تغییر
 class AdminCardSettingsAPIView(APIView):
