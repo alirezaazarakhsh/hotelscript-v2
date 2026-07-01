@@ -150,7 +150,8 @@ class CreatePaymentLinkAPIView(APIView):
         except ValidationError as ve:
             return Response(ve.detail, status=400)
 
-        self._store_session(request, wallet_user_id=request.user.id)
+        # ذخیره مبلغ و کاربر در session
+        self._store_session(request, wallet_user_id=request.user.id, wallet_amount=amount_toman)
 
         pref = PaymentGatewayPreference.objects.first()
         if not pref:
@@ -169,7 +170,8 @@ class CreatePaymentLinkAPIView(APIView):
     def post(self, request, *args, **kwargs):   # تست دستی کال‌بک
         if "/payment-callback/" in request.path:
             return self._handle_payment_callback(request)
-        return self.post(request)  # fallback
+        # fallback به متد اصلی
+        return self.post(request)
 
     def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority") or request.data.get("Authority")
