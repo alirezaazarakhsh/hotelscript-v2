@@ -43,7 +43,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://chatbot.safarnameh24.com",
     "http://www.chatbot.safarnameh24.com",
     "https://www.chatbot.safarnameh24.com",
-    ]
+]
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -140,8 +140,7 @@ CHANNEL_LAYERS = {
     },
 }
 
-# Cache backend: prefer Redis so cache keys (used by websocket timer) survive page refresh
-# If REDIS_HOST is set in env (e.g. in Docker), use that host; otherwise default to localhost
+# Cache backend
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
@@ -160,15 +159,14 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
-# تنظیمات Celery Beat برای اجرای تسک‌های زمان‌بندی شده
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
-        'schedule': 60.0,  # هر 60 ثانیه (1 دقیقه)
+        'schedule': 60.0,
     },
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
-        'schedule': 300.0,  # هر 5 دقیقه
+        'schedule': 300.0,
     },
 }
 
@@ -248,6 +246,7 @@ SIMPLE_JWT = {
 
 INTERNAL_IPS = ['127.0.0.1']
 
+# ==================== CORS ====================
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -265,16 +264,22 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.chatbot.safarnameh24.com",
     "http://addmins.safarnameh24.com",
     "https://addmins.safarnameh24.com",
-    
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ORIGIN_ALLOW_ALL = False
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = [
     'content-type',
     'authorization',
     'x-requested-with',
+    'x-csrftoken',
+    'accept',
+    'accept-encoding',
+    'user-agent',
 ]
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+
+# ==================== بقیه تنظیمات بدون تغییر ====================
 
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
@@ -330,14 +335,8 @@ TINYMCE_DEFAULT_CONFIG = {
     "file_picker_types": "image media",
 }
 
-
-
-
-# safarnameh24/settings.py
-
-# مشخص کردن محیط (local یا production)
-ENVIRONMENT = 'production'  # برای محیط لوکال (برای تست لوکال این را فعال کنید)
-# ENVIRONMENT = 'production'  # برای محیط پروداکشن
+# مشخص کردن محیط
+ENVIRONMENT = 'production'  
 
 # تنظیم URL پایه برای ریدایرکت callback
 if ENVIRONMENT == 'local':
@@ -345,15 +344,10 @@ if ENVIRONMENT == 'local':
 else:
     CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
 
-#  تنظیمات درگاه زرین‌پال (برای پروداکشن - کامنت شده)
+# تنظیمات درگاه زرین‌پال
 ZARINPAL_REQUEST_URL = 'https://payment.zarinpal.com/pg/v4/payment/request.json'
 ZARINPAL_PAYMENT_URL = 'https://payment.zarinpal.com/pg/StartPay'
 ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
 
 # تنظیمات درگاه ایران‌درگاه
 IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
-
-# تنظیمات درگاه زرین‌پال (فقط سندباکس)
-# ZARINPAL_SANDBOX_REQUEST_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
-# ZARINPAL_SANDBOX_PAYMENT_URL = 'https://sandbox.zarinpal.com/pg/StartPay'
-# ZARINPAL_SANDBOX_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json'
