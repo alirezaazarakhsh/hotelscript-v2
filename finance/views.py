@@ -76,54 +76,28 @@ class CreatePaymentLinkAPIView(APIView):
         return [IsAuthenticated()]
 
     def post(self, request, *args, **kwargs):
-        # ====================== تشخیص قوی درخواست ======================
         logger.info("=" * 80)
         logger.info("=== CREATE PAYMENT LINK REQUEST ===")
         logger.info(f"Method: {request.method}")
         logger.info(f"Content-Type: {request.content_type}")
         logger.info(f"request.data: {dict(request.data)}")
-        logger.info(f"request.POST: {dict(request.POST)}")
-        logger.info(f"request.body[:500]: {request.body[:500] if request.body else 'EMPTY'}")
+        logger.info(f"Has 'amount' in request.data? {'amount' in request.data}")
         logger.info("=" * 80)
 
-        is_create_request = False
-
-        # 1. تشخیص معمولی DRF
+        # تشخیص درخواست ایجاد پرداخت
         if request.data and isinstance(request.data, dict) and 'amount' in request.data:
-            is_create_request = True
-            logger.info("→ تشخیص داده شد: request.data")
-
-        # 2. Form data
-        elif request.POST and 'amount' in request.POST:
-            is_create_request = True
-            logger.info("→ تشخیص داده شد: request.POST")
-
-        # 3. Raw JSON Body (مهم‌ترین راه‌حل)
-        elif request.body:
-            try:
-                body_data = json.loads(request.body.decode('utf-8'))
-                if isinstance(body_data, dict) and 'amount' in body_data:
-                    is_create_request = True
-                    logger.info("→ تشخیص داده شد: raw body")
-                    request._full_data = body_data  # برای استفاده در serializer
-            except Exception as e:
-                logger.warning(f"Failed to parse raw body: {e}")
-
-        if is_create_request:
-            logger.info("=== درخواست ایجاد پرداخت پذیرفته شد ===")
+            logger.info("→ درخواست ایجاد پرداخت تشخیص داده شد")
             return self._handle_create_payment_request(request)
-        
-        logger.info("=== به عنوان کال‌بک تشخیص داده شد ===")
+
+        # اگر به هر دلیلی amount پیدا نشد → کال‌بک
+        logger.info("→ به عنوان کال‌بک تشخیص داده شد")
         return self._handle_payment_callback(request)
 
     def get(self, request, *args, **kwargs):
         return self._handle_payment_callback(request)
 
     def _handle_create_payment_request(self, request):
-        # استفاده از داده‌های خام اگر موجود باشد
-        data = getattr(request, '_full_data', request.data)
-        
-        serializer = WalletTopUpSerializer(data=data)
+        serializer = WalletTopUpSerializer(data=request.data)
         if not serializer.is_valid():
             logger.error(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=400)
@@ -203,6 +177,7 @@ class CreatePaymentLinkAPIView(APIView):
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, saved_amount)
 
+    # بقیه متدها (_verify_..., _update_..., _handle_zarinpal_payment و ...) بدون تغییر بمانند
     def _verify_zarinpal(self, request, user, authority, amount_toman):
         try:
             gateway = ZarinpalGateway.objects.first()
@@ -278,7 +253,7 @@ class CreatePaymentLinkAPIView(APIView):
             auth = res["data"]["authority"]
             base = "https://sandbox.zarinpal.com/pg/StartPay/" if gateway.mode == "sandbox" else "https://www.zarinpal.com/pg/StartPay/"
             return f"{base}{auth}", auth
-        raise Exception("Zarinpal connection error")
+        raise Exception(f"Zarinpal error: {res.get('errors', res)}")
 
     def _create_iraniangateway_payment(self, gateway, amount_toman, request):
         base_url = request.build_absolute_uri('/')
@@ -289,6 +264,7 @@ class CreatePaymentLinkAPIView(APIView):
         if result.get("success"):
             return result.get("payment_url"), result.get("order_id")
         raise Exception(result.get('message', 'Iranian gateway error'))
+
 # ===================== سایر ویوها =====================
 
 class AdminCardSettingsAPIView(APIView):
