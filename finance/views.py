@@ -71,7 +71,10 @@ class CreatePaymentLinkAPIView(APIView):
 
     def get_permissions(self):
         # اگر درخواست شامل پارامترهای بانکی باشد (کال‌بک)، اجازه دسترسی همگانی می‌دهیم
-        if self.request.method == 'GET' or 'Authority' in self.request.query_params or 'order_id' in self.request.query_params:
+        if (self.request.method == 'GET' or 
+            'Authority' in self.request.query_params or 
+            'order_id' in self.request.query_params or
+            'status' in self.request.query_params):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -104,15 +107,19 @@ class CreatePaymentLinkAPIView(APIView):
         if user_id:
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            try: return User.objects.get(id=user_id)
-            except User.DoesNotExist: pass
+            try: 
+                return User.objects.get(id=user_id)
+            except User.DoesNotExist: 
+                pass
         return None
 
     def post(self, request, *args, **kwargs):
-        # اگر در بادی مقدار amount باشد، یعنی درخواست شارژ جدید است
-        if 'amount' in request.data:
+        # === اصلاح اصلی: تشخیص بهتر درخواست ایجاد پرداخت ===
+        # اگر amount در بدنه درخواست وجود داشته باشد → ایجاد لینک پرداخت
+        if request.data and 'amount' in request.data:
             return self._handle_create_payment_request(request)
-        # در غیر این صورت، به عنوان کال‌بک در نظر می‌گیریم
+        
+        # در غیر این صورت به عنوان کال‌بک در نظر بگیریم
         return self._handle_payment_callback(request)
 
     def get(self, request, *args, **kwargs):
@@ -140,8 +147,10 @@ class CreatePaymentLinkAPIView(APIView):
             return self._handle_zarinpal_payment(amount_toman, request)
         elif pref.active_gateway == "iraniangateway":
             return self._handle_iraniangateway_payment(amount_toman, request)
+        
         return Response({"error": "No active gateway found"}, status=500)
 
+    # بقیه متدها بدون تغییر باقی می‌مانند
     def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority") or request.data.get("Authority")
         status_param = request.GET.get("Status") or request.GET.get("status") or request.data.get("status")
@@ -166,7 +175,8 @@ class CreatePaymentLinkAPIView(APIView):
     def _verify_zarinpal(self, request, user, authority, amount_toman):
         try:
             gateway = ZarinpalGateway.objects.first()
-            if not gateway: raise Exception("No gateway config")
+            if not gateway: 
+                raise Exception("No gateway config")
             
             if gateway.mode == "sandbox":
                 self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
@@ -184,6 +194,7 @@ class CreatePaymentLinkAPIView(APIView):
                 return self._build_response(self.STATUS_SUCCESS, amount_toman)
         except Exception as e:
             logger.error(f"Zarinpal verify error: {e}")
+        
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, amount_toman)
 
@@ -197,6 +208,7 @@ class CreatePaymentLinkAPIView(APIView):
                 return self._build_response(self.STATUS_SUCCESS, amount_toman)
         except Exception as e:
             logger.error(f"IranianGateway verify error: {e}")
+        
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, amount_toman)
 
@@ -244,7 +256,6 @@ class CreatePaymentLinkAPIView(APIView):
         if result.get("success"):
             return result.get("payment_url"), result.get("order_id")
         raise Exception(result.get('message', 'Iranian gateway error'))
-
 
 # ===================== سایر ویوها =====================
 
