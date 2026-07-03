@@ -77,50 +77,50 @@ class CreatePaymentLinkAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         # ====================== تشخیص قوی درخواست ======================
-        logger.info("=" * 70)
-        logger.info(f"CREATE PAYMENT LINK - Method: {request.method}")
+        logger.info("=" * 80)
+        logger.info("=== CREATE PAYMENT LINK REQUEST ===")
+        logger.info(f"Method: {request.method}")
         logger.info(f"Content-Type: {request.content_type}")
         logger.info(f"request.data: {dict(request.data)}")
         logger.info(f"request.POST: {dict(request.POST)}")
-        logger.info(f"Has amount in data? {'amount' in request.data}")
-        logger.info("=" * 70)
+        logger.info(f"request.body[:500]: {request.body[:500] if request.body else 'EMPTY'}")
+        logger.info("=" * 80)
 
         is_create_request = False
 
-        # راه‌حل 1: تشخیص معمولی DRF
-        if request.data and 'amount' in request.data:
+        # 1. تشخیص معمولی DRF
+        if request.data and isinstance(request.data, dict) and 'amount' in request.data:
             is_create_request = True
             logger.info("→ تشخیص داده شد: request.data")
 
-        # راه‌حل 2: Form data
+        # 2. Form data
         elif request.POST and 'amount' in request.POST:
             is_create_request = True
             logger.info("→ تشخیص داده شد: request.POST")
 
-        # راه‌حل 3: خواندن مستقیم body (در صورت شکست بقیه)
+        # 3. Raw JSON Body (مهم‌ترین راه‌حل)
         elif request.body:
             try:
                 body_data = json.loads(request.body.decode('utf-8'))
                 if isinstance(body_data, dict) and 'amount' in body_data:
                     is_create_request = True
                     logger.info("→ تشخیص داده شد: raw body")
-                    # کمک به serializer
-                    if not hasattr(request, '_full_data'):
-                        request._full_data = body_data
+                    request._full_data = body_data  # برای استفاده در serializer
             except Exception as e:
                 logger.warning(f"Failed to parse raw body: {e}")
 
         if is_create_request:
+            logger.info("=== درخواست ایجاد پرداخت پذیرفته شد ===")
             return self._handle_create_payment_request(request)
         
-        logger.info("→ به عنوان کال‌بک تشخیص داده شد")
+        logger.info("=== به عنوان کال‌بک تشخیص داده شد ===")
         return self._handle_payment_callback(request)
 
     def get(self, request, *args, **kwargs):
         return self._handle_payment_callback(request)
 
     def _handle_create_payment_request(self, request):
-        # استفاده از request.data یا _full_data
+        # استفاده از داده‌های خام اگر موجود باشد
         data = getattr(request, '_full_data', request.data)
         
         serializer = WalletTopUpSerializer(data=data)
@@ -134,7 +134,6 @@ class CreatePaymentLinkAPIView(APIView):
         except ValidationError as ve:
             return Response(ve.detail, status=400)
 
-        # ذخیره در سشن
         self._store_session(request, wallet_user_id=request.user.id, wallet_amount=amount_toman)
 
         pref = PaymentGatewayPreference.objects.first()
@@ -273,7 +272,7 @@ class CreatePaymentLinkAPIView(APIView):
         callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
         url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json" if gateway.mode == "sandbox" else "https://api.zarinpal.com/pg/v4/payment/request.json"
         data = {"merchant_id": gateway.merchant_code, "amount": amount_riel, "callback_url": callback_url, "description": "شارژ کیف پول"}
-        resp = requests.post(url, json=data, timeout=20)
+        resp = requests.post(url, json=data, timeout=30)
         res = resp.json()
         if res.get("data") and res["data"].get("authority"):
             auth = res["data"]["authority"]
@@ -285,12 +284,11 @@ class CreatePaymentLinkAPIView(APIView):
         base_url = request.build_absolute_uri('/')
         callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
         data = {"merchant_id": gateway.merchant_code, "amount": amount_toman, "callback_url": callback_url, "description": "شارژ کیف پول"}
-        resp = requests.post(gateway.request_url, json=data, timeout=20)
+        resp = requests.post(gateway.request_url, json=data, timeout=30)
         result = resp.json()
         if result.get("success"):
             return result.get("payment_url"), result.get("order_id")
         raise Exception(result.get('message', 'Iranian gateway error'))
-
 # ===================== سایر ویوها =====================
 
 class AdminCardSettingsAPIView(APIView):
