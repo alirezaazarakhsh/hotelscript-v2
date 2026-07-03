@@ -70,13 +70,83 @@ class CreatePaymentLinkAPIView(APIView):
     STATUS_FAILURE = "unsuccessfull"
 
     def get_permissions(self):
-        # اگر درخواست شامل پارامترهای بانکی باشد (کال‌بک)، اجازه دسترسی همگانی می‌دهیم
         if (self.request.method == 'GET' or 
-            'Authority' in self.request.query_params or 
-            'order_id' in self.request.query_params or
-            'status' in self.request.query_params):
+            any(key in self.request.query_params for key in ['Authority', 'order_id', 'status'])):
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    def post(self, request, *args, **kwargs):
+        # ====================== تشخیص قوی درخواست ======================
+        logger.info("=" * 70)
+        logger.info(f"CREATE PAYMENT LINK - Method: {request.method}")
+        logger.info(f"Content-Type: {request.content_type}")
+        logger.info(f"request.data: {dict(request.data)}")
+        logger.info(f"request.POST: {dict(request.POST)}")
+        logger.info(f"Has amount in data? {'amount' in request.data}")
+        logger.info("=" * 70)
+
+        is_create_request = False
+
+        # راه‌حل 1: تشخیص معمولی DRF
+        if request.data and 'amount' in request.data:
+            is_create_request = True
+            logger.info("→ تشخیص داده شد: request.data")
+
+        # راه‌حل 2: Form data
+        elif request.POST and 'amount' in request.POST:
+            is_create_request = True
+            logger.info("→ تشخیص داده شد: request.POST")
+
+        # راه‌حل 3: خواندن مستقیم body (در صورت شکست بقیه)
+        elif request.body:
+            try:
+                body_data = json.loads(request.body.decode('utf-8'))
+                if isinstance(body_data, dict) and 'amount' in body_data:
+                    is_create_request = True
+                    logger.info("→ تشخیص داده شد: raw body")
+                    # کمک به serializer
+                    if not hasattr(request, '_full_data'):
+                        request._full_data = body_data
+            except Exception as e:
+                logger.warning(f"Failed to parse raw body: {e}")
+
+        if is_create_request:
+            return self._handle_create_payment_request(request)
+        
+        logger.info("→ به عنوان کال‌بک تشخیص داده شد")
+        return self._handle_payment_callback(request)
+
+    def get(self, request, *args, **kwargs):
+        return self._handle_payment_callback(request)
+
+    def _handle_create_payment_request(self, request):
+        # استفاده از request.data یا _full_data
+        data = getattr(request, '_full_data', request.data)
+        
+        serializer = WalletTopUpSerializer(data=data)
+        if not serializer.is_valid():
+            logger.error(f"Serializer errors: {serializer.errors}")
+            return Response(serializer.errors, status=400)
+
+        amount_toman = serializer.validated_data['amount']
+        try:
+            self._validate_amount(amount_toman)
+        except ValidationError as ve:
+            return Response(ve.detail, status=400)
+
+        # ذخیره در سشن
+        self._store_session(request, wallet_user_id=request.user.id, wallet_amount=amount_toman)
+
+        pref = PaymentGatewayPreference.objects.first()
+        if not pref:
+            return Response({"error": "Gateway not configured"}, status=500)
+
+        if pref.active_gateway == "zarinpal":
+            return self._handle_zarinpal_payment(amount_toman, request)
+        elif pref.active_gateway == "iraniangateway":
+            return self._handle_iraniangateway_payment(amount_toman, request)
+        
+        return Response({"error": "No active gateway found"}, status=500)
 
     def _validate_amount(self, amount_toman):
         if amount_toman < self.MIN_TOPUP or amount_toman > self.MAX_TOPUP:
@@ -113,44 +183,6 @@ class CreatePaymentLinkAPIView(APIView):
                 pass
         return None
 
-    def post(self, request, *args, **kwargs):
-        # === اصلاح اصلی: تشخیص بهتر درخواست ایجاد پرداخت ===
-        # اگر amount در بدنه درخواست وجود داشته باشد → ایجاد لینک پرداخت
-        if request.data and 'amount' in request.data:
-            return self._handle_create_payment_request(request)
-        
-        # در غیر این صورت به عنوان کال‌بک در نظر بگیریم
-        return self._handle_payment_callback(request)
-
-    def get(self, request, *args, **kwargs):
-        return self._handle_payment_callback(request)
-
-    def _handle_create_payment_request(self, request):
-        serializer = WalletTopUpSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
-        amount_toman = serializer.validated_data['amount']
-        try:
-            self._validate_amount(amount_toman)
-        except ValidationError as ve:
-            return Response(ve.detail, status=400)
-
-        # ذخیره در سشن برای مرحله Verify
-        self._store_session(request, wallet_user_id=request.user.id, wallet_amount=amount_toman)
-
-        pref = PaymentGatewayPreference.objects.first()
-        if not pref:
-            return Response({"error": "Gateway not configured"}, status=500)
-
-        if pref.active_gateway == "zarinpal":
-            return self._handle_zarinpal_payment(amount_toman, request)
-        elif pref.active_gateway == "iraniangateway":
-            return self._handle_iraniangateway_payment(amount_toman, request)
-        
-        return Response({"error": "No active gateway found"}, status=500)
-
-    # بقیه متدها بدون تغییر باقی می‌مانند
     def _handle_payment_callback(self, request):
         authority = request.GET.get("Authority") or request.data.get("Authority")
         status_param = request.GET.get("Status") or request.GET.get("status") or request.data.get("status")
@@ -224,6 +256,7 @@ class CreatePaymentLinkAPIView(APIView):
             payment_link, authority = self._create_zarinpal_payment(gateway, amount_toman * 10, request)
             return Response({"gateway": "zarinpal", "amount": amount_toman, "payment_link": payment_link})
         except Exception as e:
+            logger.error(f"Zarinpal payment creation error: {e}")
             return Response({"error": str(e)}, status=500)
 
     def _handle_iraniangateway_payment(self, amount_toman, request):
@@ -232,6 +265,7 @@ class CreatePaymentLinkAPIView(APIView):
             payment_link, order_id = self._create_iraniangateway_payment(gateway, amount_toman, request)
             return Response({"gateway": "iraniangateway", "amount": amount_toman, "payment_link": payment_link})
         except Exception as e:
+            logger.error(f"IranianGateway payment creation error: {e}")
             return Response({"error": str(e)}, status=500)
 
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
