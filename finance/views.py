@@ -82,14 +82,13 @@ class CreatePaymentLinkAPIView(APIView):
         logger.info(f"Content-Type : {request.content_type}")
         logger.info(f"request.data : {dict(request.data) if hasattr(request.data, 'keys') else str(request.data)[:300]}")
         logger.info(f"request.POST : {dict(request.POST)}")
-        logger.info(f"request.body : {request.body[:500] if request.body else 'EMPTY'}")
         logger.info(f"User authenticated: {request.user.is_authenticated if hasattr(request.user, 'is_authenticated') else False}")
         logger.info("=" * 120)
 
         amount = self._extract_amount_robust(request)
 
         if amount is not None:
-            logger.info(f"✅ AMOUNT DETECTED: {amount} → Creating payment link")
+            logger.info(f"✅ AMOUNT DETECTED: {amount} → Creating payment")
             return self._handle_create_payment_request(request, amount)
         else:
             logger.error("❌ NO AMOUNT FOUND! Treating as callback")
@@ -99,34 +98,33 @@ class CreatePaymentLinkAPIView(APIView):
         return self._handle_payment_callback(request)
 
     def _extract_amount_robust(self, request):
-        """استخراج amount از همه منابع ممکن"""
-        sources = [request.data, request.POST, request.query_params]
-        
-        # Raw body
-        try:
-            import json
-            raw = json.loads(request.body.decode('utf-8'))
-            sources.append(raw)
-        except:
-            pass
+        """استخراج amount بدون دسترسی خطرناک به request.body"""
+        # 1. request.data (مهم‌ترین - JSON)
+        if hasattr(request.data, 'get'):
+            val = request.data.get('amount') or request.data.get('Amount')
+            if val is not None:
+                try:
+                    return int(str(val).strip())
+                except:
+                    pass
 
-        for source in sources:
-            if isinstance(source, dict):
-                for key in ['amount', 'Amount']:
-                    val = source.get(key)
-                    if val is not None:
-                        try:
-                            return int(str(val).strip())
-                        except:
-                            continue
-            elif hasattr(source, 'get'):
-                for key in ['amount', 'Amount']:
-                    val = source.get(key)
-                    if val is not None:
-                        try:
-                            return int(str(val).strip())
-                        except:
-                            continue
+        # 2. request.POST (form-data)
+        if hasattr(request.POST, 'get'):
+            val = request.POST.get('amount') or request.POST.get('Amount')
+            if val is not None:
+                try:
+                    return int(str(val).strip())
+                except:
+                    pass
+
+        # 3. Query params
+        val = request.query_params.get('amount') or request.query_params.get('Amount')
+        if val is not None:
+            try:
+                return int(str(val).strip())
+            except:
+                pass
+
         return None
 
     def _handle_create_payment_request(self, request, amount_toman):
@@ -226,11 +224,7 @@ class CreatePaymentLinkAPIView(APIView):
 
             resp = requests.post(
                 "https://api.zarinpal.com/pg/v4/payment/verify.json",
-                json={
-                    "merchant_id": gateway.merchant_code,
-                    "amount": amount_toman * 10,
-                    "authority": authority
-                },
+                json={"merchant_id": gateway.merchant_code, "amount": amount_toman * 10, "authority": authority},
                 timeout=20
             )
             data = resp.json().get("data", {})
