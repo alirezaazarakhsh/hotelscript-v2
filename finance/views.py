@@ -58,6 +58,7 @@ class WalletPackListAPIView(APIView):
 
 
 # ===================== ای پی ای افزایش موجودی کیف پول (اصلی) =====================
+
 class CreatePaymentLinkAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -76,21 +77,22 @@ class CreatePaymentLinkAPIView(APIView):
         return [IsAuthenticated()]
 
     def post(self, request, *args, **kwargs):
-        logger.info("=" * 100)
+        logger.info("=" * 120)
         logger.info("=== CREATE PAYMENT LINK REQUEST ===")
-        logger.info(f"Content-Type: {request.content_type}")
-        logger.info(f"request.data: {dict(request.data) if hasattr(request.data, 'keys') else str(request.data)[:200]}")
-        logger.info(f"request.POST: {dict(request.POST)}")
-        logger.info(f"request.body: {request.body[:300] if request.body else 'Empty'}")
-        logger.info("=" * 100)
+        logger.info(f"Content-Type : {request.content_type}")
+        logger.info(f"request.data : {dict(request.data) if hasattr(request.data, 'keys') else str(request.data)[:300]}")
+        logger.info(f"request.POST : {dict(request.POST)}")
+        logger.info(f"request.body : {request.body[:500] if request.body else 'EMPTY'}")
+        logger.info(f"User authenticated: {request.user.is_authenticated if hasattr(request.user, 'is_authenticated') else False}")
+        logger.info("=" * 120)
 
         amount = self._extract_amount_robust(request)
 
         if amount is not None:
-            logger.info(f"✅ درخواست ایجاد پرداخت | Amount: {amount}")
+            logger.info(f"✅ AMOUNT DETECTED: {amount} → Creating payment link")
             return self._handle_create_payment_request(request, amount)
         else:
-            logger.warning("⚠️ مقدار amount پیدا نشد → در حال پردازش به عنوان کال‌بک")
+            logger.error("❌ NO AMOUNT FOUND! Treating as callback")
             return self._handle_payment_callback(request)
 
     def get(self, request, *args, **kwargs):
@@ -98,37 +100,33 @@ class CreatePaymentLinkAPIView(APIView):
 
     def _extract_amount_robust(self, request):
         """استخراج amount از همه منابع ممکن"""
-        candidates = []
-
-        # 1. DRF request.data (JSON)
-        if hasattr(request.data, 'get'):
-            candidates.append(request.data.get('amount'))
-        elif isinstance(request.data, dict):
-            candidates.append(request.data.get('amount'))
-
-        # 2. Form data
-        candidates.append(request.POST.get('amount'))
-
-        # 3. Query params
-        candidates.append(request.query_params.get('amount'))
-
-        # 4. Raw body
+        sources = [request.data, request.POST, request.query_params]
+        
+        # Raw body
         try:
             import json
             raw = json.loads(request.body.decode('utf-8'))
-            if isinstance(raw, dict):
-                candidates.append(raw.get('amount'))
+            sources.append(raw)
         except:
             pass
 
-        for val in candidates:
-            if val is not None:
-                try:
-                    amount = int(str(val).strip())
-                    if amount > 0:
-                        return amount
-                except:
-                    continue
+        for source in sources:
+            if isinstance(source, dict):
+                for key in ['amount', 'Amount']:
+                    val = source.get(key)
+                    if val is not None:
+                        try:
+                            return int(str(val).strip())
+                        except:
+                            continue
+            elif hasattr(source, 'get'):
+                for key in ['amount', 'Amount']:
+                    val = source.get(key)
+                    if val is not None:
+                        try:
+                            return int(str(val).strip())
+                        except:
+                            continue
         return None
 
     def _handle_create_payment_request(self, request, amount_toman):
@@ -152,7 +150,7 @@ class CreatePaymentLinkAPIView(APIView):
             return self._handle_zarinpal_payment(amount_toman, request)
         elif pref.active_gateway == "iraniangateway":
             return self._handle_iraniangateway_payment(amount_toman, request)
-
+        
         return Response({"error": "No active gateway found"}, status=500)
 
     def _validate_amount(self, amount_toman):
@@ -345,6 +343,7 @@ class CreatePaymentLinkAPIView(APIView):
             return result.get("payment_url"), result.get("order_id")
             
         raise Exception(result.get('message', 'Iranian gateway error'))
+
 # ===================== سایر ویوها =====================
 
 class AdminCardSettingsAPIView(APIView):
