@@ -1,5 +1,6 @@
 from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
+from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from django.conf import settings
 import requests
