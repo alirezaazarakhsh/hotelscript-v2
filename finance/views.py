@@ -63,6 +63,7 @@ class CreatePaymentLinkAPIView(APIView):
 
     REDIRECT_BASE_URL = getattr(settings, 'CALLBACK_REDIRECT_BASE_URL', 'https://safarnameh24.com') + "/dashboard/financial/wallet"
     CALLBACK_PATH = "/api/v1/finance/wallet/payment-callback/"
+    
     MIN_TOPUP = 1_000_000
     MAX_TOPUP = 100_000_000
 
@@ -70,8 +71,8 @@ class CreatePaymentLinkAPIView(APIView):
     STATUS_FAILURE = "unsuccessfull"
 
     def get_permissions(self):
-        if (self.request.method == 'GET' or 
-            any(key in self.request.query_params for key in ['Authority', 'order_id', 'status'])):
+        # کال‌بک‌ها باید بدون احراز هویت باشند
+        if self.request.method in ['GET'] or any(key in self.request.query_params for key in ['Authority', 'order_id', 'status']):
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -81,28 +82,51 @@ class CreatePaymentLinkAPIView(APIView):
         logger.info(f"Method: {request.method}")
         logger.info(f"Content-Type: {request.content_type}")
         logger.info(f"request.data: {dict(request.data)}")
-        logger.info(f"Has 'amount' in request.data? {'amount' in request.data}")
+        logger.info(f"request.POST: {dict(request.POST)}")
         logger.info("=" * 80)
 
-        # تشخیص درخواست ایجاد پرداخت
-        if request.data and isinstance(request.data, dict) and 'amount' in request.data:
-            logger.info("→ درخواست ایجاد پرداخت تشخیص داده شد")
-            return self._handle_create_payment_request(request)
+        # === بهبود تشخیص درخواست ایجاد پرداخت ===
+        amount = self._extract_amount(request)
+        
+        if amount is not None:
+            logger.info(f"→ درخواست ایجاد پرداخت تشخیص داده شد. Amount: {amount}")
+            return self._handle_create_payment_request(request, amount)
 
-        # اگر به هر دلیلی amount پیدا نشد → کال‌بک
-        logger.info("→ به عنوان کال‌بک تشخیص داده شد")
+        # در غیر این صورت → کال‌بک
+        logger.info("→ درخواست به عنوان کال‌بک تشخیص داده شد")
         return self._handle_payment_callback(request)
 
     def get(self, request, *args, **kwargs):
         return self._handle_payment_callback(request)
 
-    def _handle_create_payment_request(self, request):
-        serializer = WalletTopUpSerializer(data=request.data)
+    def _extract_amount(self, request):
+        """بهبود یافته: هم JSON هم form-data را پشتیبانی می‌کند"""
+        # 1. از request.data (JSON)
+        if isinstance(request.data, dict) and 'amount' in request.data:
+            return request.data.get('amount')
+        
+        # 2. از request.POST (form-data)
+        if 'amount' in request.POST:
+            try:
+                return int(request.POST.get('amount'))
+            except (TypeError, ValueError):
+                pass
+        
+        # 3. از query params (موارد نادر)
+        if 'amount' in request.query_params:
+            try:
+                return int(request.query_params.get('amount'))
+            except (TypeError, ValueError):
+                pass
+                
+        return None
+
+    def _handle_create_payment_request(self, request, amount_toman):
+        serializer = WalletTopUpSerializer(data={'amount': amount_toman})
         if not serializer.is_valid():
             logger.error(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=400)
 
-        amount_toman = serializer.validated_data['amount']
         try:
             self._validate_amount(amount_toman)
         except ValidationError as ve:
@@ -123,7 +147,9 @@ class CreatePaymentLinkAPIView(APIView):
 
     def _validate_amount(self, amount_toman):
         if amount_toman < self.MIN_TOPUP or amount_toman > self.MAX_TOPUP:
-            raise ValidationError({"amount": [f"مبلغ باید بین {self.MIN_TOPUP:,} تا {self.MAX_TOPUP:,} تومان باشد."]})
+            raise ValidationError({
+                "amount": [f"مبلغ باید بین {self.MIN_TOPUP:,} تا {self.MAX_TOPUP:,} تومان باشد."]
+            })
 
     def _store_session(self, request, **kwargs):
         for k, v in kwargs.items():
@@ -146,20 +172,22 @@ class CreatePaymentLinkAPIView(APIView):
     def _get_user(self, request):
         if request.user and request.user.is_authenticated:
             return request.user
+        
         user_id = request.session.get("wallet_user_id")
         if user_id:
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            try: 
+            try:
                 return User.objects.get(id=user_id)
-            except User.DoesNotExist: 
+            except User.DoesNotExist:
                 pass
         return None
 
     def _handle_payment_callback(self, request):
-        authority = request.GET.get("Authority") or request.data.get("Authority")
-        status_param = request.GET.get("Status") or request.GET.get("status") or request.data.get("status")
-        order_id = request.GET.get("order_id") or request.data.get("order_id")
+        authority = request.GET.get("Authority") or request.data.get("Authority") or request.POST.get("Authority")
+        status_param = (request.GET.get("Status") or request.GET.get("status") or 
+                       request.data.get("status") or request.POST.get("status"))
+        order_id = request.GET.get("order_id") or request.data.get("order_id") or request.POST.get("order_id")
 
         saved_amount = request.session.get("wallet_amount", 0)
         user = self._get_user(request)
@@ -168,22 +196,22 @@ class CreatePaymentLinkAPIView(APIView):
             logger.error("Callback user not found in session")
             return self._build_response(self.STATUS_FAILURE, saved_amount)
 
-        if authority and status_param == "OK":
+        if authority and str(status_param).upper() == "OK":
             return self._verify_zarinpal(request, user, authority, saved_amount)
 
-        if order_id and status_param and str(status_param).lower() in ["success", "ok", "1"]:
+        if order_id and str(status_param).lower() in ["success", "ok", "1"]:
             return self._verify_iraniangateway(request, user, order_id, saved_amount)
 
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, saved_amount)
 
-    # بقیه متدها (_verify_..., _update_..., _handle_zarinpal_payment و ...) بدون تغییر بمانند
+    # متدهای verify و handle و create بدون تغییر اساسی (فقط بهبودهای جزئی)
     def _verify_zarinpal(self, request, user, authority, amount_toman):
         try:
             gateway = ZarinpalGateway.objects.first()
-            if not gateway: 
-                raise Exception("No gateway config")
-            
+            if not gateway:
+                raise Exception("No Zarinpal gateway config")
+
             if gateway.mode == "sandbox":
                 self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
                 self._clear_session(request)
@@ -191,30 +219,43 @@ class CreatePaymentLinkAPIView(APIView):
 
             resp = requests.post(
                 "https://api.zarinpal.com/pg/v4/payment/verify.json",
-                json={"merchant_id": gateway.merchant_code, "amount": amount_toman * 10, "authority": authority},
+                json={
+                    "merchant_id": gateway.merchant_code,
+                    "amount": amount_toman * 10,
+                    "authority": authority
+                },
                 timeout=20
             )
-            if resp.status_code == 200 and resp.json().get("data", {}).get("code") == 100:
+            data = resp.json().get("data", {})
+            if resp.status_code == 200 and data.get("code") == 100:
                 self._update_wallet_and_log(user, amount_toman, 'zarinpal', authority)
                 self._clear_session(request)
                 return self._build_response(self.STATUS_SUCCESS, amount_toman)
+                
         except Exception as e:
             logger.error(f"Zarinpal verify error: {e}")
-        
+
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, amount_toman)
 
     def _verify_iraniangateway(self, request, user, order_id, amount_toman):
         try:
             gateway = IranianGateway.objects.first()
-            resp = requests.post(gateway.verify_url, json={"merchant_id": gateway.merchant_code, "order_id": order_id}, timeout=20)
+            if not gateway:
+                raise Exception("No IranianGateway config")
+
+            resp = requests.post(
+                gateway.verify_url,
+                json={"merchant_id": gateway.merchant_code, "order_id": order_id},
+                timeout=20
+            )
             if resp.status_code == 200 and resp.json().get("success"):
                 self._update_wallet_and_log(user, amount_toman, 'iraniangateway', order_id)
                 self._clear_session(request)
                 return self._build_response(self.STATUS_SUCCESS, amount_toman)
         except Exception as e:
             logger.error(f"IranianGateway verify error: {e}")
-        
+
         self._clear_session(request)
         return self._build_response(self.STATUS_FAILURE, amount_toman)
 
@@ -222,13 +263,22 @@ class CreatePaymentLinkAPIView(APIView):
         wallet, _ = Wallet.objects.get_or_create(user=user)
         wallet.balance += amount
         wallet.save()
-        WalletTopUpLog.objects.create(user=user, amount=amount, gateway=gateway_name, authority_or_order=authority_or_order)
+        WalletTopUpLog.objects.create(
+            user=user, 
+            amount=amount, 
+            gateway=gateway_name, 
+            authority_or_order=authority_or_order
+        )
 
     def _handle_zarinpal_payment(self, amount_toman, request):
         gateway = ZarinpalGateway.objects.first()
         try:
             payment_link, authority = self._create_zarinpal_payment(gateway, amount_toman * 10, request)
-            return Response({"gateway": "zarinpal", "amount": amount_toman, "payment_link": payment_link})
+            return Response({
+                "gateway": "zarinpal",
+                "amount": amount_toman,
+                "payment_link": payment_link
+            })
         except Exception as e:
             logger.error(f"Zarinpal payment creation error: {e}")
             return Response({"error": str(e)}, status=500)
@@ -237,34 +287,57 @@ class CreatePaymentLinkAPIView(APIView):
         gateway = IranianGateway.objects.first()
         try:
             payment_link, order_id = self._create_iraniangateway_payment(gateway, amount_toman, request)
-            return Response({"gateway": "iraniangateway", "amount": amount_toman, "payment_link": payment_link})
+            return Response({
+                "gateway": "iraniangateway",
+                "amount": amount_toman,
+                "payment_link": payment_link
+            })
         except Exception as e:
             logger.error(f"IranianGateway payment creation error: {e}")
             return Response({"error": str(e)}, status=500)
 
+    # _create_zarinpal_payment و _create_iraniangateway_payment بدون تغییر
     def _create_zarinpal_payment(self, gateway, amount_riel, request):
         base_url = request.build_absolute_uri('/')
         callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
+        
         url = "https://sandbox.zarinpal.com/pg/v4/payment/request.json" if gateway.mode == "sandbox" else "https://api.zarinpal.com/pg/v4/payment/request.json"
-        data = {"merchant_id": gateway.merchant_code, "amount": amount_riel, "callback_url": callback_url, "description": "شارژ کیف پول"}
+        
+        data = {
+            "merchant_id": gateway.merchant_code,
+            "amount": amount_riel,
+            "callback_url": callback_url,
+            "description": "شارژ کیف پول"
+        }
+        
         resp = requests.post(url, json=data, timeout=30)
         res = resp.json()
+        
         if res.get("data") and res["data"].get("authority"):
             auth = res["data"]["authority"]
             base = "https://sandbox.zarinpal.com/pg/StartPay/" if gateway.mode == "sandbox" else "https://www.zarinpal.com/pg/StartPay/"
             return f"{base}{auth}", auth
+            
         raise Exception(f"Zarinpal error: {res.get('errors', res)}")
 
     def _create_iraniangateway_payment(self, gateway, amount_toman, request):
         base_url = request.build_absolute_uri('/')
         callback_url = urljoin(base_url, self.CALLBACK_PATH.lstrip('/'))
-        data = {"merchant_id": gateway.merchant_code, "amount": amount_toman, "callback_url": callback_url, "description": "شارژ کیف پول"}
+        
+        data = {
+            "merchant_id": gateway.merchant_code,
+            "amount": amount_toman,
+            "callback_url": callback_url,
+            "description": "شارژ کیف پول"
+        }
+        
         resp = requests.post(gateway.request_url, json=data, timeout=30)
         result = resp.json()
+        
         if result.get("success"):
             return result.get("payment_url"), result.get("order_id")
+            
         raise Exception(result.get('message', 'Iranian gateway error'))
-
 # ===================== سایر ویوها =====================
 
 class AdminCardSettingsAPIView(APIView):
