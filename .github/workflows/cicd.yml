@@ -29,10 +29,10 @@ jobs:
             git pull origin master
 
             echo "🛑 Stopping old containers..."
-            docker-compose down || true
+            docker compose down || true
 
             echo "🏗 Rebuilding containers..."
-            docker-compose up -d --build
+            docker compose up -d --build
 
             echo "✨ Deployment completed on $(date)"
           EOF
