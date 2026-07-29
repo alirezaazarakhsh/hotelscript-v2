@@ -13,7 +13,7 @@ services:
       - "8000:8000"
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"  
+      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -22,8 +22,8 @@ services:
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
       MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,chatbot.safarname24.com,www.chatbot.safarnameh24.com, 91.107.179.92"
-      CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com, http://chatbot.safarnameh24.com,https://chatbot.safarnameh24.com,http://www.chatbot.safarnameh24.com,https://www.chatbot.safarnameh24.com,http://addmins.safarnameh24.com,https://addmins.safarnameh24.com"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,chatbot.safarname24.com,www.chatbot.safarnameh24.com,91.107.179.92"
+      CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com,http://chatbot.safarnameh24.com,https://chatbot.safarnameh24.com,http://www.chatbot.safarnameh24.com,https://www.chatbot.safarnameh24.com,http://addmins.safarnameh24.com,https://addmins.safarnameh24.com"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
@@ -41,7 +41,7 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
+      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -58,68 +58,6 @@ services:
     networks:
       - app_network
 
-  bot:
-    build: .
-    container_name: telegram_bot
-    command: python hotel_bot/bot.py
-    volumes:
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
-      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
-      - /var/hotelscript-v2/media:/app/media
-      - ./hotel_bot/.env:/app/hotel_bot/.env
-    environment:
-      ENV_PATH: "/app/hotel_bot/.env"
-      DB_NAME: "safarname24"
-      DB_USER: "postgres"
-      DB_PASSWORD: "admin"
-      DB_HOST: "db"
-      DB_PORT: "5432"
-      MEDIA_ROOT: "/app/media"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      PROJECT_DIR: "/app"
-    depends_on:
-      - db
-    networks:
-      - app_network
-
-  db:
-    image: postgres:15.2
-    container_name: postgres_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
-    environment:
-      POSTGRES_DB: "safarname24"
-      POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "admin"
-    networks:
-      - app_network
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: "alirezaazarakhsh20@gmail.com"
-      PGADMIN_DEFAULT_PASSWORD: "password"
-    volumes:
-      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/pgadmin/storage
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
-    networks:
-      - app_network
-
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - app_network
-
   celery:
     build: .
     container_name: celery_worker
@@ -129,7 +67,7 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
+      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -155,7 +93,7 @@ services:
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "your-secure-secret-key-here"
+      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "safarname24"
       DB_USER: "postgres"
@@ -173,19 +111,36 @@ services:
     networks:
       - app_network
 
+  db:
+    image: postgres:15.2
+    container_name: postgres_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
+    environment:
+      POSTGRES_DB: "safarname24"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "admin"
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   media_data:
-    driver: local
   backups:
-    driver: local
   db_backups:
-    driver: local
   staticfiles:
-    driver: local
 
 networks:
   app_network:
