@@ -4,6 +4,7 @@ services:
   web:
     build: .
     container_name: django_app
+    restart: unless-stopped
     command: bash /app/start.sh
     volumes:
       - /var/hotelscript-v2/media:/app/media
@@ -35,6 +36,7 @@ services:
   channels_worker:
     build: .
     container_name: channels_worker
+    restart: unless-stopped
     command: python manage.py runworker default
     volumes:
       - /var/hotelscript-v2/media:/app/media
@@ -61,7 +63,8 @@ services:
   celery:
     build: .
     container_name: celery_worker
-    command: celery -A safarname24 worker -l info
+    restart: unless-stopped
+    command: celery -A safarname24 worker -l info --max-tasks-per-child=100 --max-memory-per-child=400000
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
@@ -87,6 +90,7 @@ services:
   celery_beat:
     build: .
     container_name: celery_beat
+    restart: unless-stopped
     command: celery -A safarname24 beat -l info
     volumes:
       - /var/hotelscript-v2/media:/app/media
@@ -114,6 +118,15 @@ services:
   db:
     image: postgres:15.2
     container_name: postgres_db
+    restart: unless-stopped
+    oom_score_adj: -1000
+    command: >
+      postgres
+      -c shared_buffers=1536MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=256MB
+      -c effective_cache_size=4096MB
+      -c max_connections=100
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
@@ -127,8 +140,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:
