@@ -43,6 +43,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://chatbot.safarnameh24.com",
     "http://www.chatbot.safarnameh24.com",
     "https://www.chatbot.safarnameh24.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 MEDIA_URL = '/media/'
@@ -256,8 +258,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.safarnameh24.com",
     "http://cps.safarnameh24.com",
     "https://cps.safarnameh24.com",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
     "http://chatbot.safarnameh24.com",
     "https://chatbot.safarnameh24.com",
     "http://www.chatbot.safarnameh24.com",
@@ -267,19 +267,36 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-CORS_ALLOW_HEADERS = [
-    'content-type',
-    'authorization',
-    'x-requested-with',
-    'x-csrftoken',
-    'accept',
-    'accept-encoding',
-    'user-agent',
-]
-CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
-# ==================== بقیه تنظیمات بدون تغییر ====================
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+CORS_EXPOSE_HEADERS = [
+    "Content-Type",
+    "X-CSRFToken",
+]
+
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+# ==================== بقیه تنظیمات ====================
 
 JALALI_DATE_DEFAULTS = {
     'Strftime': {
