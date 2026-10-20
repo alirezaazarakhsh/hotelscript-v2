@@ -201,3 +201,71 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
     return True, f"هماهنگ‌سازی با موفقیت انجام شد: {synced_rooms_count} اتاق (با قوانین) و {synced_prices_count} تاریخ قیمت و تخفیف ذخیره شدند."
+
+
+
+
+def sync_all_snapptrip_hotels_directory():
+    """
+    دریافت تمام شهرها و هتل‌های اسنپ و ذخیره/بروزرسانی آن‌ها در جدول SnappHotelDirectory
+    """
+    base_url, headers = get_snapptrip_client_config()
+
+    if not headers.get('api-key'):
+        return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
+
+    try:
+        cities_res = requests.get(f"{base_url}/cities/", headers=headers, timeout=20)
+        if cities_res.status_code != 200:
+            return False, f"خطا در دریافت لیست شهرها از اسنپ (کد {cities_res.status_code})"
+        
+        cities_data = cities_res.json()
+        cities_list = cities_data if isinstance(cities_data, list) else cities_data.get('results', cities_data.get('cities', []))
+    except Exception as e:
+        return False, f"خطای اتصال به سرور اسنپ: {str(e)}"
+
+    total_created = 0
+    total_updated = 0
+
+    for city in cities_list:
+        city_id = city.get('id') or city.get('city_id')
+        city_name = city.get('name') or city.get('title') or f"شهر {city_id}"
+
+        if not city_id:
+            continue
+
+        try:
+            hotels_url = f"{base_url}/cities/{city_id}/hotels"
+            hotels_res = requests.get(hotels_url, headers=headers, timeout=15)
+
+            if hotels_res.status_code == 200:
+                hotels_data = hotels_res.json()
+                hotels_list = hotels_data if isinstance(hotels_data, list) else hotels_data.get('results', hotels_data.get('hotels', []))
+
+                for h in hotels_list:
+                    h_id = h.get('id') or h.get('hotel_id')
+                    h_name = h.get('name') or h.get('title') or ''
+                    stars = str(h.get('stars') or h.get('star') or '-')
+
+                    if not h_id:
+                        continue
+
+                    obj, created = SnappHotelDirectory.objects.update_or_create(
+                        snapp_hotel_id=h_id,
+                        defaults={
+                            'name': h_name,
+                            'city_name': city_name,
+                            'city_id': city_id,
+                            'stars': stars,
+                        }
+                    )
+                    if created:
+                        total_created += 1
+                    else:
+                        total_updated += 1
+
+            time.sleep(0.05)  # مکث کوتاه برای رعایت سقف درخواست‌ها
+        except Exception as e:
+            logger.error(f"Error fetching hotels for city {city_name}: {e}")
+
+    return True, f"بروزرسانی کامل شد: {total_created} هتل جدید اضافه و {total_updated} هتل بروزرسانی شدند."

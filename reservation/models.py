@@ -2828,3 +2828,46 @@ class SnappTripSetting(models.Model):
         # نگهداری به عنوان تک‌رکورد در دیتابیس
         self.pk = 1
         super().save(*args, **kwargs)
+        
+        
+        
+        
+        # ---------------- بانک اطلاعات هتل‌های اسنپ‌تریپ ----------------
+class SnappHotelDirectory(models.Model):
+    snapp_hotel_id = models.PositiveIntegerField(
+        unique=True, 
+        verbose_name=_('شناسه هتل در اسنپ')
+    )
+    name = models.CharField(
+        max_length=256, 
+        verbose_name=_('نام هتل در اسنپ')
+    )
+    city_name = models.CharField(
+        max_length=128, 
+        verbose_name=_('شهر'), 
+        blank=True, 
+        default=''
+    )
+    city_id = models.PositiveIntegerField(
+        verbose_name=_('شناسه شهر در اسنپ'), 
+        null=True, 
+        blank=True
+    )
+    stars = models.CharField(
+        max_length=32, 
+        verbose_name=_('تعداد ستاره'), 
+        blank=True, 
+        default='-'
+    )
+    last_synced = models.DateTimeField(
+        auto_now=True, 
+        verbose_name=_('آخرین بروزرسانی')
+    )
+
+    class Meta:
+        verbose_name = _('هتل اسنپ‌تریپ')
+        verbose_name_plural = _('بانک هتل‌های اسنپ‌تریپ')
+        ordering = ['city_name', 'name']
+
+    def __str__(self):
+        return f"{self.name} ({self.snapp_hotel_id}) - {self.city_name}"

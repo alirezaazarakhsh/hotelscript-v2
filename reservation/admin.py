@@ -48,13 +48,14 @@ from .models import (
     Room,
     Passenger,
     SEOMeta,
+    SnappHotelDirectory,
     SnappTripSetting,
     SuggestedCommentItem,
     ReservationRoom,
     ReservationRoomPassenger,
     UserCancellation
 )
-from .snapptrip_service import sync_hotel_and_rooms_from_snapp
+from .snapptrip_service import sync_all_snapptrip_hotels_directory, sync_hotel_and_rooms_from_snapp
 
 
 @admin.register(Province)
@@ -1366,4 +1367,71 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
         return not SnappTripSetting.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
+        return False
+    
+    
+    
+    
+@admin.register(SnappHotelDirectory)
+class SnappHotelDirectoryAdmin(admin.ModelAdmin):
+    list_display = (
+        'snapp_hotel_id',
+        'name',
+        'city_name',
+        'stars',
+        'last_synced_jalali',
+    )
+    search_fields = ('snapp_hotel_id', 'name', 'city_name')
+    list_filter = ('city_name', 'stars')
+    readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'stars', 'last_synced')
+    actions = ['trigger_sync_action']
+
+    def last_synced_jalali(self, obj):
+        if obj.last_synced:
+            dt = obj.last_synced.togregorian() if hasattr(obj.last_synced, 'togregorian') else obj.last_synced
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M')
+        return '-'
+    last_synced_jalali.short_description = "تاریخ بروزرسانی"
+
+    # اکشن گروهی برای بروزرسانی از منوی Actions
+    @admin.action(description="بروزرسانی بانک هتل‌ها از سرور اسنپ‌تریپ")
+    def trigger_sync_action(self, request, queryset):
+        success, msg = sync_all_snapptrip_hotels_directory()
+        if success:
+            self.message_user(request, msg, messages.SUCCESS)
+        else:
+            self.message_user(request, msg, messages.ERROR)
+
+    # افزودن دکمه مستقیم به بالای جدول
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'sync-all-snapp-hotels/',
+                self.admin_site.admin_view(self.sync_all_view),
+                name='sync-all-snapp-hotels',
+            ),
+        ]
+        return custom_urls + urls
+
+    def sync_all_view(self, request):
+        success, msg = sync_all_snapptrip_hotels_directory()
+        if success:
+            self.message_user(request, msg, messages.SUCCESS)
+        else:
+            self.message_user(request, msg, messages.ERROR)
+        return redirect(reverse('admin:reservation_snapphoteldirectory_changelist'))
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        # دکمه سبزرنگ بالای صفحه برای بروزرسانی با یک کلیک
+        extra_context['title'] = format_html(
+            '{} &nbsp;&nbsp; <a class="button" style="background:#007bff; color:white; padding:5px 12px; border-radius:4px; font-size:13px; text-decoration:none;" href="{}">🔄 بروزرسانی بانک هتل‌ها از اسنپ</a>',
+            "بانک هتل‌های اسنپ‌تریپ",
+            reverse('admin:sync-all-snapp-hotels')
+        )
+        return super().changelist_view(request, extra_context=extra_context)
+
+    # قفل کردن ثبت دستی (چون این اطلاعات مستقیماً از اسنپ می‌آید)
+    def has_add_permission(self, request):
         return False
