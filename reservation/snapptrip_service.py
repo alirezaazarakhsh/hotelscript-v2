@@ -9,6 +9,7 @@ from .models import Hotel, Room, RoomDatePrice, CancellationPenalty, SnappHotelD
 
 logger = logging.getLogger(__name__)
 
+
 def get_snapptrip_client_config():
     """خواندن آدرس و کلید API از تنظیمات پنل ادمین"""
     setting = SnappTripSetting.objects.first()
@@ -26,27 +27,67 @@ def get_snapptrip_client_config():
     }
     return base_url, headers
 
+
 def extract_list_from_response(data):
-    """استخراج هوشمند آرایه از هر نوع فرمت پاسخ وب‌سرویس اسنپ (شامل data، results و تو در تو)"""
+    """استخراج هوشمند آرایه از هر نوع فرمت پاسخ وب‌سرویس اسنپ (کلیدهای شناخته‌شده یا هر لیست از دیکشنری‌ها)"""
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
-        for key in ['data', 'results', 'result', 'hotels', 'cities', 'rooms', 'items', 'list']:
+        # بررسی کلیدهای متداول
+        for key in ['data', 'results', 'result', 'rooms', 'room', 'hotels', 'cities', 'items', 'list', 'availability']:
             val = data.get(key)
-            if isinstance(val, list):
+            if isinstance(val, list) and len(val) > 0:
                 return val
             if isinstance(val, dict):
                 nested = extract_list_from_response(val)
                 if nested:
                     return nested
+        # در صورت نبودن کلیدهای بالا، هر کلیدی که مقدارش لیستی از دیکشنری‌ها باشد
+        for key, val in data.items():
+            if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                return val
     return []
+
+
+def extract_room_id(r_item):
+    """استخراج شناسه اتاق با بررسی تمام کلیدهای محتمل و ساختارهای تو در تو"""
+    if not isinstance(r_item, dict):
+        if isinstance(r_item, (int, str)) and str(r_item).isdigit():
+            return int(r_item)
+        return None
+
+    # بررسی آبجکت‌های تو در تو
+    for nested_key in ['room', 'room_type', 'details']:
+        if isinstance(r_item.get(nested_key), dict):
+            sub_id = extract_room_id(r_item[nested_key])
+            if sub_id:
+                return sub_id
+
+    # بررسی کلیدهای مستقیم
+    for key in ['id', 'room_id', 'room_type_id', 'roomTypeId', 'roomId', 'code', 'room_code', 'hotel_room_id', 'uid', 'pk']:
+        val = r_item.get(key)
+        if val is not None and str(val).strip() != '':
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return str(val)
+    return None
+
+
+def extract_room_title(r_item, default_id):
+    """استخراج نام فارسی یا عنوان اتاق"""
+    if isinstance(r_item.get('room'), dict):
+        r_item = r_item['room']
+    for key in ['title_fa', 'name_fa', 'name', 'title', 'room_name', 'room_title', 'room_type_name']:
+        val = r_item.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return f"اتاق {default_id}"
+
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     """
-    ۱. دریافت قوانین و نکات هتل و ذخیره در Hotel
-    ۲. دریافت اتاق‌ها با تست فرمت‌های استاندارد اندپوینت اتاق‌های اسنپ
-    ۳. تفکیک خودکار اتاق‌های آنی (dont_accept_need) و استعلامی (accept_need)
-    ۴. محاسبه خودکار تخفیف درصدی و ذخیره نرخ‌های ۳۰ روز آینده در RoomDatePrice
+    همگام‌سازی کامل هتل، اتاق‌ها، قوانین و نرخ‌های تقویم ۳۰ روز آینده از اسنپ
     """
     base_url, headers = get_snapptrip_client_config()
 
@@ -62,10 +103,10 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         return False, "شناسه اسنپ‌تریپ برای این هتل وارد نشده است."
 
     snapp_h_id = hotel.snapptrip_hotel_id
-    rooms_from_hotel_details = []
+    rooms_list = []
 
     # -------------------------------------------------------------
-    # مرحله ۱: دریافت قوانین کلی، نکات مهم و مشخصات هتل
+    # مرحله ۱: استعلام مشخصات، قوانین و نکات هتل
     # -------------------------------------------------------------
     hotel_urls = [
         f"{base_url}/hotels/{snapp_h_id}/",
@@ -76,28 +117,29 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             hotel_res = requests.get(h_url, headers=headers, timeout=15)
             if hotel_res.status_code == 200:
                 h_data = hotel_res.json()
-                if isinstance(h_data, dict) and 'data' in h_data:
+                if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
                     h_data = h_data['data']
+
                 hotel.rules = h_data.get('rules', hotel.rules) or hotel.rules
                 hotel.important_notes = h_data.get('important_note', hotel.important_notes) or hotel.important_notes
                 hotel.is_snapptrip = True
                 hotel.save(update_fields=['rules', 'important_notes', 'is_snapptrip'])
                 CancellationPenalty.objects.get_or_create(hotel=hotel, defaults={'penalty_percentage': 0})
 
-                # بررسی اینکه آیا خود پاسخ هتل شامل لیست اتاق‌ها هم هست یا خیر
-                if isinstance(h_data, dict) and 'rooms' in h_data and isinstance(h_data['rooms'], list):
-                    rooms_from_hotel_details = h_data['rooms']
+                # بررسی اینکه آیا خود پاسخ هتل دارای لیست اتاق‌ها هست یا نه
+                if isinstance(h_data, dict):
+                    for r_key in ['rooms', 'room', 'room_types', 'accommodations']:
+                        if isinstance(h_data.get(r_key), list) and len(h_data[r_key]) > 0:
+                            rooms_list = h_data[r_key]
+                            break
                 break
         except Exception as e:
-            logger.error(f"Error fetching hotel details from Snapp: {e}")
+            logger.error(f"Error fetching hotel details: {e}")
 
     # -------------------------------------------------------------
-    # مرحله ۲: دریافت اتاق‌ها (بررسی مسیرهای استاندارد Path و Query)
+    # مرحله ۲: استعلام اتاق‌ها در صورت نبودن در پاسخ اصلی هتل
     # -------------------------------------------------------------
-    rooms_list = rooms_from_hotel_details
-    last_error_text = ""
-    last_status_code = None
-
+    last_error_report = ""
     if not rooms_list:
         candidate_room_urls = [
             f"{base_url}/hotels/rooms/{snapp_h_id}/",
@@ -106,49 +148,47 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             f"{base_url}/hotels/{snapp_h_id}/rooms",
             f"{base_url}/hotels/rooms/?hotel_id={snapp_h_id}",
             f"{base_url}/hotels/rooms?hotel_id={snapp_h_id}",
-            f"{base_url}/hotels/rooms/?id={snapp_h_id}",
-            f"{base_url}/hotels/rooms?id={snapp_h_id}",
+            f"{base_url}/availability/hotels/{snapp_h_id}/",
+            f"{base_url}/availability/hotels/{snapp_h_id}",
         ]
 
         for r_url in candidate_room_urls:
             try:
-                rooms_res = requests.get(r_url, headers=headers, timeout=15)
-                last_status_code = rooms_res.status_code
+                rooms_res = requests.get(r_url, headers=headers, timeout=12)
                 if rooms_res.status_code == 200:
-                    rooms_payload = rooms_res.json()
-                    extracted = extract_list_from_response(rooms_payload)
+                    extracted = extract_list_from_response(rooms_res.json())
                     if extracted:
                         rooms_list = extracted
                         break
                 else:
-                    last_error_text = f"کد {rooms_res.status_code} روی آدرس {r_url}: {rooms_res.text[:150]}"
+                    last_error_report = f"آدرس {r_url} -> کد {rooms_res.status_code}: {rooms_res.text[:120]}"
             except Exception as e:
-                last_error_text = str(e)
+                last_error_report = str(e)
                 continue
 
     if not rooms_list:
-        return False, f"خطا در دریافت لیست اتاق‌ها از اسنپ: {last_error_text}"
+        return False, f"هیچ اتاقی از اسنپ دریافت نشد. آخرین گزارش ارتباط: {last_error_report}"
 
     synced_rooms_count = 0
     synced_prices_count = 0
 
-    # تاریخ ۳۰ روز آینده برای تقویم
+    # بازه زمانی ۳۰ روز آینده برای دریافت تقویم قیمت‌ها
     today_dt = datetime.now().date()
     from_date_str = today_dt.strftime('%Y-%m-%d')
     to_date_str = (today_dt + timedelta(days=30)).strftime('%Y-%m-%d')
 
     # -------------------------------------------------------------
-    # مرحله ۳: ثبت اتاق‌ها و تقویم قیمتی در جدول RoomDatePrice
+    # مرحله ۳: ثبت اتاق‌ها و تقویم قیمتی در جدول دیتابیس
     # -------------------------------------------------------------
     for r_item in rooms_list:
-        snapp_room_id = r_item.get('id') or r_item.get('room_id') or r_item.get('code')
+        snapp_room_id = extract_room_id(r_item)
         if not snapp_room_id:
             continue
 
-        room_title = r_item.get('name') or r_item.get('title') or f"اتاق {snapp_room_id}"
-        room_cap = int(r_item.get('capacity', 2) or 2)
-        extra_cap = int(r_item.get('extra_capacity', 0) or 0)
-        inv_count = int(r_item.get('count', 5) or 5)
+        room_title = extract_room_title(r_item, snapp_room_id)
+        room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
+        extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
+        inv_count = int(r_item.get('count') or r_item.get('inventory') or r_item.get('available_count') or 5)
         board_type = r_item.get('board_type', 'bed_breakfast')
 
         room_rules = (
@@ -192,13 +232,14 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         )
         synced_rooms_count += 1
 
-        # دریافت تقویم قیمت‌های اتاق (تست آدرس با و بدون پارامتر تاریخ)
+        # استعلام تقویم نرخ‌های این اتاق
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={from_date_str}&to={to_date_str}",
-            f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/",
+            f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/?from={from_date_str}&to={to_date_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar",
+            f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/",
         ]
-        
+
         for cal_url in cal_candidate_urls:
             try:
                 cal_res = requests.get(cal_url, headers=headers, timeout=12)
@@ -206,20 +247,56 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                     calendar_items = extract_list_from_response(cal_res.json())
 
                     for day_data in calendar_items:
-                        g_date_str = day_data.get('date')
-                        if not g_date_str:
+                        if not isinstance(day_data, dict):
                             continue
 
-                        g_dt = datetime.strptime(g_date_str, "%Y-%m-%d").date()
-                        j_dt = jdatetime.date.fromgregorian(date=g_dt)
+                        # استخراج تاریخ روز
+                        g_date_str = day_data.get('date') or day_data.get('day') or day_data.get('calendar_date')
+                        if not g_date_str:
+                            continue
+                        g_date_str = str(g_date_str)[:10]
 
-                        raw_price = int(Decimal(day_data.get('price', 0) or 0))
-                        raw_original = int(Decimal(day_data.get('original_sell_price', 0) or raw_price))
-                        snapp_extra = int(Decimal(day_data.get('extra_bed_price', 0) or 0))
+                        try:
+                            g_dt = datetime.strptime(g_date_str, "%Y-%m-%d").date()
+                            j_dt = jdatetime.date.fromgregorian(date=g_dt)
+                        except Exception:
+                            continue
+
+                        # استخراج قیمت‌ها
+                        raw_price = 0
+                        for pk in ['price', 'current_price', 'sell_price', 'amount']:
+                            if day_data.get(pk):
+                                try:
+                                    raw_price = int(Decimal(str(day_data[pk])))
+                                    if raw_price > 0:
+                                        break
+                                except Exception:
+                                    pass
+
+                        raw_original = raw_price
+                        for opk in ['original_sell_price', 'original_price', 'base_price', 'board_price']:
+                            if day_data.get(opk):
+                                try:
+                                    p = int(Decimal(str(day_data[opk])))
+                                    if p > 0:
+                                        raw_original = p
+                                        break
+                                except Exception:
+                                    pass
+
+                        snapp_extra = 0
+                        for epk in ['extra_bed_price', 'extra_passenger_price', 'extra_price']:
+                            if day_data.get(epk):
+                                try:
+                                    snapp_extra = int(Decimal(str(day_data[epk])))
+                                    break
+                                except Exception:
+                                    pass
 
                         if raw_price <= 0:
                             continue
 
+                        # بررسی تخفیف و تنظیم تایمر معکوس
                         if raw_original > raw_price:
                             calculated_percent = round(((raw_original - raw_price) / raw_original) * 100)
                             base_price = raw_original
@@ -251,6 +328,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                     break
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
+
+    if synced_rooms_count == 0:
+        return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما کلیدهای شناسه آن‌ها خوانده نشد!"
 
     return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق و {synced_prices_count} تاریخ قیمت ذخیره شدند."
 
