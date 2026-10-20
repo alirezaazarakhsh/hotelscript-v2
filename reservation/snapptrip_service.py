@@ -4,7 +4,7 @@ from decimal import Decimal
 import requests
 import jdatetime
 from django.conf import settings
-from .models import Hotel, Room, RoomDatePrice, CancellationPenalty, SnappTripSetting
+from .models import Hotel, Room, RoomDatePrice, CancellationPenalty, SnappHotelDirectory, SnappTripSetting
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +205,24 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
 
 
+
+
+
+def extract_list_from_response(data):
+    """استخراج هوشمند آرایه از هر نوع فرمت پاسخ وب‌سرویس اسنپ (شامل data، results و تو در تو)"""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ['data', 'results', 'result', 'hotels', 'cities', 'items', 'list']:
+            val = data.get(key)
+            if isinstance(val, list):
+                return val
+            if isinstance(val, dict):
+                nested = extract_list_from_response(val)
+                if nested:
+                    return nested
+    return []
+
 def sync_all_snapptrip_hotels_directory():
     """
     دریافت تمام شهرها و هتل‌های اسنپ و ذخیره/بروزرسانی آن‌ها در جدول SnappHotelDirectory
@@ -214,58 +232,83 @@ def sync_all_snapptrip_hotels_directory():
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
+    # ۱. دریافت لیست شهرها از اسنپ
     try:
         cities_res = requests.get(f"{base_url}/cities/", headers=headers, timeout=20)
         if cities_res.status_code != 200:
-            return False, f"خطا در دریافت لیست شهرها از اسنپ (کد {cities_res.status_code})"
+            return False, f"خطا در دریافت لیست شهرها از اسنپ: کد {cities_res.status_code} - متن: {cities_res.text[:200]}"
         
         cities_data = cities_res.json()
-        cities_list = cities_data if isinstance(cities_data, list) else cities_data.get('results', cities_data.get('cities', []))
+        cities_list = extract_list_from_response(cities_data)
     except Exception as e:
         return False, f"خطای اتصال به سرور اسنپ: {str(e)}"
 
+    if not cities_list:
+        return False, f"پاسخ شهرها دریافت شد اما هیچ لیستی شناسایی نشد! خروجی خام اسنپ: {str(cities_data)[:250]}"
+
     total_created = 0
     total_updated = 0
+    debug_first_city_error = ""
 
+    # ۲. پیمایش شهرها و دریافت هتل‌های هر شهر
     for city in cities_list:
-        city_id = city.get('id') or city.get('city_id')
-        city_name = city.get('name') or city.get('title') or f"شهر {city_id}"
+        city_id = city.get('id') or city.get('city_id') or city.get('code')
+        city_name = city.get('name') or city.get('title') or city.get('city_name') or f"شهر {city_id}"
 
         if not city_id:
             continue
 
-        try:
-            hotels_url = f"{base_url}/cities/{city_id}/hotels"
-            hotels_res = requests.get(hotels_url, headers=headers, timeout=15)
+        # بررسی مسیرهای احتمالی هتل‌های شهر در اسنپ
+        candidate_urls = [
+            f"{base_url}/cities/{city_id}/hotels/",
+            f"{base_url}/cities/{city_id}/hotels",
+            f"{base_url}/cities/{city_id}/hotel/?limit=500&offset=0",
+            f"{base_url}/cities/{city_id}/hotel/",
+        ]
 
-            if hotels_res.status_code == 200:
-                hotels_data = hotels_res.json()
-                hotels_list = hotels_data if isinstance(hotels_data, list) else hotels_data.get('results', hotels_data.get('hotels', []))
+        hotels_list = []
+        for hotels_url in candidate_urls:
+            try:
+                hotels_res = requests.get(hotels_url, headers=headers, timeout=12)
+                if hotels_res.status_code == 200:
+                    hotels_data = hotels_res.json()
+                    extracted = extract_list_from_response(hotels_data)
+                    if extracted:
+                        hotels_list = extracted
+                        break
+                elif not debug_first_city_error:
+                    debug_first_city_error = f"آدرس {hotels_url} -> کد {hotels_res.status_code}: {hotels_res.text[:150]}"
+            except Exception as e:
+                logger.error(f"Error requesting {hotels_url}: {e}")
+                continue
 
-                for h in hotels_list:
-                    h_id = h.get('id') or h.get('hotel_id')
-                    h_name = h.get('name') or h.get('title') or ''
-                    stars = str(h.get('stars') or h.get('star') or '-')
+        # ۳. ذخیره و بروزرسانی در دیتابیس
+        for h in hotels_list:
+            h_id = h.get('id') or h.get('hotel_id') or h.get('code')
+            h_name = h.get('name') or h.get('title') or h.get('hotel_name') or ''
+            stars = str(h.get('stars') or h.get('star') or h.get('hotel_star') or '-')
 
-                    if not h_id:
-                        continue
+            if not h_id:
+                continue
 
-                    obj, created = SnappHotelDirectory.objects.update_or_create(
-                        snapp_hotel_id=h_id,
-                        defaults={
-                            'name': h_name,
-                            'city_name': city_name,
-                            'city_id': city_id,
-                            'stars': stars,
-                        }
-                    )
-                    if created:
-                        total_created += 1
-                    else:
-                        total_updated += 1
+            obj, created = SnappHotelDirectory.objects.update_or_create(
+                snapp_hotel_id=h_id,
+                defaults={
+                    'name': h_name,
+                    'city_name': city_name,
+                    'city_id': city_id,
+                    'stars': stars,
+                }
+            )
+            if created:
+                total_created += 1
+            else:
+                total_updated += 1
 
-            time.sleep(0.05)  # مکث کوتاه برای رعایت سقف درخواست‌ها
-        except Exception as e:
-            logger.error(f"Error fetching hotels for city {city_name}: {e}")
+        time.sleep(0.05)  # مکث کوتاه برای رعایت سقف مجاز درخواست‌ها (Rate Limit)
+
+    # بررسی نهایی نتیجه
+    if (total_created + total_updated) == 0:
+        return False, f"تعداد {len(cities_list)} شهر دریافت شد اما هیچ هتلی دریافت نشد. نمونه خطای استعلام: {debug_first_city_error}"
 
     return True, f"بروزرسانی کامل شد: {total_created} هتل جدید اضافه و {total_updated} هتل بروزرسانی شدند."
