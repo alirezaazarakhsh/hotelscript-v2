@@ -371,4 +371,3 @@ ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
 
 # تنظیمات درگاه ایران‌درگاه
 IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
-APPEND_SLASH = False
