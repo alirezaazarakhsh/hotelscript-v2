@@ -1374,17 +1374,46 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
     
 @admin.register(SnappHotelDirectory)
 class SnappHotelDirectoryAdmin(admin.ModelAdmin):
+    # نمایش ستون‌ها با فرمت استاندارد کد-شهر و آیکون ستاره
     list_display = (
         'snapp_hotel_id',
         'name',
-        'city_name',
-        'stars',
+        'city_display',
+        'stars_display',
         'last_synced_jalali',
     )
-    search_fields = ('snapp_hotel_id', 'name', 'city_name')
+    search_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id')
     list_filter = ('city_name', 'stars')
     readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'stars', 'last_synced')
     actions = ['trigger_sync_action']
+
+    @admin.display(description="شهر (کد - نام)", ordering="city_name")
+    def city_display(self, obj):
+        """نمایش به فرمت: کد - نام شهر (مثلاً 1 - تهران)"""
+        cname = obj.city_name or ""
+        cid = obj.city_id or ""
+        
+        # اگر قبلاً با خط تیره ذخیره شده باشد
+        if " - " in cname:
+            return cname
+        if cid and cname and not cname.isdigit():
+            return f"{cid} - {cname}"
+        if cid:
+            return f"{cid}"
+        return cname or "-"
+
+    @admin.display(description="تعداد ستاره", ordering="stars")
+    def stars_display(self, obj):
+        """نمایش زیبای ستاره‌های هتل با ایموجی"""
+        if not obj.stars or str(obj.stars).strip() in ['-', '', 'None']:
+            return format_html('<span style="color:#888;">—</span>')
+        
+        val = str(obj.stars).strip()
+        if val in ['1', '2', '3', '4', '5']:
+            star_num = int(val)
+            stars_icons = "⭐" * star_num
+            return format_html('<span style="font-size: 13px;">{} ({} ستاره)</span>', stars_icons, star_num)
+        return f"{val} ستاره"
 
     def last_synced_jalali(self, obj):
         if obj.last_synced:
@@ -1393,7 +1422,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
         return '-'
     last_synced_jalali.short_description = "تاریخ بروزرسانی"
 
-    # اکشن گروهی برای بروزرسانی از منوی Actions
     @admin.action(description="بروزرسانی بانک هتل‌ها از سرور اسنپ‌تریپ")
     def trigger_sync_action(self, request, queryset):
         success, msg = sync_all_snapptrip_hotels_directory()
@@ -1402,7 +1430,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, msg, messages.ERROR)
 
-    # افزودن دکمه مستقیم به بالای جدول
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -1424,7 +1451,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
-        # دکمه سبزرنگ بالای صفحه برای بروزرسانی با یک کلیک
         extra_context['title'] = format_html(
             '{} &nbsp;&nbsp; <a class="button" style="background:#007bff; color:white; padding:5px 12px; border-radius:4px; font-size:13px; text-decoration:none;" href="{}">🔄 بروزرسانی بانک هتل‌ها از اسنپ</a>',
             "بانک هتل‌های اسنپ‌تریپ",
@@ -1432,6 +1458,5 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
         )
         return super().changelist_view(request, extra_context=extra_context)
 
-    # قفل کردن ثبت دستی (چون این اطلاعات مستقیماً از اسنپ می‌آید)
     def has_add_permission(self, request):
         return False
