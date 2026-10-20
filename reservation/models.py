@@ -509,7 +509,25 @@ class Hotel(models.Model):
         verbose_name=_('وضعیت انتشار'),
         help_text=_('اگر "پیش‌نویس" انتخاب شود، هتل در API نمایش داده نمی‌شود. اگر "منتشر شده" انتخاب شود، هتل نمایش داده می‌شود.'),
     )
-
+    
+    # --- فیلدهای اتصال به اسنپ‌تریپ ---
+    snapptrip_hotel_id = models.PositiveIntegerField(
+        verbose_name=_('شناسه هتل در اسنپ‌تریپ'),
+        null=True,
+        blank=True,
+        unique=True,
+        help_text=_('شناسه عددی هتل در وب‌سرویس اسنپ‌تریپ')
+    )
+    sync_from_snapptrip = models.BooleanField(
+        verbose_name=_('همگام‌سازی از اسنپ‌تریپ'),
+        default=False,
+        help_text=_('با فعال کردن این تیک، قوانین، اتاق‌ها و قیمت‌های اسنپ ذخیره می‌شوند.')
+    )
+    is_snapptrip = models.BooleanField(
+        verbose_name=_('هتل اسنپ‌تریپ است؟'),
+        default=False
+    )
+    
     rules = models.TextField(
         verbose_name=_('قوانین و مقررات هتل'),
         blank=True,
@@ -987,6 +1005,37 @@ class Room(models.Model):
         null=True,
         blank=True,
         help_text=_('تصویر نمایشی اتاق — اختیاری')
+    )
+    
+    # --- فیلدهای اسنپ‌تریپ و قوانین اختصاصی اتاق ---
+    snapptrip_room_id = models.PositiveIntegerField(
+        verbose_name=_('شناسه اتاق در اسنپ‌تریپ'),
+        null=True,
+        blank=True,
+        help_text=_('شناسه اتاق متناظر در اسنپ‌تریپ')
+    )
+    board_type = models.CharField(
+        verbose_name=_('نوع پذیرایی (Board Type)'),
+        max_length=32,
+        null=True,
+        blank=True,
+        choices=[
+            ('room_only', 'فقط اتاق'),
+            ('bed_breakfast', 'با صبحانه'),
+            ('half_board', 'هاف‌برد'),
+            ('full_board', 'فول‌برد'),
+        ],
+        default='bed_breakfast'
+    )
+    rules = models.TextField(
+        verbose_name=_('قوانین و مقررات اتاق'),
+        blank=True,
+        default='',
+        help_text=_('قوانین پذیرش، اقامت یا کنسلی خاص این اتاق (از اسنپ‌تریپ)')
+    )
+    is_snapptrip = models.BooleanField(
+        verbose_name=_('اتاق اسنپ‌تریپ است؟'),
+        default=False
     )
 
     class Meta:
@@ -2738,3 +2787,44 @@ class ReservationInvoiceSettings(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
+# ---------------- تنظیمات وب‌سرویس اسنپ‌تریپ ----------------
+class SnappTripSetting(models.Model):
+    title = models.CharField(
+        max_length=100, 
+        default="تنظیمات وب‌سرویس اسنپ‌تریپ", 
+        verbose_name=_("عنوان")
+    )
+    base_url = models.URLField(
+        default="https://b2bapiv2.snapptrip.com", 
+        verbose_name=_("آدرس پایه (Base URL)")
+    )
+    swagger_url = models.URLField(
+        default="https://b2bapiv2.snapptrip.com/swagger/index.html#/", 
+        verbose_name=_("آدرس سواگر (Swagger Link)")
+    )
+    api_key = models.CharField(
+        max_length=256, 
+        blank=True, 
+        null=True, 
+        verbose_name=_("کلید وب‌سرویس (API Key)"),
+        help_text=_("کلید دریافتی از تیم تجاری اسنپ‌تریپ")
+    )
+    is_active = models.BooleanField(
+        default=True, 
+        verbose_name=_("وضعیت اتصال فعال باشد؟")
+    )
+
+    class Meta:
+        verbose_name = _("تنظیمات API اسنپ‌تریپ")
+        verbose_name_plural = _("تنظیمات API اسنپ‌تریپ")
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        # نگهداری به عنوان تک‌رکورد در دیتابیس
+        self.pk = 1
+        super().save(*args, **kwargs)
