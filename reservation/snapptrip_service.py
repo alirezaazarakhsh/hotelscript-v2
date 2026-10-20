@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, time
+import time
+from datetime import datetime
 from decimal import Decimal
 import requests
 import jdatetime
@@ -203,11 +204,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     return True, f"هماهنگ‌سازی با موفقیت انجام شد: {synced_rooms_count} اتاق (با قوانین) و {synced_prices_count} تاریخ قیمت و تخفیف ذخیره شدند."
 
 
-
-
-
-
-
 def extract_list_from_response(data):
     """استخراج هوشمند آرایه از هر نوع فرمت پاسخ وب‌سرویس اسنپ (شامل data، results و تو در تو)"""
     if isinstance(data, list):
@@ -222,6 +218,7 @@ def extract_list_from_response(data):
                 if nested:
                     return nested
     return []
+
 
 def sync_all_snapptrip_hotels_directory():
     """
@@ -305,7 +302,7 @@ def sync_all_snapptrip_hotels_directory():
             else:
                 total_updated += 1
 
-        time.sleep(0.05)  # مکث کوتاه برای رعایت سقف مجاز درخواست‌ها (Rate Limit)
+        time.sleep(0.05)  # مکث کوتاه با ماژول استاندارد time پایتون
 
     # بررسی نهایی نتیجه
     if (total_created + total_updated) == 0:
