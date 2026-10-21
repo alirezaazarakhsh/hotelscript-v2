@@ -161,6 +161,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
+# زمان‌بندی تسک‌های Celery Beat
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
@@ -169,6 +170,11 @@ CELERY_BEAT_SCHEDULE = {
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
         'schedule': 300.0,
+    },
+    # تسک همگام‌سازی خودکار هتل‌های اسنپ‌تریپ هر ۱ دقیقه (۶۰ ثانیه)
+    'auto-sync-snapptrip-hotels-every-minute': {
+        'task': 'reservation.tasks.auto_sync_snapptrip_hotels_task',
+        'schedule': 60.0,
     },
 }
 
@@ -248,7 +254,6 @@ SIMPLE_JWT = {
 
 INTERNAL_IPS = ['127.0.0.1']
 
-# ==================== CORS ====================
 # ==================== CORS ====================
 CORS_ALLOW_ALL_ORIGINS = False
 

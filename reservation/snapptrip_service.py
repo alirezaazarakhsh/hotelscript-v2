@@ -54,7 +54,6 @@ IRAN_CITIES_MAP = {
     '30': 'انزلی', 'anzali': 'بندر انزلی',
 }
 
-# متن فارسی انواع پذیرایی برای نمایش در لیست خدمات فرانت‌اند
 BOARD_TYPE_TITLES = {
     'room_only': 'اقامت بدون صبحانه',
     'bed_breakfast': 'صبحانه بوفه رایگان',
@@ -64,27 +63,17 @@ BOARD_TYPE_TITLES = {
 
 
 def calculate_customer_club_points(stars_val, price_val):
-    """
-    محاسبه هوشمند امتیاز باشگاه مشتریان بر اساس ستاره هتل و قیمت اتاق به همراه ضریب رندوم
-    """
+    """محاسبه هوشمند امتیاز باشگاه بر اساس ستاره و قیمت"""
     try:
         stars = int(stars_val) if str(stars_val).isdigit() else 3
     except Exception:
         stars = 3
     stars = max(1, min(stars, 5))
 
-    # امتیاز پایه بر اساس قیمت (هر ۵۰۰ هزار تومان = ۴ امتیاز)
     price = int(price_val or 1500000)
     price_score = (price // 500000) * 4
-
-    # امتیاز بر اساس ستاره به همراه نوسان رندوم
-    star_min = stars * 12
-    star_max = stars * 22
-    star_score = random.randint(star_min, star_max)
-
-    total_points = star_score + price_score
-    # رند کردن به مضرب ۵ برای زیبایی نمایش در سایت (مثلاً ۵۵، ۷۰، ۱۱۵)
-    return max(15, round(total_points / 5) * 5)
+    star_score = random.randint(stars * 12, stars * 22)
+    return max(15, round((star_score + price_score) / 5) * 5)
 
 
 def get_snapptrip_client_config():
@@ -106,12 +95,12 @@ def get_snapptrip_client_config():
 
 
 def fetch_with_rate_limit(url, headers, max_retries=3):
-    """ارسال امن درخواست با مدیریت خطای 429 و مکث خودکار"""
+    """ارسال امن درخواست با مدیریت خطای 429"""
     for attempt in range(max_retries):
         try:
             res = requests.get(url, headers=headers, timeout=15)
             if res.status_code == 429:
-                logger.warning(f"محدودیت Rate Limit اسنپ (429). ۱۰ ثانیه توقف... (تلاش {attempt + 1})")
+                logger.warning(f"محدودیت Rate Limit اسنپ (429). ۱۰ ثانیه توقف...")
                 time.sleep(10)
                 continue
             return res
@@ -140,7 +129,7 @@ def extract_list_from_response(data):
 
 
 def extract_room_id(r_item):
-    """استخراج شناسه عددی اتاق با بررسی تمام کلیدهای محتمل"""
+    """استخراج شناسه عددی اتاق"""
     if not isinstance(r_item, dict):
         if isinstance(r_item, (int, str)) and str(r_item).isdigit():
             return int(r_item)
@@ -163,7 +152,7 @@ def extract_room_id(r_item):
 
 
 def extract_room_title(r_item, default_id):
-    """استخراج نام فارسی یا عنوان اتاق"""
+    """استخراج عنوان اتاق"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
     for key in ['title_fa', 'name_fa', 'name', 'title', 'room_name', 'room_title', 'room_type_name']:
@@ -174,10 +163,9 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_room_description(r_item):
-    """استخراج متن توضیحات و مشخصات اتاق از اسنپ"""
+    """استخراج متن توضیحات اتاق"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
-        
     for key in ['description', 'desc', 'details', 'room_description', 'about', 'view']:
         val = r_item.get(key)
         if val and isinstance(val, str) and val.strip():
@@ -185,8 +173,48 @@ def extract_room_description(r_item):
     return ''
 
 
+def extract_room_inventory(r_item):
+    """
+    استخراج دقیق موجودی اعلام‌شده اتاق از اسنپ
+    اگر اسنپ عدد دقیق فرستاده باشد همان را برمی‌دارد، در غیر این صورت سهمیه استاندارد تخصیص می‌دهد.
+    """
+    for key in ['count', 'available_count', 'inventory', 'remaining_count', 'available_rooms', 'stock']:
+        val = r_item.get(key)
+        if val is not None and str(val).isdigit():
+            num = int(val)
+            if num > 0:
+                return num
+
+    # بررسی آبجکت قیمت برای فیلد موجودی
+    pricing = r_item.get('pricing')
+    if isinstance(pricing, dict):
+        for key in ['count', 'available_count', 'inventory']:
+            val = pricing.get(key)
+            if val is not None and str(val).isdigit():
+                num = int(val)
+                if num > 0:
+                    return num
+
+    return 10  # سهمیه استاندارد در صورتی که اسنپ عدد مشخصی نفرستد
+
+
+def is_room_requiring_approval(r_item):
+    """
+    بررسی دقیق اینکه آیا اتاق در اسنپ نیاز به تأیید دارد یا خیر
+    """
+    if r_item.get('is_online') is False or r_item.get('online') is False:
+        return True
+    if r_item.get('booking_type') in ['offline', 'on_request', 'inquiry']:
+        return True
+    if r_item.get('is_instant') is False or r_item.get('instant') is False:
+        return True
+    if r_item.get('need_approval') is True or r_item.get('requires_confirmation') is True:
+        return True
+    return False
+
+
 def extract_stars_comprehensive(h):
-    """استخراج ستاره‌های هتل از تمام کلیدها و عنوان"""
+    """استخراج ستاره‌های هتل"""
     if not isinstance(h, dict):
         return '-'
 
@@ -226,7 +254,8 @@ def extract_stars_comprehensive(h):
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     """
-    همگام‌سازی کامل هتل، اتاق‌ها، توضیحات، خدمات پذیرایی، امتیاز باشگاه و نرخ‌های ۳۰ روزه
+    همگام‌سازی کامل اتاق‌ها: استخراج موجودی واقعی، تنظیم وضعیت نیاز به تأیید،
+    اتصال به پذیرایی و نرخ‌های ۳۰ روزه
     """
     base_url, headers = get_snapptrip_client_config()
 
@@ -250,9 +279,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     calendar_from_str = now.strftime('%Y-%m-%d')
     calendar_to_str = (now + timedelta(days=30)).strftime('%Y-%m-%d')
 
-    # -------------------------------------------------------------
-    # مرحله ۱: دریافت مشخصات پایه هتل، قوانین، نکات و اتصال به شهر
-    # -------------------------------------------------------------
+    # ۱. استعلام مشخصات هتل و اتصال خودکار به شهر محلی
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
             hotel_res = requests.get(h_url, headers=headers, timeout=12)
@@ -293,9 +320,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         except Exception as e:
             logger.error(f"Error fetching hotel details: {e}")
 
-    # -------------------------------------------------------------
-    # مرحله ۲: استعلام اتاق‌ها با تاریخ‌های معتبر
-    # -------------------------------------------------------------
+    # ۲. استعلام اتاق‌ها با تاریخ‌های معتبر
     last_error_report = ""
     if not rooms_list:
         candidate_room_urls = [
@@ -331,9 +356,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     today_j = jdatetime.date.fromgregorian(date=now.date())
     end_30_days_j = jdatetime.date.fromgregorian(date=(now + timedelta(days=30)).date())
 
-    # -------------------------------------------------------------
-    # مرحله ۳: ثبت اتاق‌ها و تقویم قیمتی در دیتابیس
-    # -------------------------------------------------------------
+    # ۳. ثبت اتاق‌ها بر اساس موجودی و نوع تأیید واقعی اسنپ
     for r_item in rooms_list:
         snapp_room_id = extract_room_id(r_item)
         if not snapp_room_id:
@@ -345,8 +368,8 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
         extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
         
-        # ۱. موجودی سهمیه فرضی ۱۰۰ عدد تنظیم شد
-        inv_count = 100
+        # استخراج موجودی واقعی اسنپ برای هر اتاق
+        real_inv = extract_room_inventory(r_item)
         board_type = r_item.get('board_type', 'bed_breakfast')
 
         room_rules = (
@@ -357,18 +380,11 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             ''
         )
 
-        is_online = True
-        if 'is_online' in r_item:
-            is_online = bool(r_item['is_online'])
-        elif 'online' in r_item:
-            is_online = bool(r_item['online'])
-        elif r_item.get('booking_type') == 'offline':
-            is_online = False
+        # تنظیم وضعیت نیاز به تایید ادمین یا رزرو آنی بر اساس داده اسنپ
+        needs_approval = is_room_requiring_approval(r_item)
+        count_val = real_inv if needs_approval else 0
+        auto_approved_val = 0 if needs_approval else real_inv
 
-        count_val = 0 if is_online else inv_count
-        auto_approved_val = inv_count if is_online else 0
-
-        # ذخیره اولیه اتاق
         room, _ = Room.objects.update_or_create(
             hotel=hotel,
             snapptrip_room_id=snapp_room_id,
@@ -379,7 +395,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 'room_capacity': room_cap,
                 'extra_capacity': extra_cap,
                 'board_type': board_type,
-                'inventory': inv_count,
+                'inventory': real_inv,
                 'count': count_val,
                 'auto_approved_count': auto_approved_val,
                 'is_snapptrip': True,
@@ -387,7 +403,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         )
         synced_rooms_count += 1
 
-        # ۲. اضافه کردن خودکار نوع پذیرایی به عنوان یک آیتم در خدمات اتاق (RoomService)
+        # اضافه کردن نوع پذیرایی به خدمات اتاق
         service_title = BOARD_TYPE_TITLES.get(board_type, 'همراه با صبحانه رایگان')
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
@@ -486,7 +502,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        # اگر تقویم در دسترس نبود ولی خود شیء اتاق دارای pricing بود
+        # در صورت در دسترس نبودن تقویم، استفاده از نرخ شیء pricing
         if not room_calendar_synced and isinstance(r_item.get('pricing'), dict):
             pricing = r_item['pricing']
             p_price = int(Decimal(str(pricing.get('price') or 0)))
@@ -515,12 +531,12 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 )
                 synced_prices_count += 1
 
-        # ۳. محاسبه هوشمند امتیاز باشگاه مشتریان بر اساس ستاره هتل و قیمت اتاق
+        # محاسبه امتیاز باشگاه مشتریان
         club_points = calculate_customer_club_points(hotel.stars, first_valid_price)
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 
-        # ثبت بازه ۳۰ روزه کلی جهت هماهنگی با جستجوی شهر
+        # ثبت بازه ۳۰ روزه کلی جهت بالا آمدن در جستجوی شهر
         if first_valid_price > 0:
             RoomDatePrice.objects.update_or_create(
                 room=room,
@@ -538,9 +554,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 }
             )
 
-    # -------------------------------------------------------------
-    # مرحله ۴: پاک‌سازی خودکار اتاق‌های قدیمی یا اشتباه
-    # -------------------------------------------------------------
+    # ۴. پاک‌سازی خودکار اتاق‌های قدیمی
     if synced_snapp_room_ids:
         deleted_count, _ = Room.objects.filter(
             hotel=hotel,
@@ -554,12 +568,8 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     if synced_rooms_count == 0:
         return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
 
-    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق (موجودی ۱۰۰، خدمات پذیرایی و امتیاز باشگاه) ثبت شدند."
+    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با وضعیت و موجودی دقیق ثبت شدند."
 
-
-# ----------------------------------------------------------------------------------
-# توابع ایمن و استاندارد استخراج دایرکتوری هتل‌ها با رعایت کامل Rate Limit (۱۲۰ درخواست)
-# ----------------------------------------------------------------------------------
 
 def sync_all_snapptrip_hotels_directory():
     """
