@@ -20,7 +20,6 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# دیکشنری مپینگ نام فارسی شهرهای ایران
 IRAN_CITIES_MAP = {
     '1': 'تهران', 'tehran': 'تهران',
     '2': 'مشهد', 'mashhad': 'مشهد',
@@ -63,7 +62,7 @@ BOARD_TYPE_TITLES = {
 
 
 def calculate_customer_club_points(stars_val, price_val):
-    """محاسبه هوشمند امتیاز باشگاه بر اساس ستاره و قیمت"""
+    """محاسبه هوشمند امتیاز باشگاه مشتریان"""
     try:
         stars = int(stars_val) if str(stars_val).isdigit() else 3
     except Exception:
@@ -152,7 +151,7 @@ def extract_room_id(r_item):
 
 
 def extract_room_title(r_item, default_id):
-    """استخراج عنوان اتاق"""
+    """استخراج نام فارسی یا عنوان اتاق"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
     for key in ['title_fa', 'name_fa', 'name', 'title', 'room_name', 'room_title', 'room_type_name']:
@@ -163,54 +162,15 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_room_description(r_item):
-    """استخراج متن توضیحات اتاق"""
+    """استخراج متن توضیحات و مشخصات اتاق"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
+        
     for key in ['description', 'desc', 'details', 'room_description', 'about', 'view']:
         val = r_item.get(key)
         if val and isinstance(val, str) and val.strip():
             return val.strip()
     return ''
-
-
-def extract_room_inventory(r_item):
-    """
-    استخراج دقیق موجودی اعلام‌شده اتاق از اسنپ
-    اگر اسنپ عدد دقیق فرستاده باشد همان را برمی‌دارد، در غیر این صورت سهمیه استاندارد تخصیص می‌دهد.
-    """
-    for key in ['count', 'available_count', 'inventory', 'remaining_count', 'available_rooms', 'stock']:
-        val = r_item.get(key)
-        if val is not None and str(val).isdigit():
-            num = int(val)
-            if num > 0:
-                return num
-
-    # بررسی آبجکت قیمت برای فیلد موجودی
-    pricing = r_item.get('pricing')
-    if isinstance(pricing, dict):
-        for key in ['count', 'available_count', 'inventory']:
-            val = pricing.get(key)
-            if val is not None and str(val).isdigit():
-                num = int(val)
-                if num > 0:
-                    return num
-
-    return 10  # سهمیه استاندارد در صورتی که اسنپ عدد مشخصی نفرستد
-
-
-def is_room_requiring_approval(r_item):
-    """
-    بررسی دقیق اینکه آیا اتاق در اسنپ نیاز به تأیید دارد یا خیر
-    """
-    if r_item.get('is_online') is False or r_item.get('online') is False:
-        return True
-    if r_item.get('booking_type') in ['offline', 'on_request', 'inquiry']:
-        return True
-    if r_item.get('is_instant') is False or r_item.get('instant') is False:
-        return True
-    if r_item.get('need_approval') is True or r_item.get('requires_confirmation') is True:
-        return True
-    return False
 
 
 def extract_stars_comprehensive(h):
@@ -252,10 +212,39 @@ def extract_stars_comprehensive(h):
     return '-'
 
 
+def extract_hotel_rules_and_cancellation(h_data):
+    """
+    استخراج دقیق:
+    ۱. قوانین و مقررات عمومی هتل
+    ۲. قوانین کنسلی هتل
+    """
+    rules_text = ""
+    cancellation_text = ""
+
+    if isinstance(h_data, dict):
+        # استخراج قوانین هتل
+        for r_k in ['rules', 'hotel_rules', 'regulations', 'law', 'hotel_policy']:
+            val = h_data.get(r_k)
+            if val and isinstance(val, str) and val.strip():
+                rules_text = val.strip()
+                break
+
+        # استخراج قوانین کنسلی هتل
+        for c_k in ['cancellation_rules', 'cancellation_policy', 'cancel_rules', 'cancellation', 'important_note', 'cancellation_terms']:
+            val = h_data.get(c_k)
+            if val and isinstance(val, str) and val.strip():
+                cancellation_text = val.strip()
+                break
+
+    return rules_text, cancellation_text
+
+
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     """
-    همگام‌سازی کامل اتاق‌ها: استخراج موجودی واقعی، تنظیم وضعیت نیاز به تأیید،
-    اتصال به پذیرایی و نرخ‌های ۳۰ روزه
+    ۱. دریافت قوانین عمومی هتل از اسنپ و ذخیره در rules
+    ۲. دریافت قوانین کنسلی از اسنپ و ذخیره در important_notes
+    ۳. تنظیم اتاق‌ها: همه اتاق‌ها بدون استثنا «نیازمند تأیید» (count = موجودی و auto_approved = 0)
+    ۴. استخراج کامل توضیحات، پذیرایی و قیمت‌های دقیق مسافر
     """
     base_url, headers = get_snapptrip_client_config()
 
@@ -279,7 +268,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     calendar_from_str = now.strftime('%Y-%m-%d')
     calendar_to_str = (now + timedelta(days=30)).strftime('%Y-%m-%d')
 
-    # ۱. استعلام مشخصات هتل و اتصال خودکار به شهر محلی
+    # -------------------------------------------------------------
+    # مرحله ۱: استخراج قوانین هتل و قوانین کنسلی
+    # -------------------------------------------------------------
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
             hotel_res = requests.get(h_url, headers=headers, timeout=12)
@@ -288,11 +279,18 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
                     h_data = h_data['data']
 
-                hotel.rules = h_data.get('rules', hotel.rules) or hotel.rules
-                hotel.important_notes = h_data.get('important_note', hotel.important_notes) or hotel.important_notes
+                # استخراج دقیق قوانین هتل و قوانین کنسلی
+                h_rules, h_cancellation = extract_hotel_rules_and_cancellation(h_data)
+
+                if h_rules:
+                    hotel.rules = h_rules
+                if h_cancellation:
+                    hotel.important_notes = h_cancellation  # ذخیره قوانین کنسلی در نکات ضروری
+
                 hotel.is_snapptrip = True
                 hotel.status = 'published'
 
+                # اتصال به شهر محلی در صورت خالی بودن
                 if not hotel.city:
                     dir_entry = SnappHotelDirectory.objects.filter(snapp_hotel_id=snapp_h_id).first()
                     city_search_name = ""
@@ -320,7 +318,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         except Exception as e:
             logger.error(f"Error fetching hotel details: {e}")
 
-    # ۲. استعلام اتاق‌ها با تاریخ‌های معتبر
+    # -------------------------------------------------------------
+    # مرحله ۲: استعلام اتاق‌ها با تاریخ‌های معتبر
+    # -------------------------------------------------------------
     last_error_report = ""
     if not rooms_list:
         candidate_room_urls = [
@@ -356,7 +356,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     today_j = jdatetime.date.fromgregorian(date=now.date())
     end_30_days_j = jdatetime.date.fromgregorian(date=(now + timedelta(days=30)).date())
 
-    # ۳. ثبت اتاق‌ها بر اساس موجودی و نوع تأیید واقعی اسنپ
+    # -------------------------------------------------------------
+    # مرحله ۳: ثبت اتاق‌ها و نرخ‌ها (تنظیم همه اتاق‌ها روی نیازمند تأیید)
+    # -------------------------------------------------------------
     for r_item in rooms_list:
         snapp_room_id = extract_room_id(r_item)
         if not snapp_room_id:
@@ -368,8 +370,11 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
         extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
         
-        # استخراج موجودی واقعی اسنپ برای هر اتاق
-        real_inv = extract_room_inventory(r_item)
+        # موجودی ۱۰ عدد پیش‌فرض (یا موجودی ارسالی اسنپ)
+        real_inv = 10
+        if str(r_item.get('count', '')).isdigit() and int(r_item['count']) > 0:
+            real_inv = int(r_item['count'])
+
         board_type = r_item.get('board_type', 'bed_breakfast')
 
         room_rules = (
@@ -380,10 +385,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             ''
         )
 
-        # تنظیم وضعیت نیاز به تایید ادمین یا رزرو آنی بر اساس داده اسنپ
-        needs_approval = is_room_requiring_approval(r_item)
-        count_val = real_inv if needs_approval else 0
-        auto_approved_val = 0 if needs_approval else real_inv
+        # تمام اتاق‌های اسنپ بدون استثنا نیازمند تأیید تنظیم می‌شوند:
+        count_val = real_inv        # ظرفیت نیازمند تأیید ادمین پر می‌شود
+        auto_approved_val = 0       # ظرفیت بدون تأیید همیشه صفر است
 
         room, _ = Room.objects.update_or_create(
             hotel=hotel,
@@ -408,7 +412,20 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
 
-        # استعلام تقویم نرخ‌های اتاق
+        # استخراج نرخ پایه از pricing
+        pricing = r_item.get('pricing') if isinstance(r_item.get('pricing'), dict) else {}
+        base_client_sell_price = 0
+        base_agency_buy_price = 0
+        base_extra_bed_price = 0
+
+        if pricing:
+            p_price = int(Decimal(str(pricing.get('price') or 0)))
+            p_orig = int(Decimal(str(pricing.get('original_sell_price') or 0)))
+            base_client_sell_price = p_orig if p_orig > 0 else p_price
+            base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
+            base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
+
+        # استعلام تقویم نرخ‌های این اتاق
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/?from={calendar_from_str}&to={calendar_to_str}",
@@ -416,8 +433,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         ]
 
         room_calendar_synced = False
-        first_valid_price = 0
-        first_valid_extra = 0
+        first_valid_client_price = base_client_sell_price
+        first_valid_agency_price = base_agency_buy_price
+        first_valid_extra = base_extra_bed_price
 
         for cal_url in cal_candidate_urls:
             try:
@@ -450,7 +468,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                                 except Exception:
                                     pass
 
-                        raw_original = raw_price
+                        raw_original = 0
                         for opk in ['original_sell_price', 'original_price', 'base_price', 'board_price']:
                             if day_data.get(opk):
                                 try:
@@ -469,15 +487,26 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                                     break
                                 except Exception:
                                     pass
+                        if snapp_extra == 0:
+                            snapp_extra = base_extra_bed_price
 
-                        if raw_price <= 0:
+                        if raw_price <= 0 and base_agency_buy_price <= 0:
                             continue
 
-                        client_sell_price = raw_original if raw_original > 0 else raw_price
-                        agency_buy_price = raw_price
+                        if raw_original > 0:
+                            day_client_sell_price = raw_original
+                            day_agency_buy_price = raw_price
+                        elif base_client_sell_price > 0 and base_agency_buy_price > 0:
+                            ratio = Decimal(base_client_sell_price) / Decimal(base_agency_buy_price)
+                            day_agency_buy_price = raw_price if raw_price > 0 else base_agency_buy_price
+                            day_client_sell_price = int(Decimal(day_agency_buy_price) * ratio)
+                        else:
+                            day_client_sell_price = raw_price
+                            day_agency_buy_price = raw_price
 
-                        if not first_valid_price:
-                            first_valid_price = client_sell_price
+                        if not first_valid_client_price:
+                            first_valid_client_price = day_client_sell_price
+                            first_valid_agency_price = day_agency_buy_price
                             first_valid_extra = snapp_extra
 
                         RoomDatePrice.objects.update_or_create(
@@ -486,8 +515,8 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                             end_date=j_dt,
                             user_level=None,
                             defaults={
-                                'purchase_price': agency_buy_price,
-                                'price': client_sell_price,
+                                'purchase_price': day_agency_buy_price,
+                                'price': day_client_sell_price,
                                 'extra_passenger_price': snapp_extra,
                                 'discount_type': 'none',
                                 'discount_value': 0,
@@ -497,56 +526,46 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                         )
                         synced_prices_count += 1
                         room_calendar_synced = True
+
                     if room_calendar_synced:
                         break
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        # در صورت در دسترس نبودن تقویم، استفاده از نرخ شیء pricing
-        if not room_calendar_synced and isinstance(r_item.get('pricing'), dict):
-            pricing = r_item['pricing']
-            p_price = int(Decimal(str(pricing.get('price') or 0)))
-            p_orig = int(Decimal(str(pricing.get('original_sell_price') or p_price)))
-            p_extra = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
+        # اگر تقویم نبود، استفاده مستقیم از pricing اتاق
+        if not room_calendar_synced and base_client_sell_price > 0:
+            RoomDatePrice.objects.update_or_create(
+                room=room,
+                start_date=today_j,
+                end_date=today_j,
+                user_level=None,
+                defaults={
+                    'purchase_price': base_agency_buy_price,
+                    'price': base_client_sell_price,
+                    'extra_passenger_price': base_extra_bed_price,
+                    'discount_type': 'none',
+                    'discount_value': 0,
+                    'discount_date': None,
+                    'is_fixed_discount_one_time': False,
+                }
+            )
+            synced_prices_count += 1
 
-            if p_price > 0:
-                client_p = p_orig if p_orig > 0 else p_price
-                first_valid_price = client_p
-                first_valid_extra = p_extra
+        # ثبت بازه کلی ۳۰ روزه با قیمت دقیق مشتری
+        final_base_price = first_valid_client_price or base_client_sell_price
+        final_agency_price = first_valid_agency_price or base_agency_buy_price
+        final_extra = first_valid_extra or base_extra_bed_price
 
-                RoomDatePrice.objects.update_or_create(
-                    room=room,
-                    start_date=today_j,
-                    end_date=today_j,
-                    user_level=None,
-                    defaults={
-                        'purchase_price': p_price,
-                        'price': client_p,
-                        'extra_passenger_price': p_extra,
-                        'discount_type': 'none',
-                        'discount_value': 0,
-                        'discount_date': None,
-                        'is_fixed_discount_one_time': False,
-                    }
-                )
-                synced_prices_count += 1
-
-        # محاسبه امتیاز باشگاه مشتریان
-        club_points = calculate_customer_club_points(hotel.stars, first_valid_price)
-        room.customer_club_points = club_points
-        room.save(update_fields=['customer_club_points'])
-
-        # ثبت بازه ۳۰ روزه کلی جهت بالا آمدن در جستجوی شهر
-        if first_valid_price > 0:
+        if final_base_price > 0:
             RoomDatePrice.objects.update_or_create(
                 room=room,
                 start_date=today_j,
                 end_date=end_30_days_j,
                 user_level=None,
                 defaults={
-                    'purchase_price': first_valid_price,
-                    'price': first_valid_price,
-                    'extra_passenger_price': first_valid_extra,
+                    'purchase_price': final_agency_price,
+                    'price': final_base_price,
+                    'extra_passenger_price': final_extra,
                     'discount_type': 'none',
                     'discount_value': 0,
                     'discount_date': None,
@@ -554,7 +573,12 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 }
             )
 
-    # ۴. پاک‌سازی خودکار اتاق‌های قدیمی
+        # محاسبه امتیاز باشگاه مشتریان
+        club_points = calculate_customer_club_points(hotel.stars, final_base_price)
+        room.customer_club_points = club_points
+        room.save(update_fields=['customer_club_points'])
+
+    # ۴. پاک‌سازی خودکار اتاق‌های قدیمی یا اشتباه
     if synced_snapp_room_ids:
         deleted_count, _ = Room.objects.filter(
             hotel=hotel,
@@ -568,7 +592,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     if synced_rooms_count == 0:
         return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
 
-    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با وضعیت و موجودی دقیق ثبت شدند."
+    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: قوانین هتل و کنسلی دریافت شدند و {synced_rooms_count} اتاق نیازمند تأیید ثبت شدند."
 
 
 def sync_all_snapptrip_hotels_directory():
