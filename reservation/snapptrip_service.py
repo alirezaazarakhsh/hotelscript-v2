@@ -1,6 +1,5 @@
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from decimal import Decimal
 import requests
@@ -61,6 +60,21 @@ def get_snapptrip_client_config():
         'Content-Type': 'application/json'
     }
     return base_url, headers
+
+
+def fetch_with_rate_limit(url, headers, max_retries=3):
+    """ارسال امن درخواست با مدیریت هوشمند خطای 429 و مکث خودکار"""
+    for attempt in range(max_retries):
+        try:
+            res = requests.get(url, headers=headers, timeout=15)
+            if res.status_code == 429:
+                logger.warning(f"محدودیت Rate Limit اسنپ (429). ۱۰ ثانیه توقف... (تلاش {attempt + 1})")
+                time.sleep(10)
+                continue
+            return res
+        except Exception:
+            time.sleep(1.5)
+    return None
 
 
 def extract_list_from_response(data):
@@ -172,7 +186,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     ۱. دریافت قوانین و مشخصات پایه هتل
     ۲. استعلام اتاق‌ها با تاریخ‌های معتبر و استخراج توضیحات و قیمت نفر اضافه
     ۳. پاک‌سازی خودکار اتاق‌های قدیمی یا اشتباه در صورت تغییر شناسه هتل
-    ۴. ذخیره تقویم نرخ‌ها، تخفیف درصدی و تاریخ انقضا در RoomDatePrice
+    ۴. ذخیره نرخ‌ها: قیمت واقعی اسنپ برای مسافر + ثبت نرخ خرید آژانس در purchase_price (بدون تخفیف فیک)
     """
     base_url, headers = get_snapptrip_client_config()
 
@@ -190,7 +204,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     snapp_h_id = hotel.snapptrip_hotel_id
     rooms_list = []
 
-    # تاریخ‌های استاندارد برای حل خطای INVALID_DATE
+    # تاریخ‌های استاندارد برای جلوگیری از خطای INVALID_DATE
     now = datetime.now()
     checkin_str = now.strftime('%Y-%m-%d')
     checkout_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
@@ -233,9 +247,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             f"{base_url}/availability/hotels/{snapp_h_id}/?checkin={checkin_str}&checkout={checkout_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/hotels/rooms/{snapp_h_id}/",
-            f"{base_url}/hotels/rooms/{snapp_h_id}",
             f"{base_url}/hotels/{snapp_h_id}/rooms/",
-            f"{base_url}/hotels/{snapp_h_id}/rooms",
             f"{base_url}/hotels/rooms/?hotel_id={snapp_h_id}",
         ]
 
@@ -261,7 +273,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     synced_prices_count = 0
 
     # -------------------------------------------------------------
-    # مرحله ۳: ثبت اتاق‌ها و تقویم قیمتی در دیتابیس
+    # مرحله ۳: ثبت اتاق‌ها، توضیحات و تقویم قیمتی
     # -------------------------------------------------------------
     for r_item in rooms_list:
         snapp_room_id = extract_room_id(r_item)
@@ -295,6 +307,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         count_val = 0 if is_online else inv_count
         auto_approved_val = inv_count if is_online else 0
 
+        # ذخیره مشخصات کامل اتاق شامل توضیحات
         room, _ = Room.objects.update_or_create(
             hotel=hotel,
             snapptrip_room_id=snapp_room_id,
@@ -313,7 +326,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         )
         synced_rooms_count += 1
 
-        # استعلام تقویم نرخ‌های این اتاق
+        # استعلام تقویم نرخ‌های اتاق
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/?from={calendar_from_str}&to={calendar_to_str}",
@@ -342,6 +355,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                         except Exception:
                             continue
 
+                        # قیمت خرید آژانس از اسنپ
                         raw_price = 0
                         for pk in ['price', 'current_price', 'sell_price', 'amount']:
                             if day_data.get(pk):
@@ -352,6 +366,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                                 except Exception:
                                     pass
 
+                        # قیمت واقعی مسافر در اسنپ
                         raw_original = raw_price
                         for opk in ['original_sell_price', 'original_price', 'base_price', 'board_price']:
                             if day_data.get(opk):
@@ -363,32 +378,22 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                                 except Exception:
                                     pass
 
-                        # استخراج قیمت نفر اضافه
+                        # قیمت نفر اضافه
                         snapp_extra = 0
                         for epk in ['extra_bed_price', 'extra_passenger_price', 'extra_price', 'extra_bed']:
                             if day_data.get(epk):
                                 try:
                                     snapp_extra = int(Decimal(str(day_data[epk])))
-                                    if snapp_extra > 0:
-                                        break
+                                    break
                                 except Exception:
                                     pass
 
                         if raw_price <= 0:
                             continue
 
-                        # محاسبه تخفیف درصدی و ست کردن تاریخ انقضا
-                        if raw_original > raw_price:
-                            calculated_percent = round(((raw_original - raw_price) / raw_original) * 100)
-                            base_price = raw_original
-                            disc_type = 'percentage'
-                            disc_val = calculated_percent
-                            disc_date = j_dt
-                        else:
-                            base_price = raw_price
-                            disc_type = 'none'
-                            disc_val = 0
-                            disc_date = None
+                        # قیمت فروش به مسافر برابر با نرخ مشتری اسنپ
+                        client_sell_price = raw_original if raw_original > 0 else raw_price
+                        agency_buy_price = raw_price
 
                         RoomDatePrice.objects.update_or_create(
                             room=room,
@@ -396,12 +401,12 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                             end_date=j_dt,
                             user_level=None,
                             defaults={
-                                'purchase_price': raw_price,
-                                'price': base_price,
+                                'purchase_price': agency_buy_price,   # قیمت خرید آژانس شما از اسنپ
+                                'price': client_sell_price,          # قیمت فروش مسافر (بدون تخفیف فیک)
                                 'extra_passenger_price': snapp_extra,
-                                'discount_type': disc_type,
-                                'discount_value': disc_val,
-                                'discount_date': disc_date,
+                                'discount_type': 'none',             # عدم اعمال تخفیف نادرست
+                                'discount_value': 0,
+                                'discount_date': None,
                                 'is_fixed_discount_one_time': False,
                             }
                         )
@@ -412,7 +417,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        # در صورت در دسترس نبودن تقویم، استفاده از آبجکت pricing مستقیم اتاق
+        # در صورت نبود تقویم، استفاده از نرخ روز موجود در آبجکت pricing
         if not room_calendar_synced and isinstance(r_item.get('pricing'), dict):
             pricing = r_item['pricing']
             p_price = int(Decimal(str(pricing.get('price') or 0)))
@@ -421,8 +426,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
             if p_price > 0:
                 today_j = jdatetime.date.fromgregorian(date=now.date())
-                p_disc_type = 'percentage' if p_orig > p_price else 'none'
-                p_disc_val = round(((p_orig - p_price) / p_orig) * 100) if p_orig > p_price else 0
+                client_p = p_orig if p_orig > 0 else p_price
 
                 RoomDatePrice.objects.update_or_create(
                     room=room,
@@ -431,18 +435,18 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                     user_level=None,
                     defaults={
                         'purchase_price': p_price,
-                        'price': p_orig,
+                        'price': client_p,
                         'extra_passenger_price': p_extra,
-                        'discount_type': p_disc_type,
-                        'discount_value': p_disc_val,
-                        'discount_date': today_j if p_disc_type == 'percentage' else None,
+                        'discount_type': 'none',
+                        'discount_value': 0,
+                        'discount_date': None,
                         'is_fixed_discount_one_time': False,
                     }
                 )
                 synced_prices_count += 1
 
     # -------------------------------------------------------------
-    # مرحله ۴: پاک‌سازی خودکار اتاق‌های قدیمی/اشتباه
+    # مرحله ۴: پاک‌سازی خودکار اتاق‌های قدیمی و اشتباه
     # -------------------------------------------------------------
     if synced_snapp_room_ids:
         deleted_count, _ = Room.objects.filter(
@@ -452,7 +456,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             snapptrip_room_id__in=synced_snapp_room_ids
         ).delete()
         if deleted_count > 0:
-            logger.info(f"تعداد {deleted_count} اتاق نامعتبر/قدیمی از هتل {hotel.name} حذف شدند.")
+            logger.info(f"تعداد {deleted_count} اتاق نامعتبر از هتل {hotel.name} پاک شدند.")
 
     if synced_rooms_count == 0:
         return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
@@ -461,69 +465,12 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
 
 # ----------------------------------------------------------------------------------
-# توابع پرسرعت استخراج دایرکتوری با Multi-Threading و Bulk Database Insert
+# توابع ایمن و استاندارد استخراج دایرکتوری هتل‌ها با رعایت کامل Rate Limit (۱۲۰ درخواست)
 # ----------------------------------------------------------------------------------
-
-def _fetch_city_hotels_worker(city_item, base_url, headers):
-    """تابع استعلام سریع هتل‌های یک شهر با بررسی آدرس استاندارد اسنپ"""
-    city_id = city_item.get('id') or city_item.get('city_id') or city_item.get('code')
-    if not city_id:
-        return [], "شناسه شهر یافت نشد"
-
-    raw_city_name = ""
-    for k in ['name_fa', 'title_fa', 'persian_name', 'name', 'title', 'city_name', 'city']:
-        val = city_item.get(k)
-        if val and isinstance(val, str) and not val.isdigit():
-            raw_city_name = val.strip()
-            break
-
-    pure_name = IRAN_CITIES_MAP.get(str(raw_city_name).lower()) or IRAN_CITIES_MAP.get(str(city_id)) or raw_city_name
-    formatted_city = f"{city_id} - {pure_name}" if pure_name else f"{city_id}"
-
-    candidate_urls = [
-        f"{base_url}/cities/{city_id}/hotels",
-        f"{base_url}/cities/{city_id}/hotels/",
-        f"{base_url}/cities/{city_id}/hotels?limit=100&offset=0",
-        f"{base_url}/cities/{city_id}/hotel/?limit=100&offset=0",
-    ]
-
-    hotels_found = []
-    last_debug_err = ""
-
-    for url in candidate_urls:
-        try:
-            res = requests.get(url, headers=headers, timeout=12)
-            if res.status_code == 200:
-                batch = extract_list_from_response(res.json())
-                if batch:
-                    for h in batch:
-                        if not isinstance(h, dict):
-                            continue
-                        h_id = h.get('id') or h.get('hotel_id') or h.get('code')
-                        if not h_id:
-                            continue
-                        h_name = h.get('name_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
-                        stars = extract_stars_comprehensive(h)
-
-                        hotels_found.append(SnappHotelDirectory(
-                            snapp_hotel_id=h_id,
-                            name=str(h_name).strip(),
-                            city_name=formatted_city,
-                            city_id=city_id,
-                            stars=stars
-                        ))
-                    break
-            else:
-                last_debug_err = f"{url} -> کد {res.status_code}: {res.text[:100]}"
-        except Exception as e:
-            last_debug_err = f"{url} -> خطا: {e}"
-
-    return hotels_found, last_debug_err
-
 
 def sync_all_snapptrip_hotels_directory():
     """
-    استعلام و ذخیره فوق‌العاده سریع کلیه هتل‌های اسنپ با Multi-Threading و bulk_create
+    استعلام و ذخیره کلیه هتل‌های اسنپ در جدول دایرکتوری با رعایت دقیق سقف ۱۲۰ درخواست در دقیقه
     """
     base_url, headers = get_snapptrip_client_config()
 
@@ -531,45 +478,93 @@ def sync_all_snapptrip_hotels_directory():
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
     # ۱. دریافت لیست شهرها
-    try:
-        cities_res = requests.get(f"{base_url}/cities/", headers=headers, timeout=15)
-        if cities_res.status_code != 200:
-            return False, f"خطا در دریافت لیست شهرها از اسنپ: کد {cities_res.status_code}"
-        
-        cities_list = extract_list_from_response(cities_res.json())
-    except Exception as e:
-        return False, f"خطای اتصال به سرور اسنپ: {str(e)}"
+    cities_res = fetch_with_rate_limit(f"{base_url}/cities/", headers)
+    if not cities_res:
+        return False, "ارتباط با سرور اسنپ برقرار نشد (تایم‌اوت یا خطا)."
+    
+    if cities_res.status_code == 429:
+        return False, "کلید شما موقتاً به دلیل سقف درخواست محدود شده است. لطفاً ۲ دقیقه دیگر تلاش کنید."
 
+    if cities_res.status_code != 200:
+        return False, f"خطا در دریافت لیست شهرها از اسنپ: کد {cities_res.status_code}"
+
+    cities_list = extract_list_from_response(cities_res.json())
     if not cities_list:
         return False, "هیچ شهری از وب‌سرویس اسنپ دریافت نشد!"
 
     all_hotel_objects = []
-    first_debug_error = ""
 
-    # ۲. استعلام همزمان شهرها با ۵ رشته پردازشی
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(_fetch_city_hotels_worker, c, base_url, headers) for c in cities_list]
-        for f in as_completed(futures):
-            try:
-                res_hotels, err = f.result()
-                if res_hotels:
-                    all_hotel_objects.extend(res_hotels)
-                elif err and not first_debug_error:
-                    first_debug_error = err
-            except Exception as e:
-                logger.error(f"Worker error: {e}")
+    # ۲. پیمایش ترتیبی و کنترل‌شده شهرها با مکث مجاز
+    for city in cities_list:
+        city_id = city.get('id') or city.get('city_id') or city.get('code')
+        if not city_id:
+            continue
+
+        raw_city_name = ""
+        for k in ['name_fa', 'title_fa', 'persian_name', 'name', 'title', 'city_name', 'city']:
+            val = city.get(k)
+            if val and isinstance(val, str) and not val.isdigit():
+                raw_city_name = val.strip()
+                break
+
+        pure_name = IRAN_CITIES_MAP.get(str(raw_city_name).lower()) or IRAN_CITIES_MAP.get(str(city_id)) or raw_city_name
+        formatted_city = f"{city_id} - {pure_name}" if pure_name else f"{city_id}"
+
+        offset = 0
+        limit = 100
+
+        for _ in range(15):
+            url = f"{base_url}/cities/{city_id}/hotels?limit={limit}&offset={offset}"
+            res = fetch_with_rate_limit(url, headers)
+
+            if not res or res.status_code != 200:
+                url_alt = f"{base_url}/cities/{city_id}/hotels"
+                res = fetch_with_rate_limit(url_alt, headers)
+
+            if res and res.status_code == 200:
+                batch = extract_list_from_response(res.json())
+                if not batch:
+                    break
+
+                for h in batch:
+                    if not isinstance(h, dict):
+                        continue
+                    h_id = h.get('id') or h.get('hotel_id') or h.get('code')
+                    if not h_id:
+                        continue
+                    h_name = h.get('name_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
+                    stars = extract_stars_comprehensive(h)
+
+                    all_hotel_objects.append(SnappHotelDirectory(
+                        snapp_hotel_id=h_id,
+                        name=str(h_name).strip(),
+                        city_name=formatted_city,
+                        city_id=city_id,
+                        stars=stars
+                    ))
+
+                if len(batch) < limit:
+                    break
+                offset += limit
+            else:
+                break
+
+            # مکث ایمن بین صفحات برای رعایت سقف مجاز اسنپ
+            time.sleep(0.5)
+
+        time.sleep(0.5)
 
     if not all_hotel_objects:
-        return False, f"هیچ هتلی از وب‌سرویس اسنپ استخراج نشد. آخرین گزارش سرور: {first_debug_error}"
+        return False, "هیچ هتلی از وب‌سرویس اسنپ استخراج نشد."
 
-    # ۳. یکتا‌سازی هتل‌ها بر اساس snapp_hotel_id جهت جلوگیری از خطای تکراری در دیتابیس
+    # ۳. حذف شناسه‌های تکراری
     unique_hotels = {}
     for h_obj in all_hotel_objects:
         unique_hotels[h_obj.snapp_hotel_id] = h_obj
 
     hotels_to_save = list(unique_hotels.values())
 
-    # ۴. ذخیره و به‌روزرسانی آنی در دیتابیس با bulk_create
+    # ۴. ذخیره و به‌روزرسانی سریع
     SnappHotelDirectory.objects.bulk_create(
         hotels_to_save,
         update_conflicts=True,
@@ -577,4 +572,4 @@ def sync_all_snapptrip_hotels_directory():
         unique_fields=['snapp_hotel_id']
     )
 
-    return True, f"بروزرسانی پرسرعت کامل شد: مجموعاً {len(hotels_to_save)} هتل در بانک هتل‌های اسنپ ذخیره و بروز شدند."
+    return True, f"بروزرسانی کامل شد: مجموعاً {len(hotels_to_save)} هتل با مشخصات دقیق ذخیره شدند."
