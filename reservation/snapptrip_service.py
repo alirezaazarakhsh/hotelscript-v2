@@ -300,7 +300,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     # -------------------------------------------------------------
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
-            hotel_res = requests.get(h_url, headers=headers, timeout=12)
+            hotel_res = requests.get(h_url, headers=headers, timeout=30)
             if hotel_res.status_code == 200:
                 h_data = hotel_res.json()
                 if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
@@ -360,7 +360,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
         for r_url in candidate_room_urls:
             try:
-                rooms_res = requests.get(r_url, headers=headers, timeout=12)
+                rooms_res = requests.get(r_url, headers=headers, timeout=30)
                 if rooms_res.status_code == 200:
                     extracted = extract_list_from_response(rooms_res.json())
                     if extracted:
@@ -476,7 +476,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
         for cal_url in cal_candidate_urls:
             try:
-                cal_res = requests.get(cal_url, headers=headers, timeout=12)
+                cal_res = requests.get(cal_url, headers=headers, timeout=30)
                 if cal_res.status_code == 200:
                     calendar_items = extract_list_from_response(cal_res.json())
 

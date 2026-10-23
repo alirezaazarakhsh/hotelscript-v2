@@ -165,7 +165,7 @@ CELERY_TIMEZONE = 'Asia/Tehran'
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
-        'schedule': 60.0,
+        'schedule': 900.0,
     },
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
@@ -175,6 +175,11 @@ CELERY_BEAT_SCHEDULE = {
     'auto-sync-snapptrip-hotels-every-minute': {
         'task': 'reservation.tasks.auto_sync_snapptrip_hotels_task',
         'schedule': 60.0,
+    },
+    # تسک پیگیری خودکار وضعیت رزروهای معلق و استعلامی اسنپ هر ۲ دقیقه (۱۲۰ ثانیه)
+    'check-pending-snapptrip-inquiries': {
+        'task': 'reservation.tasks.check_pending_snapptrip_inquiries_task',
+        'schedule': 120.0,
     },
 }
 

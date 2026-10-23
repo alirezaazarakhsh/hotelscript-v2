@@ -9,8 +9,13 @@ from django.db import transaction
 from django.db.models import Q
 from django.core.cache import cache
 from django.utils import timezone
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
-from reservation.snapptrip_service import sync_hotel_and_rooms_from_snapp
+from reservation.snapptrip_service import (
+    sync_hotel_and_rooms_from_snapp,
+    get_snapptrip_booking_status
+)
 from .models import (
     Hotel,
     RoomDatePrice,
@@ -154,19 +159,106 @@ def auto_cancel_unpaid_reservation(reservation_id):
 def auto_sync_snapptrip_hotels_task():
     """
     تسک زمان‌بندی‌شده Celery:
-    هر ۱ دقیقه یک‌بار اجرا می‌شود و تمام هتل‌های فعال اسنپ را خودکار آپدیت می‌کند.
+    اتاق‌های هتل‌های فعال اسنپ را به نوبت آپدیت می‌کند.
+    مجهز به قفل توزیع‌شده ردیس برای جلوگیری از هم‌پوشانی و خطای Read timed out.
     """
-    active_snapp_hotels = Hotel.objects.filter(is_snapptrip=True, snapptrip_hotel_id__isnull=False)
-    
-    for hotel in active_snapp_hotels:
-        try:
-            success, msg = sync_hotel_and_rooms_from_snapp(hotel.id)
-            if success:
-                logger.info(f"✅ بروزرسانی خودکار ۱ دقیقه‌ای هتل {hotel.name}: {msg}")
-            else:
-                logger.warning(f"⚠️ خطای بروزرسانی خودکار هتل {hotel.name}: {msg}")
-            
-            # مکث کوتاه بین استعلام هتل‌ها برای رعایت سقف درخواست‌های مجاز
-            time.sleep(0.3)
-        except Exception as e:
-            logger.error(f"❌ خطای غیرمنتظره در تسک خودکار هتل {hotel.name}: {e}")
+    lock_id = "snapptrip_auto_sync_active_lock"
+    # قفل موقت برای ۱۰ دقیقه تا ورکر دیگری همزمان اجرا نشود
+    acquire_lock = cache.add(lock_id, "true", timeout=600)
+
+    if not acquire_lock:
+        logger.info("تسک همگام‌سازی اسنپ در حال حاضر توسط ورکر دیگری در حال اجراست؛ این نوبت لغو شد.")
+        return
+
+    try:
+        active_snapp_hotels = Hotel.objects.filter(is_snapptrip=True, snapptrip_hotel_id__isnull=False)
+
+        for hotel in active_snapp_hotels:
+            try:
+                success, msg = sync_hotel_and_rooms_from_snapp(hotel.id)
+                if success:
+                    logger.info(f"✅ بروزرسانی خودکار هتل {hotel.name}: {msg}")
+                else:
+                    logger.warning(f"⚠️ {hotel.name}: {msg}")
+
+                # مکث ۱ ثانیه‌ای بین هتل‌ها برای احترام به سرور اسنپ
+                time.sleep(1.0)
+            except Exception as e:
+                logger.error(f"❌ خطا در بروزرسانی هتل {hotel.name}: {e}")
+    finally:
+        cache.delete(lock_id)
+
+
+@shared_task
+def check_pending_snapptrip_inquiries_task():
+    """
+    بررسی خودکار رزروهای نیازمند استعلام از اسنپ:
+    وضعیت رزروهای معلق (pending) را از اسنپ استعلام می‌کند.
+    اگر هتل ظرفیت را تایید کرد، وضعیت سایت شما confirmed شده و دکمه پرداخت روشن می‌شود.
+    """
+    lock_id = "snapptrip_inquiries_check_lock"
+    acquire_lock = cache.add(lock_id, "true", timeout=120)
+
+    if not acquire_lock:
+        return
+
+    try:
+        pending_snapps = Reservationhotel.objects.filter(
+            is_snapptrip_reservation=True,
+            capacity_status='pending',
+            snapp_reservation_code__isnull=False
+        )
+
+        channel_layer = get_channel_layer()
+
+        for res in pending_snapps:
+            try:
+                status_in_snapp = get_snapptrip_booking_status(res.snapp_reservation_code)
+                res.snapp_status = status_in_snapp
+
+                # اگر هتل تایید کرد:
+                if status_in_snapp in ['availability_confirmed', 'confirmed', 'payment_on']:
+                    res.capacity_status = 'confirmed'
+                    res.save(update_fields=['capacity_status', 'snapp_status'])
+
+                    # ارسال پیام زنده وب‌سوکت برای روشن شدن دکمه پرداخت
+                    async_to_sync(channel_layer.group_send)(
+                        f"reservation_{res.tracking_code}",
+                        {
+                            "type": "status_update",
+                            "message": {
+                                "capacity_status": "confirmed",
+                                "timer": 900
+                            },
+                        },
+                    )
+                    logger.info(f"✅ رزرو استعلامی {res.tracking_code} توسط هتل در اسنپ تایید شد!")
+
+                # اگر هتل ظرفیت نداشت و رزرو رد شد:
+                elif status_in_snapp in ['availability_rejected', 'failed', 'expired']:
+                    res.capacity_status = 'rejected'
+                    res.save(update_fields=['capacity_status', 'snapp_status'])
+
+                    async_to_sync(channel_layer.group_send)(
+                        f"reservation_{res.tracking_code}",
+                        {
+                            "type": "status_update",
+                            "message": {
+                                "capacity_status": "rejected",
+                                "timer": None
+                            },
+                        },
+                    )
+                    logger.info(f"❌ رزرو استعلامی {res.tracking_code} توسط هتل در اسنپ رد شد.")
+
+                else:
+                    # همچنان در حال استعلام (availability_checking)
+                    res.save(update_fields=['snapp_status'])
+
+                time.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"خطا در بررسی رزرو استعلامی اسنپ ({res.tracking_code}): {e}")
+
+    finally:
+        cache.delete(lock_id)

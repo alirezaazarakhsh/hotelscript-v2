@@ -261,7 +261,7 @@ class HotelFAQInline(admin.StackedInline):
 
 
 # ==========================================
-# Admin اصلی هتل (به‌روزرسانی‌شده با اسنپ‌تریپ)
+# Admin اصلی هتل
 # ==========================================
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
@@ -339,10 +339,8 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
     list_filter = ('is_snapptrip', 'city', 'type', 'stars', 'status')
 
-    # اینلاین‌ها
     inlines = [HotelTagPublicInline, SEOMetaInline, HotelFAQInline]
 
-    # دکمه مستقیم همگام‌سازی در جدول لیست هتل‌ها
     def sync_button_display(self, obj):
         if obj.snapptrip_hotel_id:
             url = reverse('admin:hotel-sync-snapp', args=[obj.pk])
@@ -353,7 +351,6 @@ class HotelAdmin(admin.ModelAdmin):
         return "-"
     sync_button_display.short_description = "عملیات اسنپ"
 
-    # اضافه کردن URL سفارشی برای دکمه ادمین
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -366,7 +363,6 @@ class HotelAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def sync_snapp_action(self, request, hotel_id):
-        """متد اجرای همگام‌سازی با کلیک روی دکمه"""
         success, msg = sync_hotel_and_rooms_from_snapp(hotel_id)
         if success:
             self.message_user(request, msg, messages.SUCCESS)
@@ -375,7 +371,6 @@ class HotelAdmin(admin.ModelAdmin):
         return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/hotel/'))
 
     def save_model(self, request, obj, form, change):
-        """همگام‌سازی خودکار در صورت تیک زدن گزینه هنگام ذخیره فرم هتل"""
         super().save_model(request, obj, form, change)
         if obj.sync_from_snapptrip and obj.snapptrip_hotel_id:
             success, msg = sync_hotel_and_rooms_from_snapp(obj.id)
@@ -384,7 +379,6 @@ class HotelAdmin(admin.ModelAdmin):
             else:
                 self.message_user(request, msg, messages.ERROR)
 
-    # نمایش لوگو
     def logo_preview(self, obj):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
@@ -396,7 +390,6 @@ class HotelAdmin(admin.ModelAdmin):
         return "-"
     logo_preview.short_description = "لوگو انتخاب‌شده"
 
-    # نمایش تگ‌های عمومی
     def show_public_tags(self, obj):
         qs = obj.public_tags.all()
         if not qs.exists():
@@ -630,7 +623,7 @@ class ClosedDateInline(admin.TabularInline):
 
 
 # ==========================================
-# Admin اتاق‌ها (به‌روزرسانی‌شده با فیلدهای اسنپ)
+# Admin اتاق‌ها
 # ==========================================
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
@@ -656,10 +649,10 @@ class RoomAdmin(admin.ModelAdmin):
         'hotel',
         'title',
         'description',
-        'rules',                    # قوانین اختصاصی اتاق
-        'snapptrip_room_id',        # شناسه اسنپ
-        'board_type',               # نوع پذیرایی
-        'is_snapptrip',             # نشانگر اتاق اسنپی
+        'rules',
+        'snapptrip_room_id',
+        'board_type',
+        'is_snapptrip',
         'inventory',
         'count',
         'auto_approved_count',
@@ -936,14 +929,19 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_refunded_fa',
         'cancellation_requested_fa',
         'capacity_status_colored', 'payment_status_colored',
+        'snapp_code_fa',             # نمایش کد رزرو اسنپ
+        'snapp_status_colored',       # نمایش وضعیت در اسنپ
         'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
-        'personal_discount_code__code'
+        'personal_discount_code__code',
+        'snapp_reservation_code',     # امکان جستجو با کد اسنپ
     )
     list_filter = (
+        'is_snapptrip_reservation',   # فیلتر رزروهای اسنپی
+        'snapp_status',               # فیلتر وضعیت در اسنپ
         'capacity_status', 'payment_status', 'check_in_date', 'check_out_date',
         'cancellation_requested', 'personal_discount_used'
     )
@@ -957,7 +955,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'room_fixed_discount_fa', 'wallet_withdrawn_fa', 'final_price_fa',
         'discount_processed_fa', 'ref_id',
         'personal_discount_code', 'personal_discount_used',
-        'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa'
+        'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa',
+        'is_snapptrip_reservation', 'snapp_reservation_code', 'snapp_status',
     )
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
@@ -979,6 +978,14 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'points_assigned_fa', 'discount_processed_fa', 'ref_id'
             )
         }),
+        (_('پیگیری اسنپ‌تریپ (B2B SnappTrip)'), {
+            'fields': (
+                'is_snapptrip_reservation',
+                'snapp_reservation_code',
+                'snapp_status',
+            ),
+            'description': 'اطلاعات سیستمی تراکنش متصل به وب‌سرویس اسنپ‌تریپ'
+        }),
         (_('کنسلی'), {
             'fields': (
                 'cancellation_penalty_fa',
@@ -991,6 +998,35 @@ class ReservationhotelAdmin(NestedModelAdmin):
                        'created_jalali', 'updated_jalali')
         }),
     )
+
+    @admin.display(description='کد رزرو اسنپ')
+    def snapp_code_fa(self, obj):
+        if obj.snapp_reservation_code:
+            return format_html(
+                '<span style="font-family: monospace; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 2px 6px; border-radius: 4px;">{}</span>',
+                obj.snapp_reservation_code
+            )
+        return "-"
+
+    @admin.display(description='وضعیت در اسنپ')
+    def snapp_status_colored(self, obj):
+        if not obj.is_snapptrip_reservation:
+            return format_html('<span style="color:#aaa;">رزرو محلی</span>')
+
+        status_colors = {
+            'confirmed': ('#28a745', 'تأیید نهایی'),
+            'availability_confirmed': ('#28a745', 'تأیید ظرفیت هتل'),
+            'availability_checking': ('#e0a800', 'در حال استعلام از هتل'),
+            'payment_on': ('#17a2b8', 'قفل موقت (۱۵ دقیقه)'),
+            'availability_rejected': ('#dc3545', 'عدم پذیرش هتل'),
+            'failed': ('#dc3545', 'ناموفق'),
+            'expired': ('#6c757d', 'منقضی شده'),
+        }
+        color, label = status_colors.get(obj.snapp_status, ('#6c757d', obj.snapp_status or 'نامشخص'))
+        return format_html(
+            '<span style="color: white; background: {}; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
+            color, label
+        )
 
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
@@ -1135,7 +1171,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 obj.room_fixed_discount = room_fixed_discount
                 obj.half_day_in_charge = half_day_in_charge
                 obj.half_day_out_charge = half_day_out_charge
-                obj.total_half_day_charge = total_half_day_charge
+                obj.total_half_day_charge = total_half
                 obj.final_price = final_price
                 obj._skip_price_calculation = True
                 obj.save(update_fields=[
@@ -1237,7 +1273,6 @@ class UserCancellationAdmin(admin.ModelAdmin):
                 messages.error(request, f"خطای غیرمنتظره در پردازش کنسلی: {str(e)}")
 
 
-# فرم اختصاصی و اعتبارسنجی برای CancellationPenalty
 class CancellationPenaltyForm(forms.ModelForm):
     class Meta:
         model = CancellationPenalty
@@ -1345,9 +1380,6 @@ class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
         return super().response_change(request, obj)
 
 
-# ==========================================
-# ثبت تنظیمات وب‌سرویس اسنپ در ادمین
-# ==========================================
 @admin.register(SnappTripSetting)
 class SnappTripSettingAdmin(admin.ModelAdmin):
     list_display = ('title', 'base_url', 'is_active', 'has_api_key')
@@ -1368,13 +1400,10 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-    
-    
-    
-    
+
+
 @admin.register(SnappHotelDirectory)
 class SnappHotelDirectoryAdmin(admin.ModelAdmin):
-    # نمایش ستون‌ها با فرمت استاندارد کد-شهر و آیکون ستاره
     list_display = (
         'snapp_hotel_id',
         'name',
@@ -1389,11 +1418,9 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
 
     @admin.display(description="شهر (کد - نام)", ordering="city_name")
     def city_display(self, obj):
-        """نمایش به فرمت: کد - نام شهر (مثلاً 1 - تهران)"""
         cname = obj.city_name or ""
         cid = obj.city_id or ""
         
-        # اگر قبلاً با خط تیره ذخیره شده باشد
         if " - " in cname:
             return cname
         if cid and cname and not cname.isdigit():
@@ -1404,7 +1431,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
 
     @admin.display(description="تعداد ستاره", ordering="stars")
     def stars_display(self, obj):
-        """نمایش زیبای ستاره‌های هتل با ایموجی"""
         if not obj.stars or str(obj.stars).strip() in ['-', '', 'None']:
             return format_html('<span style="color:#888;">—</span>')
         

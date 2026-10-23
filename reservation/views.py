@@ -3225,7 +3225,9 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         
 
 
-# ای پی ای رزرو 
+# ==========================================
+# API ایجاد رزرو موقت (متصل به اسنپ‌تریپ و محلی)
+# ==========================================
 logger = logging.getLogger(__name__)
 
 class ReservationCreateAPIView(generics.CreateAPIView):
@@ -3236,8 +3238,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         operation_summary="ایجاد رزرو موقت",
         operation_description="""
         ایجاد یک رزرو موقت برای کاربر و کاهش موقت موجودی اتاق‌ها.
-        - اگر اتاق در حالت auto_approved باشد، رزرو مستقیماً confirmed می‌شود.
-        - اگر نیاز به تأیید ادمین داشته باشد، capacity_status = pending.
+        - اگر اتاق اسنپی باشد: ابتدا ظرفیت از اسنپ استعلام، پیش‌رزرو ثبت و اتاق ۱۵ دقیقه در شبکه اسنپ قفل (Lock) می‌شود.
+        - اگر اتاق آنی باشد: capacity_status = confirmed.
+        - اگر اتاق نیازمند تأیید/استعلام باشد: capacity_status = pending.
 
         **نمونه درخواست:**
         ```json
@@ -3269,6 +3272,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     )
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        from reservation.snapptrip_service import create_snapptrip_booking
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -3342,6 +3347,29 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             else:
                 raise ValidationError(f"موجودی کافی برای اتاق {room.title} وجود ندارد.")
 
+            # -------------------------------------------------------------
+            # اتصال زنده به اسنپ‌تریپ در صورت اسنپی بودن اتاق
+            # -------------------------------------------------------------
+            if room.is_snapptrip and room.snapptrip_room_id and room.hotel.snapptrip_hotel_id:
+                success_snapp, snapp_code, is_instant_snapp, snapp_msg = create_snapptrip_booking(
+                    reservation=reservation,
+                    room_snapp_id=room.snapptrip_room_id,
+                    hotel_snapp_id=room.hotel.snapptrip_hotel_id,
+                    quantity=quantity
+                )
+                if not success_snapp:
+                    raise ValidationError(f"خطای وب‌سرویس اسنپ: {snapp_msg}")
+
+                # ثبت اطلاعات پیگیری اسنپ در رکورد رزرو سایت
+                reservation.is_snapptrip_reservation = True
+                reservation.snapp_reservation_code = snapp_code
+                reservation.snapp_status = 'payment_on' if is_instant_snapp else 'availability_checking'
+
+                # هماهنگی وضعیت تأیید با وضعیت واقعی اسنپ
+                auto_approval = is_instant_snapp
+                if not is_instant_snapp:
+                    all_auto_approved = False
+
             room.adjust_inventory_for_reservation(quantity, auto_approval)
 
             total_price = Decimal('0')
@@ -3369,10 +3397,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         ReservationRoom.objects.bulk_create(reservation_rooms)
 
+        # تعیین وضعیت نهایی ظرفیت (confirmed برای رزروهای آنی، pending برای استعلامی)
         reservation.capacity_status = 'confirmed' if all_auto_approved else 'pending'
+        
         total_price, total_extra, discount_amount, half_in, half_out, total_half, code_discount, final_price, room_fixed = reservation.calculate_total_price()
         
-        # ذخیره تمام مقادیر محاسبه‌شده
         reservation.total_price = total_price
         reservation.final_price = final_price
         reservation.room_fixed_discount = room_fixed
@@ -3390,7 +3419,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             'half_day_in_charge', 
             'half_day_out_charge', 
             'total_half_day_charge', 
-            'total_extra_passenger_charge'
+            'total_extra_passenger_charge',
+            'is_snapptrip_reservation',
+            'snapp_reservation_code',
+            'snapp_status'
         ])
 
         channel_layer = get_channel_layer()
@@ -3400,35 +3432,35 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 "type": "status_update",
                 "message": {
                     "capacity_status": reservation.capacity_status,
-                    "timer": None
+                    "timer": 900 if reservation.capacity_status == 'confirmed' else None
                 },
             },
         )
 
-        # Send notification to bot admins
+        # ارسال نوتیفیکیشن ربات تلگرام به ادمین‌ها
         try:
             from hotel_bot.bot import send_reservation_notification
             buyer_name = reserver_data.get('reserver_first_name', '') + ' ' + reserver_data.get('reserver_last_name', '').strip() or request.user.phone_number
             hotel_name = reservation.get_hotel().name if reservation.get_hotel() else 'نامشخص'
-            # جزئیات اتاق‌ها
             rooms_details = []
             for res_room in reservation.reservation_rooms.all():
                 rooms_details.append(f"{res_room.room.title} (تعداد: {res_room.quantity})")
             rooms_text = ', '.join(rooms_details) if rooms_details else 'بدون اتاق'
-            final_price = reservation.final_price or 0
-            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name, reservation.capacity_status, rooms_text, final_price)
+            final_p = reservation.final_price or 0
+            async_to_sync(send_reservation_notification)(reservation.tracking_code, buyer_name, hotel_name, reservation.capacity_status, rooms_text, final_p)
         except Exception as e:
             logger.error(f"Failed to send reservation notification: {e}")
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
 
-        # زمانبندی کنسلی خودکار پس از 15 دقیقه اگر پرداخت نشود
+        # زمان‌بندی لغو خودکار پس از ۱۵ دقیقه در صورت عدم پرداخت
         try:
             from reservation.tasks import auto_cancel_unpaid_reservation
             auto_cancel_unpaid_reservation.apply_async(args=[reservation.id], countdown=900)
             logger.info(f"⏱ Scheduled auto cancellation task for reservation {tracking_code} in 15 minutes")
         except Exception as e:
             logger.error(f"Failed to schedule auto cancellation for {tracking_code}: {e}")
+
         return Response({"tracking_code": tracking_code})
     
     
