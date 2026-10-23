@@ -1,6 +1,7 @@
 import logging
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from decimal import Decimal
 import requests
@@ -15,7 +16,8 @@ from .models import (
     SnappHotelDirectory,
     SnappTripSetting,
     City,
-    RoomService
+    RoomService,
+    Reservationhotel
 )
 
 logger = logging.getLogger(__name__)
@@ -62,20 +64,6 @@ BOARD_TYPE_TITLES = {
 }
 
 
-def calculate_customer_club_points(stars_val, price_val):
-    """محاسبه هوشمند امتیاز باشگاه مشتریان بر اساس ستاره و قیمت اتاق"""
-    try:
-        stars = int(stars_val) if str(stars_val).isdigit() else 3
-    except Exception:
-        stars = 3
-    stars = max(1, min(stars, 5))
-
-    price = int(price_val or 1500000)
-    price_score = (price // 500000) * 4
-    star_score = random.randint(stars * 12, stars * 22)
-    return max(15, round((star_score + price_score) / 5) * 5)
-
-
 def get_snapptrip_client_config():
     """خواندن آدرس و کلید API از تنظیمات پنل ادمین"""
     setting = SnappTripSetting.objects.first()
@@ -100,7 +88,7 @@ def fetch_with_rate_limit(url, headers, max_retries=3):
         try:
             res = requests.get(url, headers=headers, timeout=15)
             if res.status_code == 429:
-                logger.warning(f"محدودیت Rate Limit اسنپ (429). ۱۰ ثانیه توقف...")
+                logger.warning("محدودیت Rate Limit اسنپ (429). ۱۰ ثانیه توقف...")
                 time.sleep(10)
                 continue
             return res
@@ -129,7 +117,7 @@ def extract_list_from_response(data):
 
 
 def extract_room_id(r_item):
-    """استخراج شناسه عددی اتاق"""
+    """استخراج شناسه عددی اتاق با بررسی تمام کلیدهای محتمل"""
     if not isinstance(r_item, dict):
         if isinstance(r_item, (int, str)) and str(r_item).isdigit():
             return int(r_item)
@@ -163,7 +151,7 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_room_description(r_item):
-    """استخراج متن توضیحات و مشخصات اتاق"""
+    """استخراج متن توضیحات و مشخصات اتاق از اسنپ"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
         
@@ -175,7 +163,7 @@ def extract_room_description(r_item):
 
 
 def extract_stars_comprehensive(h):
-    """استخراج ستاره‌های هتل"""
+    """استخراج ستاره‌های هتل از تمام کلیدها و عنوان"""
     if not isinstance(h, dict):
         return '-'
 
@@ -214,11 +202,7 @@ def extract_stars_comprehensive(h):
 
 
 def extract_hotel_rules_and_cancellation(h_data):
-    """
-    استخراج دقیق:
-    ۱. قوانین و مقررات هتل -> rules
-    ۲. قوانین کنسلی هتل -> important_notes
-    """
+    """استخراج قوانین هتل و قوانین کنسلی"""
     rules_text = ""
     cancellation_text = ""
 
@@ -239,44 +223,199 @@ def extract_hotel_rules_and_cancellation(h_data):
 
 
 def is_room_online_instant(r_item):
-    """
-    تشخیص هوشمند آنلاین بودن (رزرو آنی بدون تأیید) طبق داده‌های وب‌سرویس اسنپ
-    """
-    # اگر اسنپ صراحتاً فلگ آنلاین بودن داده باشد
+    """تشخیص رزرو آنی بدون نیاز به تایید طبق پاسخ اسنپ"""
     if r_item.get('is_online') is True or r_item.get('online') is True:
         return True
     if r_item.get('is_instant') is True or r_item.get('instant') is True:
         return True
     
-    # اگر اسنپ صراحتاً نوع بوکینگ را آنلاین گذاشته باشد
     booking_type = str(r_item.get('booking_type', '')).lower()
     if booking_type in ['online', 'instant', 'guaranteed']:
         return True
     if booking_type in ['offline', 'on_request', 'inquiry']:
         return False
 
-    # فلگ‌های نیاز به تأیید
     if r_item.get('is_online') is False or r_item.get('online') is False:
         return False
     if r_item.get('need_approval') is True or r_item.get('requires_confirmation') is True:
         return False
 
-    # در صورت عدم اعلام صریح اسنپ: اگر موجودی بیشتر از صفر در دسترس بود، به صورت پیش‌فرض آنی در نظر گرفته می‌شود
     return True
 
 
-def sync_hotel_and_rooms_from_snapp(hotel_id: int):
-    """
-    همگام‌سازی کامل هتل و اتاق‌ها دقیقاً منطبق بر رفتار وب‌سرویس اسنپ:
-    - تفکیک واقعی رزرو آنی و رزرو نیازمند تأیید طبق پاسخ اسنپ
-    - استخراج قوانین عمومی هتل (rules) و قوانین کنسلی (important_notes)
-    - استخراج قوانین اختصاصی اتاق (room.rules) و توضیحات اتاق (room.description)
-    - قیمت‌گذاری مسافر منطبق با سایت اسنپ و حفظ سود آژانس
-    """
-    base_url, headers = get_snapptrip_client_config()
+def calculate_customer_club_points(stars_val, price_val):
+    """محاسبه هوشمند امتیاز باشگاه مشتریان"""
+    try:
+        stars = int(stars_val) if str(stars_val).isdigit() else 3
+    except Exception:
+        stars = 3
+    stars = max(1, min(stars, 5))
 
+    price = int(price_val or 1500000)
+    price_score = (price // 500000) * 4
+    star_score = random.randint(stars * 12, stars * 22)
+    return max(15, round((star_score + price_score) / 5) * 5)
+
+
+# ==============================================================================
+# بخش ۱: توابع رزرواسیون و پیگیری وضعیت در اسنپ‌تریپ (مورد نیاز Tasks و Views)
+# ==============================================================================
+
+def get_snapptrip_booking_status(snapp_reservation_code: str):
+    """استعلام وضعیت رزرو از اسنپ (GET /booking/{code})"""
+    base_url, headers = get_snapptrip_client_config()
+    url = f"{base_url}/booking/{snapp_reservation_code}"
+    try:
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            return (
+                data.get('status') or 
+                data.get('data', {}).get('status') or 
+                'confirmed'
+            )
+    except Exception as e:
+        logger.error(f"Error fetching booking status from Snapp ({snapp_reservation_code}): {e}")
+    return "unknown"
+
+
+def check_room_realtime_availability(hotel_snapp_id: int, room_snapp_id: int, checkin_str: str, checkout_str: str):
+    """استعلام زنده موجودی و وضعیت تایید اتاق از اسنپ"""
+    base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
-        return False, "کلید API اسنپ‌تریپ در تنظیمات پنل ادمین وارد نشده است!"
+        return False, False, {}, "کلید API اسنپ‌تریپ در سیستم تنظیم نشده است."
+
+    url = f"{base_url}/availability/hotels/{hotel_snapp_id}?checkin={checkin_str}&checkout={checkout_str}"
+    try:
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code != 200:
+            return False, False, {}, f"خطا در استعلام ظرفیت از اسنپ (کد {res.status_code})"
+
+        data = res.json()
+        rooms = extract_list_from_response(data)
+
+        for r in rooms:
+            rid = extract_room_id(r)
+            if rid == room_snapp_id:
+                is_instant = is_room_online_instant(r)
+                pricing = r.get('pricing', {})
+                return True, is_instant, pricing, ""
+
+        return False, False, {}, "این اتاق در بازه تاریخی انتخابی، ظرفیت خالی ندارد."
+    except Exception as e:
+        logger.error(f"Error checking real-time availability: {e}")
+        return False, False, {}, f"خطای ارتباط با سرور اسنپ: {str(e)}"
+
+
+def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
+    """ثبت پیش‌رزرو در اسنپ و قفل موقت ۱۵ دقیقه‌ای"""
+    base_url, headers = get_snapptrip_client_config()
+    if not headers.get('api-key'):
+        return False, None, False, "کلید API اسنپ‌تریپ تنظیم نشده است."
+
+    check_in_g = reservation.check_in_date.togregorian() if hasattr(reservation.check_in_date, 'togregorian') else reservation.check_in_date
+    check_out_g = reservation.check_out_date.togregorian() if hasattr(reservation.check_out_date, 'togregorian') else reservation.check_out_date
+
+    checkin_str = check_in_g.strftime('%Y-%m-%d')
+    checkout_str = check_out_g.strftime('%Y-%m-%d')
+
+    is_avail, is_instant, pricing, err = check_room_realtime_availability(
+        hotel_snapp_id, room_snapp_id, checkin_str, checkout_str
+    )
+    if not is_avail:
+        return False, None, False, err
+
+    guests_payload = []
+    first_room = reservation.reservation_rooms.first()
+    if first_room and first_room.passengers.exists():
+        for p in first_room.passengers.all():
+            guests_payload.append({
+                "first_name": p.first_name,
+                "last_name": p.last_name,
+                "national_code": p.national_code or "",
+                "phone_number": p.mobile_number or reservation.reserver_phone_number or "",
+                "foreigner": False,
+                "gender": "male"
+            })
+    else:
+        guests_payload.append({
+            "first_name": reservation.reserver_first_name or "مسافر",
+            "last_name": reservation.reserver_last_name or "اصلی",
+            "national_code": reservation.reserver_national_code or "",
+            "phone_number": reservation.reserver_phone_number or "",
+            "foreigner": False,
+            "gender": "male"
+        })
+
+    create_url = f"{base_url}/booking/create"
+    payload = {
+        "hotel_id": int(hotel_snapp_id),
+        "room_id": int(room_snapp_id),
+        "checkin": checkin_str,
+        "checkout": checkout_str,
+        "rooms_count": quantity,
+        "guests": guests_payload,
+        "note": reservation.additional_notes or ""
+    }
+
+    try:
+        res = requests.post(create_url, json=payload, headers=headers, timeout=20)
+        if res.status_code not in [200, 201]:
+            logger.error(f"Snapp create booking failed: {res.status_code} - {res.text}")
+            return False, None, is_instant, f"خطای ثبت در اسنپ: {res.text[:150]}"
+
+        res_data = res.json()
+        snapp_code = (
+            res_data.get('reservation_code') or 
+            res_data.get('code') or 
+            res_data.get('data', {}).get('reservation_code')
+        )
+
+        if not snapp_code:
+            return False, None, is_instant, f"کد پیگیری از اسنپ دریافت نشد: {res.text[:150]}"
+
+        # قفل موقت ۱۵ دقیقه‌ای
+        lock_url = f"{base_url}/booking/{snapp_code}/lock"
+        try:
+            requests.post(lock_url, headers=headers, timeout=12)
+        except Exception as lock_err:
+            logger.warning(f"قفل موقت اتاق در اسنپ انجام نشد: {lock_err}")
+
+        return True, str(snapp_code), is_instant, "پیش‌رزرو با موفقیت در اسنپ ثبت شد."
+
+    except Exception as e:
+        logger.error(f"Error creating booking in Snapp: {e}")
+        return False, None, is_instant, f"خطای ارتباط با سرور اسنپ: {str(e)}"
+
+
+def confirm_snapptrip_booking(snapp_reservation_code: str):
+    """تأیید نهایی رزرو پس از پرداخت موفق مسافر"""
+    base_url, headers = get_snapptrip_client_config()
+    if not headers.get('api-key'):
+        return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
+
+    confirm_url = f"{base_url}/booking/{snapp_reservation_code}/confirm"
+    try:
+        res = requests.post(confirm_url, headers=headers, timeout=20)
+        if res.status_code not in [200, 201]:
+            logger.error(f"Confirm failed on Snapp: {res.status_code} - {res.text}")
+            return False, "failed", f"خطای تأیید در اسنپ: {res.text[:150]}"
+
+        final_status = get_snapptrip_booking_status(snapp_reservation_code)
+        return True, final_status, "رزرو با موفقیت در اسنپ قطعی شد."
+    except Exception as e:
+        logger.error(f"Error confirming booking {snapp_reservation_code}: {e}")
+        return False, "failed", f"خطای ارتباط با اسنپ: {str(e)}"
+
+
+# ==============================================================================
+# بخش ۲: همگام‌سازی اتاق‌ها، قوانین و نرخ‌های تقویم هتل
+# ==============================================================================
+
+def sync_hotel_and_rooms_from_snapp(hotel_id: int):
+    base_url, headers = get_snapptrip_client_config()
+    if not headers.get('api-key'):
+        return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
     try:
         hotel = Hotel.objects.get(pk=hotel_id)
@@ -295,28 +434,23 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     calendar_from_str = now.strftime('%Y-%m-%d')
     calendar_to_str = (now + timedelta(days=30)).strftime('%Y-%m-%d')
 
-    # -------------------------------------------------------------
-    # مرحله ۱: دریافت مشخصات هتل، قوانین عمومی و قوانین کنسلی
-    # -------------------------------------------------------------
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
-            hotel_res = requests.get(h_url, headers=headers, timeout=30)
+            hotel_res = requests.get(h_url, headers=headers, timeout=15)
             if hotel_res.status_code == 200:
                 h_data = hotel_res.json()
                 if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
                     h_data = h_data['data']
 
                 h_rules, h_cancellation = extract_hotel_rules_and_cancellation(h_data)
-
                 if h_rules:
                     hotel.rules = h_rules
                 if h_cancellation:
-                    hotel.important_notes = h_cancellation  # ثبت قوانین کنسلی در نکات ضروری
+                    hotel.important_notes = h_cancellation
 
                 hotel.is_snapptrip = True
                 hotel.status = 'published'
 
-                # اتصال به شهر محلی
                 if not hotel.city:
                     dir_entry = SnappHotelDirectory.objects.filter(snapp_hotel_id=snapp_h_id).first()
                     city_search_name = ""
@@ -344,9 +478,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         except Exception as e:
             logger.error(f"Error fetching hotel details: {e}")
 
-    # -------------------------------------------------------------
-    # مرحله ۲: استعلام اتاق‌ها با تاریخ‌های معتبر
-    # -------------------------------------------------------------
     last_error_report = ""
     if not rooms_list:
         candidate_room_urls = [
@@ -360,7 +491,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
         for r_url in candidate_room_urls:
             try:
-                rooms_res = requests.get(r_url, headers=headers, timeout=30)
+                rooms_res = requests.get(r_url, headers=headers, timeout=15)
                 if rooms_res.status_code == 200:
                     extracted = extract_list_from_response(rooms_res.json())
                     if extracted:
@@ -382,9 +513,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     today_j = jdatetime.date.fromgregorian(date=now.date())
     end_30_days_j = jdatetime.date.fromgregorian(date=(now + timedelta(days=30)).date())
 
-    # -------------------------------------------------------------
-    # مرحله ۳: ثبت اتاق‌ها طبق رفتار واقعی اسنپ (آنی در برابر استعلامی)
-    # -------------------------------------------------------------
     for r_item in rooms_list:
         snapp_room_id = extract_room_id(r_item)
         if not snapp_room_id:
@@ -396,7 +524,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
         extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
         
-        # خواندن موجودی واقعی اسنپ یا عدد پیش‌فرض ۱۰
         real_inv = 10
         if str(r_item.get('count', '')).isdigit() and int(r_item['count']) > 0:
             real_inv = int(r_item['count'])
@@ -404,7 +531,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             real_inv = int(r_item['inventory'])
 
         board_type = r_item.get('board_type', 'bed_breakfast')
-
         room_rules = (
             r_item.get('rules') or 
             r_item.get('policy') or 
@@ -413,18 +539,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             ''
         )
 
-        # -------------------------------------------------------------
-        # تفکیک دقیق طبق پاسخ اسنپ:
-        # اگر آنی بود: auto_approved پر می‌شود (رزرو آنی در فرانت)
-        # اگر استعلامی بود: count پر می‌شود (نیازمند تأیید در فرانت)
-        # -------------------------------------------------------------
         room_is_online = is_room_online_instant(r_item)
-        if room_is_online:
-            count_val = 0
-            auto_approved_val = real_inv
-        else:
-            count_val = real_inv
-            auto_approved_val = 0
+        count_val = 0 if room_is_online else real_inv
+        auto_approved_val = real_inv if room_is_online else 0
 
         room, _ = Room.objects.update_or_create(
             hotel=hotel,
@@ -444,12 +561,10 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         )
         synced_rooms_count += 1
 
-        # اضافه کردن نوع پذیرایی به خدمات اتاق
         service_title = BOARD_TYPE_TITLES.get(board_type, 'همراه با صبحانه رایگان')
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
 
-        # استخراج نرخ پایه از pricing
         pricing = r_item.get('pricing') if isinstance(r_item.get('pricing'), dict) else {}
         base_client_sell_price = 0
         base_agency_buy_price = 0
@@ -462,7 +577,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
             base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
 
-        # استعلام تقویم نرخ‌های این اتاق
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/?from={calendar_from_str}&to={calendar_to_str}",
@@ -476,7 +590,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
         for cal_url in cal_candidate_urls:
             try:
-                cal_res = requests.get(cal_url, headers=headers, timeout=30)
+                cal_res = requests.get(cal_url, headers=headers, timeout=15)
                 if cal_res.status_code == 200:
                     calendar_items = extract_list_from_response(cal_res.json())
 
@@ -569,7 +683,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        # اگر تقویم در دسترس نبود، استفاده از نرخ استعلامی اتاق
         if not room_calendar_synced and base_client_sell_price > 0:
             RoomDatePrice.objects.update_or_create(
                 room=room,
@@ -588,7 +701,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             )
             synced_prices_count += 1
 
-        # ثبت بازه کلی ۳۰ روزه با قیمت دقیق مشتری برای هماهنگی با جستجوی شهر
         final_base_price = first_valid_client_price or base_client_sell_price
         final_agency_price = first_valid_agency_price or base_agency_buy_price
         final_extra = first_valid_extra or base_extra_bed_price
@@ -610,12 +722,10 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 }
             )
 
-        # محاسبه امتیاز باشگاه مشتریان
         club_points = calculate_customer_club_points(hotel.stars, final_base_price)
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 
-    # ۴. پاک‌سازی خودکار اتاق‌های قدیمی یا اشتباه
     if synced_snapp_room_ids:
         deleted_count, _ = Room.objects.filter(
             hotel=hotel,
@@ -629,15 +739,15 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     if synced_rooms_count == 0:
         return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
 
-    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: قوانین هتل و کنسلی دریافت شدند و {synced_rooms_count} اتاق طبق وضعیت واقعی اسنپ ثبت شدند."
+    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با قیمت دقیق اسنپ ثبت شدند."
 
+
+# ==============================================================================
+# بخش ۳: دایرکتوری پرسرعت و جدول هتل‌های اسنپ
+# ==============================================================================
 
 def sync_all_snapptrip_hotels_directory():
-    """
-    استعلام و ذخیره کلیه هتل‌های اسنپ در جدول دایرکتوری با رعایت دقیق سقف ۱۲۰ درخواست در دقیقه
-    """
     base_url, headers = get_snapptrip_client_config()
-
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
