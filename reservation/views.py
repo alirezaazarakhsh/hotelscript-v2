@@ -3223,8 +3223,9 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         })
         
         
-
-
+        
+        
+        
 # ==========================================
 # API ایجاد رزرو موقت (متصل به اسنپ‌تریپ و محلی)
 # ==========================================
@@ -3238,22 +3239,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         operation_summary="ایجاد رزرو موقت",
         operation_description="""
         ایجاد یک رزرو موقت برای کاربر و کاهش موقت موجودی اتاق‌ها.
+        - شماره تماس مستقیماً از حساب کاربری شخص واردشده خوانده می‌شود.
         - اگر اتاق اسنپی باشد: ابتدا ظرفیت از اسنپ استعلام، پیش‌رزرو ثبت و اتاق ۱۵ دقیقه در شبکه اسنپ قفل (Lock) می‌شود.
         - اگر اتاق آنی باشد: capacity_status = confirmed.
         - اگر اتاق نیازمند تأیید/استعلام باشد: capacity_status = pending.
-
-        **نمونه درخواست:**
-        ```json
-        {
-            "hotel_id": 1,
-            "room_id": 10,
-            "room_number": 2,
-            "date": {
-                "enter": "2025-12-15",
-                "exit": "2025-12-17"
-            }
-        }
-        ```
         """,
         tags=["reservation-api"],
         request_body=ReservationCreateSerializer,
@@ -3305,15 +3294,16 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        reserver_data = {}
-        if hasattr(request.user, 'natural_profile'):
-            profile = request.user.natural_profile
-            reserver_data = {
-                'reserver_first_name': profile.first_name or '',
-                'reserver_last_name': profile.last_name or '',
-                'reserver_national_code': profile.national_code or '',
-                'reserver_phone_number': request.user.phone_number
-            }
+        # استخراج قطعی شماره موبایل و مشخصات کاربر لاگین‌شده
+        profile = getattr(request.user, 'natural_profile', None)
+        user_phone = str(getattr(request.user, 'phone_number', '') or '').strip()
+
+        reserver_data = {
+            'reserver_first_name': (profile.first_name if profile else '') or '',
+            'reserver_last_name': (profile.last_name if profile else '') or '',
+            'reserver_national_code': (profile.national_code if profile else '') or '',
+            'reserver_phone_number': user_phone
+        }
 
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
@@ -3360,12 +3350,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 if not success_snapp:
                     raise ValidationError(f"خطای وب‌سرویس اسنپ: {snapp_msg}")
 
-                # ثبت اطلاعات پیگیری اسنپ در رکورد رزرو سایت
                 reservation.is_snapptrip_reservation = True
                 reservation.snapp_reservation_code = snapp_code
                 reservation.snapp_status = 'payment_on' if is_instant_snapp else 'availability_checking'
 
-                # هماهنگی وضعیت تأیید با وضعیت واقعی اسنپ
                 auto_approval = is_instant_snapp
                 if not is_instant_snapp:
                     all_auto_approved = False
@@ -3437,7 +3425,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             },
         )
 
-        # ارسال نوتیفیکیشن ربات تلگرام به ادمین‌ها
         try:
             from hotel_bot.bot import send_reservation_notification
             buyer_name = reserver_data.get('reserver_first_name', '') + ' ' + reserver_data.get('reserver_last_name', '').strip() or request.user.phone_number
@@ -3453,7 +3440,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         logger.info(f"✅ Reservation created successfully: {tracking_code}")
 
-        # زمان‌بندی لغو خودکار پس از ۱۵ دقیقه در صورت عدم پرداخت
         try:
             from reservation.tasks import auto_cancel_unpaid_reservation
             auto_cancel_unpaid_reservation.apply_async(args=[reservation.id], countdown=900)
@@ -3462,9 +3448,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             logger.error(f"Failed to schedule auto cancellation for {tracking_code}: {e}")
 
         return Response({"tracking_code": tracking_code})
-    
-    
-    
+
+
+
 # ای پی ای جزئيات یک رزرو با tracking_code
 logger = logging.getLogger(__name__)
 

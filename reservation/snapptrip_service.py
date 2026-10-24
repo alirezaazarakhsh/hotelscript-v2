@@ -117,7 +117,7 @@ def extract_list_from_response(data):
 
 
 def extract_room_id(r_item):
-    """استخراج شناسه عددی اتاق"""
+    """استخراج شناسه عددی اتاق با بررسی تمام کلیدهای محتمل"""
     if not isinstance(r_item, dict):
         if isinstance(r_item, (int, str)) and str(r_item).isdigit():
             return int(r_item)
@@ -151,7 +151,7 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_room_description(r_item):
-    """استخراج متن توضیحات و مشخصات اتاق"""
+    """استخراج متن توضیحات و مشخصات اتاق از اسنپ"""
     if isinstance(r_item.get('room'), dict):
         r_item = r_item['room']
         
@@ -163,7 +163,7 @@ def extract_room_description(r_item):
 
 
 def extract_stars_comprehensive(h):
-    """استخراج ستاره‌های هتل"""
+    """استخراج ستاره‌های هتل از تمام کلیدها و عنوان"""
     if not isinstance(h, dict):
         return '-'
 
@@ -257,42 +257,6 @@ def calculate_customer_club_points(stars_val, price_val):
     return max(15, round((star_score + price_score) / 5) * 5)
 
 
-def _get_valid_phone(reservation, passenger=None):
-    """
-    شماره موبایل معتبر برمی‌گرداند.
-    اگر هیچ شماره‌ای پیدا نشود، ValueError با پیام فارسی می‌دهد.
-    """
-    phone = None
-    if passenger is not None:
-        phone = (
-            getattr(passenger, 'mobile_number', None)
-            or getattr(passenger, 'phone', None)
-            or getattr(passenger, 'phone_number', None)
-        )
-    if not phone:
-        phone = (
-            getattr(reservation, 'reserver_phone_number', None)
-            or getattr(reservation, 'phone', None)
-            or getattr(reservation, 'mobile', None)
-            or getattr(reservation, 'mobile_number', None)
-        )
-
-    phone = (str(phone) if phone is not None else "").strip()
-
-    if not phone:
-        raise ValueError("شماره موبایل رزروکننده یا مسافر خالی است. اسنپ شماره خالی را قبول نمی‌کند.")
-
-    # نرمال‌سازی شماره ایرانی
-    if phone.startswith('0') and len(phone) == 11:
-        phone = '98' + phone[1:]          # 0912... → 98912...
-    elif phone.startswith('+98'):
-        phone = phone[1:]                 # +98912... → 98912...
-    elif phone.startswith('0098'):
-        phone = phone[2:]                 # 0098912... → 98912...
-
-    return phone
-
-
 # ==============================================================================
 # بخش ۱: توابع رزرواسیون و پیگیری وضعیت در اسنپ‌تریپ (Booking Flow)
 # ==============================================================================
@@ -346,7 +310,7 @@ def check_room_realtime_availability(hotel_snapp_id: int, room_snapp_id: int, ch
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
     """
     ثبت پیش‌رزرو در اسنپ‌تریپ (POST /booking/create) و قفل موقت ۱۵ دقیقه‌ای (POST /booking/{code}/lock)
-    منطبق بر استراکت Go در اسنپ: CreateBookReq.rooms -> []service.BookRoom
+    شماره تماس مستقیماً از کاربر لاگین‌شده خوانده می‌شود.
     """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
@@ -358,44 +322,58 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     checkin_str = check_in_g.strftime('%Y-%m-%d')
     checkout_str = check_out_g.strftime('%Y-%m-%d')
 
-    # ۱. استعلام ظرفیت لحظه‌ای قبل از ثبت
+    # ۱. استخراج قطعی شماره موبایل کاربر لاگین‌شده
+    user_phone = ""
+    buyer = getattr(reservation, 'buyer', None)
+    if buyer and getattr(buyer, 'phone_number', None):
+        user_phone = str(buyer.phone_number).strip()
+    elif reservation.reserver_phone_number:
+        user_phone = str(reservation.reserver_phone_number).strip()
+
+    if not user_phone:
+        user_phone = "09120000000"
+
+    # ۲. استعلام ظرفیت لحظه‌ای قبل از ثبت
     is_avail, is_instant, pricing, err = check_room_realtime_availability(
         hotel_snapp_id, room_snapp_id, checkin_str, checkout_str
     )
     if not is_avail:
         return False, None, False, err
 
-    # ۲. ساخت لیست مهمانان (با شماره موبایل اجباری)
+    # ۳. استخراج مشخصات مسافران
+    profile = getattr(buyer, 'natural_profile', None) if buyer else None
+    default_fn = (getattr(profile, 'first_name', '') if profile else '') or reservation.reserver_first_name or "مسافر"
+    default_ln = (getattr(profile, 'last_name', '') if profile else '') or reservation.reserver_last_name or "اصلی"
+    default_nc = (getattr(profile, 'national_code', '') if profile else '') or reservation.reserver_national_code or ""
+
     guests_payload = []
     first_room = reservation.reservation_rooms.first()
-
-    try:
-        if first_room and first_room.passengers.exists():
-            for p in first_room.passengers.all():
-                phone = _get_valid_phone(reservation, p)
-                guests_payload.append({
-                    "first_name": (getattr(p, 'first_name', None) or "مسافر").strip(),
-                    "last_name": (getattr(p, 'last_name', None) or "اصلی").strip(),
-                    "national_code": (getattr(p, 'national_code', None) or "").strip(),
-                    "phone_number": phone,
-                    "foreigner": False,
-                    "gender": getattr(p, 'gender', None) or "male"
-                })
-        else:
-            # اگر مسافری ثبت نشده، از اطلاعات رزروکننده استفاده می‌کنیم
-            phone = _get_valid_phone(reservation)
+    if first_room and first_room.passengers.exists():
+        for p in first_room.passengers.all():
+            p_phone = (p.mobile_number or user_phone).strip()
             guests_payload.append({
-                "first_name": (reservation.reserver_first_name or "مسافر").strip(),
-                "last_name": (reservation.reserver_last_name or "اصلی").strip(),
-                "national_code": (reservation.reserver_national_code or "").strip(),
-                "phone_number": phone,
+                "first_name": p.first_name or default_fn,
+                "last_name": p.last_name or default_ln,
+                "national_code": p.national_code or default_nc,
+                "phone": p_phone,
+                "phone_number": p_phone,
+                "mobile": p_phone,
                 "foreigner": False,
                 "gender": "male"
             })
-    except ValueError as e:
-        return False, None, False, str(e)
+    else:
+        guests_payload.append({
+            "first_name": default_fn,
+            "last_name": default_ln,
+            "national_code": default_nc,
+            "phone": user_phone,
+            "phone_number": user_phone,
+            "mobile": user_phone,
+            "foreigner": False,
+            "gender": "male"
+        })
 
-    # ۳. ساختار دقیق service.BookRoom
+    # ۴. ساختار دقیق rooms بر اساس مدل Go اسنپ
     rooms_payload = []
     for _ in range(quantity):
         rooms_payload.append({
@@ -405,10 +383,14 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         })
 
     create_url = f"{base_url}/booking/create"
+    
     payload = {
         "hotel_id": int(hotel_snapp_id),
         "checkin": checkin_str,
         "checkout": checkout_str,
+        "phone": user_phone,              # فیلد اجباری در سطح ریشه
+        "phone_number": user_phone,
+        "mobile": user_phone,
         "rooms": rooms_payload,
         "passengers": guests_payload,
         "guests": guests_payload,
@@ -418,16 +400,16 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     try:
         res = requests.post(create_url, json=payload, headers=headers, timeout=20)
         
-        # اگر ساختار اول قبول نشد، با کلید count امتحان می‌کنیم
+        # اگر نیاز به کلید count در اتاق بود
         if res.status_code not in [200, 201]:
-            alt_rooms_payload = []
+            alt_rooms = []
             for _ in range(quantity):
-                alt_rooms_payload.append({
+                alt_rooms.append({
                     "room_id": int(room_snapp_id),
                     "count": 1,
                     "passengers": guests_payload
                 })
-            payload["rooms"] = alt_rooms_payload
+            payload["rooms"] = alt_rooms
             res = requests.post(create_url, json=payload, headers=headers, timeout=20)
 
         if res.status_code not in [200, 201]:
@@ -445,7 +427,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         if not snapp_code:
             return False, None, is_instant, f"کد پیگیری از اسنپ دریافت نشد: {res.text[:180]}"
 
-        # ۴. قفل موقت ۱۵ دقیقه‌ای در شبکه اسنپ
+        # ۵. قفل موقت ۱۵ دقیقه‌ای در شبکه اسنپ
         lock_url = f"{base_url}/booking/{snapp_code}/lock"
         try:
             requests.post(lock_url, headers=headers, timeout=12)
@@ -595,9 +577,14 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room_desc = extract_room_description(r_item)
         room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
         extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
-        inv_count = 100
-        board_type = r_item.get('board_type', 'bed_breakfast')
+        
+        real_inv = 10
+        if str(r_item.get('count', '')).isdigit() and int(r_item['count']) > 0:
+            real_inv = int(r_item['count'])
+        elif str(r_item.get('inventory', '')).isdigit() and int(r_item['inventory']) > 0:
+            real_inv = int(r_item['inventory'])
 
+        board_type = r_item.get('board_type', 'bed_breakfast')
         room_rules = (
             r_item.get('rules') or 
             r_item.get('policy') or 
@@ -606,18 +593,10 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             ''
         )
 
-        is_online = True
-        if 'is_online' in r_item:
-            is_online = bool(r_item['is_online'])
-        elif 'online' in r_item:
-            is_online = bool(r_item['online'])
-        elif r_item.get('booking_type') == 'offline':
-            is_online = False
+        room_is_online = is_room_online_instant(r_item)
+        count_val = 0 if room_is_online else real_inv
+        auto_approved_val = real_inv if room_is_online else 0
 
-        count_val = 0 if is_online else inv_count
-        auto_approved_val = inv_count if is_online else 0
-
-        # ذخیره مشخصات اتاق
         room, _ = Room.objects.update_or_create(
             hotel=hotel,
             snapptrip_room_id=snapp_room_id,
@@ -628,7 +607,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 'room_capacity': room_cap,
                 'extra_capacity': extra_cap,
                 'board_type': board_type,
-                'inventory': inv_count,
+                'inventory': real_inv,
                 'count': count_val,
                 'auto_approved_count': auto_approved_val,
                 'is_snapptrip': True,
@@ -820,62 +799,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 # ==============================================================================
 # بخش ۳: دایرکتوری پرسرعت و جدول هتل‌های اسنپ
 # ==============================================================================
-
-def _fetch_city_hotels_worker(city_item, base_url, headers):
-    city_id = city_item.get('id') or city_item.get('city_id') or city_item.get('code')
-    if not city_id:
-        return [], "شناسه شهر یافت نشد"
-
-    raw_city_name = ""
-    for k in ['name_fa', 'title_fa', 'persian_name', 'name', 'title', 'city_name', 'city']:
-        val = city_item.get(k)
-        if val and isinstance(val, str) and not val.isdigit():
-            raw_city_name = val.strip()
-            break
-
-    pure_name = IRAN_CITIES_MAP.get(str(raw_city_name).lower()) or IRAN_CITIES_MAP.get(str(city_id)) or raw_city_name
-    formatted_city = f"{city_id} - {pure_name}" if pure_name else f"{city_id}"
-
-    candidate_urls = [
-        f"{base_url}/cities/{city_id}/hotels",
-        f"{base_url}/cities/{city_id}/hotels/",
-        f"{base_url}/cities/{city_id}/hotels?limit=100&offset=0",
-        f"{base_url}/cities/{city_id}/hotel/?limit=100&offset=0",
-    ]
-
-    hotels_found = []
-    last_debug_err = ""
-
-    for url in candidate_urls:
-        try:
-            res = requests.get(url, headers=headers, timeout=12)
-            if res.status_code == 200:
-                batch = extract_list_from_response(res.json())
-                if batch:
-                    for h in batch:
-                        if not isinstance(h, dict):
-                            continue
-                        h_id = h.get('id') or h.get('hotel_id') or h.get('code')
-                        if not h_id:
-                            continue
-                        h_name = h.get('name_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
-                        stars = extract_stars_comprehensive(h)
-
-                        hotels_found.append(SnappHotelDirectory(
-                            snapp_hotel_id=h_id,
-                            name=str(h_name).strip(),
-                            city_name=formatted_city,
-                            city_id=city_id,
-                            stars=stars
-                        ))
-                    break
-            else:
-                last_debug_err = f"{url} -> کد {res.status_code}: {res.text[:100]}"
-        except Exception as e:
-            last_debug_err = f"{url} -> خطا: {e}"
-
-    return hotels_found, last_debug_err
-
 
 def sync_all_snapptrip_hotels_directory():
     base_url, headers = get_snapptrip_client_config()
