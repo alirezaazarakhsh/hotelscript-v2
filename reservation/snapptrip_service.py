@@ -334,16 +334,8 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     checkin_str = check_in_g.strftime('%Y-%m-%d')
     checkout_str = check_out_g.strftime('%Y-%m-%d')
 
-    # ۱. استخراج شماره موبایل کاربر واردشده
-    user_phone = ""
-    buyer = getattr(reservation, 'buyer', None)
-    if buyer and getattr(buyer, 'phone_number', None):
-        user_phone = str(buyer.phone_number).strip()
-    elif reservation.reserver_phone_number:
-        user_phone = str(reservation.reserver_phone_number).strip()
-
-    if not user_phone:
-        user_phone = "09120000000"
+    # ۱. تنظیم شماره موبایل ثابت رزروکننده برای اسنپ‌تریپ
+    user_phone = "09127752353"
 
     # ۲. استعلام ظرفیت لحظه‌ای قبل از ثبت
     is_avail, is_instant, pricing, err = check_room_realtime_availability(
@@ -353,6 +345,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         return False, None, False, err
 
     # ۳. مشخصات مسافر اصلی
+    buyer = getattr(reservation, 'buyer', None)
     profile = getattr(buyer, 'natural_profile', None) if buyer else None
     default_fn = (getattr(profile, 'first_name', '') if profile else '') or reservation.reserver_first_name or "مسافر"
     default_ln = (getattr(profile, 'last_name', '') if profile else '') or reservation.reserver_last_name or "اصلی"
