@@ -7,10 +7,18 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: hotel-scriptv1-z-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Second Server
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -22,16 +30,74 @@ jobs:
           SERVER_IP: ${{ secrets.SERVER_IP_HOTEL_SCRIPTV1_Z }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          # Validate required secrets without printing their values.
+          if [[ -z "${SSH_PRIVATE_KEY:-}" ]]; then
+            echo "::error::SSH_PRIVATE_KEY_HOTEL_SCRIPTV1_Z is missing."
+            exit 1
+          fi
 
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          if [[ -z "${SERVER_IP:-}" ]]; then
+            echo "::error::SERVER_IP_HOTEL_SCRIPTV1_Z is missing."
+            exit 1
+          fi
 
-          ssh-keyscan -p 2394 -H "$SERVER_IP" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+          install -d -m 700 "$HOME/.ssh"
+
+          # Save the private key.
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_rsa"
+          chmod 600 "$HOME/.ssh/id_rsa"
+
+          # Validate that the private key is readable and valid.
+          if ! ssh-keygen -y -f "$HOME/.ssh/id_rsa" > /dev/null; then
+            echo "::error::The SSH private key is invalid or has an unsupported format."
+            exit 1
+          fi
+
+          # Verify the server host key before trusting it.
+          SCAN_FILE="$(mktemp)"
+          trap 'rm -f "$SCAN_FILE"' EXIT
+
+          if ! ssh-keyscan -T 10 -p 2394 -t ed25519 -H "$SERVER_IP" \
+            > "$SCAN_FILE" 2>/dev/null; then
+            echo "::error::Could not retrieve the server SSH host key on port 2394."
+            echo "Check SERVER_IP, port 2394, server SSH service, and network firewall rules."
+            exit 1
+          fi
+
+          if [[ ! -s "$SCAN_FILE" ]]; then
+            echo "::error::ssh-keyscan returned no host keys."
+            exit 1
+          fi
+
+          cat "$SCAN_FILE" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          echo "SSH key and host key configured successfully."
+
+      - name: Test SSH connection
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP_HOTEL_SCRIPTV1_Z }}
+          SERVER_USER: ${{ secrets.SERVER_USER_HOTEL_SCRIPTV1_Z }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "${SERVER_USER:-}" ]]; then
+            echo "::error::SERVER_USER_HOTEL_SCRIPTV1_Z is missing."
+            exit 1
+          fi
+
+          ssh \
+            -i "$HOME/.ssh/id_rsa" \
+            -p 2394 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$SERVER_USER@$SERVER_IP" \
+            'echo "SSH connection successful"; hostname'
 
       - name: Deploy to Second Server
         env:
@@ -39,41 +105,58 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER_HOTEL_SCRIPTV1_Z }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           ssh \
-            -i ~/.ssh/id_rsa \
+            -i "$HOME/.ssh/id_rsa" \
             -p 2394 \
             -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
-            "$SERVER_USER@$SERVER_IP" << 'EOF'
+            -o ConnectTimeout=15 \
+            "$SERVER_USER@$SERVER_IP" 'bash -se' <<'REMOTE_SCRIPT'
 
-              set -euo pipefail
+          set -Eeuo pipefail
 
-              echo "Starting deployment..."
-              cd /var/hotelscript-v2
+          PROJECT_DIR="/var/hotelscript-v2"
+          BRANCH="hotel-scriptv1-z"
 
-              echo "Fetching branch..."
-              git fetch origin hotel-scriptv1-z
+          echo "Starting deployment..."
+          echo "Server: $(hostname)"
+          echo "Branch: $BRANCH"
 
-              echo "Checking out deployment branch..."
-              git checkout hotel-scriptv1-z
+          cd "$PROJECT_DIR"
 
-              echo "Updating code..."
-              git pull --ff-only origin hotel-scriptv1-z
+          # Ensure this is the expected Git repository.
+          git rev-parse --is-inside-work-tree > /dev/null
 
-              echo "Rebuilding and starting containers..."
-              docker compose up -d --build
+          echo "Fetching latest branch..."
+          git fetch origin "$BRANCH"
 
-              echo "Container status:"
-              docker compose ps
+          echo "Checking out deployment branch..."
+          if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+            git checkout "$BRANCH"
+          else
+            git checkout -b "$BRANCH" --track "origin/$BRANCH"
+          fi
 
-              echo "Deployment completed successfully at $(date)"
+          echo "Updating code..."
+          git pull --ff-only origin "$BRANCH"
 
-          EOF
+          echo "Checking Docker Compose configuration..."
+          docker compose config -q
+
+          echo "Rebuilding and starting containers..."
+          docker compose up -d --build --remove-orphans
+
+          echo "Container status:"
+          docker compose ps
+
+          echo "Deployment completed successfully at $(date)"
+          REMOTE_SCRIPT
 
       - name: Cleanup SSH key
         if: always()
         shell: bash
         run: |
-          rm -f ~/.ssh/id_rsa
+          rm -f "$HOME/.ssh/id_rsa"
