@@ -257,6 +257,42 @@ def calculate_customer_club_points(stars_val, price_val):
     return max(15, round((star_score + price_score) / 5) * 5)
 
 
+def _get_valid_phone(reservation, passenger=None):
+    """
+    شماره موبایل معتبر برمی‌گرداند.
+    اگر هیچ شماره‌ای پیدا نشود، ValueError با پیام فارسی می‌دهد.
+    """
+    phone = None
+    if passenger is not None:
+        phone = (
+            getattr(passenger, 'mobile_number', None)
+            or getattr(passenger, 'phone', None)
+            or getattr(passenger, 'phone_number', None)
+        )
+    if not phone:
+        phone = (
+            getattr(reservation, 'reserver_phone_number', None)
+            or getattr(reservation, 'phone', None)
+            or getattr(reservation, 'mobile', None)
+            or getattr(reservation, 'mobile_number', None)
+        )
+
+    phone = (str(phone) if phone is not None else "").strip()
+
+    if not phone:
+        raise ValueError("شماره موبایل رزروکننده یا مسافر خالی است. اسنپ شماره خالی را قبول نمی‌کند.")
+
+    # نرمال‌سازی شماره ایرانی
+    if phone.startswith('0') and len(phone) == 11:
+        phone = '98' + phone[1:]          # 0912... → 98912...
+    elif phone.startswith('+98'):
+        phone = phone[1:]                 # +98912... → 98912...
+    elif phone.startswith('0098'):
+        phone = phone[2:]                 # 0098912... → 98912...
+
+    return phone
+
+
 # ==============================================================================
 # بخش ۱: توابع رزرواسیون و پیگیری وضعیت در اسنپ‌تریپ (Booking Flow)
 # ==============================================================================
@@ -329,30 +365,37 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     if not is_avail:
         return False, None, False, err
 
-    # ۲. ساخت لیست مهمانان (foreigner=False الزامی است)
+    # ۲. ساخت لیست مهمانان (با شماره موبایل اجباری)
     guests_payload = []
     first_room = reservation.reservation_rooms.first()
-    if first_room and first_room.passengers.exists():
-        for p in first_room.passengers.all():
+
+    try:
+        if first_room and first_room.passengers.exists():
+            for p in first_room.passengers.all():
+                phone = _get_valid_phone(reservation, p)
+                guests_payload.append({
+                    "first_name": (getattr(p, 'first_name', None) or "مسافر").strip(),
+                    "last_name": (getattr(p, 'last_name', None) or "اصلی").strip(),
+                    "national_code": (getattr(p, 'national_code', None) or "").strip(),
+                    "phone_number": phone,
+                    "foreigner": False,
+                    "gender": getattr(p, 'gender', None) or "male"
+                })
+        else:
+            # اگر مسافری ثبت نشده، از اطلاعات رزروکننده استفاده می‌کنیم
+            phone = _get_valid_phone(reservation)
             guests_payload.append({
-                "first_name": p.first_name,
-                "last_name": p.last_name,
-                "national_code": p.national_code or "",
-                "phone_number": p.mobile_number or reservation.reserver_phone_number or "",
+                "first_name": (reservation.reserver_first_name or "مسافر").strip(),
+                "last_name": (reservation.reserver_last_name or "اصلی").strip(),
+                "national_code": (reservation.reserver_national_code or "").strip(),
+                "phone_number": phone,
                 "foreigner": False,
                 "gender": "male"
             })
-    else:
-        guests_payload.append({
-            "first_name": reservation.reserver_first_name or "مسافر",
-            "last_name": reservation.reserver_last_name or "اصلی",
-            "national_code": reservation.reserver_national_code or "",
-            "phone_number": reservation.reserver_phone_number or "",
-            "foreigner": False,
-            "gender": "male"
-        })
+    except ValueError as e:
+        return False, None, False, str(e)
 
-    # ۳. ساختار دقیق service.BookRoom (حل خطای cannot unmarshal number)
+    # ۳. ساختار دقیق service.BookRoom
     rooms_payload = []
     for _ in range(quantity):
         rooms_payload.append({
@@ -375,7 +418,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     try:
         res = requests.post(create_url, json=payload, headers=headers, timeout=20)
         
-        # اگر پاسخ ناموفق بود، تست ساختار با کلید count در اتاق
+        # اگر ساختار اول قبول نشد، با کلید count امتحان می‌کنیم
         if res.status_code not in [200, 201]:
             alt_rooms_payload = []
             for _ in range(quantity):
