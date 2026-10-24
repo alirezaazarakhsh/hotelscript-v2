@@ -19,7 +19,7 @@ class ZarinpalGatewayAdmin(admin.ModelAdmin):
                 '- URL تأیید: https://payment.zarinpal.com/pg/v4/payment/verify.json<br>'
                 'در حالت سندباکس، URLهای درگاه باید شامل "sandbox" باشند.<br>'
                 'URL ریدایرکت callback برای هدایت کاربر پس از پرداخت استفاده می‌شود. '
-                'مثال: https://safarnameh24.com/payment/watcher-info'
+                'مثال: https://zarvantrip.com/payment/watcher-info'
                 '</p>'
             )
         }),
@@ -62,7 +62,7 @@ class IranianGatewayAdmin(admin.ModelAdmin):
                 '- URL پرداخت: https://dargaah.ir/ird/startpay<br>'
                 '- URL تأیید: https://dargaah.ir/verification<br>'
                 'URL ریدایرکت callback برای هدایت کاربر پس از پرداخت استفاده می‌شود. '
-                'مثال: https://safarnameh24.com/payment/watcher-info'
+                'مثال: https://zarvantrip.com/payment/watcher-info'
                 '</p>'
             )
         }),

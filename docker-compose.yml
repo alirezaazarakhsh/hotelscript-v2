@@ -1,30 +1,28 @@
-version: "3.9"
-
 services:
   web:
     build: .
-    container_name: django_app
+    container_name: zarvantrip_django_app
     restart: unless-stopped
     command: bash /app/start.sh
     volumes:
       - /var/hotelscript-v2/media:/app/media
       - /var/hotelscript-v2/staticfiles:/app/staticfiles
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/backups/zarvantrip:/var/backups/zarvantrip
     ports:
       - "8000:8000"
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
       DB_ENGINE: "django.db.backends.postgresql"
-      DB_NAME: "safarname24"
+      DB_NAME: "zarvantrip"
       DB_USER: "postgres"
-      DB_PASSWORD: "admin"
+      DB_PASSWORD: "${DB_PASSWORD}"
       DB_HOST: "db"
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,safarnameh24.com,www.safarnameh24.com,cps.safarnameh24.com,www.cps.safarnameh24.com,chatbot.safarname24.com,www.chatbot.safarnameh24.com,91.107.179.92"
-      CSRF_TRUSTED_ORIGINS: "http://safarnameh24.com,https://safarnameh24.com,http://www.safarnameh24.com,https://www.safarnameh24.com,http://cps.safarnameh24.com,https://cps.safarnameh24.com,http://chatbot.safarnameh24.com,https://chatbot.safarnameh24.com,http://www.chatbot.safarnameh24.com,https://www.chatbot.safarnameh24.com,http://addmins.safarnameh24.com,https://addmins.safarnameh24.com"
+      MEDIA_BACKUP_DIR: "/var/backups/zarvantrip"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,zarvantrip.com,www.zarvantrip.com,cps.zarvantrip.com,www.cps.zarvantrip.com,chatbot.zarvantrip.com,www.chatbot.zarvantrip.com"
+      CSRF_TRUSTED_ORIGINS: "http://zarvantrip.com,https://zarvantrip.com,http://www.zarvantrip.com,https://www.zarvantrip.com,http://cps.zarvantrip.com,https://cps.zarvantrip.com,http://chatbot.zarvantrip.com,https://chatbot.zarvantrip.com,http://www.chatbot.zarvantrip.com,https://www.chatbot.zarvantrip.com"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
@@ -35,23 +33,23 @@ services:
 
   channels_worker:
     build: .
-    container_name: channels_worker
+    container_name: zarvantrip_channels_worker
     restart: unless-stopped
     command: python manage.py runworker default
     volumes:
       - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
       DB_ENGINE: "django.db.backends.postgresql"
-      DB_NAME: "safarname24"
+      DB_NAME: "zarvantrip"
       DB_USER: "postgres"
-      DB_PASSWORD: "admin"
+      DB_PASSWORD: "${DB_PASSWORD}"
       DB_HOST: "db"
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      MEDIA_BACKUP_DIR: "/var/backups/zarvantrip"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
@@ -62,23 +60,23 @@ services:
 
   celery:
     build: .
-    container_name: celery_worker
+    container_name: zarvantrip_celery_worker
     restart: unless-stopped
     command: celery -A safarname24 worker -l info --max-tasks-per-child=100 --max-memory-per-child=400000
     volumes:
       - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
       DB_ENGINE: "django.db.backends.postgresql"
-      DB_NAME: "safarname24"
+      DB_NAME: "zarvantrip"
       DB_USER: "postgres"
-      DB_PASSWORD: "admin"
+      DB_PASSWORD: "${DB_PASSWORD}"
       DB_HOST: "db"
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      MEDIA_BACKUP_DIR: "/var/backups/zarvantrip"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
@@ -89,23 +87,23 @@ services:
 
   celery_beat:
     build: .
-    container_name: celery_beat
+    container_name: zarvantrip_celery_beat
     restart: unless-stopped
     command: celery -A safarname24 beat -l info
     volumes:
       - /var/hotelscript-v2/media:/app/media
-      - /var/backups/sf24_9xkLp7:/var/backups/sf24_9xkLp7
+      - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_SECRET_KEY: "FmHQz8ff9bG9mRTB7iSksZFj8y4vt0-GMC_HTNaDdlBmdXl3JHTr2EqVI1xtjmPg1gorLC3uPKMDEd6DHf3F6g"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY}"
       DB_ENGINE: "django.db.backends.postgresql"
-      DB_NAME: "safarname24"
+      DB_NAME: "zarvantrip"
       DB_USER: "postgres"
-      DB_PASSWORD: "admin"
+      DB_PASSWORD: "${DB_PASSWORD}"
       DB_HOST: "db"
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
-      MEDIA_BACKUP_DIR: "/var/backups/sf24_9xkLp7"
+      MEDIA_BACKUP_DIR: "/var/backups/zarvantrip"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
@@ -117,7 +115,7 @@ services:
 
   db:
     image: postgres:15.2
-    container_name: postgres_db
+    container_name: zarvantrip_postgres_db
     restart: unless-stopped
     oom_score_adj: -1000
     command: >
@@ -129,17 +127,17 @@ services:
       -c max_connections=100
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - /var/lib/backsafarname/alirezaazarakhsh20_gmail.com:/var/lib/backsafarname/alirezaazarakhsh20_gmail.com
+      - /var/lib/backsafarname/zarvantrip:/var/lib/backsafarname/zarvantrip
     environment:
-      POSTGRES_DB: "safarname24"
+      POSTGRES_DB: "zarvantrip"
       POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "admin"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
     networks:
       - app_network
 
   redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: zarvantrip_redis
     restart: unless-stopped
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
@@ -152,10 +150,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  media_data:
-  backups:
-  db_backups:
-  staticfiles:
 
 networks:
   app_network:

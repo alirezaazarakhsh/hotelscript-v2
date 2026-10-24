@@ -46,7 +46,7 @@ def get_merchant_code(active_gateway):
                 'https://sandbox.zarinpal.com/pg/StartPay',
                 'https://sandbox.zarinpal.com/pg/v4/payment/verify.json',
                 'sandbox',
-                'https://safarnameh24.com/payment/watcher-info'
+                'https://zarvantrip.com/payment/watcher-info'
             )
         logger.info(f"مرچنت‌کد زرین‌پال: {gw.merchant_code}, حالت: {gw.mode}")
         return (
@@ -67,7 +67,7 @@ def get_merchant_code(active_gateway):
                 'https://dargaah.ir/sandbox/ird/startpay',
                 'https://dargaah.ir/sandbox/verification',
                 None,
-                'https://safarnameh24.com/payment/watcher-info'
+                'https://zarvantrip.com/payment/watcher-info'
             )
         logger.info(f"مرچنت‌کد ایران‌درگاه: {gw.merchant_code}")
         return (
@@ -250,7 +250,7 @@ class ReservationPaymentCheckAPIView(APIView):
                 }
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": "https://safarnameh24.com"
+                    "Referer": "https://zarvantrip.com"
                 }
                 logger.info(f"ارسال درخواست به ایران‌درگاه: {request_url}, داده‌ها: {data}")
                 resp = make_payment_request(request_url, data, headers)
@@ -669,7 +669,7 @@ class PaymentVerifyAPIView(APIView):
                 }
                 headers = {
                     "Content-Type": "application/json",
-                    "Referer": "https://safarnameh24.com"
+                    "Referer": "https://zarvantrip.com"
                 }
                 resp = make_payment_request(verify_url, data, headers)
                 try:

@@ -1,8 +1,12 @@
+import base64
+from io import StringIO
+from urllib.parse import quote
+
+import qrcode
 from django.core.management.base import BaseCommand
 from django_otp.plugins.otp_totp.models import TOTPDevice
+
 from authentication.models import BaseUser
-import qrcode
-from io import StringIO
 
 
 class Command(BaseCommand):
@@ -23,15 +27,15 @@ class Command(BaseCommand):
         # Check if user already has TOTP device
         existing_devices = TOTPDevice.objects.filter(user=user, confirmed=True)
         if existing_devices.exists():
-            self.stdout.write('\n' + '='*70)
+            self.stdout.write('\n' + '=' * 70)
             self.stdout.write(self.style.ERROR('⚠️  این کاربر قبلاً OTP فعال دارد!'))
-            self.stdout.write('='*70)
+            self.stdout.write('=' * 70)
             self.stdout.write(f'\n📱 شماره: {phone_number}')
             self.stdout.write(f'🔐 تعداد devices: {existing_devices.count()}')
             for device in existing_devices:
                 self.stdout.write(f'\n  - Device ID: {device.id}')
                 self.stdout.write(f'    Key: {device.key}')
-            self.stdout.write('\n' + '='*70)
+            self.stdout.write('\n' + '=' * 70)
             self.stdout.write(self.style.WARNING('💡 برای ساخت OTP جدید، ابتدا OTP قبلی را حذف کنید:'))
             self.stdout.write(f'   python3 manage.py removeotp {phone_number} --all\n')
             return
@@ -44,9 +48,7 @@ class Command(BaseCommand):
         )
         
         # Generate provisioning URI with issuer and account name, using base32 secret for iOS compatibility
-        import base64
-        from urllib.parse import quote
-        issuer = "safarnameh24.com"
+        issuer = "zarvantrip.com"
         account = phone_number
         # device.bin_key is the raw key, must be base32 encoded for QR
         secret = base64.b32encode(device.bin_key).decode('utf-8').replace('=', '')
@@ -71,21 +73,20 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ فایل QR با نام otp-qr.png ذخیره شد. با موبایل اسکن کنید.'))
 
         # Print QR as ASCII in terminal
-        from io import StringIO
         f = StringIO()
         qr.print_ascii(out=f, invert=True)
         f.seek(0)
-        self.stdout.write('\n' + '='*70)
+        self.stdout.write('\n' + '=' * 70)
         self.stdout.write('📱 QR Code - اسکن کنید با Google Authenticator')
-        self.stdout.write('='*70 + '\n')
+        self.stdout.write('=' * 70 + '\n')
         self.stdout.write(f.read())
-        self.stdout.write('='*70)
-        self.stdout.write('='*70)
+        self.stdout.write('=' * 70)
+        self.stdout.write('=' * 70)
         
-        self.stdout.write('\n' + '='*70)
+        self.stdout.write('\n' + '=' * 70)
         self.stdout.write('🔑 یا این اطلاعات را دستی وارد کنید:')
-        self.stdout.write('='*70)
+        self.stdout.write('=' * 70)
         self.stdout.write(f'Key: {device.key}')
         self.stdout.write(f'Account: {phone_number}')
-        self.stdout.write(f'Type: Time-based (TOTP)')
-        self.stdout.write('='*70 + '\n')
+        self.stdout.write('Type: Time-based (TOTP)')
+        self.stdout.write('=' * 70 + '\n')

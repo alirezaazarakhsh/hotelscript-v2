@@ -1,17 +1,20 @@
 #!/bin/sh
-# =#==================== مسیرهای ذخیره بکاپ =====================
-DB_BACKUP_DIR="${DB_BACKUP_DIR:-/var/lib/backsafarname/alirezaazarakhsh20_gmail.com}"
-MEDIA_BACKUP_DIR="${MEDIA_BACKUP_DIR:-/var/backups/sf24_9xkLp7}"
+# ===================== مسیرهای ذخیره بکاپ =====================
+DB_BACKUP_DIR="${DB_BACKUP_DIR:-/var/backups/zarvantrip/db}"
+MEDIA_BACKUP_DIR="${MEDIA_BACKUP_DIR:-/var/backups/zarvantrip/media}"
 MEDIA_SOURCE_DIR="${MEDIA_ROOT:-/app/media}"
 
 # ===================== تنظیم نام فایل با زمان شمسی از آرگومان =====================
 TIMESTAMP="$2"  # زمان شمسی از Python (مثل 1404-06-16-06-13)
 USER_ID="$3"    # user_id یا "system"
-DB_NAME="${DB_NAME:-safarname24}"
+DB_NAME="${DB_NAME:-zarvantrip}"
 DB_USER="${DB_USER:-postgres}"
 DB_HOST="${DB_HOST:-db}"
 DB_PORT="${DB_PORT:-5432}"
 DB_PASSWORD="${DB_PASSWORD:-admin}"
+
+# اگر USER_ID خالی بود به عنوان پیش‌فرض system در نظر گرفته شود
+USER_ID="${USER_ID:-system}"
 
 # مسیرهای نهایی با user_id
 DB_USER_DIR="$DB_BACKUP_DIR/$USER_ID"

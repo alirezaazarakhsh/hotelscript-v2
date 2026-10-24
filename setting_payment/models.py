@@ -50,10 +50,10 @@ class ZarinpalGateway(models.Model):
         help_text="URL تأیید پرداخت زرین‌پال. برای پروداکشن از 'https://payment.zarinpal.com/pg/v4/payment/verify.json' استفاده کنید."
     )
     callback_redirect_url = models.URLField(
-        default='https://safarnameh24.com/payment/watcher-info',
+        default='https://zarvantrip.com/payment/watcher-info',
         verbose_name="URL ریدایرکت callback",
         validators=[URLValidator()],
-        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info"
+        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://zarvantrip.com/payment/watcher-info"
     )
 
     def __str__(self):
@@ -127,10 +127,10 @@ class IranianGateway(models.Model):
         help_text="URL تأیید پرداخت ایران‌درگاه. معمولاً نیازی به تغییر ندارد."
     )
     callback_redirect_url = models.URLField(
-        default='https://safarnameh24.com/payment/watcher-info',
+        default='https://zarvantrip.com/payment/watcher-info',
         verbose_name="URL ریدایرکت callback",
         validators=[URLValidator()],
-        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info"
+        help_text="URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://zarvantrip.com/payment/watcher-info"
     )
 
     def __str__(self):

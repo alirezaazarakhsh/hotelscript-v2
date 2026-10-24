@@ -1,46 +1,79 @@
-name: CI/CD Backend Deploy
+name: CI/CD Backend Deploy - Hotel Script V1 Z
 
 on:
   push:
     branches:
-      - master
+      - hotel-scriptv1-z
+
+  workflow_dispatch:
 
 jobs:
   deploy:
+    name: Deploy to Second Server
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 🔐 Setup SSH
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY_HOTEL_SCRIPTV1_Z }}
+          SERVER_IP: ${{ secrets.SERVER_IP_HOTEL_SCRIPTV1_Z }}
+        shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p ~/.ssh
-          printf "%s\n" "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p 2394 -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: 🚀 Deploy to Server
+          ssh-keyscan -p 2394 -H "$SERVER_IP" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy to Second Server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP_HOTEL_SCRIPTV1_Z }}
+          SERVER_USER: ${{ secrets.SERVER_USER_HOTEL_SCRIPTV1_Z }}
+        shell: bash
         run: |
-          ssh -i ~/.ssh/id_rsa -p 2394 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
-            echo "🔄 Pulling latest code..."
-            cd /var/hotelscript-v2 || { echo "❌ Directory not found"; exit 1; }
-            git pull origin master
+          set -euo pipefail
 
-            echo "🛑 Stopping old containers..."
-            docker compose down || true
+          ssh \
+            -i ~/.ssh/id_rsa \
+            -p 2394 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_IP" << 'EOF'
 
-            echo "🏗 Rebuilding containers..."
-            docker compose up -d --build
+              set -euo pipefail
 
-            echo "✨ Deployment completed on $(date)"
+              echo "Starting deployment..."
+              cd /var/hotelscript-v2
+
+              echo "Fetching branch..."
+              git fetch origin hotel-scriptv1-z
+
+              echo "Checking out deployment branch..."
+              git checkout hotel-scriptv1-z
+
+              echo "Updating code..."
+              git pull --ff-only origin hotel-scriptv1-z
+
+              echo "Rebuilding and starting containers..."
+              docker compose up -d --build
+
+              echo "Container status:"
+              docker compose ps
+
+              echo "Deployment completed successfully at $(date)"
+
           EOF
 
-
-
-
-
-
-
-
-          
+      - name: Cleanup SSH key
+        if: always()
+        shell: bash
+        run: |
+          rm -f ~/.ssh/id_rsa

@@ -16,7 +16,7 @@ schema_view = get_schema_view(
     openapi.Info(
         title="API SITE HOTEL",
         default_version='v1',
-        description="API SAFARNAMEH24",
+        description="API ZARVANTRIP",
         terms_of_service="https://www.sevinhost.com/",
         contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
         license=openapi.License(name="checked ✅"),
@@ -30,7 +30,7 @@ schema_view_adminpanel_empty = get_schema_view(
     openapi.Info(
         title="API ADMIN HOTEL",
         default_version='v1',
-        description="API SAFARNAMEH24",
+        description="API ZARVANTRIP",
         terms_of_service="https://www.sevinhost.com/",
         contact=openapi.Contact(email="alirezaazarakhsh20@gmail.com"),
         license=openapi.License(name="checked ✅"),

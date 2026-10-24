@@ -6,7 +6,7 @@ import sys
 
 env = environ.Env(
     DB_ENGINE=(str, 'django.db.backends.postgresql'),
-    DB_NAME=(str, 'safarname24'),
+    DB_NAME=(str, 'zarvantrip'),
     DB_USER=(str, 'postgres'),
     DB_PASSWORD=(str, ''),
     DB_HOST=(str, 'localhost'),
@@ -17,38 +17,52 @@ environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
-DEBUG = True
+# خواندن SECRET_KEY از متغیر محیطی با مقدار پیش‌فرض قبلی
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+)
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    "safarnameh24.com",
-    "www.safarnameh24.com",
-    "cps.safarnameh24.com",
-    "www.cps.safarnameh24.com",
-    "chatbot.safarnameh24.com",
-    "www.chatbot.safarnameh24.com",
-    "91.107.140.82",
-]
+# خواندن DEBUG از متغیر محیطی داپکر (پیش‌فرض True)
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1')
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://safarnameh24.com",
-    "https://safarnameh24.com",
-    "http://www.safarnameh24.com",
-    "https://www.safarnameh24.com",
-    "http://cps.safarnameh24.com",
-    "https://cps.safarnameh24.com",
-    "http://chatbot.safarnameh24.com",
-    "https://chatbot.safarnameh24.com",
-    "http://www.chatbot.safarnameh24.com",
-    "https://www.chatbot.safarnameh24.com",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# خواندن ALLOWED_HOSTS از محیط Docker یا استفاده از لیست پیش‌فرض
+if os.environ.get('ALLOWED_HOSTS'):
+    ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS').split(',')]
+else:
+    ALLOWED_HOSTS = [
+        "localhost",
+        "127.0.0.1",
+        "zarvantrip.com",
+        "www.zarvantrip.com",
+        "cps.zarvantrip.com",
+        "www.cps.zarvantrip.com",
+        "chatbot.zarvantrip.com",
+        "www.chatbot.zarvantrip.com",
+        "91.107.140.82",
+    ]
+
+# خواندن CSRF_TRUSTED_ORIGINS از متغیر محیطی داکر یا استفاده از لیست پیش‌فرض
+if os.environ.get('CSRF_TRUSTED_ORIGINS'):
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS').split(',')]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://zarvantrip.com",
+        "https://zarvantrip.com",
+        "http://www.zarvantrip.com",
+        "https://www.zarvantrip.com",
+        "http://cps.zarvantrip.com",
+        "https://cps.zarvantrip.com",
+        "http://chatbot.zarvantrip.com",
+        "https://chatbot.zarvantrip.com",
+        "http://www.chatbot.zarvantrip.com",
+        "https://www.chatbot.zarvantrip.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -80,7 +94,7 @@ INSTALLED_APPS = [
     'bashgah_moshtarian',
     'drf_yasg',
     'corsheaders',
-    'safarname24',
+    'zarvantrip',
     'icons',
     'setting_sms',
     'notification',
@@ -111,7 +125,7 @@ if DEBUG and 'test' not in sys.argv:
     INSTALLED_APPS += ['debug_toolbar']
     MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware"] + MIDDLEWARE
 
-ROOT_URLCONF = 'safarname24.urls'
+ROOT_URLCONF = 'zarvantrip.urls'
 
 TEMPLATES = [
     {
@@ -129,15 +143,15 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'safarname24.wsgi.application'
-ASGI_APPLICATION = 'safarname24.asgi.application'
+WSGI_APPLICATION = 'zarvantrip.wsgi.application'
+ASGI_APPLICATION = 'zarvantrip.asgi.application'
 
 # تنظیمات Channels
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [("redis" if os.environ.get('REDIS_HOST') else "127.0.0.1", 6379)],
+            "hosts": [(os.environ.get('REDIS_HOST', '127.0.0.1'), int(os.environ.get('REDIS_PORT', 6379)))],
         },
     },
 }
@@ -146,7 +160,7 @@ CHANNEL_LAYERS = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:6379/1",
+        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:{os.environ.get('REDIS_PORT', '6379')}/1",
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
@@ -154,8 +168,10 @@ CACHES = {
 }
 
 # تنظیمات Celery
-CELERY_BROKER_URL = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
+_REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
+_REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+CELERY_BROKER_URL = f'redis://{_REDIS_HOST}:{_REDIS_PORT}/0'
+CELERY_RESULT_BACKEND = f'redis://{_REDIS_HOST}:{_REDIS_PORT}/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -171,12 +187,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
         'schedule': 300.0,
     },
-    # تسک همگام‌سازی خودکار هتل‌های اسنپ‌تریپ هر ۱ دقیقه (۶۰ ثانیه)
     'auto-sync-snapptrip-hotels-every-minute': {
         'task': 'reservation.tasks.auto_sync_snapptrip_hotels_task',
         'schedule': 60.0,
     },
-    # تسک پیگیری خودکار وضعیت رزروهای معلق و استعلامی اسنپ هر ۲ دقیقه (۱۲۰ ثانیه)
     'check-pending-snapptrip-inquiries': {
         'task': 'reservation.tasks.check_pending_snapptrip_inquiries_task',
         'schedule': 120.0,
@@ -189,7 +203,7 @@ DATABASES = {
         'NAME': env('DB_NAME'),
         'USER': env('DB_USER'),
         'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST') if not os.environ.get('DB_HOST') else os.environ.get('DB_HOST'),
+        'HOST': os.environ.get('DB_HOST') or env('DB_HOST'),
         'PORT': env('DB_PORT'),
     }
 }
@@ -209,7 +223,7 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SWAGGER_SETTINGS = {
-    'DEFAULT_AUTO_SCHEMA_CLASS': 'safarname24.swagger_schemas.CustomSwaggerAutoSchema',
+    'DEFAULT_AUTO_SCHEMA_CLASS': 'zarvantrip.swagger_schemas.CustomSwaggerAutoSchema',
     'SECURITY_DEFINITIONS': {
         'Bearer': {
             'type': 'apiKey',
@@ -239,13 +253,13 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'safarname24.pagination.Paginator',
+    'DEFAULT_PAGINATION_CLASS': 'zarvantrip.pagination.Paginator',
     'PAGE_SIZE': 18,
 }
 
 if not DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
-        'safarname24.renderers.ResponseRenderer',
+        'zarvantrip.renderers.ResponseRenderer',
     )
 
 SIMPLE_JWT = {
@@ -265,18 +279,18 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://safarnameh24.com",
-    "https://safarnameh24.com",
-    "http://www.safarnameh24.com",
-    "https://www.safarnameh24.com",
-    "http://cps.safarnameh24.com",
-    "https://cps.safarnameh24.com",
-    "http://chatbot.safarnameh24.com",
-    "https://chatbot.safarnameh24.com",
-    "http://www.chatbot.safarnameh24.com",
-    "https://www.chatbot.safarnameh24.com",
-    "http://addmins.safarnameh24.com",
-    "https://addmins.safarnameh24.com",
+    "http://zarvantrip.com",
+    "https://zarvantrip.com",
+    "http://www.zarvantrip.com",
+    "https://www.zarvantrip.com",
+    "http://cps.zarvantrip.com",
+    "https://cps.zarvantrip.com",
+    "http://chatbot.zarvantrip.com",
+    "https://chatbot.zarvantrip.com",
+    "http://www.chatbot.zarvantrip.com",
+    "https://www.chatbot.zarvantrip.com",
+    "http://addmins.zarvantrip.com",
+    "https://addmins.zarvantrip.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -350,7 +364,7 @@ LOGGING = {
 
 ZARINPAL_CONFIG = {
     'SANDBOX': False,
-    'CALLBACK_URL': 'https://safarnameh24.com/gateways/verify/',
+    'CALLBACK_URL': 'https://zarvantrip.com/gateways/verify/',
 }
 
 TINYMCE_DEFAULT_CONFIG = {
@@ -372,7 +386,7 @@ ENVIRONMENT = 'production'
 if ENVIRONMENT == 'local':
     CALLBACK_REDIRECT_BASE_URL = 'http://localhost:3000'
 else:
-    CALLBACK_REDIRECT_BASE_URL = 'https://safarnameh24.com'
+    CALLBACK_REDIRECT_BASE_URL = 'https://zarvantrip.com'
 
 # تنظیمات درگاه زرین‌پال
 ZARINPAL_REQUEST_URL = 'https://payment.zarinpal.com/pg/v4/payment/request.json'
@@ -380,5 +394,5 @@ ZARINPAL_PAYMENT_URL = 'https://payment.zarinpal.com/pg/StartPay'
 ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
 
 # تنظیمات درگاه ایران‌درگاه
-IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
+IRANIANGATEWAY_REFERER = 'https://zarvantrip.com'
 APPEND_SLASH = False
