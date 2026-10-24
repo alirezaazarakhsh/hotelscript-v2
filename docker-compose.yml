@@ -127,7 +127,7 @@ services:
       -c max_connections=100
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - /var/lib/backsafarname/zarvantrip:/var/lib/backsafarname/zarvantrip
+      - /var/backups/zarvantrip:/var/lib/backsafarname/zarvantrip
     environment:
       POSTGRES_DB: "zarvantrip"
       POSTGRES_USER: "postgres"
