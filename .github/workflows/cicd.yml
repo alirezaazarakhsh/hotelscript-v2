@@ -118,7 +118,7 @@ jobs:
 
           set -Eeuo pipefail
 
-          PROJECT_DIR="/var/hotelscript-v2"
+          PROJECT_DIR="/var/hotelscript-v2-new"
           BRANCH="hotel-scriptv1-z"
 
           echo "Starting deployment..."
