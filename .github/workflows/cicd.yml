@@ -59,7 +59,7 @@ jobs:
           SCAN_FILE="$(mktemp)"
           trap 'rm -f "$SCAN_FILE"' EXIT
 
-          if ! ssh-keyscan -T 10 -p 2394 -t ed25519 -H "$SERVER_IP" \
+          if ! ssh-keyscan -T 10 -p 22 -t ed25519 -H "$SERVER_IP" \
             > "$SCAN_FILE" 2>/dev/null; then
             echo "::error::Could not retrieve the server SSH host key on port 2394."
             echo "Check SERVER_IP, port 2394, server SSH service, and network firewall rules."
