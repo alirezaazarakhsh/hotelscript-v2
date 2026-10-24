@@ -55,7 +55,12 @@ from .models import (
     ReservationRoomPassenger,
     UserCancellation
 )
-from .snapptrip_service import sync_all_snapptrip_hotels_directory, sync_hotel_and_rooms_from_snapp
+from .snapptrip_service import (
+    sync_all_snapptrip_hotels_directory, 
+    sync_hotel_and_rooms_from_snapp,
+    get_snapptrip_booking_status,
+    get_snapptrip_wallet_balance
+)
 
 
 @admin.register(Province)
@@ -999,12 +1004,14 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
+    # کلیک روی کد اسنپ برای استعلام زنده وضعیت
     @admin.display(description='کد رزرو اسنپ')
     def snapp_code_fa(self, obj):
         if obj.snapp_reservation_code:
+            url = reverse('admin:reservation-check-snapp-status', args=[obj.pk])
             return format_html(
-                '<span style="font-family: monospace; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 2px 6px; border-radius: 4px;">{}</span>',
-                obj.snapp_reservation_code
+                '<a href="{}" title="کلیک برای استعلام زنده وضعیت و خطای اسنپ" style="font-family: monospace; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 2px 6px; border-radius: 4px; text-decoration: none;">🔍 {}</a>',
+                url, obj.snapp_reservation_code
             )
         return "-"
 
@@ -1012,6 +1019,12 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def snapp_status_colored(self, obj):
         if not obj.is_snapptrip_reservation:
             return format_html('<span style="color:#aaa;">رزرو محلی</span>')
+
+        if obj.snapp_status and obj.snapp_status.startswith('failed'):
+            return format_html(
+                '<span style="color: white; background: #dc3545; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;" title="{}">ناموفق ⚠️</span>',
+                obj.snapp_status
+            )
 
         status_colors = {
             'confirmed': ('#28a745', 'تأیید نهایی'),
@@ -1027,6 +1040,51 @@ class ReservationhotelAdmin(NestedModelAdmin):
             '<span style="color: white; background: {}; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
             color, label
         )
+
+    # متدهای استعلام زنده و عیب‌یابی رزرو اسنپ
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:reservation_id>/check-snapp-status/',
+                self.admin_site.admin_view(self.check_snapp_status_action),
+                name='reservation-check-snapp-status',
+            ),
+        ]
+        return custom_urls + urls
+
+    def check_snapp_status_action(self, request, reservation_id):
+        """استعلام زنده وضعیت رزرو و موجودی کیف‌پول اسنپ همراه با نمایش پیام خطا"""
+        obj = self.get_object(request, reservation_id)
+        if not obj or not obj.snapp_reservation_code:
+            self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
+            return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+
+        status_name, raw_res = get_snapptrip_booking_status(obj.snapp_reservation_code)
+        obj.snapp_status = status_name
+        obj.save(update_fields=['snapp_status'])
+
+        balance, b_msg = get_snapptrip_wallet_balance()
+
+        msg = (
+            f"🔍 وضعیت در اسنپ: {status_name} | "
+            f"موجودی کیف‌پول اسنپ شما: {int(balance):,} تومان | "
+            f"پاسخ کامل سرور اسنپ: {raw_res[:350]}"
+        )
+        self.message_user(request, msg, messages.INFO)
+        return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj and obj.snapp_reservation_code:
+            check_url = reverse('admin:reservation-check-snapp-status', args=[obj.pk])
+            extra_context['title'] = format_html(
+                '{} &nbsp;&nbsp; <a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام وضعیت و خطای اسنپ</a>',
+                f"ویرایش رزرو {obj.tracking_code}",
+                check_url
+            )
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
@@ -1380,9 +1438,12 @@ class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
         return super().response_change(request, obj)
 
 
+# ==========================================
+# ثبت تنظیمات وب‌سرویس اسنپ در ادمین
+# ==========================================
 @admin.register(SnappTripSetting)
 class SnappTripSettingAdmin(admin.ModelAdmin):
-    list_display = ('title', 'base_url', 'is_active', 'has_api_key')
+    list_display = ('title', 'base_url', 'is_active', 'has_api_key', 'wallet_balance_display')
     fieldsets = (
         ('اطلاعات احراز هویت وب‌سرویس اسنپ‌تریپ', {
             'fields': ('title', 'base_url', 'swagger_url', 'api_key', 'is_active'),
@@ -1394,6 +1455,11 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
         return bool(obj.api_key)
     has_api_key.boolean = True
     has_api_key.short_description = "کلید ثبت شده؟"
+
+    def wallet_balance_display(self, obj):
+        bal, _ = get_snapptrip_wallet_balance()
+        return f"{int(bal):,} تومان" if bal else "۰ تومان"
+    wallet_balance_display.short_description = "موجودی کیف‌پول در اسنپ"
 
     def has_add_permission(self, request):
         return not SnappTripSetting.objects.exists()
