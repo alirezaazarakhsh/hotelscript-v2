@@ -27,7 +27,7 @@ defusedxml==0.7.1
 Django==4.2.20
 django-admin-interface==0.30.0
 django-allauth==0.61.1
-django-channels==0.7.0
+# django-channels==0.7.0
 django-ckeditor==6.7.3
 django-colorfield==0.13.0
 django-cors-headers==4.3.1
