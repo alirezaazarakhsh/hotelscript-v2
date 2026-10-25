@@ -8,7 +8,7 @@ from channels.auth import AuthMiddlewareStack
 
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
-    "safarname24.settings"
+    "zarvantrip.settings"
 )
 
 

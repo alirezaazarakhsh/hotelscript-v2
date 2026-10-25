@@ -22,4 +22,4 @@ sleep 2
 
 # ================= اجرای سرور Daphne برای ASGI =================
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] اجرای سرور Daphne" | tee -a $DJANGO_LOG
-daphne -b 0.0.0.0 -p 8000 safarname24.asgi:application >> $DJANGO_LOG 2>&1
+daphne -b 0.0.0.0 -p 8000 zarvantrip.asgi:application >> $DJANGO_LOG 2>&1

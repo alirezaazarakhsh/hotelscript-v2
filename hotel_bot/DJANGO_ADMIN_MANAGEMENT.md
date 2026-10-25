@@ -168,6 +168,6 @@ await DjangoAdminManager.manage_admin_groups(chat_id, context, base_user_id)
 
 ## نویسنده
 
-این سیستم برای پروژه Safarname24 توسعه داده شده است.
+این سیستم برای پروژه zarvantrip توسعه داده شده است.
 
 تاریخ: بهمن 1404

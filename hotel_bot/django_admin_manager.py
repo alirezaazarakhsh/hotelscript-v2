@@ -8,7 +8,7 @@ import os
 import sys
 
 # Setup Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'zarvantrip.settings')
 django.setup()
 
 from authentication.models import Admin, BaseUser

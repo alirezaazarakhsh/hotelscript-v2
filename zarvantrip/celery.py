@@ -2,10 +2,10 @@ import os
 from celery import Celery
 
 # تنظیم محیط Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'zarvantrip.settings')
 
 # ایجاد نمونه Celery
-app = Celery('safarname24')
+app = Celery('zarvantrip')
 
 # بارگذاری تنظیمات از فایل settings.py
 app.config_from_object('django.conf:settings', namespace='CELERY')

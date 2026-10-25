@@ -16,7 +16,7 @@ from telegram.ext import (
 
 import os
 # Setup Django before importing models
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'safarname24.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'zarvantrip.settings')
 sys.path.insert(0, '/app')
 django.setup()
 
