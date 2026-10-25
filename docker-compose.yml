@@ -5,8 +5,8 @@ services:
     restart: unless-stopped
     command: bash /app/start.sh
     volumes:
-      - /var/hotelscript-v2/media:/app/media
-      - /var/hotelscript-v2/staticfiles:/app/staticfiles
+      - /var/hotelscript-v2-new/media:/app/media
+      - /var/hotelscript-v2-new/staticfiles:/app/staticfiles
       - /var/backups/zarvantrip:/var/backups/zarvantrip
     ports:
       - "8000:8000"
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
     command: python manage.py runworker default
     volumes:
-      - /var/hotelscript-v2/media:/app/media
+      - /var/hotelscript-v2-new/media:/app/media
       - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
@@ -62,9 +62,9 @@ services:
     build: .
     container_name: zarvantrip_celery_worker
     restart: unless-stopped
-    command: celery -A safarname24 worker -l info --max-tasks-per-child=100 --max-memory-per-child=400000
+    command: celery -A zarvantrip worker -l info --max-tasks-per-child=100 --max-memory-per-child=400000
     volumes:
-      - /var/hotelscript-v2/media:/app/media
+      - /var/hotelscript-v2-new/media:/app/media
       - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
@@ -89,9 +89,9 @@ services:
     build: .
     container_name: zarvantrip_celery_beat
     restart: unless-stopped
-    command: celery -A safarname24 beat -l info
+    command: celery -A zarvantrip beat -l info
     volumes:
-      - /var/hotelscript-v2/media:/app/media
+      - /var/hotelscript-v2-new/media:/app/media
       - /var/backups/zarvantrip:/var/backups/zarvantrip
     environment:
       DJANGO_DEBUG: "False"
