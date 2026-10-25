@@ -39,7 +39,7 @@ else:
         "www.cps.zarvantrip.com",
         "chatbot.zarvantrip.com",
         "www.chatbot.zarvantrip.com",
-        "91.107.140.82",
+        "37.152.181.133",
     ]
 
 # خواندن CSRF_TRUSTED_ORIGINS از متغیر محیطی داکر یا استفاده از لیست پیش‌فرض
@@ -57,6 +57,8 @@ else:
         "https://chatbot.zarvantrip.com",
         "http://www.chatbot.zarvantrip.com",
         "https://www.chatbot.zarvantrip.com",
+        "http://37.152.181.133",
+        "http://37.152.181.133:8000",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
@@ -292,6 +294,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.chatbot.zarvantrip.com",
     "http://addmins.zarvantrip.com",
     "https://addmins.zarvantrip.com",
+    "http://37.152.181.133",
+    "http://37.152.181.133:8000",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
