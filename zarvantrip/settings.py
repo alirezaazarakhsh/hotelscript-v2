@@ -23,7 +23,7 @@ SECRET_KEY = os.environ.get(
     "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
 )
 
-# خواندن DEBUG از متغیر محیطی داپکر (پیش‌فرض True)
+# خواندن DEBUG از متغیر محیطی داکر (پیش‌فرض True)
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1')
 
 # خواندن ALLOWED_HOSTS از محیط Docker یا استفاده از لیست پیش‌فرض
@@ -68,6 +68,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 INSTALLED_APPS = [
+    'daphne',  # برای Channels 4 حتماً باید در سطر اول باشد
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
