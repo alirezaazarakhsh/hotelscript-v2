@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     'settingchatbot',
     'chat_api',
     'user_subscription_settings',
+    'hotel_backup',
     
     'channels',
     'nested_admin',
