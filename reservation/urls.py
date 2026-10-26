@@ -24,6 +24,7 @@ from .views import (
     ReservationRoomDetailAPIView,
     UserCancellationCreateAPIView,
     WalletWithdrawAPIView
+    
 )
 
 app_name = 'reservation'
@@ -43,29 +44,25 @@ urlpatterns = [
     path('hotels/<slug:slug>/tags/', views.HotelTagsView.as_view(), name='hotel-tags'),
     path('hotels/<slug:slug>/gallery/', views.HotelGalleryView.as_view(), name='hotel-gallery'),
 
-    # ==== Hotel Listings (آدرس‌های منطبق با فرانت‌اند) ====
-    path('suggested-hotels/', SuggesteHotelListView.as_view(), name='suggested-hotels'),
-    path('amazing-hotels/', AmazingHotelsListView.as_view(), name='amazing-hotels'),
-    path('best-sellers/', BestSellersListView.as_view(), name='best-sellers'),
-    path('by-hotel-slug/<str:hotel_slug>/', HomeHotelByHotelSlugView.as_view(), name='by-hotel-slug'),
-
-    # ==== Hotel Listings (آدرس‌های قدیمی برای پشتیبانی کامل) ====
-    path('hotels/suggested-hotels/', SuggesteHotelListView.as_view(), name='suggested-hotels-legacy'),
-    path('hotels/amazing-hotels/', AmazingHotelsListView.as_view(), name='amazing-hotels-legacy'),
-    path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-legacy'),
-    path('hotels/by-hotel-slug/<str:hotel_slug>/', HomeHotelByHotelSlugView.as_view(), name='hotels-by-hotel-slug-legacy'),
-
+    # ==== Hotel Listings ====
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
     path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
+    path('hotels/suggested-hotels/', SuggesteHotelListView.as_view(), name='suggested-hotels'),
+    path('hotels/amazing-hotels/', AmazingHotelsListView.as_view(), name='amazing-hotels'),
+    path('hotels/best-sellers/', BestSellersListView.as_view(), name='best-sellers-list'),
+    path('hotels/by-hotel-slug/<str:hotel_slug>/', HomeHotelByHotelSlugView.as_view(), name='hotels-by-hotel-slug'),
     path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),
     path('best-hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
 
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
-    path('hotel-facilities/', views.AllFacilitiesView.as_view(), name='hotel-facilities-short'),
-    path('room-facilities/', views.AllRoomFacilitiesView.as_view(), name='room-facilities-short'),
+    
+    
+     # ==== Facilities and Services all ====
     path('hotels/hotel-facilities/', views.AllFacilitiesView.as_view(), name='all-facilities'),
     path('hotels/room-facilities/', views.AllRoomFacilitiesView.as_view(), name='all-room-facilities'),
+
+
 
     # ==== Cities ====
     path('cities/homepage/', views.HomePageCityListView.as_view(), name='homepage-city-list'),
@@ -90,7 +87,7 @@ urlpatterns = [
     path('reservation/hotel-slug/<str:tracking_code>/', HotelImageAPIView.as_view(), name='hotel-image'),
     path("reservation/invoice/<str:tracking_code>/", ReservationInvoiceAPIView.as_view(), name="reservation-invoice"),
     path('reservation/description/<str:tracking_code>/', ReservationDescriptionAPIView.as_view(), name='reservation-description'),
-    path('reservation/form/<str:tracking_code>/', ReservationRoomDetailAPIView.as_view(), name='reservation-room-detail'),
+    path('reservation/form/<str:tracking_code>/', ReservationRoomDetailAPIView.as_view(),name='reservation-room-detail'),
     path('reservation/passengers/', PassengerListForReservationView.as_view(), name='reservation-passenger-list'),
     path('reservation/wallet/withdraw/<str:tracking_code>/', WalletWithdrawAPIView.as_view(), name='wallet-withdraw'),
     
@@ -99,10 +96,11 @@ urlpatterns = [
     path('cancellation-reasons/', CancellationReasonListAPIView.as_view(), name='cancellation-reasons-list'),
     
     # ==== User Cancellations ====
-    path('reservation/cancellations/create/', UserCancellationCreateAPIView.as_view(), name='user-cancellation-create'),
+    path('reservation/cancellations/create/', UserCancellationCreateAPIView.as_view(),  name='user-cancellation-create'),
+    
     
     # ==== Invoice Settings ====
-    path('reservation/factor/signator/', ReservationInvoiceSettingsAPIView.as_view(), name='reservation-invoice-settings'),
+    path('reservation/factor/signator/',ReservationInvoiceSettingsAPIView.as_view(),name='reservation-invoice-settings' ),
     
     # ==== Invoice Detail ====
     path('reservation/invoices/<str:tracking_code>/', ReservationInvoiceDetailAPIView.as_view(), name='reservation-invoice-detail'),
@@ -115,4 +113,7 @@ urlpatterns = [
     
     # === Chat-bot API ===
     path('hotels/chatbot/', HotelChatBotListView.as_view(), name='hotel-chatbot-list'),
+    
 ]
+
+  
