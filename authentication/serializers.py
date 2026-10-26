@@ -9,7 +9,7 @@ from django.core.validators import RegexValidator
 from django.db import IntegrityError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from zarvantrip.serializers import ErrorMessageSerializerMixin
+from safarname24.serializers import ErrorMessageSerializerMixin
 from .validators import validate_phone_number
 from .models import BaseUser, CardNumber, JuridicalCardNumber, NaturalProfile, JuridicalProfile, JuridicalProfileDocument
 
