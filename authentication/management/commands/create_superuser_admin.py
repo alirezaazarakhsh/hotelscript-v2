@@ -10,12 +10,13 @@ class Command(BaseCommand):
         parser.add_argument('--password', type=str, required=True, help='رمز عبور ادمین')
 
     def handle(self, *args, **options):
-        phone = options['phone']
-        password = options['password']
+        phone = options['phone'].strip()
+        password = options['password'].strip()
 
         user, created = BaseUser.objects.get_or_create(phone_number=phone)
         user.set_password(password)
-        user.is_staff = True
+        
+        # در BaseUser فیلد is_staff به صورت خودکار از روی is_superuser خوانده می‌شود
         user.is_superuser = True
         user.is_active = True
         user.save()
