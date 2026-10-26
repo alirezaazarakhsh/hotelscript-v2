@@ -5,7 +5,6 @@ from urllib.parse import quote
 import qrcode
 from django.core.management.base import BaseCommand
 from django_otp.plugins.otp_totp.models import TOTPDevice
-
 from authentication.models import BaseUser
 
 
@@ -47,18 +46,15 @@ class Command(BaseCommand):
             confirmed=True
         )
         
-        # Generate provisioning URI with issuer and account name, using base32 secret for iOS compatibility
         issuer = "zarvantrip.com"
         account = phone_number
-        # device.bin_key is the raw key, must be base32 encoded for QR
         secret = base64.b32encode(device.bin_key).decode('utf-8').replace('=', '')
         uri = f"otpauth://totp/{quote(issuer)}:{quote(account)}?secret={secret}&issuer={quote(issuer)}"
         
         self.stdout.write(self.style.SUCCESS(f'\nTOTP device created for {phone_number}'))
-        self.stdout.write(f'Device ID: {device.id}')
-        self.stdout.write(f'Key: {device.key}\n')
+        self.stdout.write(f'Device ID: {device.id}\n')
         
-        # Generate QR code, show in terminal, and save as PNG
+        # Generate QR code
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -67,26 +63,23 @@ class Command(BaseCommand):
         )
         qr.add_data(uri)
         qr.make(fit=True)
-        # Save as PNG
         img = qr.make_image(fill_color="black", back_color="white")
         img.save("otp-qr.png")
-        self.stdout.write(self.style.SUCCESS('✅ فایل QR با نام otp-qr.png ذخیره شد. با موبایل اسکن کنید.'))
 
         # Print QR as ASCII in terminal
         f = StringIO()
         qr.print_ascii(out=f, invert=True)
         f.seek(0)
         self.stdout.write('\n' + '=' * 70)
-        self.stdout.write('📱 QR Code - اسکن کنید با Google Authenticator')
+        self.stdout.write('📱 QR Code - اسکن کنید با Google Authenticator:')
         self.stdout.write('=' * 70 + '\n')
         self.stdout.write(f.read())
         self.stdout.write('=' * 70)
-        self.stdout.write('=' * 70)
         
         self.stdout.write('\n' + '=' * 70)
-        self.stdout.write('🔑 یا این اطلاعات را دستی وارد کنید:')
+        self.stdout.write('🔑 یا اگر دوربین ندارید، این کد را به صورت دستی وارد کنید:')
         self.stdout.write('=' * 70)
-        self.stdout.write(f'Key: {device.key}')
-        self.stdout.write(f'Account: {phone_number}')
+        self.stdout.write(f'Secret Key (Base32): {secret}')
+        self.stdout.write(f'Account Name: {phone_number}')
         self.stdout.write('Type: Time-based (TOTP)')
         self.stdout.write('=' * 70 + '\n')
