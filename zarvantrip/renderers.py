@@ -1,3 +1,4 @@
+from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework import renderers
 import json
 
@@ -24,7 +25,7 @@ class ResponseRenderer(renderers.JSONRenderer):
             else:
                 response_dict["data"] = data
 
-        json_string = json.dumps(response_dict)
+            json_string = json.dumps(response_dict, cls=DjangoJSONEncoder)
 
         if isinstance(json_string, str):
             json_bytes = json_string.encode('utf-8')
