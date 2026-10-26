@@ -3,7 +3,7 @@ import os
 import shutil
 import zipfile
 import tempfile
-from io import BytesIO
+from io import BytesIO, StringIO
 from django.conf import settings
 from django.core.management import call_command
 from django.db import transaction
@@ -11,43 +11,41 @@ from django.db import transaction
 # نام اپلیکیشن اصلی هتل‌ها (در صورت تفاوت، تغییر دهید)
 APP_NAME = 'reservation' 
 
-# مدل‌ها دقیقاً بر اساس اولویت وابستگی (اول پدرها، بعد فرزندها):
+# مدل‌ها دقیقاً بر اساس اولویت وابستگی (اول والدها، بعد فرزندها):
 BACKUP_MODELS = [
-    # ۱. ابتدا آیکون‌ها (پایه کل سیستم)
+    # ۱. آیکون‌ها و سطوح کاربری (پایه سیستم)
     'icons.IconShortcut',
-    
-    # ۲. سطوح کاربری (وابسته به آیکون)
     'config.UserLevel',
     
-    # ۳. تعاریف پایه هتل‌ها و شهرها
+    # ۲. تعاریف پایه هتل‌ها و شهرها
     f'{APP_NAME}.Province',
     f'{APP_NAME}.City',
     f'{APP_NAME}.HotelType',
     f'{APP_NAME}.HotelTag',
     f'{APP_NAME}.HotelTagPublic',
-    f'{APP_NAME}.Facilities',          # وابسته به IconShortcut
-    f'{APP_NAME}.RoomFacilities',      # وابسته به IconShortcut
+    f'{APP_NAME}.Facilities',
+    f'{APP_NAME}.RoomFacilities',
     f'{APP_NAME}.BestHotels',
     
-    # ۴. هتل و متعلقات آن
+    # ۳. هتل و متعلقات آن
     f'{APP_NAME}.Hotel',
     f'{APP_NAME}.SEOMeta',
     f'{APP_NAME}.HotelGallery',
     f'{APP_NAME}.HotelGalleryImage',
     f'{APP_NAME}.NearbyPlace',
-    f'{APP_NAME}.HotelFAQ',            # وابسته به IconShortcut
+    f'{APP_NAME}.HotelFAQ',
     f'{APP_NAME}.CancellationPenalty',
     
-    # ۵. اتاق‌ها، خدمات و قیمت‌گذاری‌ها
+    # ۴. اتاق‌ها، خدمات و قیمت‌گذاری‌ها
     f'{APP_NAME}.RoomService',
     f'{APP_NAME}.Room',
-    f'{APP_NAME}.RoomDatePrice',       # وابسته به UserLevel
-    f'{APP_NAME}.ClosedDate',          # وابسته به UserLevel و RoomDatePrice
+    f'{APP_NAME}.RoomDatePrice',
+    f'{APP_NAME}.ClosedDate',
 ]
 
-# تمام پوشه‌های مدیای مربوطه (پوشه آیکون‌های SVG اضافه شد)
+# تمام پوشه‌های مدیای مربوط به تصاویر و آیکون‌ها
 MEDIA_SUBDIRS = [
-    'icons/svg_icons',        # آیکون‌های SVG مدل IconShortcut
+    'icons/svg_icons',        # آیکون‌های SVG
     'images/hotels',          # تصاویر هتل‌ها
     'room_images',            # تصاویر اتاق‌ها
     'hotel_gallery',          # گالری تصاویر هتل‌ها
@@ -59,22 +57,30 @@ MEDIA_SUBDIRS = [
 class HotelBackupService:
 
     @classmethod
-    def export_json(cls) -> BytesIO:
-        """خروجی ساختار دیتابیس به صورت JSON استاندارد"""
-        buf = BytesIO()
+    def export_json_string(cls) -> str:
+        """خروجی اطلاعات به صورت رشته متنی JSON با استفاده از StringIO جهت جلوگیری از ارور باینری"""
+        string_buf = StringIO()
         call_command(
             'dumpdata',
             *BACKUP_MODELS,
             format='json',
             indent=2,
-            stdout=buf
+            stdout=string_buf
         )
-        buf.seek(0)
-        return buf
+        return string_buf.getvalue()
+
+    @classmethod
+    def export_json(cls) -> BytesIO:
+        """
+        خروجی باینری سازگار با متد قدیمی:
+        داده‌های متنی استخراج شده را به صورت بایت‌های UTF-8 در BytesIO برمی‌گرداند.
+        """
+        json_str = cls.export_json_string()
+        return BytesIO(json_str.encode('utf-8'))
 
     @classmethod
     def export_media_zip(cls) -> BytesIO:
-        """فشرده‌سازی و دانلود کل پوشه عکس‌ها و آیکون‌ها به صورت ZIP"""
+        """فشرده‌سازی و دانلود کل پوشه عکس‌ها و آیکون‌ها به صورت فایل ZIP"""
         zip_buffer = BytesIO()
         media_root = settings.MEDIA_ROOT
 
@@ -94,21 +100,21 @@ class HotelBackupService:
     @classmethod
     def export_full_backup_zip(cls) -> BytesIO:
         """
-        پکیج کامل و مستقل:
-        شامل فایل data.json (شامل آیکون‌ها، سطوح کاربری، هتل‌ها و اتاق‌ها)
-        + پوشه کامل تمام مدیاها و SVGها
+        خروجی پکیج کامل شامل:
+        1. data.json (اطلاعات دیتابیس)
+        2. media/ (تمامی تصاویر و آیکون‌های SVG)
         """
         zip_buffer = BytesIO()
         media_root = settings.MEDIA_ROOT
 
-        # استخراج دیتای دیتابیس
-        json_buffer = cls.export_json()
+        # دریافت داده‌های دیتابیس
+        json_str = cls.export_json_string()
 
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # ۱. ذخیره فایل JSON در ریشه فایل ZIP
-            zf.writestr('data.json', json_buffer.getvalue())
+            # ذخیره فایل json در ریشه زیپ
+            zf.writestr('data.json', json_str.encode('utf-8'))
 
-            # ۲. ذخیره فایل‌های تصویری در پوشه media داخل ZIP
+            # قرار دادن تصاویر در پوشه media داخل فایل زیپ
             for subdir in MEDIA_SUBDIRS:
                 folder_path = os.path.join(media_root, subdir)
                 if os.path.exists(folder_path):
@@ -124,17 +130,13 @@ class HotelBackupService:
 
     @classmethod
     def restore_from_zip(cls, uploaded_file) -> tuple[bool, str]:
-        """
-        بازگردانی همه‌چیز در دیتابیس جدید:
-        1. تصاویر و SVGها به MEDIA_ROOT منتقل می‌شوند
-        2. دیتابیس از طریق loaddata لود می‌شود
-        """
+        """بازگردانی پکیج کامل ZIP (تصاویر + دیتابیس)"""
         temp_dir = tempfile.mkdtemp()
         try:
             with zipfile.ZipFile(uploaded_file, 'r') as zf:
                 zf.extractall(temp_dir)
 
-            # ۱. انتقال فایل‌های مدیا
+            # ۱. بازیابی فایل‌های مدیا به MEDIA_ROOT
             extracted_media_dir = os.path.join(temp_dir, 'media')
             media_root = settings.MEDIA_ROOT
 
@@ -148,7 +150,7 @@ class HotelBackupService:
                         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
                         shutil.copy2(src_file, dest_file)
 
-            # ۲. لود داده‌های JSON به دیتابیس
+            # ۲. تزریق اطلاعات JSON به دیتابیس
             json_file_path = os.path.join(temp_dir, 'data.json')
             if not os.path.exists(json_file_path):
                 return False, "فایل data.json در فایل ZIP یافت نشد!"
@@ -156,7 +158,7 @@ class HotelBackupService:
             with transaction.atomic():
                 call_command('loaddata', json_file_path)
 
-            return True, "اطلاعات (آیکون‌ها، سطوح کاربری، هتل‌ها و اتاق‌ها) به همراه تمامی فایل‌های مدیا با موفقیت بازگردانی شدند."
+            return True, "اطلاعات متنی و فایل‌های مدیا با موفقیت بازگردانی شدند."
 
         except Exception as e:
             return False, f"خطا در بازگردانی: {str(e)}"
@@ -165,7 +167,7 @@ class HotelBackupService:
 
     @classmethod
     def restore_from_json(cls, uploaded_file) -> tuple[bool, str]:
-        """بازگردانی فقط فایل JSON"""
+        """بازگردانی فقط فایل JSON به دیتابیس"""
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
         try:
             for chunk in uploaded_file.chunks():
