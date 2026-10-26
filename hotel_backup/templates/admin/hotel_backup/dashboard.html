@@ -1,0 +1,61 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 20px auto; direction: rtl; font-family: Tahoma, sans-serif;">
+    
+    <div style="background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 25px;">
+        <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0;">
+            📥 دانلود فایل‌های بکاپ
+        </h2>
+        <p style="color: #666; font-size: 14px; line-height: 1.7;">
+            از این بخش می‌توانید اطلاعات متنی هتل‌ها، اتاق‌ها، قیمت‌ها، شهرها و همچنین فایل‌های تصاویر متصل به آن‌ها را دریافت کنید.
+        </p>
+        
+        <div style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap;">
+            <!-- دانلود پکیج کامل -->
+            <a href="{% url 'admin:hotel_backup_download_full' %}" 
+               style="background: #27ae60; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-flex; align-items: center; gap: 8px;">
+               📦 دانلود بکاپ کامل (داده دیتابیس + تصاویر در فایل ZIP)
+            </a>
+
+            <!-- دانلود فقط JSON -->
+            <a href="{% url 'admin:hotel_backup_download_json' %}" 
+               style="background: #2980b9; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+               📄 فقط فایل JSON (متن هتل و اتاق‌ها)
+            </a>
+
+            <!-- دانلود فقط مدیا -->
+            <a href="{% url 'admin:hotel_backup_download_media' %}" 
+               style="background: #8e44ad; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+               🖼️ فقط فایل ZIP عکس‌ها
+            </a>
+        </div>
+    </div>
+
+    <div style="background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <h2 style="color: #c0392b; border-bottom: 2px solid #e74c3c; padding-bottom: 10px; margin-top: 0;">
+            📤 بازگردانی (Restore) در دیتابیس جدید
+        </h2>
+        <p style="color: #666; font-size: 14px; line-height: 1.7;">
+            فایل بکاپ دانلود شده (فایل <code>.zip</code> کامل یا فایل <code>.json</code>) را انتخاب کرده و دکمه بازگردانی را بزنید. 
+            <br>
+            <strong>نکته:</strong> در صورت انتخاب فایل ZIP کامل، هم تصاویر به صورت خودکار به پوشه مدیا منتقل می‌شوند و هم اطلاعات دیتابیس ریستور خواهند شد.
+        </p>
+
+        <form method="post" action="{% url 'admin:hotel_backup_restore' %}" enctype="multipart/form-data" style="margin-top: 20px;">
+            {% csrf_token %}
+            <div style="margin-bottom: 15px;">
+                <input type="file" name="backup_file" accept=".zip,.json" required 
+                       style="padding: 10px; border: 1px solid #ccc; border-radius: 5px; width: 100%; max-width: 400px;">
+            </div>
+            <button type="submit" 
+                    onclick="return confirm('آیا از بازگردانی اطلاعات اطمینان دارید؟ داده‌های متناظر در دیتابیس به‌روز یا درج خواهند شد.');"
+                    style="background: #c0392b; color: white; padding: 12px 25px; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer;">
+                🚀 شروع بازگردانی اطلاعات
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
