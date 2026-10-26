@@ -21,8 +21,8 @@ services:
       DB_PORT: "5432"
       MEDIA_ROOT: "/app/media"
       MEDIA_BACKUP_DIR: "/var/backups/zarvantrip"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,zarvantrip.com,www.zarvantrip.com,cps.zarvantrip.com,www.cps.zarvantrip.com,chatbot.zarvantrip.com,www.chatbot.zarvantrip.com"
-      CSRF_TRUSTED_ORIGINS: "http://zarvantrip.com,https://zarvantrip.com,http://www.zarvantrip.com,https://www.zarvantrip.com,http://cps.zarvantrip.com,https://cps.zarvantrip.com,http://chatbot.zarvantrip.com,https://chatbot.zarvantrip.com,http://www.chatbot.zarvantrip.com,https://www.chatbot.zarvantrip.com"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,zarvantrip.com,www.zarvantrip.com,cps.zarvantrip.com,www.cps.zarvantrip.com,chatbot.zarvantrip.com,www.chatbot.zarvantrip.com,37.152.181.133"
+      CSRF_TRUSTED_ORIGINS: "http://zarvantrip.com,https://zarvantrip.com,http://www.zarvantrip.com,https://www.zarvantrip.com,http://cps.zarvantrip.com,https://cps.zarvantrip.com,http://chatbot.zarvantrip.com,https://chatbot.zarvantrip.com,http://www.chatbot.zarvantrip.com,https://www.chatbot.zarvantrip.com,http://37.152.181.133,http://37.152.181.133:8000"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
     depends_on:
