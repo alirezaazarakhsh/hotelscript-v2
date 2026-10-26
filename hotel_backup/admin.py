@@ -9,7 +9,11 @@ from .services import HotelBackupService
 
 @admin.register(HotelBackupManager)
 class HotelBackupManagerAdmin(admin.ModelAdmin):
+    # غیرفعال کردن دسترسی‌های ایجاد، تغییر و حذف رکورد چون مدل صوری است
     def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
     def has_delete_permission(self, request, obj=None):
@@ -27,7 +31,7 @@ class HotelBackupManagerAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def changelist_view(self, request, extra_context=None):
-        # ریدایرکت مستقیم به داشبورد اختصاصی بکاپ
+        # ریدایرکت خودکار به صفحه داشبورد اختصاصی
         return HttpResponseRedirect(reverse('admin:hotel_backup_dashboard'))
 
     def backup_dashboard_view(self, request):
@@ -38,29 +42,49 @@ class HotelBackupManagerAdmin(admin.ModelAdmin):
         return render(request, 'admin/hotel_backup/dashboard.html', context)
 
     def download_json(self, request):
-        buf = HotelBackupService.export_json()
-        now_str = timezone.now().strftime('%Y%m%d_%H%M')
-        response = HttpResponse(buf.getvalue(), content_type='application/json')
-        response['Content-Disposition'] = f'attachment; filename="hotels_data_{now_str}.json"'
-        return response
+        """دانلود اطلاعات متنی دیتابیس به صورت JSON"""
+        try:
+            json_str = HotelBackupService.export_json_string()
+            now_str = timezone.now().strftime('%Y%m%d_%H%M')
+            response = HttpResponse(json_str, content_type='application/json; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="hotels_data_{now_str}.json"'
+            return response
+        except Exception as e:
+            messages.error(request, f"خطا در ایجاد فایل JSON: {str(e)}")
+            return HttpResponseRedirect(reverse('admin:hotel_backup_dashboard'))
 
     def download_media(self, request):
-        buf = HotelBackupService.export_media_zip()
-        now_str = timezone.now().strftime('%Y%m%d_%H%M')
-        response = HttpResponse(buf.getvalue(), content_type='application/zip')
-        response['Content-Disposition'] = f'attachment; filename="hotels_media_{now_str}.zip"'
-        return response
+        """دانلود تمامی تصاویر و مدیاها به صورت ZIP"""
+        try:
+            buf = HotelBackupService.export_media_zip()
+            now_str = timezone.now().strftime('%Y%m%d_%H%M')
+            response = HttpResponse(buf.getvalue(), content_type='application/zip')
+            response['Content-Disposition'] = f'attachment; filename="hotels_media_{now_str}.zip"'
+            return response
+        except Exception as e:
+            messages.error(request, f"خطا در ساخت فایل فشرده عکس‌ها: {str(e)}")
+            return HttpResponseRedirect(reverse('admin:hotel_backup_dashboard'))
 
     def download_full(self, request):
-        buf = HotelBackupService.export_full_backup_zip()
-        now_str = timezone.now().strftime('%Y%m%d_%H%M')
-        response = HttpResponse(buf.getvalue(), content_type='application/zip')
-        response['Content-Disposition'] = f'attachment; filename="hotels_full_backup_{now_str}.zip"'
-        return response
+        """دانلود پکیج کامل شامل دیتابیس (JSON) و مدیاها در قالب یک فایل ZIP"""
+        try:
+            buf = HotelBackupService.export_full_backup_zip()
+            now_str = timezone.now().strftime('%Y%m%d_%H%M')
+            response = HttpResponse(buf.getvalue(), content_type='application/zip')
+            response['Content-Disposition'] = f'attachment; filename="hotels_full_backup_{now_str}.zip"'
+            return response
+        except Exception as e:
+            messages.error(request, f"خطا در ساخت پکیج کامل بکاپ: {str(e)}")
+            return HttpResponseRedirect(reverse('admin:hotel_backup_dashboard'))
 
     def restore_backup(self, request):
-        if request.method == 'POST' and request.FILES.get('backup_file'):
-            file = request.FILES['backup_file']
+        """بازگردانی اطلاعات از فایل‌های ZIP یا JSON"""
+        if request.method == 'POST':
+            file = request.FILES.get('backup_file')
+            if not file:
+                messages.error(request, "لطفاً ابتدا یک فایل بکاپ انتخاب کنید.")
+                return HttpResponseRedirect(reverse('admin:hotel_backup_dashboard'))
+
             filename = file.name.lower()
 
             if filename.endswith('.zip'):
@@ -68,7 +92,7 @@ class HotelBackupManagerAdmin(admin.ModelAdmin):
             elif filename.endswith('.json'):
                 success, msg = HotelBackupService.restore_from_json(file)
             else:
-                success, msg = False, "فقط فرمت‌های zip و json مجاز هستند."
+                success, msg = False, "فرمت فایل نامعتبر است! فقط پسوندهای .zip و .json مجاز هستند."
 
             if success:
                 messages.success(request, msg)
