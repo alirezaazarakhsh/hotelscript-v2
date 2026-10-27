@@ -3669,7 +3669,7 @@ class HotelImageAPIView(APIView):
             raise NotFound("عکس اصلی هتل موجود نیست.")
 
         # ساخت لینک کامل
-        site_url = getattr(settings, "SITE_URL", "https://safarnameh24.com")
+        site_url = getattr(settings, "SITE_URL", "https://zarvantrip.com")
         image_url = f"{site_url}{hotel.main_image.url}"
 
         response_data = {
