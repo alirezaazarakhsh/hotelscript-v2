@@ -3915,7 +3915,7 @@ class ReservationRoomDetailAPIView(APIView):
                 except ValidationError as e:
                     return Response({'detail': f'خطا در کد شناسایی رزروکننده: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # اعتبارسنجی اتاق‌ها و مسافران
+            # اعتبارسنجی اولیه اتاق‌ها و مسافران
             for room_entry in rooms_data:
                 room_id = room_entry['id']
                 if not Room.objects.filter(id=room_id).exists():
@@ -3941,10 +3941,11 @@ class ReservationRoomDetailAPIView(APIView):
                             }
                         }, status=status.HTTP_400_BAD_REQUEST)
                 
-                # بررسی کد ملی مسافر اصلی تنها در صورت وارد شدن (اختیاری)
-                if main_passenger.get('national_code'):
+                # اعتبارسنجی کد ملی مسافر اصلی در حلقه اولیه (فقط در صورت وجود مقدار)
+                main_nat_code = main_passenger.get('national_code')
+                if main_nat_code and str(main_nat_code).strip() != '':
                     try:
-                        validate_national_code(main_passenger['national_code'])
+                        validate_national_code(str(main_nat_code).strip())
                     except ValidationError as e:
                         return Response({
                             'detail': 'خطا در داده‌های ورودی',
@@ -4040,7 +4041,7 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.passengers.all().delete()
                 main_passenger = passengers_data.get('main_passenger', {})
 
-                # بررسی نام و نام خانوادگی برای مسافر اصلی (همچنان اجباری)
+                # بررسی نام و نام خانوادگی برای مسافر اصلی (اجباری)
                 if not main_passenger.get('first_name') or not main_passenger.get('last_name'):
                     return Response({
                         'detail': 'خطا در داده‌های ورودی',
@@ -4074,10 +4075,12 @@ class ReservationRoomDetailAPIView(APIView):
                             }
                         }, status=status.HTTP_400_BAD_REQUEST)
 
-                # اعتبارسنجی کد ملی مسافر اصلی (فقط اگر مقدار داشته باشد)
-                if main_passenger.get('national_code'):
+                # مدیریت کد ملی مسافر اصلی (اختیاری)
+                main_nat_code = main_passenger.get('national_code')
+                if main_nat_code and str(main_nat_code).strip() != '':
+                    main_nat_code = str(main_nat_code).strip()
                     try:
-                        validate_national_code(main_passenger.get('national_code'))
+                        validate_national_code(main_nat_code)
                     except ValidationError as e:
                         return Response({
                             'detail': 'خطا در داده‌های ورودی',
@@ -4091,6 +4094,8 @@ class ReservationRoomDetailAPIView(APIView):
                                 }
                             }
                         }, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    main_nat_code = None
 
                 ReservationRoomPassenger.objects.create(
                     reservation_room=res_room,
@@ -4098,19 +4103,19 @@ class ReservationRoomDetailAPIView(APIView):
                     first_name=main_passenger['first_name'],
                     last_name=main_passenger['last_name'],
                     mobile_number=main_passenger.get('phone_number'),
-                    national_code=main_passenger.get('national_code', None),
+                    national_code=main_nat_code,
                     is_primary=True
                 )
 
                 # اضافه کردن به لیست مسافران کاربر اگر وجود ندارد و پرداخت نهایی نشده
-                if reservation.payment_status != 'paid' and main_passenger.get('national_code'):
-                    if not Passenger.objects.filter(user=request.user, identification_code=main_passenger['national_code']).exists():
+                if reservation.payment_status != 'paid' and main_nat_code:
+                    if not Passenger.objects.filter(user=request.user, identification_code=main_nat_code).exists():
                         try:
                             Passenger.objects.create(
                                 user=request.user,
                                 first_name=main_passenger['first_name'],
                                 last_name=main_passenger['last_name'],
-                                identification_code=main_passenger['national_code'],
+                                identification_code=main_nat_code,
                                 phone_number=main_passenger.get('phone_number')
                             )
                         except Exception:
@@ -4119,23 +4124,29 @@ class ReservationRoomDetailAPIView(APIView):
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     passenger_type_db = 'secondary' if p_type == 'other_passengers' else 'extra'
                     for passenger in passengers_data.get(p_type, []):
+                        pass_nat_code = passenger.get('national_code')
+                        if pass_nat_code and str(pass_nat_code).strip() != '':
+                            pass_nat_code = str(pass_nat_code).strip()
+                        else:
+                            pass_nat_code = None
+
                         ReservationRoomPassenger.objects.create(
                             reservation_room=res_room,
                             passenger_type=passenger_type_db,
                             first_name=passenger['first_name'],
                             last_name=passenger['last_name'],
                             mobile_number=passenger.get('phone_number', None),
-                            national_code=passenger.get('national_code', None),
+                            national_code=pass_nat_code,
                             is_primary=False
                         )
-                        if reservation.payment_status != 'paid' and passenger.get('national_code') and passenger.get('phone_number'):
-                            if not Passenger.objects.filter(user=request.user, identification_code=passenger['national_code']).exists():
+                        if reservation.payment_status != 'paid' and pass_nat_code and passenger.get('phone_number'):
+                            if not Passenger.objects.filter(user=request.user, identification_code=pass_nat_code).exists():
                                 try:
                                     Passenger.objects.create(
                                         user=request.user,
                                         first_name=passenger['first_name'],
                                         last_name=passenger['last_name'],
-                                        identification_code=passenger['national_code'],
+                                        identification_code=pass_nat_code,
                                         phone_number=passenger['phone_number']
                                     )
                                 except Exception:
