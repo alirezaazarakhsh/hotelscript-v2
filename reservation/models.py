@@ -2400,6 +2400,8 @@ class ReservationRoomPassenger(models.Model):
     first_name = models.CharField('نام', max_length=100)
     last_name = models.CharField('نام خانوادگی', max_length=100)
     mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
+    
+    # تابع validator تنها زمانی اجرا می‌شود که مقداری برای national_code ارسال شده باشد (چون blank=True, null=True است)
     national_code = models.CharField('کد ملی', max_length=10, blank=True, null=True, validators=[validate_national_code])
 
     class Meta:
@@ -2407,14 +2409,18 @@ class ReservationRoomPassenger(models.Model):
         verbose_name_plural = 'مسافرها'
 
     def clean(self):
-        # الزامی بودن فیلدها برای مسافر اصلی
+        # الزامی بودن فیلدها برای مسافر اصلی (فقط نام و نام خانوادگی اجباری شدند)
         if self.passenger_type == 'primary':
             missing_fields = []
-            for field_name in ['first_name', 'last_name', 'mobile_number', 'national_code']:
+            for field_name in ['first_name', 'last_name']:  # mobile_number و national_code از این لیست حذف شدند
                 if not getattr(self, field_name):
                     missing_fields.append(field_name)
             if missing_fields:
                 raise ValidationError(f'برای مسافر اصلی، فیلدهای {missing_fields} الزامی هستند.')
+
+        # اعتبارسنجی سفارشی کد ملی/پاسپورت فقط در صورت پر بودن فیلد
+        if self.national_code:
+            validate_national_code(self.national_code)
 
         # یکتایی کد ملی در همان اتاق
         # چک یکتایی برداشته شد
@@ -2430,7 +2436,6 @@ class ReservationRoomPassenger(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'
-    
     
     
 #دلایل کنسلی رزرو 
