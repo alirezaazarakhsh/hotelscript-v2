@@ -3633,7 +3633,7 @@ class HotelImageAPIView(APIView):
         - **پاسخ**:
           ```json
           {
-            "hotel_image": "https://safarnameh24.com/media/images/hotels/hotel-azadi/main_image.jpg",
+            "hotel_image": "https://zarvantrip.com/media/images/hotels/hotel-azadi/main_image.jpg",
             "hotel_slug": "hotel-azadi"
           }
           ```
@@ -5308,7 +5308,7 @@ class UserCancellationCreateAPIView(APIView):
 class ReservationInvoiceSettingsAPIView(APIView):
     """
     API برای دریافت تنظیمات فاکتور رزرو
-    شامل عنوان فاکتور، شماره تماس‌ها، آدرس پستی و لینک کامل عکس امضا با دامنه safarnameh24.com
+    شامل عنوان فاکتور، شماره تماس‌ها، آدرس پستی و لینک کامل عکس امضا با دامنه zarvantrip.com
     """
     permission_classes = [AllowAny]
 
@@ -5320,9 +5320,9 @@ class ReservationInvoiceSettingsAPIView(APIView):
         - شماره تماس ۱
         - شماره تماس ۲
         - آدرس پستی
-        - لینک کامل عکس امضا (با دامنه اصلی: `https://safarnameh24.com`)
+        - لینک کامل عکس امضا (با دامنه اصلی: `https://zarvantrip.com`)
 
-        **نکته مهم**: لینک عکس همیشه با دامنه اصلی `safarnameh24.com` برگردانده می‌شود.
+        **نکته مهم**: لینک عکس همیشه با دامنه اصلی `zarvantrip.com` برگردانده می‌شود.
         اگر تنظیماتی وجود نداشته باشد، مقدار `null` برمی‌گردد.
         """,
         responses={
@@ -5335,7 +5335,7 @@ class ReservationInvoiceSettingsAPIView(APIView):
                             "contact_number_1": "021-12345678",
                             "contact_number_2": "0912-1234567",
                             "postal_address": "تهران، خیابان آزادی، پلاک ۱۲۳",
-                            "signature_image": "https://safarnameh24.com/media/signatures/signature.png"
+                            "signature_image": "https://zarvantrip.com/media/signatures/signature.png"
                         }
                     }
                 }
@@ -5367,7 +5367,7 @@ class ReservationInvoiceSettingsAPIView(APIView):
         # ساخت لینک کامل با دامنه اصلی
         signature_url = None
         if settings_obj.signature_image:
-            base_url = "https://safarnameh24.com"
+            base_url = "https://zarvantrip.com"
             signature_url = f"{base_url}{settings_obj.signature_image.url}"
 
         data = {
@@ -5400,7 +5400,7 @@ class ReservationInvoiceDetailAPIView(APIView):
         - لیست مسافران (نوع: اصلی / اضافه)
         - توضیحات رزرو
         - قوانین و مقررات هتل
-        - لینک عکس‌ها با دامنه اصلی `safarnameh24.com`
+        - لینک عکس‌ها با دامنه اصلی `zarvantrip.com`
 
         **مثال کد پیگیری**: `RES123456`
         """,
@@ -5593,7 +5593,7 @@ class HotelChatBotListView(APIView):
         operation_description="""
         این API لیست تمام هتل‌های موجود در سایت را با نام و لینک اصلی برمی‌گرداند.
 
-        **لینک خروجی**: `https://safarnameh24.com/best-hotels/{slug}/`
+        **لینک خروجی**: `https://zarvantrip.com/best-hotels/{slug}/`
 
         مناسب برای:
         - نمایش لیست هتل‌ها در چت‌بات
@@ -5609,11 +5609,11 @@ class HotelChatBotListView(APIView):
                     "application/json": [
                         {
                             "name": "هتل عباسی",
-                            "url": "https://safarnameh24.com/best-hotels/hotel-abbasi/"
+                            "url": "https://zarvantrip.com/best-hotels/hotel-abbasi/"
                         },
                         {
                             "name": "هتل پارسیان کوثر",
-                            "url": "https://safarnameh24.com/best-hotels/hotel-parsian-kowsar/"
+                            "url": "https://zarvantrip.com/best-hotels/hotel-parsian-kowsar/"
                         }
                     ]
                 }
