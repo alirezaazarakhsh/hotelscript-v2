@@ -40,51 +40,70 @@ from .sms.sms import send_logout_sms, send_otp_sms, send_welcome_sms
 
 # ای پی ای خروج از اکانت کاربران 
 class APILogoutView(APIView):
-    permission_classes = (IsAuthenticated,)
+    # اجازه به همه کاربران (حتی اگر توکن اکسس منقضی شده باشد تا پشت درِ لاگین گیر نکنند)
+    permission_classes = (AllowAny,)
 
     @swagger_auto_schema(
         operation_summary="خروج از حساب کاربری",
-        operation_description="این API برای خروج کاربر از سیستم با باطل کردن توکن refresh استفاده می‌شود. توکن از کوکی خوانده می‌شود.",
-        responses={200: 'OK', 400: 'Bad Request'}
+        operation_description="خروج کاربر، باطل کردن توکن refresh و پاک‌سازی کامل کوکی‌های مرورگر بدون ایجاد خطا.",
+        responses={200: 'با موفقیت خارج شدید.'}
     )
     def post(self, request, *args, **kwargs):
-        try:
-            refresh_token = request.COOKIES.get('refresh_token')
-            if not refresh_token:
-                return Response(
-                    {"detail": "refresh_token not found in cookies"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # ۱. استخراج توکن رفرش (ابتدا از کوکی، اگر نبود از بدنه درخواست)
+        refresh_token = (
+            request.COOKIES.get('refresh_token') or 
+            request.data.get('refresh_token') or 
+            request.data.get('refresh')
+        )
 
-            token = RefreshToken(token=refresh_token)
-            token.blacklist()
+        # ۲. اگر توکن وجود داشت، سعی در باطل کردن (blacklist) آن
+        if refresh_token:
+            try:
+                token = RefreshToken(token=refresh_token)
+                token.blacklist()
+            except Exception:
+                # اگر توکن قبلاً منقضی یا باطل شده باشد، نباید جلوی خروج گرفته شود
+                pass
 
-            # ارسال پیامک خروج
-            user = request.user
-            phone = user.phone_number
-            full_name = f"{user.first_name}{user.last_name}".strip()
-            send_logout_sms(phone, full_name)
+        # ۳. ارسال پیامک خروج (فقط در صورتی که کاربر احراز هویت شده باشد)
+        if request.user and request.user.is_authenticated:
+            try:
+                user = request.user
+                phone = getattr(user, 'phone_number', None)
+                first_name = getattr(user, 'first_name', '') or ''
+                last_name = getattr(user, 'last_name', '') or ''
+                full_name = f"{first_name} {last_name}".strip()
 
-            # حذف کوکی‌ها (expire)
-            response = Response({"detail": _("با موفقیت خارج شدید.")})
+                if phone:
+                    send_logout_sms(phone, full_name)
+            except Exception:
+                # خطای پنل پیامک مانع از فرآیند خروج کاربر نمی‌شود
+                pass
+
+        # ۴. ایجاد پاسخ موفقیت‌آمیز (همیشه کد 200)
+        response = Response(
+            {"detail": _("با موفقیت خارج شدید.")},
+            status=status.HTTP_200_OK
+        )
+
+        # ۵. پاک‌سازی کوکی‌ها (مطابق تنظیماتی که در زمان لاگین ست شده بود)
+        cookie_domain = getattr(settings, 'COOKIE_DOMAIN', '.zarvantrip.com')
+
+        for cookie_key in ['access_token', 'refresh_token']:
+            # پاک کردن با دامنه اختصاصی
             response.delete_cookie(
-                key='access_token',
-                domain='.safarnameh24.com',
+                key=cookie_key,
+                domain=cookie_domain,
+                path='/',
                 samesite='None'
             )
+            # پاک کردن به عنوان فال‌بک (برای لوکال‌هاست یا دامنه‌های فرعی)
             response.delete_cookie(
-                key='refresh_token',
-                domain='.safarnameh24.com',
-                samesite='None'
-            )
-            return response
-
-        except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
+                key=cookie_key,
+                path='/'
             )
 
+        return response
 
 
 
