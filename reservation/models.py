@@ -1686,8 +1686,12 @@ class Reservationhotel(models.Model):
                 half_day_out_charge += (res_room.half_day_out_price if hasattr(res_room, 'half_day_out_price') else Decimal('0')) * quantity
 
         total_half_day_charge = half_day_in_charge + half_day_out_charge
-        base_price_after_all_discounts_except_wallet = total + total_extra + total_half_day_charge - self.discount - room_fixed_discount
-        final_price_to_pay = base_price_after_all_discounts_except_wallet - self.wallet_withdrawal_amount
+        
+        # محاسبه قیمت کل بدون کسر کیف پول
+        base_price_after_all_discounts = total + total_extra + total_half_day_charge - self.discount - room_fixed_discount
+        
+        # کسر مبلغ کیف پول از مبلغ قابل پرداخت نهایی
+        final_price_to_pay = base_price_after_all_discounts - self.wallet_withdrawal_amount
         
         if final_price_to_pay < 0:
             final_price_to_pay = Decimal('0')
@@ -1861,6 +1865,25 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         if cache.get(cache_key_points) or cache.get(cache_key_discount):
             logger.info(f"Processing skipped for {instance.tracking_code} due to lock (points or discount)")
             return
+
+        # =========================================================================
+        # کسر از موجودی کیف پول کاربر پس از پرداخت موفق (payment_status == 'paid')
+        # =========================================================================
+        if instance.payment_status == 'paid' and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+            with transaction.atomic():
+                res_lock = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+                if not res_lock.wallet_withdrawn and res_lock.wallet_withdrawal_amount > 0:
+                    wallet, created_w = Wallet.objects.select_for_update().get_or_create(user=res_lock.buyer)
+                    if wallet.balance >= res_lock.wallet_withdrawal_amount:
+                        wallet.balance -= res_lock.wallet_withdrawal_amount
+                        wallet.save(update_fields=['balance'])
+                        
+                        res_lock.wallet_withdrawn = True
+                        res_lock._skip_price_calculation_on_save = True
+                        res_lock.save(update_fields=['wallet_withdrawn'])
+                        logger.info(f"✅ مبلغ {res_lock.wallet_withdrawal_amount} تومان از کیف پول کاربر {res_lock.buyer.phone_number} برای رزرو {res_lock.tracking_code} کسر شد.")
+                    else:
+                        logger.error(f"❌ موجودی کیف پول کاربر {res_lock.buyer.phone_number} برای کسر مبلغ {res_lock.wallet_withdrawal_amount} کافی نیست!")
 
         if instance.payment_status == 'paid' and instance.applied_discount_code and not instance.personal_discount_used:
             try:
@@ -2087,8 +2110,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
         logger.debug(f"اعلان به‌روزرسانی وضعیت برای رزرو {instance.tracking_code} ارسال شد.")
     except Exception as e:
         logger.exception(f"خطا کلی در سیگنال notify_status_change_and_assign_points برای رزرو {instance.tracking_code}: {e}")
-        
-        
          
 
 # ---------------- ReservationRoom ----------------

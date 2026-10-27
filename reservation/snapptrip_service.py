@@ -336,7 +336,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     checkin_str = check_in_g.strftime('%Y-%m-%d')
     checkout_str = check_out_g.strftime('%Y-%m-%d')
 
-    user_phone = "09127752353"
+    user_phone = "09122914675"
 
     is_avail, is_instant, pricing, err = check_room_realtime_availability(
         hotel_snapp_id, room_snapp_id, checkin_str, checkout_str
