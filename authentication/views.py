@@ -218,7 +218,7 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 httponly=True,
                 secure=True,
                 samesite='None',
-                domain='.safarnameh24.com',
+                domain='.zarvantrip.com',
                 max_age=60*60*24,  # 1 day
             )
         if refresh_token:
@@ -228,7 +228,7 @@ class TokenObtainPairView(JwtTokenObtainPairView):
                 httponly=True,
                 secure=True,
                 samesite='None',
-                domain='.safarnameh24.com',
+                domain='.zarvantrip.com',
                 max_age=60*60*7,  # 7 days
             )
         return response
@@ -274,7 +274,7 @@ class TokenRefreshView(JwtTokenRefreshView):
                 httponly=True,
                 secure=True,
                 samesite='None',
-                domain='.safarnameh24.com',
+                domain='.zarvantrip.com',
                 max_age=60*60*24,  # 1 day
             )
         
@@ -286,7 +286,7 @@ class TokenRefreshView(JwtTokenRefreshView):
                 httponly=True,
                 secure=True,
                 samesite='None',
-                domain='.safarnameh24.com',
+                domain='.zarvantrip.com',
                 max_age=60*60*24*7,  # 7 days
             )
         
