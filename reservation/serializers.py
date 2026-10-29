@@ -51,7 +51,7 @@ class IconShortcutSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get('request')
         url = obj.svg_icon.url
-        return request.build_absolute_uri(url) if request else f"https://safarnameh24.com{url}"
+        return request.build_absolute_uri(url) if request else f"https://zarvantrip.com{url}"
 
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -102,7 +102,7 @@ class FavoriteHotelSerializer(serializers.ModelSerializer):
     def get_main_image(self, obj):
         request = self.context.get('request')
         image_url = obj.main_image.url if obj.main_image else ''
-        return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
+        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
 
     def get_total_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
@@ -159,7 +159,7 @@ class HotelListSerializer(serializers.ModelSerializer):
     def get_main_image(self, obj):
         request = self.context.get('request')
         image_url = obj.main_image.url if obj.main_image else ''
-        return request.build_absolute_uri(image_url) if request else f"https://safarnameh24.com{image_url}"
+        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
 
     def get_total_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
@@ -811,4 +811,4 @@ class HotelLinkSerializer(serializers.ModelSerializer):
         fields = ['name', 'url']
 
     def get_url(self, obj):
-        return f'https://safarnameh24.com/best-hotels/{obj.slug}/'
+        return f'https://zarvantrip.com/best-hotels/{obj.slug}/'
