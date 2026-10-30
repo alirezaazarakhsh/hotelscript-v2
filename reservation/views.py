@@ -3240,7 +3240,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     - موجودی زنده کیف پول کاربر نیز از طریق وب‌سوکت به فرانت ارسال می‌شود.
     """
     serializer_class = ReservationCreateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     authentication_classes = []  
 
     @swagger_auto_schema(
