@@ -3490,7 +3490,7 @@ logger = logging.getLogger(__name__)
 class ReservationDetailAPIView(APIView):
     """
     نمایش جزئیات رزرو بر اساس tracking_code:
-    - بررسی مالکیت رزرو توسط کاربر جاری
+    - بررسی مالکیت رزرو فقط در صورتی که رزرو خریدار ثبت‌شده داشته باشد
     - ارسال مشخصات مسافر، تاریخ و ساعت ورود/خروج و هتل
     - ارسال وضعیت ظرفیت، وضعیت پرداخت و موجودی زنده کیف پول مسافر
     """
@@ -3568,12 +3568,13 @@ class ReservationDetailAPIView(APIView):
         # دریافت رزرو
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-        # اعتبارسنجی مالکیت رزرو
-        if reservation.buyer != request.user:
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # اعتبارسنجی مالکیت: فقط اگر رزرو قبلاً به کاربری الصاق شده باشد چک می‌شود
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         # دریافت ایمن هتل مرتبط
         hotel = reservation.get_hotel()
@@ -3590,11 +3591,11 @@ class ReservationDetailAPIView(APIView):
         city = hotel.city
         province = city.province if hasattr(city, 'province') else None
 
-        # استخراج دقیق مشخصات رزروکننده (اول از رزرو، سپس پروفایل کاربر)
-        profile = getattr(request.user, 'natural_profile', None)
+        # استخراج مشخصات رزروکننده به صورت کاملاً ایمن
+        profile = getattr(request.user, 'natural_profile', None) if request.user.is_authenticated else None
         reserver_first_name = reservation.reserver_first_name or (profile.first_name if profile else '') or ''
         reserver_last_name = reservation.reserver_last_name or (profile.last_name if profile else '') or ''
-        reserver_phone = reservation.reserver_phone_number or getattr(request.user, 'phone_number', '') or ''
+        reserver_phone = reservation.reserver_phone_number or (getattr(request.user, 'phone_number', '') if request.user.is_authenticated else '') or ''
         reserver_code = reservation.reserver_national_code or (profile.national_code if profile else '') or ''
 
         reserver_data = {
@@ -3604,9 +3605,9 @@ class ReservationDetailAPIView(APIView):
             'national_code': reserver_code
         }
 
-        # دریافت زنده موجودی کیف پول کاربر
+        # دریافت ایمن موجودی کیف پول (فقط در صورت لاگین بودن کاربر)
         user_wallet_balance = 0
-        if hasattr(request.user, 'wallet') and request.user.wallet:
+        if request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
             user_wallet_balance = int(request.user.wallet.balance)
 
         # فرمت‌بندی ساعت ورود و خروج
@@ -3622,7 +3623,7 @@ class ReservationDetailAPIView(APIView):
             'snapp_status': reservation.snapp_status,
             'is_snapptrip': reservation.is_snapptrip_reservation,
             'final_price': int(reservation.final_price or 0),
-            'user_wallet_balance': user_wallet_balance,  # 👈 موجودی زنده کیف پول مسافر
+            'user_wallet_balance': user_wallet_balance,
             'reserver': reserver_data,
             'date': {
                 'enter': reservation.check_in_date.isoformat() if reservation.check_in_date else None,
@@ -3698,29 +3699,37 @@ class HotelImageAPIView(APIView):
     )
     def get(self, request, tracking_code, *args, **kwargs):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        if reservation.buyer != request.user:
-            raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
-        reservation_room = reservation.reservation_rooms.first()
+        # اگر رزرو به کاربر خاصی متصل شده است، کاربر دیگری نتواند آن را ببیند
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # دریافت اتاق و هتل مرتبط
+        reservation_room = reservation.reservation_rooms.select_related('room__hotel').first()
         if not reservation_room or not reservation_room.room or not reservation_room.room.hotel:
-            raise NotFound("اطلاعات هتل یا اتاق یافت نشد.")
+            return Response(
+                {"detail": "اطلاعات هتل یا اتاق یافت نشد."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         hotel = reservation_room.room.hotel
 
-        if not hotel.main_image:
-            raise NotFound("عکس اصلی هتل موجود نیست.")
-
-        # ساخت لینک کامل
+        # ساخت لینک کامل عکس به صورت ایمن
         site_url = getattr(settings, "SITE_URL", "https://zarvantrip.com")
-        image_url = f"{site_url}{hotel.main_image.url}"
+        image_url = ""
+        if hotel.main_image and hasattr(hotel.main_image, 'url'):
+            image_url = f"{site_url}{hotel.main_image.url}"
 
         response_data = {
             'hotel_image': image_url,
-            'hotel_slug': hotel.slug
+            'hotel_slug': hotel.slug or ""
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
     
 
 
@@ -3729,13 +3738,13 @@ class HotelImageAPIView(APIView):
 # ==============================================================================
 logger = logging.getLogger(__name__)
 
-
 class ReservationInvoiceAPIView(APIView):
     """
     مشاهده صورت‌حساب مالی رزرو:
     - تفکیک اقلام: قیمت پایه، نفرات اضافه، نیم‌شارژها، تخفیف ثابت و کد تخفیف
     - نمایش مبلغ برداشت از کیف پول و موجودی زنده کیف پول مسافر
     - وضعیت تایید ظرفیت و وضعیت پرداخت رزرو
+    - قابل مشاهده برای کاربر مهمان و کاربر لاگین‌شده
     """
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -3801,17 +3810,19 @@ class ReservationInvoiceAPIView(APIView):
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-        # اعتبارسنجی مالکیت رزرو
-        if reservation.buyer != request.user:
-            logger.warning(f"کاربر {request.user.phone_number} تلاش کرد به رزرو {tracking_code} متعلق به کاربر دیگری دسترسی پیدا کند.")
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # اعتبارسنجی هوشمند مالکیت: فقط در صورتی که رزرو قبلاً به کاربری متصل شده باشد بررسی می‌شود
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                user_info = getattr(request.user, 'phone_number', 'کاربر ناشناس')
+                logger.warning(f"کاربر {user_info} تلاش کرد به رزرو {tracking_code} دسترسی پیدا کند.")
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
-        # استخراج زنده موجودی کیف پول خریدار
+        # استخراج ایمن موجودی کیف پول (فقط اگر کاربر لاگین بود)
         user_wallet_balance = 0
-        if hasattr(request.user, 'wallet') and request.user.wallet:
+        if request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
             user_wallet_balance = int(request.user.wallet.balance)
 
         response_data = {
@@ -3826,7 +3837,7 @@ class ReservationInvoiceAPIView(APIView):
             "wallet_withdraw": int(self.parse_number(reservation.wallet_withdrawal_amount)),
             "wallet_withdrawn": bool(reservation.wallet_withdrawn),
             "final_price": int(self.parse_number(reservation.final_price)),
-            "user_wallet_balance": user_wallet_balance,  # 👈 موجودی زنده کیف پول مسافر
+            "user_wallet_balance": user_wallet_balance,
             "capacity_status": reservation.capacity_status,
             "payment_status": reservation.payment_status,
         }
@@ -3835,42 +3846,94 @@ class ReservationInvoiceAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
     
+    
+    
 
-# ای پی ای توضیحات تکمیلی رزرو 
+
+
+# ==============================================================================
+# API توضیحات تکمیلی رزرو (هماهنگ با کاربر مهمان و فیلد اختیاری)
+# ==============================================================================
 class ReservationDescriptionAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="دریافت توضیحات رزرو",
         operation_description="دریافت توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
-        tags=["reservation-api"]
+        tags=["reservation-api"],
+        responses={
+            200: openapi.Response(
+                description="توضیحات رزرو",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'description': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
+            ),
+            403: "عدم دسترسی به رزرو",
+            404: "رزرو یافت نشد"
+        }
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+
+        # اگر رزرو به کاربر خاصی تعلق دارد، کاربر دیگری نتواند آن را ببیند
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
         return Response({
-            'description': reservation.additional_notes
-        })
+            'description': reservation.additional_notes or ''
+        }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="بروزرسانی توضیحات رزرو",
-        operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
+        operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری (توضیحات اختیاری است).",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['description'],
             properties={
-                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو')
+                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات جدید رزرو (اختیاری)')
             }
         ),
-        tags=["reservation-api"]
+        tags=["reservation-api"],
+        responses={
+            200: openapi.Response(
+                description="توضیحات با موفقیت ثبت شد",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'description': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
+            ),
+            403: "عدم دسترسی به رزرو",
+            404: "رزرو یافت نشد"
+        }
     )
     def put(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        notes = request.data.get('description', None)
-        if notes is None:
-            return Response({'detail': 'فیلد description الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        reservation.additional_notes = notes
+        # بررسی مالکیت رزرو
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # توضیحات اختیاری است؛ اگر null یا خالی ارسال شد به صورت رشته خالی ذخیره می‌شود
+        notes = request.data.get('description', '')
+        if notes is None:
+            notes = ''
+
+        reservation.additional_notes = str(notes).strip()
         reservation.save(update_fields=['additional_notes'])
+
         return Response({
             'description': reservation.additional_notes
         }, status=status.HTTP_200_OK)
@@ -3897,6 +3960,7 @@ def validate_national_code(value):
 
 
 
+
 # ==============================================================================
 # API دریافت و ویرایش مسافران، اتاق‌ها و نیم‌شارژهای رزرو
 # ==============================================================================
@@ -3906,7 +3970,8 @@ logger = logging.getLogger(__name__)
 class ReservationRoomDetailAPIView(APIView):
     """
     دریافت و ویرایش اطلاعات مسافران، اتاق‌ها و نیم‌شارژهای یک رزرو:
-    - اعتبارسنجی مالکیت رزرو
+    - اعتبارسنجی مالکیت رزرو (مشاهده رایگان برای کاربر مهمان دارنده tracking_code)
+    - الصاق خودکار رزرو به کاربر پس از ورود (لاگین) در مرحله اول
     - کنترل عدم ویرایش مالی رزروهای پرداخت‌شده
     - ثبت و اعتبارسنجی مشخصات مسافر اصلی، سایر مسافران و نفرات اضافه
     - ذخیره خودکار مسافران جدید در دفترچه مسافران کاربر
@@ -3927,23 +3992,27 @@ class ReservationRoomDetailAPIView(APIView):
     )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
-        
-        # اعتبارسنجی مالکیت رزرو
-        if reservation.buyer != request.user:
-            return Response({"detail": "شما اجازه دسترسی به این رزرو را ندارید."}, status=status.HTTP_403_FORBIDDEN)
+
+        # اگر رزرو قبلاً به کاربری الصاق شده است، سایر کاربران اجازه مشاهده ندارند
+        if reservation.buyer is not None:
+            if not request.user.is_authenticated or reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         # استخراج مشخصات رزروکننده
-        profile = getattr(request.user, 'natural_profile', None)
+        profile = getattr(request.user, 'natural_profile', None) if request.user.is_authenticated else None
         reserver_data = {
             'first_name': reservation.reserver_first_name or (profile.first_name if profile else '') or '',
             'last_name': reservation.reserver_last_name or (profile.last_name if profile else '') or '',
-            'phone_number': reservation.reserver_phone_number or getattr(request.user, 'phone_number', '') or '',
+            'phone_number': reservation.reserver_phone_number or (getattr(request.user, 'phone_number', '') if request.user.is_authenticated else '') or '',
             'national_code': reservation.reserver_national_code or (profile.national_code if profile else '') or ''
         }
 
         # موجودی زنده کیف پول مسافر
         user_wallet_balance = 0
-        if hasattr(request.user, 'wallet') and request.user.wallet:
+        if request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
             user_wallet_balance = int(request.user.wallet.balance)
 
         response_data = {
@@ -3951,7 +4020,7 @@ class ReservationRoomDetailAPIView(APIView):
             "capacity_status": reservation.capacity_status,
             "payment_status": reservation.payment_status,
             "final_price": int(reservation.final_price or 0),
-            "user_wallet_balance": user_wallet_balance,  # 👈 موجودی زنده کیف پول کاربر
+            "user_wallet_balance": user_wallet_balance,
             "reserver": reserver_data,
             "rooms": []
         }
@@ -3964,8 +4033,11 @@ class ReservationRoomDetailAPIView(APIView):
             res_room.calculate_room_prices()
             res_room.calculate_half_day_prices()
 
-            half_day_in_price = int(res_room.half_day_in_price or 0) if hotel.has_check_in_half_day_charge else 0
-            half_day_out_price = int(res_room.half_day_out_price or 0) if hotel.has_check_out_half_day_charge else 0
+            has_in_charge = bool(getattr(hotel, 'has_check_in_half_day_charge', False))
+            has_out_charge = bool(getattr(hotel, 'has_check_out_half_day_charge', False))
+
+            half_day_in_price = int(res_room.half_day_in_price or 0) if has_in_charge else 0
+            half_day_out_price = int(res_room.half_day_out_price or 0) if has_out_charge else 0
 
             room_data = {
                 "id": res_room.room.id,
@@ -3981,14 +4053,14 @@ class ReservationRoomDetailAPIView(APIView):
                 },
                 "half_charges": {
                     "enter": {
-                        "enabled": bool(res_room.half_day_in_selected and hotel.has_check_in_half_day_charge),
+                        "enabled": bool(res_room.half_day_in_selected and has_in_charge),
                         "price": half_day_in_price,
-                        "available": bool(hotel.has_check_in_half_day_charge)
+                        "available": has_in_charge
                     },
                     "exit": {
-                        "enabled": bool(res_room.half_day_out_selected and hotel.has_check_out_half_day_charge),
+                        "enabled": bool(res_room.half_day_out_selected and has_out_charge),
                         "price": half_day_out_price,
-                        "available": bool(hotel.has_check_out_half_day_charge)
+                        "available": has_out_charge
                     }
                 }
             }
@@ -4025,10 +4097,17 @@ class ReservationRoomDetailAPIView(APIView):
         with transaction.atomic():
             reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-            if reservation.buyer != request.user:
-                return Response({"detail": "شما اجازه دسترسی به این رزرو را ندارید."}, status=status.HTTP_403_FORBIDDEN)
+            # اتصال هوشمند رزرو مهمان به کاربری که در این مرحله وارد شده است
+            if reservation.buyer is None:
+                if request.user.is_authenticated:
+                    reservation.buyer = request.user
+            elif reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
-            # جلوگیری از تغییرات ساختاری/مالی روی رزرو پرداخت شده
+            # جلوگیری از تغییرات ساختاری/مالی روی رزرو پرداخت‌شده
             if reservation.payment_status == 'paid':
                 return Response(
                     {"detail": "این رزرو قبلاً پرداخت و قطعی شده است و امکان تغییر اتاق‌ها یا خدمات وجود ندارد."},
@@ -4077,7 +4156,7 @@ class ReservationRoomDetailAPIView(APIView):
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     for passenger in passengers.get(p_type, []):
                         if not passenger.get('first_name') or not passenger.get('last_name'):
-                            return Response({'detail': f'نام و نام خانوادگی برای تمام مسافران الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+                            return Response({'detail': 'نام و نام خانوادگی برای تمام مسافران الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
                         if passenger.get('phone_number'):
                             try:
                                 validate_phone_number(passenger['phone_number'])
@@ -4089,14 +4168,13 @@ class ReservationRoomDetailAPIView(APIView):
                             except ValidationError as e:
                                 return Response({'detail': f'خطا در کد ملی مسافر: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # بررسی پشتیبانی نیم‌شارژ توسط هتل
                 hotel = Room.objects.get(id=room_id).hotel
                 if hotel:
                     half_charges = room_entry.get('half_charges', {})
                     for charge_type in ['enter', 'exit']:
                         charge = half_charges.get(charge_type, {})
                         enabled = charge.get('enabled', False)
-                        is_supported = hotel.has_check_in_half_day_charge if charge_type == 'enter' else hotel.has_check_out_half_day_charge
+                        is_supported = getattr(hotel, 'has_check_in_half_day_charge', False) if charge_type == 'enter' else getattr(hotel, 'has_check_out_half_day_charge', False)
                         if enabled and not is_supported:
                             return Response({'detail': f'نیم‌شارژ {charge_type} توسط این هتل پشتیبانی نمی‌شود.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -4108,7 +4186,7 @@ class ReservationRoomDetailAPIView(APIView):
             if reserver_code:
                 validate_national_code(reserver_code)
             reservation.reserver_national_code = reserver_code
-            reservation.save(update_fields=['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
+            reservation.save(update_fields=['buyer', 'reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
             # ذخیره اتاق‌ها و مسافران
             res_rooms_list = list(reservation.reservation_rooms.all())
@@ -4130,8 +4208,8 @@ class ReservationRoomDetailAPIView(APIView):
 
                 hotel = res_room.room.hotel if res_room.room else None
                 if hotel:
-                    res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False) and hotel.has_check_in_half_day_charge
-                    res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False) and hotel.has_check_out_half_day_charge
+                    res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False) and getattr(hotel, 'has_check_in_half_day_charge', False)
+                    res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False) and getattr(hotel, 'has_check_out_half_day_charge', False)
                     res_room.calculate_half_day_prices()
 
                 res_room.calculate_room_prices()
@@ -4161,7 +4239,7 @@ class ReservationRoomDetailAPIView(APIView):
                 )
 
                 # ذخیره مسافر در دفترچه مخاطبین کاربر
-                if main_nat_code:
+                if main_nat_code and request.user.is_authenticated:
                     if not Passenger.objects.filter(user=request.user, identification_code=main_nat_code).exists():
                         try:
                             Passenger.objects.create(
@@ -4188,7 +4266,7 @@ class ReservationRoomDetailAPIView(APIView):
                             national_code=p_nat_code,
                             is_primary=False
                         )
-                        if p_nat_code and p.get('phone_number'):
+                        if p_nat_code and p.get('phone_number') and request.user.is_authenticated:
                             if not Passenger.objects.filter(user=request.user, identification_code=p_nat_code).exists():
                                 try:
                                     Passenger.objects.create(
@@ -4219,17 +4297,16 @@ class ReservationRoomDetailAPIView(APIView):
             reservation.total_half_day_charge = total_half
             reservation.final_price = final_price
 
-            # استفاده از نام صحیح فلگ جهت ممانعت از بازنویسی اشتباه
             reservation._skip_price_calculation_on_save = True
             reservation.save(update_fields=[
-                'total_price', 'total_extra_passenger_charge', 'discount',
+                'buyer', 'total_price', 'total_extra_passenger_charge', 'discount',
                 'room_fixed_discount', 'half_day_in_charge',
                 'half_day_out_charge', 'total_half_day_charge', 'final_price'
             ])
 
-        user_wallet_balance = int(request.user.wallet.balance) if hasattr(request.user, 'wallet') and request.user.wallet else 0
+        user_wallet_balance = int(request.user.wallet.balance) if (request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet) else 0
 
-        # ارسال به‌روزرسانی زنده به وب‌سوکت تا تغییرات قیمت بدون رفرش اعمال شود
+        # ارسال به‌روزرسانی زنده به وب‌سوکت
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"reservation_{reservation.tracking_code}",
@@ -4250,53 +4327,68 @@ class ReservationRoomDetailAPIView(APIView):
             'final_price': int(reservation.final_price),
             'user_wallet_balance': user_wallet_balance
         }, status=status.HTTP_200_OK)
-
-
     
-#لیست مسافران برای بخش رزرو
+    
+    
+# ------------------------------------------------------------------------------
+# احراز هویت امن: در صورت لاگین کاربر شناسایی می‌شود و در صورت عدم لاگین، خطای ۴۰۱ نمی‌دهد
+# ------------------------------------------------------------------------------
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+class SafeJWTAuthentication(JWTAuthentication):
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except Exception:
+            return None
+
+
+# لیست مسافران برای بخش رزرو (پشتیبانی از کاربر مهمان و لاگین‌شده)
 class PassengerListForReservationView(generics.GenericAPIView):
     """
-    API لیست مسافران برای بخش رزرواسیون بدون صفحه‌بندی.
+    API لیست مسافران برای بخش رزرواسیون بدون صفحه‌بندی:
+    - برای کاربران واردشده: لیست دفترچه مسافران ذخیره‌شده را برمی‌گرداند.
+    - برای کاربران مهمان: بدون پرتاب خطای ۴۰۱، یک آرایه خالی [] با وضعیت ۲۰۰ بازمی‌گرداند.
     """
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [AllowAny]
+    authentication_classes = [SafeJWTAuthentication]
     serializer_class = PassengerSerializer
 
     def get_queryset(self):
-        # فقط مسافرانی که به کاربر جاری تعلق دارند
-        return Passenger.objects.filter(user=self.request.user)
+        if self.request.user and self.request.user.is_authenticated:
+            return Passenger.objects.filter(user=self.request.user)
+        return Passenger.objects.none()
 
     @swagger_auto_schema(
         tags=["reservation-api"],
         operation_summary="لیست مسافران برای رزرواسیون",
-        operation_description="تمام مسافران ثبت‌شده توسط کاربر جاری را بدون صفحه‌بندی بازمی‌گرداند.",
+        operation_description="مسافران ذخیره‌شده کاربر جاری را برمی‌گرداند (برای کاربر مهمان لیست خالی ارسال می‌شود).",
         responses={200: PassengerSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
         try:
+            # اگر کاربر هنوز لاگین نکرده است، لیست خالی برگردان تا فرم مسافران بدون خطا لود شود
+            if not request.user or not request.user.is_authenticated:
+                return Response([], status=status.HTTP_200_OK)
+
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as exc:
-            return Response({
-                "error": str(exc),
-                "exception_type": exc.__class__.__name__,
-                "trace": traceback.format_exc(limit=2)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"خطا در دریافت لیست مسافران برای رزرو: {exc}")
+            # بازگرداندن آرایه خالی در صورت هرگونه خطا تا فرانت‌اند کرش نکند
+            return Response([], status=status.HTTP_200_OK)
 
 
-    
-    
-    
-# ای پی ای کد تخفیف برای رزرو 
-logger = logging.getLogger(__name__)
-_thread_locals = local()
-
-def set_skip_points_and_sms(value):
-    setattr(_thread_locals, 'skip_points_and_sms', value)
-
-def get_skip_points_and_sms():
-    return getattr(_thread_locals, 'skip_points_and_sms', False)
-
+# استفاده از تابع کنترل سیگنال‌های مدل به جای تعریف thread_local موازی
+try:
+    from .models import set_skip_points_and_sms, get_skip_points_and_sms
+except ImportError:
+    _thread_locals = local()
+    def set_skip_points_and_sms(value):
+        setattr(_thread_locals, 'skip_points_and_sms', value)
+    def get_skip_points_and_sms():
+        return getattr(_thread_locals, 'skip_points_and_sms', False)
 
 
 
