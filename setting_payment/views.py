@@ -121,10 +121,7 @@ class ReservationPaymentCheckAPIView(APIView):
         این API لینک پرداخت برای رزرو هتل با کد رهگیری مشخص را برمی‌گرداند.
         - نیاز به احراز هویت دارد.
         - کد رهگیری (tracking_code) از URL دریافت می‌شود.
-        - اگر رزرو معتبر باشد و لینک پرداخت در کش موجود باشد، همان لینک بازگشت داده می‌شود.
-        - در غیر این صورت، لینک پرداخت جدید از درگاه فعال (زرین‌پال یا ایران‌درگاه) تولید می‌شود.
-        - اگر لینک پرداخت منقضی شده باشد، وضعیت رزرو به unpaid تغییر می‌کند.
-        - پاسخ شامل پراپرتی `ok` است که نشان‌دهنده وضعیت معتبر بودن لینک پرداخت است.
+        - اگر رزرو در حالت مهمان ساخته شده باشد، به کاربر متصل می‌شود.
         """,
         responses={
             200: openapi.Response(
@@ -146,8 +143,13 @@ class ReservationPaymentCheckAPIView(APIView):
     def post(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-        if reservation.buyer != request.user:
+        # 👇 نکته کلیدی: اگر رزرو در حالت مهمان بوده، همینجا به نام کاربر لاگین‌شده سند می‌خورد
+        if reservation.buyer is None:
+            reservation.buyer = request.user
+            reservation.save(update_fields=['buyer'])
+        elif reservation.buyer != request.user:
             return Response({"detail": "شما به این رزرو دسترسی ندارید."}, status=status.HTTP_403_FORBIDDEN)
+
         if reservation.capacity_status != 'confirmed':
             return Response({"detail": "رزرو تایید نشده است."}, status=status.HTTP_400_BAD_REQUEST)
         if reservation.final_price <= 0:
@@ -317,37 +319,12 @@ class ReservationPaymentCheckAPIView(APIView):
 class PaymentCallbackAPIView(APIView):
     permission_classes = []
 
-    @swagger_auto_schema(
-        operation_summary="دریافت callback تراکنش پرداخت",
-        operation_description="""
-        این API توسط درگاه پرداخت (زرین‌پال یا ایران‌درگاه) برای اعلام نتیجه تراکنش فراخوانی می‌شود.
-        - نیازی به احراز هویت ندارد.
-        - درگاه زرین‌پال: اگر Status=OK باشد، پرداخت موفق است.
-        - درگاه ایران‌درگاه: اگر code=100 باشد، پرداخت موفق است.
-        - در هر حالت (موفق یا ناموفق)، کاربر به آدرس فرانت ریدایرکت می‌شود.
-        """,
-        manual_parameters=[
-            openapi.Parameter('Authority', openapi.IN_QUERY, description="شناسه تراکنش (زرین‌پال)", type=openapi.TYPE_STRING),
-            openapi.Parameter('authority', openapi.IN_QUERY, description="شناسه تراکنش (ایران‌درگاه)", type=openapi.TYPE_STRING),
-            openapi.Parameter('Status', openapi.IN_QUERY, description="وضعیت تراکنش زرین‌پال (OK/NOK)", type=openapi.TYPE_STRING),
-            openapi.Parameter('code', openapi.IN_QUERY, description="کد وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
-            openapi.Parameter('message', openapi.IN_QUERY, description="پیام وضعیت تراکنش ایران‌درگاه", type=openapi.TYPE_STRING),
-            openapi.Parameter('amount', openapi.IN_QUERY, description="مبلغ تراکنش", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('orderId', openapi.IN_QUERY, description="شناسه سفارش", type=openapi.TYPE_STRING),
-            openapi.Parameter('refId', openapi.IN_QUERY, description="شناسه ارجاع", type=openapi.TYPE_STRING),
-        ],
-        responses={302: "ریدایرکت به صفحه مناسب"},
-        tags=["reservation-api"]
-    )
     def get(self, request):
         try:
             active_gateway = get_active_gateway()
             merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
 
-            # --- مهم: پشتیبانی از هر دو حالت Authority و authority ---
             authority = request.query_params.get("Authority") or request.query_params.get("authority")
-            # -----------------------------------------------------------
-
             payment_status = request.query_params.get("Status")
             payment_code = request.query_params.get("code")
             ref_id = request.query_params.get("refId") or request.query_params.get("refid")
@@ -358,7 +335,7 @@ class PaymentCallbackAPIView(APIView):
             logger.info(f"Callback دریافت شد: authority={authority}, Status={payment_status}, code={payment_code}, orderId={order_id}, refId={ref_id}")
 
             if not authority:
-                logger.error("Authority در callback وجود ندارد (نه با A بزرگ و نه با a کوچک).")
+                logger.error("Authority در callback وجود ندارد.")
                 return Response({"detail": "تراکنش نامعتبر: authority وجود ندارد"}, status=status.HTTP_400_BAD_REQUEST)
 
             tracking_code = get_tracking_by_authority(authority)
@@ -395,24 +372,31 @@ class PaymentCallbackAPIView(APIView):
                 # ارسال نوتیف پرداخت به ادمین‌ها
                 from hotel_bot.bot import send_payment_receipt_notification
                 from asgiref.sync import async_to_sync
+                
+                buyer_phone = (
+                    reservation.buyer.phone_number 
+                    if reservation.buyer 
+                    else reservation.reserver_phone_number or "نامشخص"
+                )
+
                 if reservation.payment_status == 'paid':
-                    # محاسبه امتیاز دریافتی
                     total_points = sum(
                         (rr.room.customer_club_points or 0) * rr.quantity
                         for rr in reservation.reservation_rooms.select_related('room').all()
                     )
                     
-                    # دریافت امتیاز فعلی کاربر
-                    from bashgah_moshtarian.models import CustomerClubPoint
-                    try:
-                        customer_points = CustomerClubPoint.objects.get(user=reservation.buyer)
-                        current_points = customer_points.points
-                    except CustomerClubPoint.DoesNotExist:
-                        current_points = 0
+                    current_points = 0
+                    if reservation.buyer:
+                        from bashgah_moshtarian.models import CustomerClubPoint
+                        try:
+                            customer_points = CustomerClubPoint.objects.get(user=reservation.buyer)
+                            current_points = customer_points.points
+                        except CustomerClubPoint.DoesNotExist:
+                            current_points = 0
                     
                     async_to_sync(send_payment_receipt_notification)(
                         reservation.tracking_code,
-                        reservation.buyer.phone_number,
+                        buyer_phone,
                         int(reservation.total_price),
                         int(reservation.total_half_day_charge),
                         int(reservation.wallet_withdrawal_amount),
@@ -425,39 +409,34 @@ class PaymentCallbackAPIView(APIView):
                 else:
                     async_to_sync(send_payment_receipt_notification)(
                         reservation.tracking_code,
-                        reservation.buyer.phone_number,
+                        buyer_phone,
                         0, 0, 0, 0,
                         int(reservation.final_price),
                         0, 0,
                         success=False
                     )
                 
-                # اگر پرداخت موفق بود و کیف پول استفاده شده، آن را پردازش کن
-                if reservation.payment_status == 'paid' and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                if (
+                    reservation.payment_status == 'paid' 
+                    and reservation.wallet_withdrawal_amount > 0 
+                    and not reservation.wallet_withdrawn 
+                    and reservation.buyer
+                ):
                     try:
                         logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {tracking_code}")
                         wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
                         withdrawal_amount = int(reservation.wallet_withdrawal_amount)
                         
                         if wallet.balance >= withdrawal_amount:
-                            # کم کردن موجودی
                             wallet.balance = F('balance') - withdrawal_amount
                             wallet.save(update_fields=['balance'])
-                            
-                            # زدن تیک
                             Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
-                            
-                            logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد و تیک wallet_withdrawn خورد")
+                            logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
                         else:
-                            logger.warning(f"⚠️ موجودی کیف پول کافی نیست: {wallet.balance} < {withdrawal_amount}")
-                    except Wallet.DoesNotExist:
-                        logger.error(f"❌ کیف پول برای کاربر {reservation.buyer.phone_number} یافت نشد")
+                            logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
                     except Exception as e:
                         logger.error(f"❌ خطا در پردازش کیف پول: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
 
-            # ذخیره در کش برای verify
             cache_data = {
                 "status": payment_status or payment_code,
                 "tracking_code": tracking_code,
@@ -468,11 +447,9 @@ class PaymentCallbackAPIView(APIView):
                 "message": message,
             }
             cache.set(f"callback_{authority}", cache_data, timeout=1800)
-            logger.info(f"داده callback ذخیره شد: {cache_data}")
 
-            # ریدایرکت نهایی به فرانت
             query_params = {
-                "Authority": authority,  # همیشه با A بزرگ برای فرانت
+                "Authority": authority,
                 "Status": payment_status if active_gateway == "zarinpal" else (payment_code or "NOK"),
                 "tracking-code": tracking_code,
             }
@@ -482,7 +459,6 @@ class PaymentCallbackAPIView(APIView):
                     query_params["refId"] = ref_id
 
             redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
-            logger.info(f"ریدایرکت نهایی: {redirect_url}")
             return HttpResponseRedirect(redirect_url)
 
         except Exception as e:
@@ -492,7 +468,7 @@ class PaymentCallbackAPIView(APIView):
                     reservation.payment_status = 'unpaid'
                     reservation.save(update_fields=['payment_status'])
             return Response({"detail": "خطا در پردازش تراکنش"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
 
 # -------------------------
 # API: تأیید نهایی تراکنش (اختیاری)
@@ -500,42 +476,13 @@ class PaymentCallbackAPIView(APIView):
 class PaymentVerifyAPIView(APIView):
     permission_classes = []
 
-    @swagger_auto_schema(
-        operation_summary="تأیید نهایی تراکنش پرداخت (اختیاری)",
-        operation_description="""
-        این API برای تأیید نهایی تراکنش پرداخت استفاده می‌شود و اختیاری است.
-        - نیازی به احراز هویت ندارد.
-        - اطلاعات تراکنش (مانند authority و orderId) از بدنه درخواست دریافت شده و وضعیت پرداخت بررسی می‌شود.
-        - اگر رزرو قبلاً به paid تنظیم شده باشد، همان وضعیت برگردانده می‌شود.
-        - در صورت عدم موفقیت، وضعیت رزرو به unpaid تغییر می‌کند.
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'authority': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه تراکنش'),
-                'orderId': openapi.Schema(type=openapi.TYPE_STRING, description='شناسه سفارش (tracking_code رزرو)'),
-                'amount': openapi.Schema(type=openapi.TYPE_INTEGER, description='مبلغ تراکنش به ریال')
-            },
-            required=['authority', 'orderId', 'amount']
-        ),
-        responses={
-            200: openapi.Response(description="تراکنش با موفقیت تأیید شد یا قبلاً تأیید شده"),
-            400: openapi.Response(description="تأیید تراکنش ناموفق یا داده‌های نامعتبر"),
-            404: openapi.Response(description="رزرو یافت نشد"),
-            500: openapi.Response(description="خطای سرور، مانند مشکل در اتصال به درگاه")
-        },
-        tags=["reservation-api"]
-    )
     def post(self, request):
         authority = request.data.get("authority")
         order_id = request.data.get("orderId")
         amount = int(request.data.get("amount", 0))
 
-        logger.info(f"درخواست تأیید تراکنش: authority={authority}, order_id={order_id}, amount={amount}")
-
         reservation = get_object_or_404(Reservationhotel, tracking_code=order_id)
         if reservation.payment_status == 'paid':
-            logger.info(f"رزرو {order_id} قبلاً به paid تنظیم شده است.")
             return Response(
                 {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                 status=status.HTTP_200_OK
@@ -545,9 +492,7 @@ class PaymentVerifyAPIView(APIView):
         merchant_code, request_url, payment_url, verify_url, mode, callback_redirect_url = get_merchant_code(active_gateway)
 
         callback_data = cache.get(f"callback_{authority}")
-        logger.info(f"داده‌های کش برای authority={authority}: {callback_data}")
         if not callback_data or not isinstance(callback_data, dict) or callback_data.get("tracking_code") != order_id:
-            logger.error(f"داده‌های callback نامعتبر: authority={authority}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -557,7 +502,6 @@ class PaymentVerifyAPIView(APIView):
             )
 
         if active_gateway == 'zarinpal' and callback_data.get("status") != "OK":
-            logger.error(f"تراکنش زرین‌پال ناموفق: status={callback_data.get('status')}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -566,7 +510,6 @@ class PaymentVerifyAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         elif active_gateway == 'iraniangateway' and callback_data.get("status") not in ["100", "101"]:
-            logger.error(f"تراکنش ایران‌درگاه ناموفق: code={callback_data.get('status')}")
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
                 reservation.save(update_fields=['payment_status'])
@@ -589,9 +532,7 @@ class PaymentVerifyAPIView(APIView):
                 resp = make_payment_request(verify_url, data, headers)
                 try:
                     resp_data = resp.json()
-                    logger.info(f"پاسخ تأیید زرین‌پال: {resp_data}")
                 except ValueError:
-                    logger.error(f"پاسخ غیر JSON از زرین‌پال: {resp.text}")
                     with transaction.atomic():
                         reservation.payment_status = 'unpaid'
                         reservation.save(update_fields=['payment_status'])
@@ -606,47 +547,37 @@ class PaymentVerifyAPIView(APIView):
                         reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         
-                        # اضافه کردن مسافران جدید به لیست مسافران کاربر
-                        for res_room in reservation.reservation_rooms.all():
-                            for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
-                                if passenger.national_code and passenger.mobile_number:
-                                    if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
-                                        try:
-                                            Passenger.objects.create(
-                                                user=reservation.buyer,
-                                                first_name=passenger.first_name,
-                                                last_name=passenger.last_name,
-                                                identification_code=passenger.national_code,
-                                                phone_number=passenger.mobile_number
-                                            )
-                                            logger.info(f"✅ مسافر {passenger.first_name} {passenger.last_name} به لیست اضافه شد.")
-                                        except Exception as e:
-                                            logger.error(f"❌ خطا در اضافه کردن مسافر {passenger.first_name} {passenger.last_name}: {e}")
-                                    else:
-                                        logger.info(f"ℹ️ مسافر {passenger.first_name} {passenger.last_name} قبلاً در لیست وجود دارد.")
-                                else:
-                                    logger.warning(f"⚠️ مسافر {passenger.first_name} {passenger.last_name} کد ملی یا موبایل ندارد، اضافه نشد.")
+                        if reservation.buyer:
+                            for res_room in reservation.reservation_rooms.all():
+                                for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
+                                    if passenger.national_code and passenger.mobile_number:
+                                        if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
+                                            try:
+                                                Passenger.objects.create(
+                                                    user=reservation.buyer,
+                                                    first_name=passenger.first_name,
+                                                    last_name=passenger.last_name,
+                                                    identification_code=passenger.national_code,
+                                                    phone_number=passenger.mobile_number
+                                                )
+                                            except Exception:
+                                                pass
                         
-                        # پردازش کیف پول
-                        if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                        if reservation.buyer and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
                             try:
-                                logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {reservation.tracking_code}")
                                 wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
                                 withdrawal_amount = int(reservation.wallet_withdrawal_amount)
-                                
                                 if wallet.balance >= withdrawal_amount:
                                     wallet.balance = F('balance') - withdrawal_amount
                                     wallet.save(update_fields=['balance'])
                                     Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
-                                    logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
-                                else:
-                                    logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
-                            except Exception as e:
-                                logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                            except Exception:
+                                pass
                         
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
+
                     return Response(
                         {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                         status=status.HTTP_200_OK
@@ -674,9 +605,7 @@ class PaymentVerifyAPIView(APIView):
                 resp = make_payment_request(verify_url, data, headers)
                 try:
                     resp_data = resp.json()
-                    logger.info(f"پاسخ تأیید ایران‌درگاه: {resp_data}")
                 except ValueError:
-                    logger.error(f"پاسخ غیر JSON از ایران‌درگاه: {resp.text}")
                     with transaction.atomic():
                         reservation.payment_status = 'unpaid'
                         reservation.save(update_fields=['payment_status'])
@@ -691,47 +620,37 @@ class PaymentVerifyAPIView(APIView):
                         reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
                         
-                        # اضافه کردن مسافران جدید به لیست مسافران کاربر
-                        for res_room in reservation.reservation_rooms.all():
-                            for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
-                                if passenger.national_code and passenger.mobile_number:
-                                    if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
-                                        try:
-                                            Passenger.objects.create(
-                                                user=reservation.buyer,
-                                                first_name=passenger.first_name,
-                                                last_name=passenger.last_name,
-                                                identification_code=passenger.national_code,
-                                                phone_number=passenger.mobile_number
-                                            )
-                                            logger.info(f"✅ مسافر {passenger.first_name} {passenger.last_name} به لیست اضافه شد.")
-                                        except Exception as e:
-                                            logger.error(f"❌ خطا در اضافه کردن مسافر {passenger.first_name} {passenger.last_name}: {e}")
-                                    else:
-                                        logger.info(f"ℹ️ مسافر {passenger.first_name} {passenger.last_name} قبلاً در لیست وجود دارد.")
-                                else:
-                                    logger.warning(f"⚠️ مسافر {passenger.first_name} {passenger.last_name} کد ملی یا موبایل ندارد، اضافه نشد.")
+                        if reservation.buyer:
+                            for res_room in reservation.reservation_rooms.all():
+                                for passenger in res_room.passengers.filter(passenger_type__in=['primary', 'extra']):
+                                    if passenger.national_code and passenger.mobile_number:
+                                        if not Passenger.objects.filter(user=reservation.buyer, identification_code=passenger.national_code).exists():
+                                            try:
+                                                Passenger.objects.create(
+                                                    user=reservation.buyer,
+                                                    first_name=passenger.first_name,
+                                                    last_name=passenger.last_name,
+                                                    identification_code=passenger.national_code,
+                                                    phone_number=passenger.mobile_number
+                                                )
+                                            except Exception:
+                                                pass
                         
-                        # پردازش کیف پول
-                        if reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
+                        if reservation.buyer and reservation.wallet_withdrawal_amount > 0 and not reservation.wallet_withdrawn:
                             try:
-                                logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {reservation.tracking_code}")
                                 wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
                                 withdrawal_amount = int(reservation.wallet_withdrawal_amount)
-                                
                                 if wallet.balance >= withdrawal_amount:
                                     wallet.balance = F('balance') - withdrawal_amount
                                     wallet.save(update_fields=['balance'])
                                     Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
-                                    logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
-                                else:
-                                    logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
-                            except Exception as e:
-                                logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                            except Exception:
+                                pass
                         
                         cache.delete(f"payment_link_{order_id}")
                         cache.delete(f"payment_link_authority_{authority}")
                         cache.delete(f"callback_{authority}")
+
                     return Response(
                         {"status": "success", "refId": reservation.ref_id, "payment_status": "paid"},
                         status=status.HTTP_200_OK
@@ -745,15 +664,6 @@ class PaymentVerifyAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-        except requests.exceptions.RequestException as e:
-            with transaction.atomic():
-                reservation.payment_status = 'unpaid'
-                reservation.save(update_fields=['payment_status'])
-            logger.exception(f"خطا در اتصال به درگاه: {str(e)}")
-            return Response(
-                {"status": "failed", "detail": f"خطا در اتصال به درگاه: {str(e)}", "payment_status": "unpaid"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
         except Exception as e:
             with transaction.atomic():
                 reservation.payment_status = 'unpaid'
@@ -771,20 +681,13 @@ class PaymentVerifyAPIView(APIView):
 class ReservationPaymentStatusAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(
-        operation_summary="دریافت وضعیت پرداخت رزرو با tracking_code",
-        operation_description="این API وضعیت پرداخت رزرو را بر اساس tracking_code برمی‌گرداند.",
-        responses={
-            200: openapi.Response(description="وضعیت پرداخت رزرو با موفقیت بازگشت داده شد"),
-            403: openapi.Response(description="عدم دسترسی به رزرو"),
-            404: openapi.Response(description="رزرو یافت نشد")
-        },
-        tags=["reservation-api"]
-    )
     def get(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-        if reservation.buyer != request.user:
+        if reservation.buyer is None:
+            reservation.buyer = request.user
+            reservation.save(update_fields=['buyer'])
+        elif reservation.buyer != request.user:
             logger.warning(f"کاربر {request.user.phone_number} به رزرو {tracking_code} دسترسی ندارد.")
             raise ValidationError("شما به این رزرو دسترسی ندارید.")
 
@@ -792,7 +695,6 @@ class ReservationPaymentStatusAPIView(APIView):
             "payment_status": reservation.payment_status,
             "ref_id": reservation.ref_id
         }
-        logger.debug(f"ReservationPaymentStatusAPIView response: {response_data}")
         return Response(response_data, status=status.HTTP_200_OK)
 
 
@@ -816,9 +718,13 @@ def cancel_unpaid_reservations():
             reservation.save(update_fields=['capacity_status'])
             logger.info(f"رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.")
             
-            # ارسال نوتیف به ادمین‌ها
             from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
-            notification_text = f"🚫 رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.\n👤 کاربر: {reservation.buyer.phone_number}"
+            buyer_phone = (
+                reservation.buyer.phone_number 
+                if reservation.buyer 
+                else reservation.reserver_phone_number or "مهمان"
+            )
+            notification_text = f"🚫 رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.\n👤 کاربر: {buyer_phone}"
             for admin_id in SUPER_ADMINS:
                 try:
                     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -827,9 +733,7 @@ def cancel_unpaid_reservations():
                         "text": notification_text,
                         "parse_mode": "Markdown"
                     }
-                    response = requests.post(url, data=data, timeout=10)
-                    if response.status_code != 200:
-                        logger.error(f"Failed to send notification to {admin_id}: {response.text}")
-                except Exception as e:
-                    logger.error(f"Error sending notification to {admin_id}: {e}")
+                    requests.post(url, data=data, timeout=10)
+                except Exception:
+                    pass
     logger.info("پایان کنسل رزروهای پرداخت نشده")
