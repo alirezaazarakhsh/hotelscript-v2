@@ -3241,6 +3241,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
     """
     serializer_class = ReservationCreateSerializer
     permission_classes = [IsAuthenticated]
+    authentication_classes = []  
 
     @swagger_auto_schema(
         operation_summary="ایجاد رزرو موقت",
