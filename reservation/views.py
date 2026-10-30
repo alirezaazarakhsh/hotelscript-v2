@@ -3230,8 +3230,6 @@ class GetPriceRangeAPI(generics.GenericAPIView):
 # API ایجاد رزرو موقت (پرسرعت، دوگانه: محلی + اسنپ‌تریپ)
 # ==============================================================================
 logger = logging.getLogger(__name__)
-
-
 class ReservationCreateAPIView(generics.CreateAPIView):
     """
     ایجاد رزرو موقت با حداکثر سرعت:
@@ -3304,9 +3302,11 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         if check_out_date <= check_in_date:
             raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
 
-        # استخراج اطلاعات رزروکننده از حساب کاربری شخص واردشده
-        profile = getattr(request.user, 'natural_profile', None)
-        user_phone = str(getattr(request.user, 'phone_number', '') or '').strip()
+        # استخراج اطلاعات رزروکننده از حساب کاربری شخص واردشده (ایمن در برابر کاربر مهمان)
+        is_logged_in = bool(request.user and request.user.is_authenticated)
+        current_buyer = request.user if is_logged_in else None
+        profile = getattr(current_buyer, 'natural_profile', None) if is_logged_in else None
+        user_phone = str(getattr(current_buyer, 'phone_number', '') or '').strip() if is_logged_in else ''
 
         reserver_data = {
             'reserver_first_name': (profile.first_name if profile else '') or '',
@@ -3315,11 +3315,12 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             'reserver_phone_number': user_phone
         }
 
+        # ذخیره خریدار به صورت None برای مهمان تا خطای 500 برطرف شود
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             check_in_date=check_in_date,
             check_out_date=check_out_date,
-            buyer=request.user,
+            buyer=current_buyer,
             capacity_status='pending',
             payment_status='pending',
             **reserver_data
@@ -3425,8 +3426,8 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation._skip_price_calculation_on_save = True
         reservation.save()
 
-        # خواندن موجودی زنده کیف پول مسافر
-        user_balance = int(request.user.wallet.balance) if hasattr(request.user, 'wallet') and request.user.wallet else 0
+        # خواندن موجودی زنده کیف پول مسافر (فقط اگر کاربر لاگین بود)
+        user_balance = int(current_buyer.wallet.balance) if (current_buyer and hasattr(current_buyer, 'wallet') and current_buyer.wallet) else 0
 
         # ارسال رویداد وب‌سوکت همراه با تایمر و موجودی کیف پول کاربر
         channel_layer = get_channel_layer()
@@ -3448,7 +3449,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         # ارسال اعلان غیرمسدودکننده به تلگرام (عدم ایجاد کندی در پاسخ وب)
         try:
             from hotel_bot.bot import send_reservation_notification
-            buyer_name = f"{reserver_data.get('reserver_first_name', '')} {reserver_data.get('reserver_last_name', '')}".strip() or user_phone
+            buyer_name = f"{reserver_data.get('reserver_first_name', '')} {reserver_data.get('reserver_last_name', '')}".strip() or user_phone or "کاربر مهمان"
             hotel_name = room.hotel.name if room.hotel else 'نامشخص'
             rooms_text = f"{room.title} (تعداد: {quantity})"
             async_to_sync(send_reservation_notification)(
@@ -3477,7 +3478,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             "wallet_balance": user_balance,
             "final_price": int(reservation.final_price)
         }, status=status.HTTP_200_OK)
-        
         
 
 
