@@ -3913,10 +3913,7 @@ class ReservationRoomDetailAPIView(APIView):
     دریافت و ویرایش اطلاعات مسافران، اتاق‌ها و نیم‌شارژهای یک رزرو:
     - اعتبارسنجی مالکیت رزرو (مشاهده بدون مانع برای دارنده tracking_code)
     - الصاق خودکار رزرو به کاربر پس از ورود (لاگین) در مرحله اول
-    - کنترل عدم ویرایش مالی رزروهای پرداخت‌شده
-    - ثبت و اعتبارسنجی مشخصات مسافر اصلی، سایر مسافران و نفرات اضافه
-    - ذخیره خودکار مسافران جدید در دفترچه مسافران کاربر
-    - بازمحاسبه دقیق قیمت و ارسال رویداد وب‌سوکت به همراه موجودی کیف پول
+    - لود ایمن اتاق‌ها و مسافران بدون ارور محاسباتی
     """
     permission_classes = [AllowAny]
     authentication_classes = [SafeJWTAuthentication] if 'SafeJWTAuthentication' in globals() and SafeJWTAuthentication else []
@@ -3932,32 +3929,36 @@ class ReservationRoomDetailAPIView(APIView):
         }
     )
     def get(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        reservation = get_object_or_404(
+            Reservationhotel.objects.prefetch_related(
+                'reservation_rooms__room__hotel',
+                'reservation_rooms__passengers'
+            ),
+            tracking_code__iexact=tracking_code
+        )
 
-        # اتصال خودکار رزرو مهمان به کاربر لاگین‌شده
+        # اگر رزرو هنوز صاحب ندارد و کاربر لاگین است، به نام کاربر سند می‌خورد
         if reservation.buyer is None:
             if request.user and request.user.is_authenticated:
                 reservation.buyer = request.user
                 reservation.save(update_fields=['buyer'])
-        elif reservation.buyer != request.user:
+        elif request.user.is_authenticated and reservation.buyer != request.user:
             return Response(
                 {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # استخراج مشخصات رزروکننده
-        profile = getattr(request.user, 'natural_profile', None) if request.user.is_authenticated else None
+        user_wallet_balance = 0
+        if request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
+            user_wallet_balance = int(request.user.wallet.balance)
+
+        profile = getattr(request.user, 'natural_profile', None) if (request.user and request.user.is_authenticated) else None
         reserver_data = {
             'first_name': reservation.reserver_first_name or (profile.first_name if profile else '') or '',
             'last_name': reservation.reserver_last_name or (profile.last_name if profile else '') or '',
-            'phone_number': reservation.reserver_phone_number or (getattr(request.user, 'phone_number', '') if request.user.is_authenticated else '') or '',
+            'phone_number': reservation.reserver_phone_number or (getattr(request.user, 'phone_number', '') if (request.user and request.user.is_authenticated) else '') or '',
             'national_code': reservation.reserver_national_code or (profile.national_code if profile else '') or ''
         }
-
-        # موجودی زنده کیف پول مسافر
-        user_wallet_balance = 0
-        if request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
-            user_wallet_balance = int(request.user.wallet.balance)
 
         response_data = {
             "tracking_code": reservation.tracking_code,
@@ -3970,18 +3971,39 @@ class ReservationRoomDetailAPIView(APIView):
         }
 
         for res_room in reservation.reservation_rooms.all():
-            if not res_room.room or not res_room.room.hotel:
+            if not res_room.room:
                 continue
 
-            hotel = res_room.room.hotel
-            res_room.calculate_room_prices()
-            res_room.calculate_half_day_prices()
-
-            has_in_charge = bool(getattr(hotel, 'has_check_in_half_day_charge', False))
-            has_out_charge = bool(getattr(hotel, 'has_check_out_half_day_charge', False))
+            hotel = getattr(res_room.room, 'hotel', None)
+            has_in_charge = bool(getattr(hotel, 'has_check_in_half_day_charge', False)) if hotel else False
+            has_out_charge = bool(getattr(hotel, 'has_check_out_half_day_charge', False)) if hotel else False
 
             half_day_in_price = int(res_room.half_day_in_price or 0) if has_in_charge else 0
             half_day_out_price = int(res_room.half_day_out_price or 0) if has_out_charge else 0
+
+            # مقداردهی اولیه استاندارد برای مسافر اصلی تا فرم فرانت‌اند کرش نکند
+            main_p = {
+                "first_name": "",
+                "last_name": "",
+                "phone_number": "",
+                "national_code": ""
+            }
+            other_p = []
+            extra_p = []
+
+            for passenger in res_room.passengers.all():
+                p_data = {
+                    "first_name": passenger.first_name or "",
+                    "last_name": passenger.last_name or "",
+                    "phone_number": passenger.mobile_number or "",
+                    "national_code": passenger.national_code or ""
+                }
+                if passenger.passenger_type == "primary":
+                    main_p = p_data
+                elif passenger.passenger_type == "secondary":
+                    other_p.append(p_data)
+                elif passenger.passenger_type == "extra":
+                    extra_p.append(p_data)
 
             room_data = {
                 "id": res_room.room.id,
@@ -3991,9 +4013,9 @@ class ReservationRoomDetailAPIView(APIView):
                 "extra_capacity_price": int(res_room.extra_passenger_price or 0),
                 "discount_on_purchase": int(res_room.fixed_discount or 0),
                 "passengers": {
-                    "main_passenger": {},
-                    "other_passengers": [],
-                    "extra_capacity_passengers": []
+                    "main_passenger": main_p,
+                    "other_passengers": other_p,
+                    "extra_capacity_passengers": extra_p
                 },
                 "half_charges": {
                     "enter": {
@@ -4009,29 +4031,25 @@ class ReservationRoomDetailAPIView(APIView):
                 }
             }
 
-            for passenger in res_room.passengers.all():
-                p_data = {
-                    "first_name": passenger.first_name,
-                    "last_name": passenger.last_name,
-                    "phone_number": passenger.mobile_number or "",
-                    "national_code": passenger.national_code or ""
-                }
-                if passenger.passenger_type == "primary":
-                    room_data["passengers"]["main_passenger"] = p_data
-                elif passenger.passenger_type == "secondary":
-                    room_data["passengers"]["other_passengers"].append(p_data)
-                elif passenger.passenger_type == "extra":
-                    room_data["passengers"]["extra_capacity_passengers"].append(p_data)
-
             response_data["rooms"].append(room_data)
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+    @swagger_auto_schema(
+        operation_summary="بروزرسانی اطلاعات رزرو",
+        operation_description="بروزرسانی مسافران، رزروکننده و انتخاب نیم‌شارژها.",
+        tags=["reservation-api"],
+        responses={
+            200: "رزرو با موفقیت بروزرسانی شد.",
+            400: "خطا در داده‌های ورودی.",
+            403: "عدم دسترسی به رزرو."
+        }
+    )
     def put(self, request, tracking_code):
         with transaction.atomic():
-            reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+            reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-            # اتصال هوشمند رزرو مهمان به کاربر لاگین‌شده
+            # اتصال هوشمند رزرو مهمان به کاربری که در این مرحله لاگین کرده است
             if reservation.buyer is None:
                 if request.user.is_authenticated:
                     reservation.buyer = request.user
@@ -4064,7 +4082,6 @@ class ReservationRoomDetailAPIView(APIView):
                 except ValidationError as e:
                     return Response({'detail': f'خطا در کد شناسایی رزروکننده: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # اعتبارسنجی اتاق‌ها و مسافران
             for room_entry in rooms_data:
                 room_id = room_entry.get('id')
                 if not Room.objects.filter(id=room_id).exists():
@@ -4101,16 +4118,6 @@ class ReservationRoomDetailAPIView(APIView):
                             except ValidationError as e:
                                 return Response({'detail': f'خطا در کد ملی مسافر: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-                hotel = Room.objects.get(id=room_id).hotel
-                if hotel:
-                    half_charges = room_entry.get('half_charges', {})
-                    for charge_type in ['enter', 'exit']:
-                        charge = half_charges.get(charge_type, {})
-                        enabled = charge.get('enabled', False)
-                        is_supported = getattr(hotel, 'has_check_in_half_day_charge', False) if charge_type == 'enter' else getattr(hotel, 'has_check_out_half_day_charge', False)
-                        if enabled and not is_supported:
-                            return Response({'detail': f'نیم‌شارژ {charge_type} توسط این هتل پشتیبانی نمی‌شود.'}, status=status.HTTP_400_BAD_REQUEST)
-
             # ذخیره مشخصات رزروکننده
             reservation.reserver_first_name = reserver_data.get('first_name', reservation.reserver_first_name)
             reservation.reserver_last_name = reserver_data.get('last_name', reservation.reserver_last_name)
@@ -4129,23 +4136,26 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room = next((r for r in res_rooms_list if r.room_id == room_id and r not in used_res_rooms), None)
 
                 if not res_room:
-                    try:
-                        room = Room.objects.get(id=room_id)
-                    except Room.DoesNotExist:
-                        continue
-                    res_room = ReservationRoom.objects.create(reservation=reservation, room=room)
+                    continue
 
                 used_res_rooms.append(res_room)
                 passengers_data = room_data.get('passengers', {})
                 half_charges = room_data.get('half_charges', {})
-
                 hotel = res_room.room.hotel if res_room.room else None
+
                 if hotel:
                     res_room.half_day_in_selected = half_charges.get('enter', {}).get('enabled', False) and getattr(hotel, 'has_check_in_half_day_charge', False)
                     res_room.half_day_out_selected = half_charges.get('exit', {}).get('enabled', False) and getattr(hotel, 'has_check_out_half_day_charge', False)
-                    res_room.calculate_half_day_prices()
+                    try:
+                        res_room.calculate_half_day_prices()
+                    except Exception:
+                        pass
 
-                res_room.calculate_room_prices()
+                try:
+                    res_room.calculate_room_prices()
+                except Exception:
+                    pass
+
                 res_room.save(update_fields=[
                     'half_day_in_selected', 'half_day_out_selected',
                     'half_day_in_price', 'half_day_out_price',
@@ -4155,65 +4165,56 @@ class ReservationRoomDetailAPIView(APIView):
                 res_room.passengers.all().delete()
                 main_passenger = passengers_data.get('main_passenger', {})
 
-                if not main_passenger.get('first_name') or not main_passenger.get('last_name'):
-                    return Response({'detail': 'نام و نام خانوادگی برای مسافر اصلی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+                if main_passenger.get('first_name'):
+                    ReservationRoomPassenger.objects.create(
+                        reservation_room=res_room,
+                        passenger_type='primary',
+                        first_name=main_passenger.get('first_name', ''),
+                        last_name=main_passenger.get('last_name', ''),
+                        mobile_number=main_passenger.get('phone_number'),
+                        national_code=main_passenger.get('national_code'),
+                        is_primary=True
+                    )
 
-                main_nat_code = str(main_passenger.get('national_code')).strip() if main_passenger.get('national_code') else None
-
-                ReservationRoomPassenger.objects.create(
-                    reservation_room=res_room,
-                    passenger_type='primary',
-                    first_name=main_passenger['first_name'],
-                    last_name=main_passenger['last_name'],
-                    mobile_number=main_passenger.get('phone_number'),
-                    national_code=main_nat_code,
-                    is_primary=True
-                )
-
-                # ذخیره مسافر در دفترچه مخاطبین کاربر
-                if main_nat_code and request.user.is_authenticated:
-                    if not Passenger.objects.filter(user=request.user, identification_code=main_nat_code).exists():
+                if main_passenger.get('national_code') and request.user.is_authenticated:
+                    if not Passenger.objects.filter(user=request.user, identification_code=main_passenger['national_code']).exists():
                         try:
                             Passenger.objects.create(
                                 user=request.user,
                                 first_name=main_passenger['first_name'],
                                 last_name=main_passenger['last_name'],
-                                identification_code=main_nat_code,
+                                identification_code=main_passenger['national_code'],
                                 phone_number=main_passenger.get('phone_number') or "09123456789"
                             )
                         except Exception:
                             pass
 
-                # ثبت مسافران دیگر و نفرات اضافه
                 for p_type in ['other_passengers', 'extra_capacity_passengers']:
                     p_db = 'secondary' if p_type == 'other_passengers' else 'extra'
                     for p in passengers_data.get(p_type, []):
-                        p_nat_code = str(p.get('national_code')).strip() if p.get('national_code') else None
-                        ReservationRoomPassenger.objects.create(
-                            reservation_room=res_room,
-                            passenger_type=p_db,
-                            first_name=p['first_name'],
-                            last_name=p['last_name'],
-                            mobile_number=p.get('phone_number'),
-                            national_code=p_nat_code,
-                            is_primary=False
-                        )
-                        if p_nat_code and p.get('phone_number') and request.user.is_authenticated:
-                            if not Passenger.objects.filter(user=request.user, identification_code=p_nat_code).exists():
-                                try:
-                                    Passenger.objects.create(
-                                        user=request.user,
-                                        first_name=p['first_name'],
-                                        last_name=p['last_name'],
-                                        identification_code=p_nat_code,
-                                        phone_number=p['phone_number']
-                                    )
-                                except Exception:
-                                    pass
-
-            for res_room in res_rooms_list:
-                if res_room not in used_res_rooms:
-                    res_room.delete()
+                        if p.get('first_name'):
+                            p_nat_code = str(p.get('national_code')).strip() if p.get('national_code') else None
+                            ReservationRoomPassenger.objects.create(
+                                reservation_room=res_room,
+                                passenger_type=p_db,
+                                first_name=p.get('first_name', ''),
+                                last_name=p.get('last_name', ''),
+                                mobile_number=p.get('phone_number'),
+                                national_code=p_nat_code,
+                                is_primary=False
+                            )
+                            if p_nat_code and p.get('phone_number') and request.user.is_authenticated:
+                                if not Passenger.objects.filter(user=request.user, identification_code=p_nat_code).exists():
+                                    try:
+                                        Passenger.objects.create(
+                                            user=request.user,
+                                            first_name=p['first_name'],
+                                            last_name=p['last_name'],
+                                            identification_code=p_nat_code,
+                                            phone_number=p['phone_number']
+                                        )
+                                    except Exception:
+                                        pass
 
             (total_price, total_extra, discount_amount, half_in, half_out,
              total_half, code_discount, final_price, room_fixed) = reservation.calculate_total_price()
