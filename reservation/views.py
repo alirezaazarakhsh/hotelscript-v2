@@ -3494,7 +3494,8 @@ class ReservationDetailAPIView(APIView):
     - ارسال مشخصات مسافر، تاریخ و ساعت ورود/خروج و هتل
     - ارسال وضعیت ظرفیت، وضعیت پرداخت و موجودی زنده کیف پول مسافر
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="نمایش جزئیات رزرو",
@@ -3656,7 +3657,8 @@ logger = logging.getLogger(__name__)
 
 
 class HotelImageAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="نمایش لینک عکس هتل و اسلاگ هتل",
@@ -3735,7 +3737,8 @@ class ReservationInvoiceAPIView(APIView):
     - نمایش مبلغ برداشت از کیف پول و موجودی زنده کیف پول مسافر
     - وضعیت تایید ظرفیت و وضعیت پرداخت رزرو
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     def parse_number(self, value):
         """تبدیل امن رشته یا عدد به Decimal بدون بروز خطا در کاراکترهای اضافی"""
@@ -3909,7 +3912,8 @@ class ReservationRoomDetailAPIView(APIView):
     - ذخیره خودکار مسافران جدید در دفترچه مسافران کاربر
     - بازمحاسبه دقیق قیمت و ارسال رویداد وب‌سوکت به همراه موجودی کیف پول
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="دریافت اطلاعات رزرو برای ویرایش",
