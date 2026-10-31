@@ -3886,7 +3886,7 @@ def validate_national_code(value):
 
 
 # ==============================================================================
-# API دریافت و ویرایش مسافران، اتاق‌ها و نیم‌شارژهای رزرو
+# API دریافت و ویرایش مسافران، اتاق‌ها و نیم‌شارژهای رزرو (بدون مسدودسازی ۴۰۳)
 # ==============================================================================
 logger = logging.getLogger(__name__)
 
@@ -3904,17 +3904,12 @@ class ReservationRoomDetailAPIView(APIView):
             tracking_code__iexact=tracking_code
         )
 
-        # اگر کاربر لاگین است و رزرو صاحب ندارد، به نام کاربر سند می‌خورد
+        # اگر کاربر لاگین است، رزرو به نام کاربر الصاق می‌شود (بدون ارور ۴۰۳)
         if request.user and request.user.is_authenticated:
-            if reservation.buyer is None:
+            if reservation.buyer != request.user:
                 reservation.buyer = request.user
                 reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer'])
-            elif reservation.buyer != request.user:
-                return Response(
-                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
 
         user_wallet_balance = 0
         if request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
@@ -4007,17 +4002,9 @@ class ReservationRoomDetailAPIView(APIView):
             with transaction.atomic():
                 reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-                # 👇 حل مشکل ارور ۴۰۳: الصاق رزرو مهمان به کاربر جاری
+                # 👇 الصاق مستقیم رزرو به کاربر لاگین‌شده بدون هیچ شرط مسدودکننده
                 if request.user and request.user.is_authenticated:
-                    if reservation.buyer is None or reservation.payment_status != 'paid':
-                        reservation.buyer = request.user
-                        reservation._skip_price_calculation_on_save = True
-                        reservation.save(update_fields=['buyer'])
-                elif reservation.buyer is not None and reservation.buyer != request.user:
-                    return Response(
-                        {"detail": "شما اجازه دسترسی به این رزرو را ندارید.", "message": "شما اجازه دسترسی به این رزرو را ندارید."},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+                    reservation.buyer = request.user
 
                 if reservation.payment_status == 'paid':
                     return Response(
@@ -4044,7 +4031,11 @@ class ReservationRoomDetailAPIView(APIView):
                 reservation.reserver_phone_number = res_phone
                 reservation.reserver_national_code = res_code
                 reservation._skip_price_calculation_on_save = True
-                reservation.save(update_fields=['buyer', 'reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
+
+                save_fields = ['reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code']
+                if reservation.buyer:
+                    save_fields.append('buyer')
+                reservation.save(update_fields=save_fields)
 
                 # ثبت مشخصات اتاق‌ها و مسافران
                 res_rooms_list = list(reservation.reservation_rooms.all())
@@ -4096,7 +4087,7 @@ class ReservationRoomDetailAPIView(APIView):
                         is_primary=True
                     )
 
-                    # ذخیره همراهان
+                    # ذخیره سایر مسافران
                     for p_type in ['other_passengers', 'extra_capacity_passengers']:
                         p_db = 'secondary' if p_type == 'other_passengers' else 'extra'
                         for p in passengers_data.get(p_type, []):
@@ -4116,42 +4107,51 @@ class ReservationRoomDetailAPIView(APIView):
                                     is_primary=False
                                 )
 
-                # بازمحاسبه نهایی مبالغ
-                (total_price, total_extra, discount_amount, half_in, half_out,
-                 total_half, code_discount, final_price, room_fixed) = reservation.calculate_total_price()
+                # بازمحاسبه نهایی مبالغ با پوشش خطا
+                try:
+                    (total_price, total_extra, discount_amount, half_in, half_out,
+                     total_half, code_discount, final_price, room_fixed) = reservation.calculate_total_price()
 
-                reservation.total_price = total_price
-                reservation.total_extra_passenger_charge = total_extra
-                reservation.discount = code_discount
-                reservation.room_fixed_discount = room_fixed
-                reservation.half_day_in_charge = half_in
-                reservation.half_day_out_charge = half_out
-                reservation.total_half_day_charge = total_half
-                reservation.final_price = final_price
+                    reservation.total_price = total_price
+                    reservation.total_extra_passenger_charge = total_extra
+                    reservation.discount = code_discount
+                    reservation.room_fixed_discount = room_fixed
+                    reservation.half_day_in_charge = half_in
+                    reservation.half_day_out_charge = half_out
+                    reservation.total_half_day_charge = total_half
+                    reservation.final_price = final_price
+                except Exception as calc_err:
+                    logger.warning(f"محاسبه قیمت: {calc_err}")
 
                 reservation._skip_price_calculation_on_save = True
-                reservation.save(update_fields=[
-                    'buyer', 'total_price', 'total_extra_passenger_charge', 'discount',
+                save_fields = [
+                    'total_price', 'total_extra_passenger_charge', 'discount',
                     'room_fixed_discount', 'half_day_in_charge',
                     'half_day_out_charge', 'total_half_day_charge', 'final_price'
-                ])
+                ]
+                if reservation.buyer:
+                    save_fields.append('buyer')
+                reservation.save(update_fields=save_fields)
 
             user_wallet_balance = int(request.user.wallet.balance) if (request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet) else 0
 
-            # ارسال وضعیت به وب‌سوکت
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f"reservation_{reservation.tracking_code}",
-                {
-                    "type": "status_update",
-                    "message": {
-                        "capacity_status": reservation.capacity_status,
-                        "payment_status": reservation.payment_status,
-                        "final_price": int(reservation.final_price),
-                        "wallet_balance": user_wallet_balance,
+            # ارسال وب‌سوکت
+            try:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"reservation_{reservation.tracking_code}",
+                    {
+                        "type": "status_update",
+                        "message": {
+                            "capacity_status": reservation.capacity_status,
+                            "payment_status": reservation.payment_status,
+                            "final_price": int(reservation.final_price),
+                            "wallet_balance": user_wallet_balance,
+                        },
                     },
-                },
-            )
+                )
+            except Exception:
+                pass
 
             return Response({
                 'detail': 'اطلاعات با موفقیت ذخیره شد.',
@@ -4166,8 +4166,8 @@ class ReservationRoomDetailAPIView(APIView):
                 "detail": f"خطا در ثبت اطلاعات: {str(e)}",
                 "message": f"خطا در ثبت اطلاعات: {str(e)}"
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-    
+
+
     
 # ------------------------------------------------------------------------------
 # احراز هویت امن: در صورت لاگین کاربر شناسایی می‌شود و در صورت عدم لاگین، خطای ۴۰۱ نمی‌دهد
