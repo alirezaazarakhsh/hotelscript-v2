@@ -3718,58 +3718,32 @@ class HotelImageAPIView(APIView):
 
 
 # ==============================================================================
-# API جزئیات صورت‌حساب رزرو (همراه با موجودی زنده کیف پول کاربر و وضعیت پرداخت)
+# ۳. صورت‌حساب رزرو (بدون خطای دسترسی)
 # ==============================================================================
-logger = logging.getLogger(__name__)
-
-
 class ReservationInvoiceAPIView(APIView):
-    """
-    مشاهده صورت‌حساب مالی رزرو:
-    - تفکیک اقلام: قیمت پایه، نفرات اضافه، نیم‌شارژها، تخفیف ثابت و کد تخفیف
-    - نمایش مبلغ برداشت از کیف پول و موجودی زنده کیف پول مسافر
-    - وضعیت تایید ظرفیت و وضعیت پرداخت رزرو
-    - قابل مشاهده برای کاربر مهمان و کاربر لاگین‌شده
-    """
     permission_classes = [AllowAny]
     authentication_classes = [SafeJWTAuthentication] if 'SafeJWTAuthentication' in globals() and SafeJWTAuthentication else []
 
     def parse_number(self, value):
-        """تبدیل امن رشته یا عدد به Decimal بدون بروز خطا در کاراکترهای اضافی"""
         if value is None:
             return Decimal('0')
         try:
             return Decimal(str(value).replace(',', '').strip())
-        except (InvalidOperation, ValueError, TypeError):
+        except Exception:
             return Decimal('0')
 
-    @swagger_auto_schema(
-        operation_summary="دریافت صورت‌حساب رزرو",
-        operation_description="مشاهده کامل جزئیات صورت‌حساب رزرو بر اساس tracking_code.",
-        tags=["reservation-api"],
-        responses={
-            200: "جزئیات صورت‌حساب با موفقیت دریافت شد.",
-            403: "شما اجازه دسترسی به این رزرو را ندارید.",
-            404: "رزرو یافت نشد.",
-        }
-    )
     def get(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-        # اتصال خودکار رزرو به کاربر لاگین‌شده
-        if reservation.buyer is None:
-            if request.user and request.user.is_authenticated:
+        # الصاق رزرو به کاربر لاگین‌شده
+        if request.user and request.user.is_authenticated:
+            if reservation.buyer != request.user:
                 reservation.buyer = request.user
+                reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer'])
-        elif reservation.buyer != request.user:
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
 
-        # استخراج ایمن موجودی کیف پول
         user_wallet_balance = 0
-        if request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
+        if request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
             user_wallet_balance = int(request.user.wallet.balance)
 
         response_data = {
@@ -3790,9 +3764,6 @@ class ReservationInvoiceAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-        
-    
-    
 
 
 
@@ -4231,69 +4202,22 @@ except ImportError:
 
 
 
-# ------------------------------------------------------------------------------
-# ۶. API اعمال و حذف کدهای تخفیف روی رزرو (نسخه کاملاً اصلاح‌شده و هماهنگ)
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# ۶. API اعمال و حذف کدهای تخفیف روی رزرو (هماهنگ با رزروهای جدید)
+# ==============================================================================
 class ApplyDiscountCodeAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = [SafeJWTAuthentication] if 'SafeJWTAuthentication' in globals() and SafeJWTAuthentication else []
 
-    @swagger_auto_schema(
-        operation_summary="اعمال کد تخفیف روی رزرو",
-        operation_description="""
-        کاربر می‌تواند کد تخفیف را روی رزرو اعمال کند.
-        - کد فقط در صورت **فعال‌سازی قبلی** و **پرداخت موفق** مصرف می‌شود.
-        - تا قبل از پرداخت، کد فقط **اعمال** می‌شود (نه مصرف).
-        - کاربر می‌تواند کد را **حذف** کند و دوباره کد دیگری وارد کند.
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'discount_code': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='کد تخفیف (حروف بزرگ و کوچک مهم نیست)'
-                ),
-            },
-            required=['discount_code'],
-        ),
-        responses={
-            200: openapi.Response(
-                description="کد با موفقیت اعمال شد",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
-                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
-                        'discount_code': openapi.Schema(type=openapi.TYPE_STRING),
-                        'discount_value': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'remaining_uses': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'usage_limit': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'user_wallet_balance': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    }
-                )
-            ),
-            400: "خطا در ورودی یا شرایط",
-            403: "دسترسی ممنوع",
-            404: "رزرو یافت نشد"
-        },
-        tags=["reservation-api"]
-    )
     def post(self, request, tracking_code, *args, **kwargs):
-        code = request.data.get("discount_code", "").strip()
+        code = request.data.get("discount_code", "").strip().upper()
         if not code:
             return Response({"error": "فیلد discount_code الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        code = code.upper()
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-        try:
-            reservation = Reservationhotel.objects.get(
-                tracking_code=tracking_code,
-                buyer=request.user
-            )
-        except Reservationhotel.DoesNotExist:
-            logger.error(f"رزرو {tracking_code} برای کاربر {request.user.phone_number} یافت نشد")
-            return Response({"error": "رزرو یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        if request.user and request.user.is_authenticated:
+            reservation.buyer = request.user
 
         if reservation.payment_status == 'paid':
             return Response(
@@ -4301,7 +4225,7 @@ class ApplyDiscountCodeAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # پیدا کردن کد تخفیف: اتاق، هتل یا کد اختصاصی کاربر
+        # پیدا کردن کد تخفیف
         discount_obj = None
         discount_type = None
         try:
@@ -4318,66 +4242,14 @@ class ApplyDiscountCodeAPIView(APIView):
                 except PersonalDiscountCode.DoesNotExist:
                     return Response({"error": "کد تخفیف وارد شده معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        now_j = jdatetime.datetime.now().date()
-
-        # --- اعتبارسنجی‌ها ---
-        # ۱. بررسی تاریخ انقضا
-        if getattr(discount_obj, 'expires_at', None) and discount_obj.expires_at < now_j:
-            return Response({"error": "مهلت استفاده از این کد تخفیف به پایان رسیده است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # ۲. بررسی دسترسی کاربر و سطح کاربری
-        if discount_type in ('room', 'hotel'):
-            if discount_obj.users.exists() and request.user not in discount_obj.users.all():
-                return Response({"error": "این کد تخفیف برای حساب کاربری شما تعریف نشده است."}, status=status.HTTP_400_BAD_REQUEST)
-
-            user_level = getattr(getattr(request.user, 'natural_profile', None), 'level', None)
-            if discount_obj.user_level and discount_obj.user_level != user_level:
-                return Response({"error": "سطح کاربری شما مجاز به استفاده از این کد تخفیف نیست."}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            # کد شخصی: فقط برای کاربر مالک کد
-            if discount_obj.user_id != request.user.pk:
-                return Response({"error": "این کد تخفیف اختصاصی متعلق به شما نیست."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # ۳. بررسی تطابق با اتاق یا هتل رزرو شده
-        if discount_type == 'room':
-            if not any(rr.room_id == discount_obj.room_id for rr in reservation.reservation_rooms.all()):
-                return Response({"error": "این کد تخفیف برای اتاق‌های انتخاب‌شده معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
-        elif discount_type == 'hotel':
-            hotel = reservation.get_hotel()
-            if not hotel or hotel.id != discount_obj.hotel_id:
-                return Response({"error": "این کد تخفیف برای این هتل معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # ۴. بررسی فعال‌سازی در باشگاه مشتریان و سقف استفاده
-        if discount_type in ('room', 'hotel'):
-            activation_filter = {
-                'user': request.user,
-                'discount_type': discount_type,
-                **({'room_discount_code': discount_obj} if discount_type == 'room' else {'hotel_discount_code': discount_obj}),
-            }
-            if not DiscountActivationRecord.objects.filter(**activation_filter).exists():
-                return Response({"error": "ابتدا باید این کد تخفیف را در باشگاه مشتریان فعال کنید."}, status=status.HTTP_400_BAD_REQUEST)
-
-            if request.user in discount_obj.activated_users.all():
-                return Response({"error": "شما قبلاً از این کد تخفیف استفاده کرده‌اید."}, status=status.HTTP_403_FORBIDDEN)
-
-            if discount_obj.remaining_uses <= 0:
-                return Response({"error": "ظرفیت استفاده از این کد تخفیف تکمیل شده است."}, status=status.HTTP_403_FORBIDDEN)
-        else:
-            if discount_obj.uses_count >= discount_obj.usage_limit:
-                return Response({"error": "تعداد دفعات مجاز استفاده از این کد به پایان رسیده است."}, status=status.HTTP_403_FORBIDDEN)
-
-        # --- محاسبه دقیق قیمت و اعمال تخفیف بدون خطای محاسباتی ---
         with transaction.atomic():
-            # موقتاً تخفیف قبلی را صفر می‌کنیم تا قیمت پایه خالص محاسبه شود
             reservation.discount = Decimal('0')
             (total, total_extra, _, half_day_in_charge, half_day_out_charge,
              total_half_day_charge, _, base_payable, room_fixed_discount) = reservation.calculate_total_price()
 
-            # مبلغ پایه قابل تخفیف (قبل از کسر کیف پول)
             gross_amount = total + total_extra + total_half_day_charge - room_fixed_discount
             discount_value = min(Decimal(discount_obj.discount_value), max(Decimal('0'), gross_amount))
 
-            # اعمال تخفیف و کسر کیف پول
             reservation.applied_discount_code = code
             reservation.discount = discount_value
             reservation.total_price = total
@@ -4387,43 +4259,20 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.half_day_out_charge = half_day_out_charge
             reservation.total_half_day_charge = total_half_day_charge
 
-            # محاسبه قیمت نهایی بعد از تخفیف و کسر کیف پول
             price_after_promo = max(Decimal('0'), gross_amount - discount_value)
             reservation.final_price = max(Decimal('0'), price_after_promo - (reservation.wallet_withdrawal_amount or Decimal('0')))
 
-            # استفاده از نام درست فلگ برای جلوگیری از بازمحاسبه اشتباه در save مدل
             reservation._skip_price_calculation_on_save = True
-            set_skip_points_and_sms(True)
-            reservation.save(update_fields=[
+            save_fields = [
                 'applied_discount_code', 'discount', 'final_price', 'total_price',
                 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
                 'total_half_day_charge', 'total_extra_passenger_charge'
-            ])
-            set_skip_points_and_sms(False)
+            ]
+            if reservation.buyer:
+                save_fields.append('buyer')
+            reservation.save(update_fields=save_fields)
 
-        logger.info(f"کد تخفیف {code} با موفقیت روی رزرو {tracking_code} اعمال شد.")
-
-        user_wallet_balance = int(request.user.wallet.balance) if hasattr(request.user, 'wallet') and request.user.wallet else 0
-
-        # ارسال آپدیت زنده به وب‌سوکت تا بدون رفرش قیمت کاربر تغییر کند
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"reservation_{reservation.tracking_code}",
-            {
-                "type": "status_update",
-                "message": {
-                    "capacity_status": reservation.capacity_status,
-                    "payment_status": reservation.payment_status,
-                    "final_price": int(reservation.final_price),
-                    "discount_code": code,
-                    "discount_value": int(discount_value),
-                    "wallet_balance": user_wallet_balance,
-                },
-            },
-        )
-
-        remaining = getattr(discount_obj, 'remaining_uses', None)
-        usage_lim = getattr(discount_obj, 'usage_limit', None)
+        user_wallet_balance = int(request.user.wallet.balance) if (request.user and hasattr(request.user, 'wallet') and request.user.wallet) else 0
 
         return Response({
             "status": "ok",
@@ -4432,51 +4281,14 @@ class ApplyDiscountCodeAPIView(APIView):
             "discount_value": int(discount_value),
             "final_price": int(reservation.final_price),
             "total_discount": int(reservation.discount),
-            "remaining_uses": int(remaining) if remaining is not None else int(getattr(discount_obj, 'remaining_uses', 0)),
-            "usage_limit": int(usage_lim) if usage_lim is not None else int(getattr(discount_obj, 'usage_limit', 0)),
             "user_wallet_balance": user_wallet_balance
         }, status=status.HTTP_200_OK)
 
-    @swagger_auto_schema(
-        operation_summary="حذف کد تخفیف از رزرو",
-        operation_description="حذف کد تخفیف اعمال‌شده از رزرو (قبل از پرداخت).",
-        responses={
-            200: openapi.Response(
-                description="کد با موفقیت حذف شد",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'status': openapi.Schema(type=openapi.TYPE_STRING, example="ok"),
-                        'tracking_code': openapi.Schema(type=openapi.TYPE_STRING),
-                        'discount_code': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, example=None),
-                        'final_price': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'total_discount': openapi.Schema(type=openapi.TYPE_INTEGER, example=0),
-                        'user_wallet_balance': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    }
-                )
-            ),
-            400: "کد اعمال نشده یا رزرو پرداخت شده",
-            404: "رزرو یافت نشد"
-        },
-        tags=["reservation-api"]
-    )
     def delete(self, request, tracking_code, *args, **kwargs):
-        try:
-            reservation = Reservationhotel.objects.get(
-                tracking_code=tracking_code,
-                buyer=request.user
-            )
-        except Reservationhotel.DoesNotExist:
-            return Response({"error": "رزرو یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
         if reservation.payment_status == 'paid':
-            return Response(
-                {"error": "رزرو پرداخت شده است و امکان حذف کد تخفیف وجود ندارد."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not reservation.applied_discount_code:
-            return Response({"error": "هیچ کد تخفیفی روی این رزرو اعمال نشده است."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "رزرو پرداخت شده است."}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             reservation.discount = Decimal('0')
@@ -4488,40 +4300,19 @@ class ApplyDiscountCodeAPIView(APIView):
             reservation.total_price = total
             reservation.total_extra_passenger_charge = total_extra
             reservation.room_fixed_discount = room_fixed_discount
-            reservation.half_day_in_charge = half_day_in_charge
-            reservation.half_day_out_charge = half_day_out_charge
+            reservation.half_day_in_charge = half_in_charge
+            reservation.half_day_out_charge = half_out_charge
             reservation.total_half_day_charge = total_half_day_charge
             reservation.final_price = final_pay
 
             reservation._skip_price_calculation_on_save = True
-            set_skip_points_and_sms(True)
             reservation.save(update_fields=[
                 'applied_discount_code', 'discount', 'final_price', 'total_price',
                 'room_fixed_discount', 'half_day_in_charge', 'half_day_out_charge',
                 'total_half_day_charge', 'total_extra_passenger_charge'
             ])
-            set_skip_points_and_sms(False)
 
-        logger.info(f"کد تخفیف از رزرو {tracking_code} حذف شد.")
-
-        user_wallet_balance = int(request.user.wallet.balance) if hasattr(request.user, 'wallet') and request.user.wallet else 0
-
-        # ارسال آپدیت به وب‌سوکت
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"reservation_{reservation.tracking_code}",
-            {
-                "type": "status_update",
-                "message": {
-                    "capacity_status": reservation.capacity_status,
-                    "payment_status": reservation.payment_status,
-                    "final_price": int(reservation.final_price),
-                    "discount_code": None,
-                    "discount_value": 0,
-                    "wallet_balance": user_wallet_balance,
-                },
-            },
-        )
+        user_wallet_balance = int(request.user.wallet.balance) if (request.user and hasattr(request.user, 'wallet') and request.user.wallet) else 0
 
         return Response({
             "status": "ok",
@@ -4533,7 +4324,6 @@ class ApplyDiscountCodeAPIView(APIView):
         }, status=status.HTTP_200_OK)
         
         
-
 
 
 # ==============================================================================
