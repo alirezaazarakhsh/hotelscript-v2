@@ -3533,14 +3533,17 @@ class ReservationDetailAPIView(APIView):
     )
     def get(self, request, tracking_code, *args, **kwargs):
         # دریافت رزرو با تطابق بدون حساسیت به حروف بزرگ و کوچک (Case-Insensitive)
-        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=str(tracking_code).strip())
 
-        # 👇 نکته حیاتی: اگر کاربر لاگین است و رزرو هنوز پرداخت نشده، مالکیت آن به کاربر جاری به‌روزرسانی می‌شود
+        # اتصال خودکار رزرو پرداخت‌نشده به کاربری که در این مرحله لاگین است
         if request.user and request.user.is_authenticated:
-            if reservation.buyer is None or (reservation.buyer_id != request.user.id and reservation.payment_status != 'paid'):
-                reservation.buyer = request.user
-                reservation._skip_price_calculation_on_save = True
-                reservation.save(update_fields=['buyer'])
+            try:
+                if reservation.buyer is None or (reservation.buyer_id != request.user.id and reservation.payment_status != 'paid'):
+                    reservation.buyer = request.user
+                    reservation._skip_price_calculation_on_save = True
+                    reservation.save(update_fields=['buyer'])
+            except Exception as e:
+                logger.warning(f"عدم توانایی در به‌روزرسانی خریدار رزرو {tracking_code}: {e}")
 
         # دریافت ایمن هتل مرتبط
         hotel = reservation.get_hotel()
@@ -3557,12 +3560,18 @@ class ReservationDetailAPIView(APIView):
         city = getattr(hotel, 'city', None)
         province = getattr(city, 'province', None) if city else None
 
-        # استخراج مشخصات رزروکننده به صورت کاملاً ایمن
-        profile = getattr(request.user, 'natural_profile', None) if (request.user and request.user.is_authenticated) else None
+        # دریافت ایمن پروفایل کاربر
+        profile = None
+        if request.user and request.user.is_authenticated:
+            try:
+                profile = getattr(request.user, 'natural_profile', None)
+            except Exception:
+                profile = None
+
         reserver_first_name = reservation.reserver_first_name or (profile.first_name if profile else '') or ''
         reserver_last_name = reservation.reserver_last_name or (profile.last_name if profile else '') or ''
         reserver_phone = reservation.reserver_phone_number or (getattr(request.user, 'phone_number', '') if (request.user and request.user.is_authenticated) else '') or ''
-        reserver_code = reservation.reserver_national_code or (profile.national_code if profile else '') or ''
+        reserver_code = reservation.reserver_national_code or (getattr(profile, 'national_code', '') if profile else '') or ''
 
         reserver_data = {
             'first_name': reserver_first_name,
@@ -3573,14 +3582,26 @@ class ReservationDetailAPIView(APIView):
 
         # دریافت ایمن موجودی کیف پول کاربر
         user_wallet_balance = 0
-        if request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
-            user_wallet_balance = int(request.user.wallet.balance)
+        if request.user and request.user.is_authenticated:
+            try:
+                if hasattr(request.user, 'wallet') and request.user.wallet:
+                    user_wallet_balance = int(request.user.wallet.balance)
+            except Exception:
+                user_wallet_balance = 0
 
         # فرمت‌بندی ساعت ورود و خروج
         def format_time(t_val, default="14:00:00"):
             if not t_val:
                 return default
             return t_val.strftime('%H:%M:%S') if hasattr(t_val, 'strftime') else str(t_val)
+
+        # استخراج ایمن تاریخ‌ها
+        enter_date = None
+        exit_date = None
+        if reservation.check_in_date:
+            enter_date = reservation.check_in_date.isoformat() if hasattr(reservation.check_in_date, 'isoformat') else str(reservation.check_in_date)
+        if reservation.check_out_date:
+            exit_date = reservation.check_out_date.isoformat() if hasattr(reservation.check_out_date, 'isoformat') else str(reservation.check_out_date)
 
         response_data = {
             'tracking_code': reservation.tracking_code,
@@ -3592,8 +3613,8 @@ class ReservationDetailAPIView(APIView):
             'user_wallet_balance': user_wallet_balance,
             'reserver': reserver_data,
             'date': {
-                'enter': reservation.check_in_date.isoformat() if reservation.check_in_date else None,
-                'exit': reservation.check_out_date.isoformat() if reservation.check_out_date else None
+                'enter': enter_date,
+                'exit': exit_date
             },
             'time': {
                 'enter': format_time(getattr(hotel, 'check_in_time', None), "14:00:00"),
@@ -3604,7 +3625,7 @@ class ReservationDetailAPIView(APIView):
             'hotel_star': getattr(hotel, 'stars', 0),
             'city_name': getattr(city, 'name', None),
             'province_name': getattr(province, 'name', None),
-            'number_of_rooms': reservation.total_rooms,
+            'number_of_rooms': reservation.total_rooms or 1,
             'half_charges': {
                 'enter': {
                     'enabled': bool(getattr(hotel, 'has_check_in_half_day_charge', False))
@@ -3616,8 +3637,6 @@ class ReservationDetailAPIView(APIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-    
-    
 
 
 
