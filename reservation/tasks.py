@@ -4,6 +4,7 @@ from datetime import timedelta
 import jdatetime
 
 from celery import shared_task
+from celery.signals import worker_ready
 from django.db import transaction
 from django.db.models import Q
 from django.core.cache import cache
@@ -13,7 +14,8 @@ from asgiref.sync import async_to_sync
 
 from reservation.snapptrip_service import (
     sync_hotel_and_rooms_from_snapp,
-    get_snapptrip_booking_status
+    get_snapptrip_booking_status,
+    sync_all_snapptrip_hotels_directory
 )
 from .models import (
     Hotel,
@@ -238,6 +240,51 @@ def auto_sync_snapptrip_prices_task():
 
     finally:
         cache.delete(lock_id)
+
+
+@shared_task(name="reservation.tasks.auto_sync_snapptrip_directory_task")
+def auto_sync_snapptrip_directory_task():
+    """
+    بروزرسانی خودکار کل بانک هتل‌های اسنپ‌تریپ (هفته‌ای یک‌بار جمعه‌ها ساعت ۳:۰۰ صبح)
+    جهت همگام‌سازی هتل‌های جدید ایجاد شده در اسنپ
+    """
+    lock_id = "auto_sync_directory_lock"
+    acquire_lock = cache.add(lock_id, "true", timeout=3600)
+    if not acquire_lock:
+        logger.warning("تسک بروزرسانی بانک هتل‌ها در حال اجراست.")
+        return False
+
+    try:
+        logger.info("🔄 شروع بروزرسانی دوره‌ای کل بانک هتل‌های اسنپ‌تریپ...")
+        success, msg = sync_all_snapptrip_hotels_directory()
+        if success:
+            logger.info(f"✅ بانک هتل‌ها با موفقیت بروزرسانی شد: {msg}")
+        else:
+            logger.warning(f"⚠️ خطا در بروزرسانی بانک هتل‌ها: {msg}")
+        return success
+    except Exception as e:
+        logger.error(f"❌ خطای پیش‌بینی نشده در بروزرسانی بانک هتل‌ها: {e}")
+        return False
+    finally:
+        cache.delete(lock_id)
+
+
+# اجرای فوری و یکپارچه در صورتی که بانک اطلاعاتی خالی باشد (بار اول)
+@worker_ready.connect
+def auto_sync_on_first_startup(sender, **kwargs):
+    """
+    به محض روشن شدن سلری، اگر بانک هتل‌ها خالی باشد (بار اول)،
+    صبر نمی‌کند و همان لحظه کل بانک هتل‌ها را یک‌جا پر می‌کند.
+    """
+    try:
+        from .models import SnappHotelDirectory
+        total_directory = SnappHotelDirectory.objects.count()
+        if total_directory < 10:
+            logger.info("⚡️ بانک هتل‌ها خالی است. شروع فوری و خودکار دانلود کل هتل‌های کشور...")
+            auto_sync_snapptrip_directory_task.delay()
+    except Exception as e:
+        logger.error(f"Error in auto_sync_on_first_startup: {e}")
+
 
 # نام جایگزین برای پشتیبانی از فراخوانی‌های قدیمی
 auto_sync_snapptrip_hotels_task = auto_sync_snapptrip_prices_task

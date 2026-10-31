@@ -2,6 +2,7 @@ import os
 import environ
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 import sys
 
 env = environ.Env(
@@ -181,23 +182,27 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
-# زمان‌بندی تسک‌های Celery Beat (اصلاح‌شده و هماهنگ)
+# زمان‌بندی تسک‌های Celery Beat (اصلاح‌شده، ایمن و کامل)
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
-        'schedule': 900.0,  # هر ۱۵ دقیقه
+        'schedule': 900.0,  # هر ۱۵ دقیقه یک‌بار
     },
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
-        'schedule': 300.0,  # هر ۵ دقیقه
+        'schedule': 300.0,  # هر ۵ دقیقه یک‌بار
     },
     'check-pending-snapptrip-inquiries': {
         'task': 'reservation.tasks.check_pending_snapptrip_inquiries_task',
-        'schedule': 120.0,  # هر ۲ دقیقه یک‌بار (استعلام زنده رزروهای معلق در اسنپ)
+        'schedule': 120.0,  # هر ۲ دقیقه یک‌بار (استعلام زنده رزروهای مسافران از اسنپ)
     },
     'auto-sync-snapptrip-prices-every-2-hours': {
         'task': 'reservation.tasks.auto_sync_snapptrip_prices_task',
-        'schedule': 7200.0,  # هر ۲ ساعت یک‌بار (بروزرسانی خودکار تقویم و قیمت هتل‌ها)
+        'schedule': 7200.0,  # هر ۲ ساعت یک‌بار (بروزرسانی خودکار قیمت و تقویم هتل‌های فعال)
+    },
+    'auto-sync-snapptrip-directory-weekly': {
+        'task': 'reservation.tasks.auto_sync_snapptrip_directory_task',
+        'schedule': crontab(minute=0, hour=3, day_of_week='fri'),  # جمعه‌ها ساعت ۳:۰۰ صبح (بروزرسانی کل بانک اطلاعاتی هتل‌های کشور)
     },
 }
 

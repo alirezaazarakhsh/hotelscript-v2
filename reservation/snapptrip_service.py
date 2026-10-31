@@ -586,7 +586,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
 
 # ==============================================================================
-# بخش ۳: بروزرسانی فوق‌سریع و چندنخی بانک هتل‌های اسنپ (Multi-Threaded)
+# بخش ۳: بروزرسانی یکپارچه و سریع بانک هتل‌های اسنپ (Bulk & Multi-Threaded)
 # ==============================================================================
 
 def _fetch_city_hotels_worker(city_info, base_url, headers):
@@ -639,66 +639,74 @@ def _fetch_city_hotels_worker(city_info, base_url, headers):
 
 
 def sync_all_snapptrip_hotels_directory():
-    """همگام‌سازی موازی و سریع دایرکتوری هتل‌ها با فرمت دقیق (کد شهر - نام شهر)"""
+    """همگام‌سازی یکپارچه، کامل و یک‌جای کل بانک هتل‌های کشور بدون تکه‌تکه شدن"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
-    try:
-        cities_res = _snapp_session.get(f"{base_url}/cities/", headers=headers, timeout=10)
-    except Exception as e:
-        return False, f"خطای ارتباط با سرور اسنپ: {e}"
-
-    if not cities_res or cities_res.status_code != 200:
-        return False, "خطا در دریافت لیست شهرها از اسنپ."
-
-    cities_list = extract_list_from_response(cities_res.json())
-    cities_payload = []
-
-    for city in cities_list:
-        city_id = str(city.get('id') or city.get('city_id') or city.get('code') or '').strip()
-        if not city_id:
-            continue
-
-        raw_name = ""
-        for k in ['title_fa', 'name_fa', 'title', 'name', 'persian_name', 'city_name', 'slug']:
-            val = city.get(k)
-            if val and isinstance(val, str) and not val.strip().isdigit():
-                raw_name = val.strip()
-                break
-
-        pure_name = (
-            IRAN_CITIES_MAP.get(city_id) or 
-            IRAN_CITIES_MAP.get(str(raw_name).lower()) or 
-            raw_name
-        )
-
-        # فرمت استاندارد ادمین شما: کد - نام (مثال: 6208 - تهران)
-        if pure_name and pure_name != city_id:
-            formatted_city = f"{city_id} - {pure_name}"
-        else:
-            formatted_city = f"{city_id}"
-
-        cities_payload.append({
-            'city_id': city_id,
-            'formatted_city': formatted_city
-        })
-
     all_hotel_objects = []
 
-    # اجرای موازی با ۶ نخ برای افزایش چشمگیر سرعت
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        future_to_city = {
-            executor.submit(_fetch_city_hotels_worker, c_info, base_url, headers): c_info 
-            for c_info in cities_payload
-        }
-        for future in as_completed(future_to_city):
-            try:
-                results = future.result()
-                if results:
-                    all_hotel_objects.extend(results)
-            except Exception as e:
-                logger.error(f"Error in city sync worker: {e}")
+    # روش ۱: تلاش برای دریافت مستقیم کل هتل‌های کشور به صورت یکجا
+    for bulk_url in [f"{base_url}/hotels?limit=4000", f"{base_url}/hotels/?limit=4000", f"{base_url}/hotels/"]:
+        try:
+            res = _snapp_session.get(bulk_url, headers=headers, timeout=15)
+            if res.status_code == 200:
+                batch = extract_list_from_response(res.json())
+                if len(batch) > 50:
+                    for h in batch:
+                        if not isinstance(h, dict):
+                            continue
+                        h_id = h.get('id') or h.get('hotel_id') or h.get('code')
+                        if not h_id:
+                            continue
+                        city_id = str(h.get('city_id') or h.get('city', {}).get('id') or '').strip() if isinstance(h.get('city'), dict) else str(h.get('city_id') or '').strip()
+                        raw_city = h.get('city_name') or (h.get('city', {}).get('name') if isinstance(h.get('city'), dict) else '') or ''
+                        pure_city = IRAN_CITIES_MAP.get(city_id) or IRAN_CITIES_MAP.get(str(raw_city).lower()) or raw_city or f"شهر {city_id}"
+                        formatted_city = f"{city_id} - {pure_city}" if city_id and pure_city != city_id else (pure_city or "-")
+
+                        all_hotel_objects.append(SnappHotelDirectory(
+                            snapp_hotel_id=h_id,
+                            name=str(h.get('name_fa') or h.get('title_fa') or h.get('name') or h.get('title') or f"هتل {h_id}").strip(),
+                            city_name=formatted_city,
+                            city_id=city_id,
+                            stars=extract_stars_comprehensive(h)
+                        ))
+                    break
+        except Exception:
+            pass
+
+    # روش ۲: در صورت عدم پشتیبانی از دریافت یکجا، اجرای موازی با ۸ نخ روی تمامی شهرها
+    if len(all_hotel_objects) < 50:
+        cities_res = _snapp_session.get(f"{base_url}/cities/", headers=headers, timeout=10)
+        if cities_res and cities_res.status_code == 200:
+            cities_list = extract_list_from_response(cities_res.json())
+            cities_payload = []
+            for city in cities_list:
+                city_id = str(city.get('id') or city.get('city_id') or city.get('code') or '').strip()
+                if not city_id:
+                    continue
+                raw_name = ""
+                for k in ['title_fa', 'name_fa', 'title', 'name', 'persian_name', 'city_name', 'slug']:
+                    val = city.get(k)
+                    if val and isinstance(val, str) and not val.strip().isdigit():
+                        raw_name = val.strip()
+                        break
+                pure_name = IRAN_CITIES_MAP.get(city_id) or IRAN_CITIES_MAP.get(str(raw_name).lower()) or raw_name
+                formatted_city = f"{city_id} - {pure_name}" if pure_name and pure_name != city_id else f"{city_id}"
+                cities_payload.append({'city_id': city_id, 'formatted_city': formatted_city})
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                future_to_city = {
+                    executor.submit(_fetch_city_hotels_worker, c_info, base_url, headers): c_info 
+                    for c_info in cities_payload
+                }
+                for future in as_completed(future_to_city):
+                    try:
+                        results = future.result()
+                        if results:
+                            all_hotel_objects.extend(results)
+                    except Exception as e:
+                        logger.error(f"Error in city sync worker: {e}")
 
     if not all_hotel_objects:
         return False, "هیچ هتلی از وب‌سرویس اسنپ استخراج نشد."
@@ -715,4 +723,4 @@ def sync_all_snapptrip_hotels_directory():
         update_fields=['name', 'city_name', 'city_id', 'stars', 'last_synced'],
         unique_fields=['snapp_hotel_id']
     )
-    return True, f"بروزرسانی فوق‌سریع انجام شد: مجموعاً {len(hotels_to_save)} هتل با اطلاعات کامل ذخیره شدند."
+    return True, f"بروزرسانی کامل انجام شد: مجموعاً {len(hotels_to_save)} هتل یکجا ذخیره شدند."
