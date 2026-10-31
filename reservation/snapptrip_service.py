@@ -21,7 +21,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# ایجاد سشن سراسری جهت حفظ اتصال TCP و افزایش سرعت درخواست‌ها
+# ایجاد سشن سراسری جهت حفظ اتصال TCP و افزایش سرعت پاسخگویی
 _snapp_session = requests.Session()
 
 IRAN_CITIES_MAP = {
@@ -129,7 +129,7 @@ def extract_room_id(r_item):
             sub = extract_room_id(r_item[nested])
             if sub:
                 return sub
-    for key in ['id', 'room_id', 'room_type_id', 'code']:
+    for key in ['id', 'room_id', 'room_type_id', 'roomId', 'code']:
         val = r_item.get(key)
         if val is not None and str(val).strip() != '':
             try:
@@ -137,6 +137,34 @@ def extract_room_id(r_item):
             except ValueError:
                 return str(val)
     return None
+
+
+def extract_room_title(r_item, default_id):
+    """استخراج هوشمند و دقیق عنوان فارسی اتاق از ساختارهای تودرتوی اسنپ"""
+    if not isinstance(r_item, dict):
+        return f"اتاق {default_id}"
+
+    # ۱. بررسی کلیدهای تودرتو
+    for nested_key in ['room_type', 'room', 'details', 'roomType', 'info']:
+        nested_obj = r_item.get(nested_key)
+        if isinstance(nested_obj, dict):
+            title = extract_room_title(nested_obj, None)
+            if title and not title.startswith("اتاق None") and not title.isdigit():
+                return title
+        elif isinstance(nested_obj, str) and nested_obj.strip() and not nested_obj.strip().isdigit():
+            return nested_obj.strip()
+
+    # ۲. بررسی فیلدهای متنی مستقیم
+    keys_to_check = [
+        'name_fa', 'title_fa', 'room_type_name', 'room_name', 
+        'name', 'title', 'room_title', 'persian_title', 'type_name'
+    ]
+    for key in keys_to_check:
+        val = r_item.get(key)
+        if val and isinstance(val, str) and val.strip() and not val.strip().isdigit():
+            return val.strip()
+
+    return f"اتاق {default_id}"
 
 
 def extract_stars_comprehensive(h):
@@ -194,7 +222,7 @@ def get_snapptrip_booking_status(snapp_reservation_code: str):
 
 def lock_snapptrip_booking(snapp_reservation_code: str):
     """
-    قفل موقت اتاق به مدت ۱۵ دقیقه طبق مستندات اسنپ
+    قفل موقت اتاق به مدت ۱۵ دقیقه طبق مستندات اسنپ (الزامی برای نمایش در پنل)
     POST /booking/{code}/lock
     """
     base_url, headers = get_snapptrip_client_config()
@@ -213,8 +241,7 @@ def lock_snapptrip_booking(snapp_reservation_code: str):
 
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
     """
-    ثبت پیش‌رزرو در اسنپ‌تریپ با ارسال فیلد اجباری guests
-    POST /booking/create
+    ثبت پیش‌رزرو و قفل کردن اتاق در اسنپ‌تریپ
     """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
@@ -225,9 +252,10 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
     checkin_str = check_in_g.strftime('%Y-%m-%d')
     checkout_str = check_out_g.strftime('%Y-%m-%d')
-    user_phone = (reservation.buyer.phone_number if reservation.buyer else "09122914675").strip()
-
+    
     buyer = getattr(reservation, 'buyer', None)
+    user_phone = (buyer.phone_number if buyer and getattr(buyer, 'phone_number', None) else "09122914675").strip()
+
     profile = getattr(buyer, 'natural_profile', None) if buyer else None
     default_fn = (getattr(profile, 'first_name', '') if profile else '') or reservation.reserver_first_name or "مسافر"
     default_ln = (getattr(profile, 'last_name', '') if profile else '') or reservation.reserver_last_name or "اصلی"
@@ -285,7 +313,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     }
 
     try:
-        res = _snapp_session.post(create_url, json=payload, headers=headers, timeout=10)
+        res = _snapp_session.post(create_url, json=payload, headers=headers, timeout=12)
 
         if res.status_code not in [200, 201]:
             alt_rooms = [
@@ -297,7 +325,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
                 }
             ]
             payload["rooms"] = alt_rooms
-            res = _snapp_session.post(create_url, json=payload, headers=headers, timeout=10)
+            res = _snapp_session.post(create_url, json=payload, headers=headers, timeout=12)
 
         if res.status_code not in [200, 201]:
             logger.error(f"Snapp create booking error {res.status_code}: {res.text}")
@@ -320,6 +348,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         status_val = res_data.get('status') or res_data.get('data', {}).get('status', '')
         is_instant = status_val not in ['availability_checking', 'availability_pending', 'offline']
 
+        # قفل موقت رزرو الزامی است تا رزرو در پنل اسنپ بنشیند
         if is_instant:
             lock_ok, _ = lock_snapptrip_booking(str(snapp_code))
             return True, str(snapp_code), True, "payment_on" if lock_ok else "draft"
@@ -332,37 +361,24 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
-    """
-    تأیید نهایی رزرو پس از پرداخت مسافر و قطعی شدن در اسنپ:
-    - در صورت draft بودن ابتدا رزرو را قفل می‌کند تا اسنپ اجازه تایید بدهد.
-    - وضعیت را به صورت زنده استعلام گرفته و وضعیت تایید را ثبت می‌کند.
-    """
+    """تأیید نهایی رزرو پس از پرداخت مسافر"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
 
     code_str = str(snapp_reservation_code).strip()
 
-    # مرحله ۱: استعلام وضعیت زنده از اسنپ
+    # اطمینان از وضعیت پرداخت و لاک قبل از تایید
     current_status, _ = get_snapptrip_booking_status(code_str)
-    logger.info(f"وضعیت رزرو اسنپ {code_str} قبل از تایید: {current_status}")
-
-    # اگر وضعیت در اسنپ هنوز draft است، ابتدا باید lock شود تا به payment_on برود:
     if current_status in ['draft', 'unknown', '']:
-        lock_ok, lock_status = lock_snapptrip_booking(code_str)
-        logger.info(f"لاک کردن رزرو {code_str} قبل از تایید: ok={lock_ok}, status={lock_status}")
+        lock_snapptrip_booking(code_str)
 
-    # مرحله ۲: ارسال درخواست تایید قطعی به اسنپ
     confirm_url = f"{base_url}/booking/{code_str}/confirm"
     try:
         res = _snapp_session.post(confirm_url, json={}, headers=headers, timeout=15)
-        logger.info(f"پاسخ اسنپ به confirm ({code_str}): {res.status_code} - {res.text}")
-
         if res.status_code in [200, 201]:
             final_status, _ = get_snapptrip_booking_status(code_str)
             real_status = final_status if final_status != "unknown" else "confirmed"
-            
-            # به‌روزرسانی مستقیم وضعیت در دیتابیس
             Reservationhotel.objects.filter(snapp_reservation_code=code_str).update(snapp_status=real_status)
             return True, real_status, "رزرو با موفقیت در اسنپ‌تریپ قطعی شد."
         else:
@@ -375,11 +391,10 @@ def confirm_snapptrip_booking(snapp_reservation_code: str):
 
 
 # ==============================================================================
-# بخش ۲: همگام‌سازی هتل‌ها، اتاق‌ها و تقویم قیمتی
+# بخش ۲: همگام‌سازی اتاق‌ها با نام دقیق فارسی و قیمت‌ها
 # ==============================================================================
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
-    """دریافت و تفکیک دقیق اتاق‌های آنی و نیازمند تایید از اسنپ"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
@@ -401,6 +416,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     calendar_from_str = now.strftime('%Y-%m-%d')
     calendar_to_str = (now + timedelta(days=30)).strftime('%Y-%m-%d')
 
+    # ۱. دریافت مشخصات هتل و اتاق‌ها از هتل
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
             hotel_res = _snapp_session.get(h_url, headers=headers, timeout=10)
@@ -423,6 +439,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         except Exception as e:
             logger.error(f"Error fetching hotel details: {e}")
 
+    # ۲. در صورت نیافتن، دریافت از اندپوینت Availability
     if not rooms_list:
         for r_url in [
             f"{base_url}/availability/hotels/{snapp_h_id}?checkin={checkin_str}&checkout={checkout_str}",
@@ -452,7 +469,9 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             continue
 
         synced_snapp_room_ids.append(snapp_room_id)
-        room_title = r_item.get('name_fa') or r_item.get('title_fa') or r_item.get('name') or f"اتاق {snapp_room_id}"
+        
+        # استخراج عنوان دقیق اتاق
+        room_title = extract_room_title(r_item, snapp_room_id)
         room_cap = int(r_item.get('capacity') or r_item.get('standard_capacity') or 2)
         extra_cap = int(r_item.get('extra_capacity') or 0)
         board_type = r_item.get('board_type', 'bed_breakfast')
@@ -548,54 +567,4 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     if synced_snapp_room_ids:
         Room.objects.filter(hotel=hotel, is_snapptrip=True).exclude(snapptrip_room_id__in=synced_snapp_room_ids).delete()
 
-    return True, f"هتل {hotel.name} با {synced_rooms_count} اتاق بروزرسانی شد."
-
-
-def sync_all_snapptrip_hotels_directory():
-    """همگام‌سازی کامل بانک هتل‌های اسنپ‌تریپ"""
-    base_url, headers = get_snapptrip_client_config()
-    if not headers.get('api-key'):
-        return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
-
-    cities_res = fetch_with_rate_limit(f"{base_url}/cities/", headers)
-    if not cities_res or cities_res.status_code != 200:
-        return False, "خطا در دریافت لیست شهرها از اسنپ."
-
-    cities_list = extract_list_from_response(cities_res.json())
-    all_hotel_objects = []
-
-    for city in cities_list:
-        city_id = city.get('id') or city.get('city_id')
-        if not city_id:
-            continue
-        raw_name = city.get('name_fa') or city.get('name') or str(city_id)
-        pure_name = IRAN_CITIES_MAP.get(str(raw_name).lower()) or raw_name
-        formatted_city = f"{city_id} - {pure_name}"
-
-        url = f"{base_url}/cities/{city_id}/hotels?limit=100&offset=0"
-        res = fetch_with_rate_limit(url, headers)
-        if res and res.status_code == 200:
-            batch = extract_list_from_response(res.json())
-            for h in batch:
-                h_id = h.get('id') or h.get('hotel_id')
-                if not h_id:
-                    continue
-                all_hotel_objects.append(SnappHotelDirectory(
-                    snapp_hotel_id=h_id,
-                    name=str(h.get('name_fa') or h.get('name') or f"هتل {h_id}").strip(),
-                    city_name=formatted_city,
-                    city_id=city_id,
-                    stars=extract_stars_comprehensive(h)
-                ))
-        time.sleep(0.2)
-
-    unique_hotels = {h.snapp_hotel_id: h for h in all_hotel_objects}
-    hotels_to_save = list(unique_hotels.values())
-
-    SnappHotelDirectory.objects.bulk_create(
-        hotels_to_save,
-        update_conflicts=True,
-        update_fields=['name', 'city_name', 'city_id', 'stars', 'last_synced'],
-        unique_fields=['snapp_hotel_id']
-    )
-    return True, f"مجموعاً {len(hotels_to_save)} هتل ذخیره شدند."
+    return True, f"هتل {hotel.name} با {synced_rooms_count} اتاق با عناوین واقعی بروزرسانی شد."
