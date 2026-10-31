@@ -559,6 +559,46 @@ def confirm_snapptrip_booking(snapp_reservation_code: str):
         return False, "failed", f"خطای ارتباط با اسنپ: {str(e)[:50]}"
 
 
+def auto_confirm_snapp_reservation_if_charged(reservation):
+    """
+    بررسی خودکار و هوشمند کیف پول اسنپ بعد از پرداخت مسافر:
+    - اگر کیف پول اسنپ شارژ داشت، رزرو را در اسنپ قطعی می‌کند.
+    - اگر شارژ نداشت، وضعیت به 'insufficient_credit' تغییر می‌کند تا ادمین متوجه شود و سیستم ۵۰۰ ندهد.
+    """
+    if not reservation.is_snapptrip_reservation or not reservation.snapp_reservation_code:
+        return False, "رزرو اسنپی نیست."
+
+    # ۱. استعلام موجودی زنده کیف پول اسنپ
+    snapp_balance, b_msg = get_snapptrip_wallet_balance()
+
+    # هزینه مورد نیاز بر حسب تومان
+    required_price = int(reservation.final_price or reservation.total_price or 0)
+
+    logger.info(f"🔍 بررسی خودکار اسنپ: موجودی کیف‌پول={snapp_balance:,} | مبلغ مورد نیاز={required_price:,} | رزرو={reservation.tracking_code}")
+
+    # ۲. اگر کیف پول اسنپ شارژ کافی نداشت:
+    if snapp_balance < required_price:
+        logger.warning(f"⚠️ کیف پول اسنپ شارژ کافی ندارد ({snapp_balance:,} تومان). وضعیت به insufficient_credit تغییر کرد.")
+        reservation.snapp_status = 'insufficient_credit'
+        reservation.save(update_fields=['snapp_status'])
+        return False, f"کیف‌پول اسنپ شارژ ندارد (موجودی: {snapp_balance:,} تومان)"
+
+    # ۳. در صورت داشتن شارژ کافی، ارسال درخواست قطعی کردن به اسنپ
+    success, final_stat, msg = confirm_snapptrip_booking(reservation.snapp_reservation_code)
+    
+    if success:
+        reservation.snapp_status = str(final_stat)[:30]
+        logger.info(f"✅ رزرو {reservation.snapp_reservation_code} در اسنپ با موفقیت قطعی شد.")
+    else:
+        if "insufficient credit" in msg.lower():
+            reservation.snapp_status = 'insufficient_credit'
+        else:
+            reservation.snapp_status = 'failed'
+
+    reservation.save(update_fields=['snapp_status'])
+    return success, msg
+
+
 # ==============================================================================
 # بخش ۲: همگام‌سازی اتاق‌ها با ظرفیت دقیق نفرات اصلی و اضافه
 # ==============================================================================

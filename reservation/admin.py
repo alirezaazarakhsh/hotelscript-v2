@@ -928,7 +928,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_requested_fa',
         'capacity_status_colored', 'payment_status_colored',
         'snapp_code_fa',             # نمایش کد رزرو اسنپ
-        'snapp_status_colored',       # نمایش وضعیت در اسنپ
+        'snapp_status_colored',       # نمایش وضعیت در اسنپ با برچسب هوشمند
         'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
     )
     search_fields = (
@@ -1025,6 +1025,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
             'availability_checking': ('#e0a800', 'در حال استعلام از هتل'),
             'payment_on': ('#17a2b8', 'قفل موقت (۱۵ دقیقه)'),
             'draft': ('#6c757d', 'پیش‌نویس (draft)'),
+            'insufficient_credit': ('#fd7e14', 'کسری شارژ کیف‌پول اسنپ ⚠️'),
             'availability_rejected': ('#dc3545', 'عدم پذیرش هتل'),
             'failed': ('#dc3545', 'ناموفق'),
             'expired': ('#6c757d', 'منقضی شده'),
@@ -1077,35 +1078,32 @@ class ReservationhotelAdmin(NestedModelAdmin):
         return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
     def confirm_snapp_action(self, request, reservation_id):
-        """تایید نهایی و قطعی رزرو در اسنپ از طریق پنل ادمین (ایمن در برابر ارور ۵۰۰)"""
+        """تایید هوشمند رزرو در اسنپ (بررسی خودکار موجودی کیف‌پول قبل از ثبت)"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
             return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
         try:
-            success, final_stat, msg = confirm_snapptrip_booking(obj.snapp_reservation_code)
-            # محدود کردن به ۳۰ کاراکتر جهت جلوگیری از خطای سرریز فیلد در دیتابیس
-            obj.snapp_status = str(final_stat)[:30]
-            obj.save(update_fields=['snapp_status'])
+            from .snapptrip_service import auto_confirm_snapp_reservation_if_charged
+            success, msg = auto_confirm_snapp_reservation_if_charged(obj)
 
             if success:
-                self.message_user(request, f"✅ رزرو {obj.snapp_reservation_code} با موفقیت در اسنپ قطعی شد: {msg}", messages.SUCCESS)
+                self.message_user(request, f"✅ {msg} (سفارش در پنل اسنپ قطعی شد)", messages.SUCCESS)
             else:
-                self.message_user(request, f"❌ {msg}", messages.ERROR)
+                self.message_user(request, f"⚠️ {msg}", messages.WARNING)
         except Exception as e:
-            self.message_user(request, f"خطای غیرمنتظره در ارتباط با اسنپ: {e}", messages.ERROR)
+            self.message_user(request, f"خطای سیستمی در ارتباط با اسنپ: {e}", messages.ERROR)
 
         return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
-    @admin.action(description="✅ تایید قطعی رزروهای انتخاب‌شده در اسنپ‌تریپ")
+    @admin.action(description="✅ بررسی شارژ و تایید قطعی رزروهای انتخاب‌شده در اسنپ")
     def confirm_snapp_action_bulk(self, request, queryset):
+        from .snapptrip_service import auto_confirm_snapp_reservation_if_charged
         success_count = 0
         for obj in queryset.filter(is_snapptrip_reservation=True, snapp_reservation_code__isnull=False):
             try:
-                ok, final_stat, _ = confirm_snapptrip_booking(obj.snapp_reservation_code)
-                obj.snapp_status = str(final_stat)[:30]
-                obj.save(update_fields=['snapp_status'])
+                ok, _ = auto_confirm_snapp_reservation_if_charged(obj)
                 if ok:
                     success_count += 1
             except Exception:
@@ -1121,7 +1119,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
             extra_context['title'] = format_html(
                 '{} &nbsp;&nbsp; '
                 '<a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام وضعیت اسنپ</a> &nbsp;'
-                '<a class="button" style="background:#28a745; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" onclick="return confirm(\'آیا از تایید نهایی این رزرو در اسنپ و کسر از کیف‌پول مطمئن هستید؟\');" href="{}">✅ تایید قطعی در اسنپ</a>',
+                '<a class="button" style="background:#28a745; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" onclick="return confirm(\'آیا از تایید نهایی این رزرو در اسنپ و کسر از کیف‌پول اسنپ مطمئن هستید؟\');" href="{}">✅ تایید در اسنپ (بررسی شارژ)</a>',
                 f"ویرایش رزرو {obj.tracking_code}",
                 check_url,
                 confirm_url
@@ -1288,7 +1286,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     res_room.calculate_half_day_prices()
                     res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
         return form
-    
     
 
 
