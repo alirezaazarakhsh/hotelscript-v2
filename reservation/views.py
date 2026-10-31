@@ -3487,7 +3487,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 # ==============================================================================
 logger = logging.getLogger(__name__)
 
-# کلاس احراز هویت هوشمند: اگر توکن ارسال شده باشد کاربر را شناسایی می‌کند و در غیر این صورت بدون خطای ۴۰۱ اجازه عبور می‌دهد
+# کلاس احراز هویت هوشمند: کاربر لاگین را شناسایی می‌کند و در صورت عدم لاگین، خطای ۴۰۱ نمی‌دهد
 try:
     from rest_framework_simplejwt.authentication import JWTAuthentication
     class SafeJWTAuthentication(JWTAuthentication):
@@ -3503,19 +3503,16 @@ except ImportError:
 class ReservationDetailAPIView(APIView):
     """
     نمایش جزئیات رزرو بر اساس tracking_code:
-    - برای کاربران مهمان اطلاعات را بدون خطا بازمی‌گرداند.
-    - اگر کاربر لاگین باشد، رزرو مهمان را خودکار به نام کاربر ذخیره می‌کند.
-    - فقط در صورتی که رزرو به کاربر دیگری تعلق داشته باشد، خطای ۴۰۳ می‌دهد.
+    - برای مسافر مهمان و لاگین‌شده همیشه اطلاعات را بدون مسدودسازی لود می‌کند.
+    - اگر کاربر لاگین باشد و رزرو پرداخت‌نشده باشد، خودکار رزرو را به نام کاربر الصاق می‌کند.
+    - هرگز با خطای ۴۰۳ صفحه مسافر را قفل نمی‌کند.
     """
     permission_classes = [AllowAny]
     authentication_classes = [SafeJWTAuthentication] if SafeJWTAuthentication else []
 
     @swagger_auto_schema(
         operation_summary="نمایش جزئیات رزرو",
-        operation_description="""
-        این API جزئیات کامل یک رزرو را بر اساس کد پیگیری (tracking_code) بازمی‌گرداند.
-        همچنین موجودی زنده کیف پول کاربر (user_wallet_balance) و وضعیت تایید ظرفیت (capacity_status) را شامل می‌شود.
-        """,
+        operation_description="این API جزئیات کامل یک رزرو را بر اساس کد پیگیری (tracking_code) بازمی‌گرداند.",
         tags=["reservation-api"],
         responses={
             200: openapi.Response(
@@ -3528,75 +3525,27 @@ class ReservationDetailAPIView(APIView):
                         'payment_status': openapi.Schema(type=openapi.TYPE_STRING, example='pending'),
                         'final_price': openapi.Schema(type=openapi.TYPE_INTEGER, example=2450000),
                         'user_wallet_balance': openapi.Schema(type=openapi.TYPE_INTEGER, example=1500000),
-                        'reserver': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'first_name': openapi.Schema(type=openapi.TYPE_STRING, example='علی'),
-                                'last_name': openapi.Schema(type=openapi.TYPE_STRING, example='احمدی'),
-                                'phone_number': openapi.Schema(type=openapi.TYPE_STRING, example='09123456789'),
-                                'national_code': openapi.Schema(type=openapi.TYPE_STRING, example='0012345678')
-                            }
-                        ),
-                        'date': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'enter': openapi.Schema(type=openapi.TYPE_STRING, example='1404-06-30'),
-                                'exit': openapi.Schema(type=openapi.TYPE_STRING, example='1404-07-02')
-                            }
-                        ),
-                        'time': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'enter': openapi.Schema(type=openapi.TYPE_STRING, example='14:00:00'),
-                                'exit': openapi.Schema(type=openapi.TYPE_STRING, example='12:00:00')
-                            }
-                        ),
-                        'number_of_nights': openapi.Schema(type=openapi.TYPE_INTEGER, example=2),
-                        'hotel_name': openapi.Schema(type=openapi.TYPE_STRING, example='هتل عباسی'),
-                        'hotel_star': openapi.Schema(type=openapi.TYPE_INTEGER, example=5),
-                        'city_name': openapi.Schema(type=openapi.TYPE_STRING, example='اصفهان'),
-                        'province_name': openapi.Schema(type=openapi.TYPE_STRING, example='اصفهان'),
-                        'number_of_rooms': openapi.Schema(type=openapi.TYPE_INTEGER, example=1),
-                        'half_charges': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'enter': openapi.Schema(
-                                    type=openapi.TYPE_OBJECT,
-                                    properties={'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN)}
-                                ),
-                                'exit': openapi.Schema(
-                                    type=openapi.TYPE_OBJECT,
-                                    properties={'enabled': openapi.Schema(type=openapi.TYPE_BOOLEAN)}
-                                )
-                            }
-                        )
                     }
                 )
             ),
-            403: "شما اجازه دسترسی به این رزرو را ندارید.",
             404: "رزرو یا اطلاعات هتل یافت نشد."
         }
     )
     def get(self, request, tracking_code, *args, **kwargs):
-        # دریافت رزرو
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        # دریافت رزرو با تطابق بدون حساسیت به حروف بزرگ و کوچک (Case-Insensitive)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-        # 👇 نکته اساسی: اگر رزرو قبلاً مهمان بوده و کاربر الان لاگین است، درجا به نام کاربر سند می‌خورد
-        if reservation.buyer is None:
-            if request.user and request.user.is_authenticated:
+        # 👇 نکته حیاتی: اگر کاربر لاگین است و رزرو هنوز پرداخت نشده، مالکیت آن به کاربر جاری به‌روزرسانی می‌شود
+        if request.user and request.user.is_authenticated:
+            if reservation.buyer is None or (reservation.buyer_id != request.user.id and reservation.payment_status != 'paid'):
                 reservation.buyer = request.user
+                reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer'])
-        elif reservation.buyer != request.user:
-            # فقط اگر رزرو متعلق به کاربر دیگری بود خطا می‌دهد
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
 
         # دریافت ایمن هتل مرتبط
         hotel = reservation.get_hotel()
         if not hotel:
-            first_room = reservation.reservation_rooms.first()
+            first_room = reservation.reservation_rooms.select_related('room__hotel').first()
             if first_room and first_room.room and first_room.room.hotel:
                 hotel = first_room.room.hotel
             else:
@@ -3605,8 +3554,8 @@ class ReservationDetailAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-        city = hotel.city
-        province = city.province if hasattr(city, 'province') else None
+        city = getattr(hotel, 'city', None)
+        province = getattr(city, 'province', None) if city else None
 
         # استخراج مشخصات رزروکننده به صورت کاملاً ایمن
         profile = getattr(request.user, 'natural_profile', None) if (request.user and request.user.is_authenticated) else None
@@ -3647,14 +3596,14 @@ class ReservationDetailAPIView(APIView):
                 'exit': reservation.check_out_date.isoformat() if reservation.check_out_date else None
             },
             'time': {
-                'enter': format_time(hotel.check_in_time, "14:00:00"),
-                'exit': format_time(hotel.check_out_time, "12:00:00")
+                'enter': format_time(getattr(hotel, 'check_in_time', None), "14:00:00"),
+                'exit': format_time(getattr(hotel, 'check_out_time', None), "12:00:00")
             },
             'number_of_nights': reservation.nights_count or 0,
-            'hotel_name': hotel.name or "نامشخص",
-            'hotel_star': hotel.stars or 0,
-            'city_name': city.name if city else None,
-            'province_name': province.name if province else None,
+            'hotel_name': getattr(hotel, 'name', 'نامشخص'),
+            'hotel_star': getattr(hotel, 'stars', 0),
+            'city_name': getattr(city, 'name', None),
+            'province_name': getattr(province, 'name', None),
             'number_of_rooms': reservation.total_rooms,
             'half_charges': {
                 'enter': {
