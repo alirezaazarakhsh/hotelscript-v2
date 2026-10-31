@@ -5232,154 +5232,67 @@ class ReservationInvoiceSettingsAPIView(APIView):
 
 
 
-# ای پی ای فاکتور رزروها 
-class ReservationInvoiceDetailAPIView(APIView):
 
+# ==============================================================================
+# API فاکتور نهایی و واچر رزرو (شامل عکس کامل هتل و هماهنگ با فرانت‌اند)
+# ==============================================================================
+class ReservationInvoiceDetailAPIView(APIView):
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
-        operation_summary="دریافت اطلاعات فاکتور رزرو",
-        operation_description="""
-        این API تمام اطلاعات لازم برای نمایش فاکتور رزرو را بر اساس **کد پیگیری** برمی‌گرداند.
-
-        شامل:
-        - اطلاعات رزرو کننده
-        - تاریخ‌ها و کد پیگیری
-        - نام و آدرس هتل
-        - جزئیات اتاق‌ها (نام، مدت اقامت، خدمات، نیم‌شارژها)
-        - لیست مسافران (نوع: اصلی / اضافه)
-        - توضیحات رزرو
-        - قوانین و مقررات هتل
-        - لینک عکس‌ها با دامنه اصلی `zarvantrip.com`
-
-        **مثال کد پیگیری**: `RES123456`
-        """,
+        operation_summary="دریافت اطلاعات فاکتور و واچر رزرو",
+        operation_description="این API تمام اطلاعات لازم برای نمایش فاکتور و واچر رزرو (شامل عکس هتل) را بر اساس کد پیگیری برمی‌گرداند.",
         manual_parameters=[
             openapi.Parameter(
                 'tracking_code',
                 openapi.IN_PATH,
-                description="کد پیگیری رزرو (مثلاً: RES123456)",
+                description="کد پیگیری رزرو (مثلاً: sfa1234567890)",
                 type=openapi.TYPE_STRING,
                 required=True
             )
         ],
         responses={
-            200: openapi.Response(
-                description="فاکتور با موفقیت بازگشت داده شد",
-                examples={
-                    "application/json": {
-                        "reservation": {
-                            "reserver_name": "علی رضایی",
-                            "reserver_phone": "09123456789",
-                            "tracking_code": "RES123456",
-                            "created_at": "1403-08-10T14:30:00",
-                            "check_in_date": "1404-08-15T00:00:00",
-                            "check_out_date": "1404-08-18T00:00:00",
-                            "hotel": {
-                                "name": "هتل پارسیان کوثر",
-                                "address": "تهران، خیابان ولیعصر، پلاک ۱۲۳۴"
-                            },
-                            "rooms": [
-                                {
-                                    "room_name": "اتاق دو تخته لوکس",
-                                    "nights": 3,
-                                    "services": ["وای‌فای", "صبحانه", "پارکینگ"],
-                                    "half_day_in": True,
-                                    "half_day_out": False
-                                }
-                            ],
-                            "passengers": [
-                                {"name": "علی رضایی", "type": "اصلی"},
-                                {"name": "سارا احمدی", "type": "اضافه"}
-                            ],
-                            "hotel_rules": "ورود از ساعت 14، خروج تا ساعت 12..."
-                        }
-                    }
-                }
-            ),
-            404: openapi.Response(
-                description="رزرو یافت نشد",
-                examples={"application/json": {"detail": "رزرو با این کد پیگیری یافت نشد."}}
-            )
+            200: "فاکتور با موفقیت بازگشت داده شد",
+            404: "رزرو یا هتل یافت نشد"
         },
         tags=["reservedashboard-api"]
     )
     def get(self, request, tracking_code):
-        # دریافت رزرو
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        # دریافت رزرو با تطابق حروف کوچک و بزرگ
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=str(tracking_code).strip())
 
-        # دریافت هتل
+        # دریافت هتل مرتبط
         hotel = reservation.get_hotel()
         if not hotel:
-            return Response(
-                {"detail": "هتل مرتبط با این رزرو یافت نشد."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # تبدیل created_at به شمسی ISO string
-        try:
-            if reservation.created_at:
-                # اگر created_at از نوع jDateTimeField است، مستقیماً فرمت می‌کنیم
-                if hasattr(reservation.created_at, 'year'):
-                    # بررسی می‌کنیم که آیا تاریخ شمسی است یا میلادی
-                    # اگر سال بزرگتر از 1500 باشد، احتمالاً میلادی است
-                    if reservation.created_at.year > 1500:
-                        # میلادی است، تبدیل به شمسی
-                        jalali_date = jdatetime.datetime.fromgregorian(
-                            datetime=reservation.created_at,
-                            locale='fa_IR'
-                        )
-                        created_iso = jalali_date.strftime('%Y-%m-%dT%H:%M:%S')
-                    else:
-                        # شمسی است، مستقیماً فرمت می‌کنیم
-                        created_iso = reservation.created_at.strftime('%Y-%m-%dT%H:%M:%S')
-                else:
-                    created_iso = str(reservation.created_at)
+            first_room = reservation.reservation_rooms.select_related('room__hotel').first()
+            if first_room and first_room.room and first_room.room.hotel:
+                hotel = first_room.room.hotel
             else:
-                created_iso = None
-        except Exception as e:
-            print(f"Error formatting created_at: {e}")
+                return Response(
+                    {"detail": "هتل مرتبط با این رزرو یافت نشد."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # ساخت لینک کامل و معتبر تصویر اصلی هتل برای نمایش در واچر
+        site_url = getattr(settings, "SITE_URL", "https://zarvantrip.com")
+        image_url = ""
+        if hotel.main_image and hasattr(hotel.main_image, 'url'):
+            image_url = f"{site_url}{hotel.main_image.url}"
+
+        # تبدیل تاریخ‌های شمسی به رشته استاندارد
+        try:
+            created_iso = reservation.created_at.strftime('%Y-%m-%dT%H:%M:%S') if reservation.created_at else None
+        except Exception:
             created_iso = str(reservation.created_at) if reservation.created_at else None
 
-        # تبدیل check_in_date و check_out_date به شمسی ISO string
         try:
-            if reservation.check_in_date:
-                if hasattr(reservation.check_in_date, 'year'):
-                    if reservation.check_in_date.year > 1500:
-                        # میلادی است، تبدیل به شمسی
-                        jalali_check_in = jdatetime.date.fromgregorian(
-                            date=reservation.check_in_date
-                        )
-                        check_in_iso = jalali_check_in.strftime('%Y-%m-%dT%H:%M:%S')
-                    else:
-                        # شمسی است، مستقیماً فرمت می‌کنیم
-                        check_in_iso = reservation.check_in_date.strftime('%Y-%m-%dT%H:%M:%S')
-                else:
-                    check_in_iso = str(reservation.check_in_date)
-            else:
-                check_in_iso = None
-        except Exception as e:
-            print(f"Error formatting check_in_date: {e}")
+            check_in_iso = reservation.check_in_date.strftime('%Y-%m-%dT%H:%M:%S') if reservation.check_in_date else None
+        except Exception:
             check_in_iso = str(reservation.check_in_date) if reservation.check_in_date else None
 
         try:
-            if reservation.check_out_date:
-                if hasattr(reservation.check_out_date, 'year'):
-                    if reservation.check_out_date.year > 1500:
-                        # میلادی است، تبدیل به شمسی
-                        jalali_check_out = jdatetime.date.fromgregorian(
-                            date=reservation.check_out_date
-                        )
-                        check_out_iso = jalali_check_out.strftime('%Y-%m-%dT%H:%M:%S')
-                    else:
-                        # شمسی است، مستقیماً فرمت می‌کنیم
-                        check_out_iso = reservation.check_out_date.strftime('%Y-%m-%dT%H:%M:%S')
-                else:
-                    check_out_iso = str(reservation.check_out_date)
-            else:
-                check_out_iso = None
-        except Exception as e:
-            print(f"Error formatting check_out_date: {e}")
+            check_out_iso = reservation.check_out_date.strftime('%Y-%m-%dT%H:%M:%S') if reservation.check_out_date else None
+        except Exception:
             check_out_iso = str(reservation.check_out_date) if reservation.check_out_date else None
 
         # لیست اتاق‌ها
@@ -5411,19 +5324,23 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "type": p_type
             })
 
-        # داده نهایی
+        # ساختار نهایی خروجی همراه با لینک عکس هتل در تمام کلیدهای احتمالی فرانت‌اند
         data = {
             "reservation": {
                 "reserver_name": f"{reservation.reserver_first_name} {reservation.reserver_last_name}".strip(),
                 "reserver_phone": reservation.reserver_phone_number,
                 "tracking_code": reservation.tracking_code,
-                "created_at": created_iso,  # شمسی ISO string
-                "check_in_date": check_in_iso,  # شمسی ISO string
-                "check_out_date": check_out_iso,  # شمسی ISO string
+                "created_at": created_iso,
+                "check_in_date": check_in_iso,
+                "check_out_date": check_out_iso,
                 "hotel": {
                     "name": hotel.name,
-                    "address": hotel.address
+                    "address": hotel.address,
+                    "image": image_url,        # 👈 فیلد عکس برای واچر
+                    "main_image": image_url,   # 👈 برای پشتیبانی کامل
                 },
+                "hotel_image": image_url,      # 👈 در سطح اول آبجکت
+                "hotel_slug": getattr(hotel, 'slug', '') or "",
                 "rooms": rooms_data,
                 "passengers": passengers_data,
                 "hotel_rules": hotel.rules or "قوانین ثبت نشده است."

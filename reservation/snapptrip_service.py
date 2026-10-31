@@ -154,24 +154,6 @@ def extract_stars_comprehensive(h):
     return '-'
 
 
-def extract_hotel_rules_and_cancellation(h_data):
-    """استخراج قوانین هتل و کنسلی"""
-    rules_text = ""
-    cancellation_text = ""
-    if isinstance(h_data, dict):
-        for r_k in ['rules', 'hotel_rules', 'regulations', 'hotel_policy']:
-            val = h_data.get(r_k)
-            if val and isinstance(val, str) and val.strip():
-                rules_text = val.strip()
-                break
-        for c_k in ['cancellation_rules', 'cancellation_policy', 'cancel_rules', 'important_note']:
-            val = h_data.get(c_k)
-            if val and isinstance(val, str) and val.strip():
-                cancellation_text = val.strip()
-                break
-    return rules_text, cancellation_text
-
-
 def is_room_online_instant(r_item):
     """تشخیص رزرو آنی بدون نیاز به تایید طبق ساختار اسنپ"""
     if r_item.get('is_online') is True or r_item.get('online') is True:
@@ -251,7 +233,6 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     default_ln = (getattr(profile, 'last_name', '') if profile else '') or reservation.reserver_last_name or "اصلی"
     default_nc = (getattr(profile, 'national_code', '') if profile else '') or reservation.reserver_national_code or "0012345679"
 
-    # آماده‌سازی آرایه مهمان‌ها
     guests_payload = []
     first_room = reservation.reservation_rooms.first()
     if first_room and first_room.passengers.exists():
@@ -339,7 +320,6 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         status_val = res_data.get('status') or res_data.get('data', {}).get('status', '')
         is_instant = status_val not in ['availability_checking', 'availability_pending', 'offline']
 
-        # وضعیت در زمان ساخت باید payment_on یا draft باشد (نه confirmed!) تا بعد از پرداخت بتوان تایید کرد
         if is_instant:
             lock_ok, _ = lock_snapptrip_booking(str(snapp_code))
             return True, str(snapp_code), True, "payment_on" if lock_ok else "draft"
@@ -353,33 +333,49 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
     """
-    تأیید نهایی رزرو پس از پرداخت مسافر و قطعی شدن در اسنپ
-    POST /booking/{code}/confirm
+    تأیید نهایی رزرو پس از پرداخت مسافر و قطعی شدن در اسنپ:
+    - در صورت draft بودن ابتدا رزرو را قفل می‌کند تا اسنپ اجازه تایید بدهد.
+    - وضعیت را به صورت زنده استعلام گرفته و وضعیت تایید را ثبت می‌کند.
     """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
 
-    confirm_url = f"{base_url}/booking/{snapp_reservation_code}/confirm"
+    code_str = str(snapp_reservation_code).strip()
+
+    # مرحله ۱: استعلام وضعیت زنده از اسنپ
+    current_status, _ = get_snapptrip_booking_status(code_str)
+    logger.info(f"وضعیت رزرو اسنپ {code_str} قبل از تایید: {current_status}")
+
+    # اگر وضعیت در اسنپ هنوز draft است، ابتدا باید lock شود تا به payment_on برود:
+    if current_status in ['draft', 'unknown', '']:
+        lock_ok, lock_status = lock_snapptrip_booking(code_str)
+        logger.info(f"لاک کردن رزرو {code_str} قبل از تایید: ok={lock_ok}, status={lock_status}")
+
+    # مرحله ۲: ارسال درخواست تایید قطعی به اسنپ
+    confirm_url = f"{base_url}/booking/{code_str}/confirm"
     try:
         res = _snapp_session.post(confirm_url, json={}, headers=headers, timeout=15)
+        logger.info(f"پاسخ اسنپ به confirm ({code_str}): {res.status_code} - {res.text}")
 
-        if res.status_code not in [200, 201]:
+        if res.status_code in [200, 201]:
+            final_status, _ = get_snapptrip_booking_status(code_str)
+            real_status = final_status if final_status != "unknown" else "confirmed"
+            
+            # به‌روزرسانی مستقیم وضعیت در دیتابیس
+            Reservationhotel.objects.filter(snapp_reservation_code=code_str).update(snapp_status=real_status)
+            return True, real_status, "رزرو با موفقیت در اسنپ‌تریپ قطعی شد."
+        else:
             err_msg = res.text[:150]
-            logger.error(f"Confirm failed on Snapp ({snapp_reservation_code}): {res.status_code} - {res.text}")
-            return False, "failed", f"خطای تأیید در اسنپ: {err_msg}"
-
-        # استعلام وضعیت نهایی
-        final_status, _ = get_snapptrip_booking_status(snapp_reservation_code)
-        real_status = final_status if final_status != "unknown" else "confirmed"
-        return True, real_status, "رزرو با موفقیت در اسنپ‌تریپ قطعی شد."
+            logger.error(f"Confirm failed on Snapp ({code_str}): {res.status_code} - {res.text}")
+            return False, current_status or "failed", f"خطای تأیید در اسنپ: {err_msg}"
     except Exception as e:
-        logger.error(f"Error confirming booking {snapp_reservation_code}: {e}")
+        logger.error(f"Error confirming booking {code_str}: {e}")
         return False, "failed", f"خطای ارتباط با اسنپ: {str(e)}"
 
 
 # ==============================================================================
-# بخش ۲: همگام‌سازی اتاق‌ها، تفکیک آفلاین/آنلاین و قیمت‌گذاری تقویم
+# بخش ۲: همگام‌سازی هتل‌ها، اتاق‌ها و تقویم قیمتی
 # ==============================================================================
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
