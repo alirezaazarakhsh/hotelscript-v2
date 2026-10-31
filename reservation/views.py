@@ -418,22 +418,17 @@ class HotelRoomsView(generics.RetrieveAPIView):
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 
-        # --- تعیین سطح کاربری ---
+        # تعیین سطح کاربری
         user_level = None
         if request.user.is_authenticated:
             try:
                 profile = request.user.natural_profile
                 if profile.level:
                     user_level = profile.level
-                    logger.info(f"User level detected: {user_level.title}")
-                else:
-                    logger.info("User has no level, using available prices")
             except NaturalProfile.DoesNotExist:
-                logger.info("No natural profile found, using available prices")
-        else:
-            logger.info("Anonymous user, using available prices")
+                pass
 
-        # --- مرحله ۱: تمام اتاق‌های فعال (فقط موجودی > 0) ---
+        # تمام اتاق‌های فعال دارای موجودی
         active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
 
         if not active_rooms.exists():
@@ -443,9 +438,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
             }, status=200)
 
-        # --- مرحله ۲: تمام اتاق‌ها رو بگیر (بدون فیلتر قیمت) ---
         rooms_qs = active_rooms.prefetch_related('date_prices', 'services').select_related('hotel')
-
         date_range = [start_date_obj + jdatetime.timedelta(days=i) for i in range((end_date_obj - start_date_obj).days)]
         night_count = (end_date_obj - start_date_obj).days
 
@@ -457,30 +450,32 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # --- انتخاب قیمت: اولویت با سطح کاربری، سپس عمومی ---
+                # ==============================================================
+                # اصلاح کلیدی: اولویت اول قطعی با قیمت دقیق تک‌روزه همان روز
+                # ==============================================================
                 price_data = None
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 )
 
-                # اولویت اول: قیمت سطح کاربری
+                # اگر رکورد تک‌روزه مختص به همان تاریخ وجود دارد، حتماً همان انتخاب شود
+                exact_day_prices = price_data_qs.filter(start_date=date, end_date=date)
+                target_qs = exact_day_prices if exact_day_prices.exists() else price_data_qs
+
+                # ۱. اولویت سطح کاربری
                 if user_level:
-                    level_prices = price_data_qs.filter(user_level=user_level)
+                    level_prices = target_qs.filter(user_level=user_level)
                     if level_prices.exists():
                         price_data = level_prices.order_by('-id').first()
-                        logger.debug(f"Using level price for {user_level.title}: {price_data.price if price_data else 'None'}")
                 
-                # اولویت دوم: قیمت عمومی (فقط اگر قیمت سطح کاربری پیدا نشد)
+                # ۲. اولویت قیمت عمومی
                 if not price_data:
-                    public_prices = price_data_qs.filter(user_level__isnull=True)
+                    public_prices = target_qs.filter(user_level__isnull=True)
                     if public_prices.exists():
                         price_data = public_prices.order_by('-id').first()
-                        logger.debug(f"Using public price: {price_data.price if price_data else 'None'}")
 
                 closed_date = closed_dates.filter(date=date).first()
-                
-                # وضعیت: اگر قیمت (از هر نوع) وجود داشت و تاریخ بسته نبود، open است
                 status = "open" if price_data and not closed_date else "close"
 
                 try:
@@ -505,32 +500,34 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     } if status == "open" else None
                 })
 
-            # --- قیمت اولین روز (برای نمایش تخفیف) ---
+            # ==============================================================
+            # اصلاح کلیدی first_price_data: اولویت دقیق با روز شروع رزرو
+            # ==============================================================
             first_price_data = None
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
             )
 
-            # اولویت اول: قیمت سطح کاربری برای روز اول
+            exact_first_prices = first_price_data_qs.filter(start_date=start_date_obj, end_date=start_date_obj)
+            target_first_qs = exact_first_prices if exact_first_prices.exists() else first_price_data_qs
+
             if user_level:
-                level_prices = first_price_data_qs.filter(user_level=user_level)
+                level_prices = target_first_qs.filter(user_level=user_level)
                 if level_prices.exists():
                     first_price_data = level_prices.order_by('-id').first()
-            
-            # اولویت دوم: قیمت عمومی برای روز اول
+
             if not first_price_data:
-                public_prices = first_price_data_qs.filter(user_level__isnull=True)
+                public_prices = target_first_qs.filter(user_level__isnull=True)
                 if public_prices.exists():
                     first_price_data = public_prices.order_by('-id').first()
 
-            # حتی اگر first_price_data هم None باشد، باز هم اتاق را نمایش می‌دهیم
             try:
                 discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False)
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
-            # --- محاسبه قیمت کل از price_calendar (بدون احتساب نفر اضافه) ---
+            # جمع مبالغ تمام شب‌های بازه انتخابی
             total_price = sum(
                 day['price']['price'] for day in price_calendar
                 if day['status'] == "open" and day['price'] and day['price']['price'] is not None
@@ -575,11 +572,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         room_data = list(room_dict.values())
 
-        # --- Single room ---
+        # حالت انتخاب تک‌اتاق بدون مسافر
         if not passengers_list:
             room_data.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(room_data)
 
+        # حالت تک‌اتاق با تعداد مسافر مشخص
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
             filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
@@ -591,13 +589,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 }, status=200)
 
             for room in filtered_rooms:
-                # قیمت نفر اضافه را به قیمت کل اضافه نکن؛ فقط ظرفیت را چک کن
                 room['selected_passenger'] = required_capacity
             
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(filtered_rooms)
 
-        # --- Pack rooms ---
+        # حالت بسته‌های چنداتاقه (Pack rooms)
         packs = []
         passengers_list.sort()
         room_candidates = {}
@@ -610,7 +607,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 pack_rooms = []
                 for orig_room, p in current_pack:
                     room = copy.deepcopy(orig_room)
-                    # قیمت نفر اضافه را به قیمت کل اضافه نکن؛ فقط ظرفیت را چک کن
                     room['selected_passenger'] = p
                     pack_rooms.append(room)
                     pack_total_price += room['price']['total_price_discount']
@@ -650,7 +646,6 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
-    
     
 
 
@@ -2431,7 +2426,6 @@ class BestHotelspageAPI(ListAPIView):
         return round(overall_average or 0, 1)
 
     def get_user_level(self, request):
-        """تعیین سطح کاربری مانند HotelRoomsView"""
         user_level = None
         if request.user.is_authenticated:
             try:
@@ -2443,20 +2437,26 @@ class BestHotelspageAPI(ListAPIView):
         return user_level
 
     def get_price_data_for_date(self, room, date, user_level):
-        """انتخاب قیمت بر اساس سطح کاربری مانند HotelRoomsView"""
+        """
+        انتخاب هوشمند قیمت با اولویت رکوردهای دقیق تک‌روزه همان تاریخ
+        """
         price_data_qs = room.date_prices.filter(
             start_date__lte=date,
             end_date__gte=date
         )
 
-        # اولویت اول: قیمت سطح کاربری
+        # اگر قیمت مشخص تک‌روزه برای همین تاریخ داریم، از بازه ماهانه استفاده نکن
+        exact_day_prices = price_data_qs.filter(start_date=date, end_date=date)
+        target_qs = exact_day_prices if exact_day_prices.exists() else price_data_qs
+
+        # اولویت با سطح کاربری
         if user_level:
-            level_prices = price_data_qs.filter(user_level=user_level)
+            level_prices = target_qs.filter(user_level=user_level)
             if level_prices.exists():
                 return level_prices.order_by('-id').first()
         
-        # اولویت دوم: قیمت عمومی
-        public_prices = price_data_qs.filter(user_level__isnull=True)
+        # در غیر این صورت قیمت عمومی
+        public_prices = target_qs.filter(user_level__isnull=True)
         if public_prices.exists():
             return public_prices.order_by('-id').first()
         
@@ -2511,7 +2511,6 @@ class BestHotelspageAPI(ListAPIView):
             has_zero_price = False
 
             for date in date_range:
-                # استفاده از منطق انتخاب قیمت بر اساس سطح کاربری
                 price_data = self.get_price_data_for_date(room, date, user_level)
                 closed_date = closed_dates.filter(date=date).first()
                 status = "open" if price_data and not closed_date else "close"
@@ -2542,6 +2541,7 @@ class BestHotelspageAPI(ListAPIView):
             if has_zero_price or not price_calendar or all(day['status'] != "open" for day in price_calendar):
                 continue
 
+            # جمع مبالغ شب‌های اقامت
             total_price = sum(day['price']['price'] for day in price_calendar if day['status'] == "open" and day['price'])
             total_price_discount = sum(
                 day['price']['price_after_discount'] if day['status'] == "open" and day['price'] and day['price']['discount_percentage'] is not None else
@@ -2551,7 +2551,6 @@ class BestHotelspageAPI(ListAPIView):
             if total_price == 0 or total_price_discount == 0:
                 continue
 
-            # قیمت اولین روز با در نظر گرفتن سطح کاربری
             first_price_data = self.get_price_data_for_date(room, start_date_obj, user_level)
             if not first_price_data:
                 continue
@@ -2580,7 +2579,6 @@ class BestHotelspageAPI(ListAPIView):
 
         room_data = list(room_dict.values())
 
-        # If passengers_list is empty or [0], find the cheapest room regardless of capacity
         if not passengers_list or passengers_list == [0]:
             if not room_data:
                 return None
@@ -2593,7 +2591,6 @@ class BestHotelspageAPI(ListAPIView):
                 'user_level': min_room['price']['user_level'],
             }
         else:
-            # --- Single room ---
             if len(passengers_list) == 1:
                 required_capacity = passengers_list[0]
                 filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
@@ -2622,8 +2619,6 @@ class BestHotelspageAPI(ListAPIView):
                     'discount_date': min_room['price']['discount_date'],
                     'user_level': min_room['price']['user_level'],
                 }
-
-            # --- Pack rooms ---
             else:
                 packs = []
                 passengers_list.sort()
@@ -2701,13 +2696,6 @@ class BestHotelspageAPI(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        operation_description=(
-            "این API لیست هتل‌ها را با توجه به فیلترها بازمی‌گرداند. "
-            "قیمت اصلی (price) و قیمت با تخفیف (price_after_discount) "
-            "برای ارزان‌ترین اتاق یا پک در کل بازه نمایش داده می‌شود. "
-            "اگر passengers=0 یا خالی باشد، تمام هتل‌ها با ارزان‌ترین اتاق نمایش داده می‌شوند. "
-            "همچنین تعداد شب‌ها (night_count) و تعداد کامنت‌های تأییدشده (comment_count) نمایش داده می‌شود."
-        ),
         tags=["best-hotel"],
         manual_parameters=[
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
@@ -2737,7 +2725,6 @@ class BestHotelspageAPI(ListAPIView):
         room_facilities = request.query_params.get('room-facilities')
         hotel_facilities = request.query_params.get('hotel-facilities')
 
-        # تعیین سطح کاربری
         user_level = self.get_user_level(request)
 
         passenger_values = []
@@ -2747,7 +2734,7 @@ class BestHotelspageAPI(ListAPIView):
                 if len(passenger_values) > 3 or sum(passenger_values) > 8 or any(p < 0 for p in passenger_values):
                     return Response({'detail': 'پارامتر passengers نامعتبر است.'}, status=400)
                 if passenger_values == [0]:
-                    passenger_values = []  # Treat passengers=0 as no passenger constraint
+                    passenger_values = []
             except ValueError:
                 return Response({'detail': 'پارامتر passengers باید لیست اعداد صحیح باشد.'}, status=400)
 
@@ -2777,8 +2764,7 @@ class BestHotelspageAPI(ListAPIView):
         if residence_type:
             try:
                 residence_ids = [int(x.strip()) for x in residence_type.split(',') if x.strip()]
-                logger.info(f"Filtering by residence_type IDs: {residence_ids}")
-                if residence_ids:  # فقط اگر لیست residence_ids خالی نباشد، فیلتر اعمال شود
+                if residence_ids:
                     hotels_qs = hotels_qs.filter(type__id__in=residence_ids)
             except ValueError:
                 return Response({'detail': 'شناسه نوع اقامتگاه نامعتبر است.'}, status=400)
@@ -2815,18 +2801,15 @@ class BestHotelspageAPI(ListAPIView):
 
         hotel_min_price_map = {}
         for hotel in hotels_qs:
-            # ارسال user_level به متد get_room_data
             min_price_data = self.get_room_data(hotel, start_date_obj, end_date_obj, passenger_values, user_level)
             if min_price_data:
                 hotel_min_price_map[hotel.id] = min_price_data
 
-        # فیلتر هتل‌هایی که قیمت صفر دارند
         hotel_min_price_map = {
             hotel_id: data for hotel_id, data in hotel_min_price_map.items()
             if data.get('total_price', 0) > 0 and data.get('original_total_price', 0) > 0
         }
 
-        # If no dates and no passengers (or passengers=0), include all hotels
         if not start_date_str and not end_date_str and not passengers:
             for hotel in hotels_qs:
                 if hotel.id not in hotel_min_price_map:
@@ -2841,11 +2824,9 @@ class BestHotelspageAPI(ListAPIView):
                         'average_score': self.get_average_score(hotel),
                     }
         else:
-            # Filter hotels that have valid min_price_data
             filtered_hotel_ids = list(hotel_min_price_map.keys())
             hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
 
-        # Apply min/max price filter if applicable
         if min_price is not None or max_price is not None:
             filtered_hotel_ids = [
                 hid for hid, data in hotel_min_price_map.items()
@@ -2854,13 +2835,11 @@ class BestHotelspageAPI(ListAPIView):
             ]
             hotels_qs = hotels_qs.filter(id__in=filtered_hotel_ids)
 
-        # Sort hotels by min total_price ascending
         sorted_hotels = sorted(
             hotels_qs,
             key=lambda h: hotel_min_price_map.get(h.id, {}).get('total_price', float('inf'))
         )
 
-        # Comment count map
         hotel_comment_count_map = {h.id: h.comments.count() for h in sorted_hotels}
 
         context = {
@@ -2877,8 +2856,6 @@ class BestHotelspageAPI(ListAPIView):
 
         serializer = self.get_serializer(sorted_hotels, many=True, context=context)
         return Response(serializer.data)
-
-
 
 
 #ای پی ای فیلتر محدوده قیمت بهترین هتل ها 

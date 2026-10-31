@@ -548,7 +548,6 @@ def confirm_snapptrip_booking(snapp_reservation_code: str):
         if res.status_code not in [200, 201]:
             err_msg = res.text[:120]
             logger.error(f"Confirm failed on Snapp ({code_str}): {res.status_code} - {res.text}")
-            # بازگرداندن وضعیت کوتاه 'failed' برای جلوگیری از خطای سرریز فیلد دیتابیس
             return False, "failed", f"خطای تأیید در اسنپ: {err_msg}"
 
         final_status, _ = get_snapptrip_booking_status(code_str)
@@ -563,27 +562,22 @@ def auto_confirm_snapp_reservation_if_charged(reservation):
     """
     بررسی خودکار و هوشمند کیف پول اسنپ بعد از پرداخت مسافر:
     - اگر کیف پول اسنپ شارژ داشت، رزرو را در اسنپ قطعی می‌کند.
-    - اگر شارژ نداشت، وضعیت به 'insufficient_credit' تغییر می‌کند تا ادمین متوجه شود و سیستم ۵۰۰ ندهد.
+    - اگر شارژ نداشت، وضعیت به 'insufficient_credit' تغییر می‌کند تا ادمین متوجه شود.
     """
     if not reservation.is_snapptrip_reservation or not reservation.snapp_reservation_code:
         return False, "رزرو اسنپی نیست."
 
-    # ۱. استعلام موجودی زنده کیف پول اسنپ
     snapp_balance, b_msg = get_snapptrip_wallet_balance()
-
-    # هزینه مورد نیاز بر حسب تومان
     required_price = int(reservation.final_price or reservation.total_price or 0)
 
     logger.info(f"🔍 بررسی خودکار اسنپ: موجودی کیف‌پول={snapp_balance:,} | مبلغ مورد نیاز={required_price:,} | رزرو={reservation.tracking_code}")
 
-    # ۲. اگر کیف پول اسنپ شارژ کافی نداشت:
     if snapp_balance < required_price:
         logger.warning(f"⚠️ کیف پول اسنپ شارژ کافی ندارد ({snapp_balance:,} تومان). وضعیت به insufficient_credit تغییر کرد.")
         reservation.snapp_status = 'insufficient_credit'
         reservation.save(update_fields=['snapp_status'])
         return False, f"کیف‌پول اسنپ شارژ ندارد (موجودی: {snapp_balance:,} تومان)"
 
-    # ۳. در صورت داشتن شارژ کافی، ارسال درخواست قطعی کردن به اسنپ
     success, final_stat, msg = confirm_snapptrip_booking(reservation.snapp_reservation_code)
     
     if success:
@@ -878,46 +872,41 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        if not room_calendar_synced and base_client_sell_price > 0:
-            RoomDatePrice.objects.update_or_create(
+        # =====================================================================
+        # اصلاح کلیدی: جلوگیری از ثبت بازه ۳۰ روزه در صورت وجود تقویم روزانه
+        # =====================================================================
+        if room_calendar_synced:
+            # پاک‌سازی خودکار بازه چندروزه قدیمی که از سینک‌های قبل مانده بود و تداخل ایجاد می‌کرد
+            RoomDatePrice.objects.filter(
                 room=room,
                 start_date=today_j,
-                end_date=today_j,
-                user_level=None,
-                defaults={
-                    'purchase_price': base_agency_buy_price,
-                    'price': base_client_sell_price,
-                    'extra_passenger_price': base_extra_bed_price,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                    'is_fixed_discount_one_time': False,
-                }
-            )
-            synced_prices_count += 1
+                end_date=end_30_days_j
+            ).delete()
+        else:
+            # اگر تقویم روزانه نیامد، به عنوان فال‌بک از نرخ پایه برای ۳۰ روز استفاده کن
+            final_base_price = first_valid_client_price or base_client_sell_price
+            final_agency_price = first_valid_agency_price or base_agency_buy_price
+            final_extra = first_valid_extra or base_extra_bed_price
 
-        final_base_price = first_valid_client_price or base_client_sell_price
-        final_agency_price = first_valid_agency_price or base_agency_buy_price
-        final_extra = first_valid_extra or base_extra_bed_price
+            if final_base_price > 0:
+                RoomDatePrice.objects.update_or_create(
+                    room=room,
+                    start_date=today_j,
+                    end_date=end_30_days_j,
+                    user_level=None,
+                    defaults={
+                        'purchase_price': final_agency_price,
+                        'price': final_base_price,
+                        'extra_passenger_price': final_extra,
+                        'discount_type': 'none',
+                        'discount_value': 0,
+                        'discount_date': None,
+                        'is_fixed_discount_one_time': False,
+                    }
+                )
+                synced_prices_count += 1
 
-        if final_base_price > 0:
-            RoomDatePrice.objects.update_or_create(
-                room=room,
-                start_date=today_j,
-                end_date=end_30_days_j,
-                user_level=None,
-                defaults={
-                    'purchase_price': final_agency_price,
-                    'price': final_base_price,
-                    'extra_passenger_price': final_extra,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                    'is_fixed_discount_one_time': False,
-                }
-            )
-
-        club_points = calculate_customer_club_points(hotel.stars, final_base_price)
+        club_points = calculate_customer_club_points(hotel.stars, first_valid_client_price or base_client_sell_price)
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 

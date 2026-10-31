@@ -1154,20 +1154,41 @@ class ReservationApprovalDuration(models.Model):
 
 
 def validate_phone_number(value):
+    """اعتبارسنجی شماره همراه ایران"""
     if not value:
         raise ValidationError(_('شماره موبایل نمی‌تواند خالی باشد.'))
-    if not re.match(r'^09\d{9}$', value):
+    clean_val = str(value).strip()
+    if not re.match(r'^09\d{9}$', clean_val):
         raise ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
 
 
 def validate_identification_code(value):
+    """اعتبارسنجی دوگانه: کد ملی ۱۰ رقمی یا شماره پاسپورت معتبر"""
     if not value:
         raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
-    if re.match(r'^\d{10}$', value):
-        return value
-    if 6 <= len(value) <= 9 and re.match(r'^[A-Za-z]*\d+$', value):
-        return value
-    raise ValidationError(_('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت بین ۶ تا ۹ کاراکتر باشد.'))
+    
+    clean_val = str(value).strip()
+
+    # حالت ۱: بررسی کد ملی ایرانی (۱۰ رقم همراه با Checksum)
+    if re.match(r'^\d{10}$', clean_val):
+        check_digit = int(clean_val[9])
+        total = sum(int(clean_val[i]) * (10 - i) for i in range(9)) % 11
+        remainder = total % 11
+
+        # کدهای ملی با ارقام تکراری ساختگی نامعتبر هستند
+        if len(set(clean_val)) == 1:
+            raise ValidationError(_('کد ملی وارد شده معتبر نیست.'))
+
+        is_valid = (remainder < 2 and check_digit == remainder) or (remainder >= 2 and check_digit == (11 - remainder))
+        if not is_valid:
+            raise ValidationError(_('کد ملی وارد شده معتبر نیست.'))
+        return clean_val
+
+    # حالت ۲: بررسی شماره پاسپورت اتباع خارجی (۶ تا ۹ کاراکتر الفبانومریک)
+    if 6 <= len(clean_val) <= 9 and re.match(r'^[A-Za-z0-9]+$', clean_val):
+        return clean_val.upper()
+
+    raise ValidationError(_('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت ۶ تا ۹ کاراکتر باشد.'))
 
 
 class Passenger(models.Model):
@@ -1239,7 +1260,12 @@ class BestHotels(models.Model):
         return f"{self.order} - {self.title_logo}"
 
 
-# ---------------- Reservationhotel ----------------
+
+
+# ==============================================================================
+# بخش مدل اصلی رزرو (Reservationhotel) و سیگنال هماهنگ با کیف‌پول و اسنپ
+# ==============================================================================
+
 class Reservationhotel(models.Model):
     CAPACITY_STATUS_CHOICES = [
         ('pending', _('در حال بررسی')),
@@ -1253,7 +1279,7 @@ class Reservationhotel(models.Model):
         ('pending', _('در انتظار پرداخت')),
     ]
 
-    # کاربر می‌تواند نال باشد تا قبل از لاگین رزرو اولیه ساخته شود
+    # خریدار (می‌تواند برای رزرو مهمان قبل از لاگین null باشد)
     buyer = models.ForeignKey(
         BaseUser,
         on_delete=models.CASCADE,
@@ -1265,7 +1291,7 @@ class Reservationhotel(models.Model):
     reserver_first_name = models.CharField(_('نام رزرو کننده'), max_length=256, blank=True, default='')
     reserver_last_name = models.CharField(_('نام خانوادگی رزرو کننده'), max_length=256, blank=True, default='')
     reserver_phone_number = models.CharField(_('شماره تماس رزرو کننده'), max_length=11, blank=True, default='')
-    reserver_national_code = models.CharField(_('کد ملی رزرو کننده'), max_length=10, blank=True, null=True)
+    reserver_national_code = models.CharField(_('کد ملی رزرو کننده'), max_length=12, blank=True, null=True)
 
     check_in_date = jmodels.jDateField(_('تاریخ ورود'))
     check_out_date = jmodels.jDateField(_('تاریخ خروج'))
@@ -1289,11 +1315,11 @@ class Reservationhotel(models.Model):
     wallet_withdrawn = models.BooleanField(_('برداشت از کیف پول انجام شده'), default=False)
 
     is_approved = models.BooleanField(_('تأیید شده'), default=False)
-    tracking_code = models.CharField(max_length=20, unique=True, verbose_name='کد پیگیری رزرو')
+    tracking_code = models.CharField(max_length=20, unique=True, verbose_name=_('کد پیگیری رزرو'))
     additional_notes = models.TextField(_('توضیحات تکمیلی'), blank=True, default='')
     capacity_status = models.CharField(_('وضعیت ظرفیت'), max_length=20, choices=CAPACITY_STATUS_CHOICES, default='pending')
     payment_status = models.CharField(_('وضعیت پرداخت'), max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
-    applied_discount_code = models.CharField(max_length=8, blank=True, null=True, verbose_name=_("کد تخفیف اعمال‌شده"))
+    applied_discount_code = models.CharField(max_length=20, blank=True, null=True, verbose_name=_("کد تخفیف اعمال‌شده"))
     personal_discount_code = models.ForeignKey(
         'bashgah_moshtarian.PersonalDiscountCode',
         null=True,
@@ -1336,7 +1362,7 @@ class Reservationhotel(models.Model):
         help_text=_('مشخص می‌کند که اعلان تایید رزرو به ادمین ارسال شده است.')
     )
 
-    # --- فیلدهای اتصال رزرو به اسنپ‌تریپ ---
+    # --- فیلدهای وب‌سرویس اسنپ‌تریپ ---
     is_snapptrip_reservation = models.BooleanField(
         default=False, 
         verbose_name=_('رزرو اسنپ‌تریپ است؟')
@@ -1365,13 +1391,13 @@ class Reservationhotel(models.Model):
         buyer_phone = self.buyer.phone_number if self.buyer else "کاربر مهمان"
         return f'رزرو {self.tracking_code} توسط {buyer_phone}'
 
-    # --- متدهای کمکی ---
     @cached_property
     def nights_count(self):
+        """محاسبه تعداد شب‌های اقامت"""
         if self.check_in_date and self.check_out_date:
-            check_in = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
-            check_out = self.check_out_date.togregorian() if hasattr(self.check_out_date, 'togregorian') else self.check_out_date
-            return max(0, (check_out - check_in).days)
+            c_in = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
+            c_out = self.check_out_date.togregorian() if hasattr(self.check_out_date, 'togregorian') else self.check_out_date
+            return max(0, (c_out - c_in).days)
         return 0
 
     @cached_property
@@ -1391,7 +1417,8 @@ class Reservationhotel(models.Model):
 
     def get_hotel(self):
         if hasattr(self, 'reservation_rooms') and self.reservation_rooms.exists():
-            return self.reservation_rooms.first().room.hotel
+            first_rr = self.reservation_rooms.first()
+            return first_rr.room.hotel if first_rr and first_rr.room else None
         return None
 
     def calculate_cancellation_refund(self):
@@ -1418,15 +1445,19 @@ class Reservationhotel(models.Model):
         ])
 
     def calculate_total_price(self):
+        """
+        محاسبه بی‌نقص مجموع صورت‌حساب:
+        قیمت به صورت شب‌به‌شب از روی تقویم شمسی خوانده شده و جمع می‌شود (هماهنگ با تغییرات قیمت روزهای هفته).
+        """
         if not self.pk or not self.reservation_rooms.exists():
             return (Decimal('0'),) * 9 
 
         first_res_room = self.reservation_rooms.first()
-        if not first_res_room:
+        if not first_res_room or not first_res_room.room:
             return (Decimal('0'),) * 9
 
         hotel = first_res_room.room.hotel
-        if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all()):
+        if not all(res_room.room.hotel == hotel for res_room in self.reservation_rooms.all() if res_room.room):
             raise ValidationError('تمام اتاق‌ها باید از یک هتل باشند.')
 
         total = Decimal('0')
@@ -1440,49 +1471,61 @@ class Reservationhotel(models.Model):
             return (total, total_extra, self.discount, half_day_in_charge, half_day_out_charge, Decimal('0'), self.discount, self.final_price, room_fixed_discount)
 
         user_level = getattr(self.buyer.natural_profile, 'level', None) if (self.buyer and hasattr(self.buyer, 'natural_profile')) else None
-        check_in_date_std = self.check_in_date.togregorian() if hasattr(self.check_in_date, 'togregorian') else self.check_in_date
 
         for res_room in self.reservation_rooms.all():
             room = res_room.room
+            if not room:
+                continue
+
             quantity = res_room.quantity
             extra_guests = res_room.passengers.filter(passenger_type='extra').count()
 
-            price_obj = room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level=user_level
-            ).first() or room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level__isnull=True
-            ).first()
+            # محاسبه شب‌به‌شب قیمت‌ها به صورت کاملاً شمسی
+            for night_idx in range(nights):
+                target_date_j = self.check_in_date + jdatetime.timedelta(days=night_idx)
 
-            daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
-            extra_price_per_person = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
+                price_qs = room.date_prices.filter(
+                    start_date__lte=target_date_j,
+                    end_date__gte=target_date_j
+                )
 
-            total += daily_price * nights * quantity
-            total_extra += extra_price_per_person * extra_guests * nights * quantity
+                # اولویت قطعی با نرخ روزانه همان تاریخ
+                exact_day_qs = price_qs.filter(start_date=target_date_j, end_date=target_date_j)
+                target_qs = exact_day_qs if exact_day_qs.exists() else price_qs
 
-            if price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
-                if price_obj.discount_date and check_in_date_std <= price_obj.discount_date:
-                    room_fixed_discount += Decimal(price_obj.discount_value) * quantity
-                elif not price_obj.discount_date:
-                    room_fixed_discount += Decimal(price_obj.discount_value) * quantity
+                price_obj = None
+                if user_level:
+                    price_obj = target_qs.filter(user_level=user_level).order_by('-id').first()
+                if not price_obj:
+                    price_obj = target_qs.filter(user_level__isnull=True).order_by('-id').first()
 
-            if hasattr(res_room, 'half_day_in_selected') and res_room.half_day_in_selected and hasattr(hotel, 'has_check_in_half_day_charge') and hotel.has_check_in_half_day_charge:
-                half_day_in_charge += (res_room.half_day_in_price if hasattr(res_room, 'half_day_in_price') else Decimal('0')) * quantity
-            if hasattr(res_room, 'half_day_out_selected') and res_room.half_day_out_selected and hasattr(hotel, 'has_check_out_half_day_charge') and hotel.has_check_out_half_day_charge:
-                half_day_out_charge += (res_room.half_day_out_price if hasattr(res_room, 'half_day_out_price') else Decimal('0')) * quantity
+                daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
+                extra_price_per_person = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
+
+                total += daily_price * quantity
+                total_extra += extra_price_per_person * extra_guests * quantity
+
+                # اعمال تخفیف ثابت اولین شب
+                if night_idx == 0 and price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
+                    if price_obj.discount_date and self.check_in_date <= price_obj.discount_date:
+                        room_fixed_discount += Decimal(price_obj.discount_value) * quantity
+                    elif not price_obj.discount_date:
+                        room_fixed_discount += Decimal(price_obj.discount_value) * quantity
+
+            # محاسبه نیم‌شارژها
+            if hasattr(res_room, 'half_day_in_selected') and res_room.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
+                half_day_in_charge += (res_room.half_day_in_price or Decimal('0')) * quantity
+            if hasattr(res_room, 'half_day_out_selected') and res_room.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
+                half_day_out_charge += (res_room.half_day_out_price or Decimal('0')) * quantity
 
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price_after_all_discounts = total + total_extra + total_half_day_charge - self.discount - room_fixed_discount
-        final_price_to_pay = base_price_after_all_discounts - self.wallet_withdrawal_amount
-        
-        if final_price_to_pay < 0:
-            final_price_to_pay = Decimal('0')
+        final_price_to_pay = max(Decimal('0'), base_price_after_all_discounts - (self.wallet_withdrawal_amount or Decimal('0')))
 
-        return (total, total_extra, self.discount, half_day_in_charge, half_day_out_charge,
-                total_half_day_charge, self.discount, final_price_to_pay, room_fixed_discount)
+        return (
+            total, total_extra, self.discount, half_day_in_charge, half_day_out_charge,
+            total_half_day_charge, self.discount, final_price_to_pay, room_fixed_discount
+        )
 
     def save(self, *args, **kwargs):
         if not getattr(self, '_skip_price_calculation_on_save', False):
@@ -1499,14 +1542,16 @@ class Reservationhotel(models.Model):
         super().save(*args, **kwargs)
 
 
-# --- متدهای کمکی پردازش کد تخفیف ---
-def process_discount_after_payment_v2(self):
-    if not (self.payment_status == 'paid' and self.applied_discount_code and not self.discount_processed):
+# ------------------------------------------------------------------------------
+# متدهای کمکی پردازش کد تخفیف
+# ------------------------------------------------------------------------------
+def process_discount_after_payment_v2(reservation_instance):
+    if not (reservation_instance.payment_status == 'paid' and reservation_instance.applied_discount_code and not reservation_instance.discount_processed):
         return False
 
     try:
         with transaction.atomic():
-            reservation = Reservationhotel.objects.select_for_update().get(pk=self.pk)
+            reservation = Reservationhotel.objects.select_for_update().get(pk=reservation_instance.pk)
             if reservation.discount_processed or not reservation.buyer:
                 return True
 
@@ -1522,6 +1567,7 @@ def process_discount_after_payment_v2(self):
                     reservation.personal_discount_code = discount_obj
                     reservation.personal_discount_used = True
                     reservation.discount_processed = True
+                    reservation._skip_price_calculation_on_save = True
                     reservation.save(update_fields=['personal_discount_code', 'personal_discount_used', 'discount_processed'])
                     return True
                 return False
@@ -1529,6 +1575,7 @@ def process_discount_after_payment_v2(self):
             success = discount_obj.consume_discount_for_user(reservation.buyer)
             if success:
                 reservation.discount_processed = True
+                reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['discount_processed'])
                 return True
             return False
@@ -1538,27 +1585,20 @@ def process_discount_after_payment_v2(self):
         return False
 
 
-def _debug_discount_status(self):
-    try:
-        discount_obj, discount_type = find_discount_obj_by_code(self.applied_discount_code)
-        if not discount_obj:
-            return
-        logger.info(f"دیباگ کد تخفیف: {discount_obj.code} (نوع: {discount_type})")
-    except Exception as e:
-        logger.error(f"خطا در دیباگ کد تخفیف: {e}")
-
-
 def find_discount_obj_by_code(code):
+    if not code:
+        return None, None
+    clean_code = str(code).strip()
     try:
-        return RoomDiscountCode.objects.get(code__iexact=code), 'room'
+        return RoomDiscountCode.objects.get(code__iexact=clean_code), 'room'
     except RoomDiscountCode.DoesNotExist:
         pass
     try:
-        return HotelDiscountCode.objects.get(code__iexact=code), 'hotel'
+        return HotelDiscountCode.objects.get(code__iexact=clean_code), 'hotel'
     except HotelDiscountCode.DoesNotExist:
         pass
     try:
-        return PersonalDiscountCode.objects.get(code__iexact=code), 'personal'
+        return PersonalDiscountCode.objects.get(code__iexact=clean_code), 'personal'
     except PersonalDiscountCode.DoesNotExist:
         pass
     return None, None
@@ -1574,171 +1614,175 @@ def get_skip_points_and_sms():
 
 
 # ==============================================================================
-# سیگنال مدیریت وضعیت رزرو، تایید قطعی اسنپ، کسر کیف پول و تخصیص امتیاز
+# سیگنال مدیریت وضعیت پرداخت، کسر کیف پول و تایید قطعی اسنپ‌تریپ (فقط یک‌بار)
 # ==============================================================================
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
-    try:
-        if get_skip_points_and_sms():
-            return
+    """
+    مدیریت پرداخت موفق:
+    ۱. کسر قطعی مبلغ از کیف پول سایت مسافر
+    ۲. هماهنگی و تایید رزرو در اسنپ‌تریپ با بررسی شارژ حساب B2B
+    ۳. مصرف کد تخفیف و تخصیص امتیاز باشگاه
+    ۴. ارسال وب‌سوکت وضعیت به فرانت‌اند
+    """
+    if get_skip_points_and_sms():
+        return
 
-        channel_layer = get_channel_layer()
-        cache_key_approval = f"reservation_approval_timer_{instance.tracking_code}"
-        cache_key_payment = f"reservation_payment_timer_{instance.tracking_code}"
-        cache_key_points = f"points_assignment_lock_{instance.tracking_code}"
-        cache_key_discount = f"discount_process_lock_{instance.tracking_code}"
+    update_fields = kwargs.get('update_fields')
+    if update_fields and set(update_fields).issubset({'wallet_withdrawn', 'points_assigned', 'discount_processed', 'snapp_status'}):
+        return
 
-        # ---------------------------------------------------------------------
-        # بخش ۱: رزرو رد شده (Rejected) -> بازگردانی ظرفیت
-        # ---------------------------------------------------------------------
-        if instance.capacity_status == 'rejected':
-            rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
-            with transaction.atomic():
-                for r in rooms:
-                    room = Room.objects.select_for_update().get(pk=r.room.pk)
-                    room.revert_inventory_for_cancellation(r.quantity, getattr(r, 'was_auto_approved', False))
-            cache.delete_many([cache_key_approval, cache_key_payment, cache_key_discount])
-            logger.info(f"رزرو {instance.tracking_code} رد شد؛ ظرفیت اتاق‌ها بازگردانده شد.")
+    def _execute_after_commit():
+        try:
+            channel_layer = get_channel_layer()
+            cache_key_points = f"points_assignment_lock_{instance.tracking_code}"
+            cache_key_discount = f"discount_process_lock_{instance.tracking_code}"
 
-        # ---------------------------------------------------------------------
-        # بخش ۲: پرداخت موفق مسافر (payment_status == 'paid')
-        # ---------------------------------------------------------------------
-        elif instance.payment_status == 'paid':
-            logger.info(f"🔵 پرداخت موفق برای رزرو {instance.tracking_code}. شروع پردازش تایید اسنپ، کیف پول و امتیاز...")
-
-            # الف) تایید نهایی و قطعی رزرو در وب‌سرویس اسنپ‌تریپ
-            if (
-                getattr(instance, 'is_snapptrip_reservation', False)
-                and instance.snapp_reservation_code
-                and instance.snapp_status != 'confirmed'
-            ):
-                try:
-                    from reservation.snapptrip_service import confirm_snapptrip_booking
-                    ok, final_snapp_status, msg = confirm_snapptrip_booking(instance.snapp_reservation_code)
-                    if ok:
-                        Reservationhotel.objects.filter(pk=instance.pk).update(snapp_status=final_snapp_status)
-                        instance.snapp_status = final_snapp_status
-                        logger.info(f"✅ رزرو اسنپ {instance.snapp_reservation_code} قطعی و در پنل ثبت شد: {msg}")
-                    else:
-                        logger.error(f"❌ خطا در قطعی کردن رزرو اسنپ ({instance.snapp_reservation_code}): {msg}")
-                except Exception as snapp_confirm_err:
-                    logger.error(f"❌ خطا در فراخوانی confirm اسنپ: {snapp_confirm_err}")
-
-            # ب) کسر قطعی مبلغ برداشت‌شده از کیف پول کاربر
-            if instance.buyer and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+            if instance.capacity_status == 'rejected':
+                rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
                 with transaction.atomic():
-                    res_lock = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-                    if not res_lock.wallet_withdrawn and res_lock.wallet_withdrawal_amount > 0 and res_lock.buyer:
-                        wallet, _ = Wallet.objects.select_for_update().get_or_create(user=res_lock.buyer)
-                        if wallet.balance >= res_lock.wallet_withdrawal_amount:
-                            wallet.balance -= res_lock.wallet_withdrawal_amount
-                            wallet.save(update_fields=['balance'])
-                            res_lock.wallet_withdrawn = True
-                            res_lock._skip_price_calculation_on_save = True
-                            res_lock.save(update_fields=['wallet_withdrawn'])
-                            logger.info(f"✅ مبلغ {res_lock.wallet_withdrawal_amount} تومان از کیف پول کاربر کسر شد.")
+                    for r in rooms:
+                        if r.room:
+                            room = Room.objects.select_for_update().get(pk=r.room.pk)
+                            room.revert_inventory_for_cancellation(r.quantity, getattr(r, 'was_auto_approved', False))
+                logger.info(f"رزرو {instance.tracking_code} رد شد؛ ظرفیت اتاق‌ها در دیتابیس آزاد شد.")
+
+            elif instance.payment_status == 'paid':
+                logger.info(f"🔵 پرداخت موفق برای رزرو {instance.tracking_code}. شروع پردازش...")
+
+                # گام اول: کسر قطعی وجه از کیف پول سایت مسافر
+                if instance.buyer and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
+                    with transaction.atomic():
+                        res_lock = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+                        if not res_lock.wallet_withdrawn and res_lock.wallet_withdrawal_amount > 0 and res_lock.buyer:
+                            wallet, _ = Wallet.objects.select_for_update().get_or_create(user=res_lock.buyer)
+                            if wallet.balance >= res_lock.wallet_withdrawal_amount:
+                                wallet.balance -= res_lock.wallet_withdrawal_amount
+                                wallet.save(update_fields=['balance'])
+
+                                res_lock.wallet_withdrawn = True
+                                res_lock._skip_price_calculation_on_save = True
+                                res_lock.save(update_fields=['wallet_withdrawn'])
+                                instance.wallet_withdrawn = True
+                                logger.info(f"✅ مبلغ {res_lock.wallet_withdrawal_amount:,} تومان از کیف پول کاربر در سایت کسر شد.")
+                            else:
+                                logger.error(f"❌ موجودی کیف پول سایت کاربر برای کسر کافی نیست!")
+
+                # گام دوم: هماهنگی هوشمند و قطعی کردن رزرو در اسنپ‌تریپ
+                if (
+                    getattr(instance, 'is_snapptrip_reservation', False)
+                    and instance.snapp_reservation_code
+                    and instance.snapp_status != 'confirmed'
+                ):
+                    try:
+                        from reservation.snapptrip_service import auto_confirm_snapp_reservation_if_charged
+                        ok, msg = auto_confirm_snapp_reservation_if_charged(instance)
+                        if ok:
+                            logger.info(f"✅ رزرو اسنپ {instance.snapp_reservation_code} قطعی شد: {msg}")
                         else:
-                            logger.error(f"❌ موجودی کیف پول کاربر برای کسر کافی نیست!")
+                            logger.warning(f"⚠️ وضعیت اسنپ برای رزرو {instance.snapp_reservation_code}: {msg}")
+                    except Exception as snapp_err:
+                        logger.error(f"❌ خطا در هماهنگی رزرو با اسنپ‌تریپ: {snapp_err}")
 
-            # ج) مصرف کدهای تخفیف
-            if instance.applied_discount_code and not instance.discount_processed and not cache.get(cache_key_discount):
-                cache.set(cache_key_discount, True, timeout=60)
-                try:
-                    process_discount_after_payment_v2(instance)
-                except Exception as e:
-                    logger.error(f"خطا در مصرف کد تخفیف: {e}")
-                finally:
-                    cache.delete(cache_key_discount)
+                # گام سوم: مصرف کد تخفیف
+                if instance.applied_discount_code and not instance.discount_processed and not cache.get(cache_key_discount):
+                    cache.set(cache_key_discount, True, timeout=60)
+                    try:
+                        process_discount_after_payment_v2(instance)
+                    except Exception as e:
+                        logger.error(f"خطا در مصرف کد تخفیف: {e}")
+                    finally:
+                        cache.delete(cache_key_discount)
 
-            # د) تخصیص امتیاز باشگاه مشتریان
-            if instance.buyer and not instance.points_assigned and not cache.get(cache_key_points):
-                cache.set(cache_key_points, True, timeout=60)
-                with transaction.atomic():
-                    res_pts = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
-                    if not res_pts.points_assigned and res_pts.buyer:
-                        total_pts = sum(
-                            (rr.room.customer_club_points or 0) * rr.quantity
-                            for rr in res_pts.reservation_rooms.select_related('room').all()
-                        )
-                        if total_pts > 0:
-                            club_pts, _ = CustomerClubPoint.objects.get_or_create(user=res_pts.buyer, defaults={'points': 0})
-                            club_pts.points += total_pts
-                            set_skip_points_and_sms(True)
-                            club_pts.save()
-                            set_skip_points_and_sms(False)
-
-                            send_customer_club_sms(
-                                phone_number=res_pts.buyer.phone_number,
-                                user_name=res_pts.buyer.first_name or res_pts.buyer.phone_number,
-                                added_points=total_pts,
-                                current_points=club_pts.points
+                # گام چهارم: تخصیص امتیاز باشگاه مشتریان
+                if instance.buyer and not instance.points_assigned and not cache.get(cache_key_points):
+                    cache.set(cache_key_points, True, timeout=60)
+                    with transaction.atomic():
+                        res_pts = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
+                        if not res_pts.points_assigned and res_pts.buyer:
+                            total_pts = sum(
+                                (rr.room.customer_club_points or 0) * rr.quantity
+                                for rr in res_pts.reservation_rooms.select_related('room').all()
+                                if rr.room
                             )
-                            logger.info(f"✅ تعداد {total_pts} امتیاز باشگاه به کاربر اضافه شد.")
+                            if total_pts > 0:
+                                club_pts, _ = CustomerClubPoint.objects.get_or_create(user=res_pts.buyer, defaults={'points': 0})
+                                club_pts.points += total_pts
+                                club_pts.save()
 
-                        res_pts.points_assigned = True
-                        res_pts.save(update_fields=['points_assigned'])
+                                try:
+                                    send_customer_club_sms(
+                                        phone_number=res_pts.buyer.phone_number,
+                                        user_name=res_pts.buyer.first_name or res_pts.buyer.phone_number,
+                                        added_points=total_pts,
+                                        current_points=club_pts.points
+                                    )
+                                except Exception:
+                                    pass
 
-                        # افزایش مجموع خرید در پروفایل کاربر
-                        if hasattr(res_pts.buyer, 'natural_profile') and res_pts.buyer.natural_profile:
-                            prof = res_pts.buyer.natural_profile
-                            if res_pts.final_price and res_pts.final_price > 0:
-                                prof.total_purchase += res_pts.final_price
-                                prof.save(update_fields=['total_purchase'])
-                                prof.update_level()
-                cache.delete(cache_key_points)
+                            res_pts.points_assigned = True
+                            res_pts._skip_price_calculation_on_save = True
+                            res_pts.save(update_fields=['points_assigned'])
 
-        # ---------------------------------------------------------------------
-        # بخش ۳: ارسال وضعیت کامل و زنده به وب‌سوکت فرانت‌اند
-        # ---------------------------------------------------------------------
-        user_wallet = getattr(instance.buyer, 'wallet', None) if instance.buyer else None
-        user_balance = int(user_wallet.balance) if user_wallet else 0
-        timer_seconds = 900 if instance.capacity_status == 'confirmed' and instance.payment_status != 'paid' else None
+                            if hasattr(res_pts.buyer, 'natural_profile') and res_pts.buyer.natural_profile:
+                                prof = res_pts.buyer.natural_profile
+                                if res_pts.final_price and res_pts.final_price > 0:
+                                    prof.total_purchase += res_pts.final_price
+                                    prof.save(update_fields=['total_purchase'])
+                                    prof.update_level()
+                    cache.delete(cache_key_points)
 
-        async_to_sync(channel_layer.group_send)(
-            f"reservation_{instance.tracking_code}",
-            {
-                "type": "status_update",
-                "message": {
-                    "capacity_status": instance.capacity_status,
-                    "payment_status": instance.payment_status,
-                    "snapp_status": instance.snapp_status,
-                    "final_price": int(instance.final_price or 0),
-                    "wallet_balance": user_balance,
-                    "timer": timer_seconds,
+            user_wallet = getattr(instance.buyer, 'wallet', None) if instance.buyer else None
+            user_balance = int(user_wallet.balance) if user_wallet else 0
+            timer_seconds = 900 if instance.capacity_status == 'confirmed' and instance.payment_status != 'paid' else None
+
+            async_to_sync(channel_layer.group_send)(
+                f"reservation_{instance.tracking_code}",
+                {
+                    "type": "status_update",
+                    "message": {
+                        "capacity_status": instance.capacity_status,
+                        "payment_status": instance.payment_status,
+                        "snapp_status": instance.snapp_status,
+                        "final_price": int(instance.final_price or 0),
+                        "wallet_balance": user_balance,
+                        "timer": timer_seconds,
+                    },
                 },
-            },
-        )
-        logger.debug(f"پیام به‌روزرسانی وب‌سوکت برای رزرو {instance.tracking_code} ارسال شد.")
+            )
+        except Exception as e:
+            logger.exception(f"خطا در پردازش سیگنال رزرو {instance.tracking_code}: {e}")
 
-    except Exception as e:
-        logger.exception(f"خطای کلی در سیگنال رزرو {instance.tracking_code}: {e}")
+    transaction.on_commit(_execute_after_commit)
 
 
-# ---------------- ReservationRoom ----------------
+# ==============================================================================
+# مدل کامل اتاق رزرو شده (ReservationRoom)
+# ==============================================================================
 class ReservationRoom(models.Model):
     reservation = models.ForeignKey(
         'Reservationhotel',
         on_delete=models.CASCADE,
-        verbose_name='رزرو',
+        verbose_name=_('رزرو'),
         related_name='reservation_rooms'
     )
     room = models.ForeignKey(
         'Room',
         on_delete=models.CASCADE,
-        verbose_name='اتاق',
+        verbose_name=_('اتاق'),
         related_name='reservation_rooms'
     )
-    quantity = models.PositiveIntegerField(default=1, verbose_name='تعداد')
-    was_auto_approved = models.BooleanField(default=False, verbose_name='رزرو خودکار تایید شد؟')
+    quantity = models.PositiveIntegerField(default=1, verbose_name=_('تعداد'))
+    was_auto_approved = models.BooleanField(default=False, verbose_name=_('رزرو خودکار تایید شد؟'))
     price_per_night = models.DecimalField(
-        'قیمت هر شب',
+        verbose_name=_('قیمت هر شب'),
         max_digits=12,
         decimal_places=0,
         validators=[MinValueValidator(0)],
         default=Decimal('0')
     )
     extra_passenger_price = models.DecimalField(
-        'قیمت هر نفر اضافه',
+        verbose_name=_('قیمت هر نفر اضافه'),
         max_digits=12,
         decimal_places=0,
         validators=[MinValueValidator(0)],
@@ -1747,7 +1791,7 @@ class ReservationRoom(models.Model):
         null=True,
     )
     fixed_discount = models.DecimalField(
-        'تخفیف ثابت',
+        verbose_name=_('تخفیف ثابت'),
         max_digits=12,
         decimal_places=0,
         validators=[MinValueValidator(0)],
@@ -1756,28 +1800,28 @@ class ReservationRoom(models.Model):
         null=True,
     )
     subtotal = models.PositiveBigIntegerField(
-        verbose_name='مجموع قیمت (تومان)',
+        verbose_name=_('مجموع قیمت (تومان)'),
         default=0
     )
     primary_passengers_count = models.PositiveIntegerField(
         default=0,
-        verbose_name='تعداد نفر اصلی'
+        verbose_name=_('تعداد نفر اصلی')
     )
     extra_passengers_count = models.PositiveIntegerField(
         default=0,
-        verbose_name='تعداد نفر اضافه'
+        verbose_name=_('تعداد نفر اضافه')
     )
-    half_day_in_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ ورود انتخاب شده؟')
-    half_day_out_selected = models.BooleanField(default=False, verbose_name='نیم‌شارژ خروج انتخاب شده؟')
+    half_day_in_selected = models.BooleanField(default=False, verbose_name=_('نیم‌شارژ ورود انتخاب شده؟'))
+    half_day_out_selected = models.BooleanField(default=False, verbose_name=_('نیم‌شارژ خروج انتخاب شده؟'))
     half_day_in_price = models.DecimalField(
-        'قیمت نیم‌شارژ ورود',
+        verbose_name=_('قیمت نیم‌شارژ ورود'),
         max_digits=12,
         decimal_places=0,
         default=Decimal('0'),
         validators=[MinValueValidator(0)]
     )
     half_day_out_price = models.DecimalField(
-        'قیمت نیم‌شارژ خروج',
+        verbose_name=_('قیمت نیم‌شارژ خروج'),
         max_digits=12,
         decimal_places=0,
         default=Decimal('0'),
@@ -1785,13 +1829,28 @@ class ReservationRoom(models.Model):
     )
 
     class Meta:
-        verbose_name = 'اتاق رزرو شده'
-        verbose_name_plural = 'اتاق‌های رزرو شده'
+        verbose_name = _('اتاق رزرو شده')
+        verbose_name_plural = _('اتاق‌های رزرو شده')
 
     def __str__(self):
         room_title = self.room.title if self.room_id else "اتاق نامشخص"
         reservation_code = self.reservation.tracking_code if self.reservation_id else "رزرو نامشخص"
         return f'{room_title} (تعداد: {self.quantity}) در رزرو {reservation_code}'
+
+    def _get_exact_price_obj(self, target_date, user_level):
+        base_qs = self.room.date_prices.filter(
+            start_date__lte=target_date,
+            end_date__gte=target_date
+        )
+        exact_qs = base_qs.filter(start_date=target_date, end_date=target_date)
+        target_qs = exact_qs if exact_qs.exists() else base_qs
+
+        if user_level:
+            level_obj = target_qs.filter(user_level=user_level).order_by('-id').first()
+            if level_obj:
+                return level_obj
+
+        return target_qs.filter(user_level__isnull=True).order_by('-id').first()
 
     def calculate_room_prices(self):
         if not self.room_id or not self.reservation_id:
@@ -1809,31 +1868,16 @@ class ReservationRoom(models.Model):
             self.subtotal = 0
             return
 
-        check_in_date_std = (
-            self.reservation.check_in_date.togregorian()
-            if hasattr(self.reservation.check_in_date, 'togregorian')
-            else self.reservation.check_in_date
-        )
+        check_in_date_j = self.reservation.check_in_date
         user_level = getattr(self.reservation.buyer.natural_profile, 'level', None) if (self.reservation.buyer and hasattr(self.reservation.buyer, 'natural_profile')) else None
 
-        price_obj = (
-            self.room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level=user_level
-            ).first()
-            or self.room.date_prices.filter(
-                start_date__lte=check_in_date_std,
-                end_date__gte=check_in_date_std,
-                user_level__isnull=True
-            ).first()
-        )
-
+        price_obj = self._get_exact_price_obj(check_in_date_j, user_level)
         if not price_obj:
-            raise ValidationError(f"قیمت‌گذاری برای اتاق {self.room.title} در بازه زمانی مشخص‌شده یافت نشد.")
+            raise ValidationError(f"قیمت‌گذاری برای اتاق {self.room.title} در تاریخ {check_in_date_j} یافت نشد.")
 
         self.price_per_night = Decimal(price_obj.price)
         self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
+
         if price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
             self.fixed_discount = Decimal(price_obj.discount_value)
         else:
@@ -1848,7 +1892,7 @@ class ReservationRoom(models.Model):
             self.half_day_out_price = Decimal('0')
             return
 
-        hotel = self.room.hotel
+        hotel = getattr(self.room, 'hotel', None)
         if not hotel:
             self.half_day_in_price = Decimal('0')
             self.half_day_out_price = Decimal('0')
@@ -1880,24 +1924,9 @@ class ReservationRoom(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.extra_passenger_price and self.room:
-            check_in_date_std = (
-                self.reservation.check_in_date.togregorian()
-                if hasattr(self.reservation.check_in_date, 'togregorian')
-                else self.reservation.check_in_date
-            )
+            check_in_date_j = self.reservation.check_in_date
             user_level = getattr(self.reservation.buyer.natural_profile, 'level', None) if (self.reservation.buyer and hasattr(self.reservation.buyer, 'natural_profile')) else None
-            price_obj = (
-                self.room.date_prices.filter(
-                    start_date__lte=check_in_date_std,
-                    end_date__gte=check_in_date_std,
-                    user_level=user_level
-                ).first()
-                or self.room.date_prices.filter(
-                    start_date__lte=check_in_date_std,
-                    end_date__gte=check_in_date_std,
-                    user_level__isnull=True
-                ).first()
-            )
+            price_obj = self._get_exact_price_obj(check_in_date_j, user_level)
             if price_obj:
                 self.extra_passenger_price = Decimal(price_obj.extra_passenger_price)
 
@@ -1915,48 +1944,43 @@ class ReservationRoom(models.Model):
         super().save(*args, **kwargs)
 
 
-# ---------------- ReservationRoomPassenger ----------------
-def validate_national_code(value):
-    if not value:
-        raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
-    if re.match(r'^\d{10}$', value):
-        check_digits = int(value[9])
-        total = sum(int(value[i]) * (10 - i) for i in range(9)) % 11
-        if int(value[3:9]) == 0 or not ((total < 2 and check_digits == total) or (total >= 2 and check_digits == (11 - total))):
-            raise ValidationError(_('کد ملی معتبر نیست'))
-        return value
-    if 6 <= len(value) <= 9 and re.match(r'^[A-Za-z]*\d+$', value):
-        return value
-    raise ValidationError(_('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت بین ۶ تا ۹ کاراکتر باشد.'))
 
-
+# ==============================================================================
+# مدل کامل مسافران اتاق (ReservationRoomPassenger) - بدون تابع تکراری
+# ==============================================================================
 class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
-        ('primary', 'مسافر اصلی'),
-        ('extra', 'نفر اضافه'),
-        ('secondary', 'سایر مسافران'),
+        ('primary', _('مسافر اصلی')),
+        ('extra', _('نفر اضافه')),
+        ('secondary', _('سایر مسافران')),
     ]
 
     reservation_room = models.ForeignKey(
         ReservationRoom,
         on_delete=models.CASCADE,
         related_name='passengers',
-        verbose_name='اتاق رزرو شده'
+        verbose_name=_('اتاق رزرو شده')
     )
     passenger_type = models.CharField(
         max_length=20,
         choices=PASSENGER_TYPE_CHOICES,
-        verbose_name='نوع مسافر'
+        verbose_name=_('نوع مسافر')
     )
-    is_primary = models.BooleanField(default=False, verbose_name='مسافر اصلی است؟')
-    first_name = models.CharField('نام', max_length=100)
-    last_name = models.CharField('نام خانوادگی', max_length=100)
-    mobile_number = models.CharField('شماره موبایل', max_length=11, blank=True, null=True)
-    national_code = models.CharField('کد ملی', max_length=10, blank=True, null=True, validators=[validate_national_code])
+    is_primary = models.BooleanField(default=False, verbose_name=_('مسافر اصلی است؟'))
+    first_name = models.CharField(_('نام'), max_length=100)
+    last_name = models.CharField(_('نام خانوادگی'), max_length=100)
+    mobile_number = models.CharField(_('شماره موبایل'), max_length=11, blank=True, null=True)
+    national_code = models.CharField(
+        _('کد شناسایی (کد ملی / پاسپورت)'), 
+        max_length=12, 
+        blank=True, 
+        null=True, 
+        validators=[validate_identification_code]
+    )
 
     class Meta:
-        verbose_name = 'مسافر'
-        verbose_name_plural = 'مسافرها'
+        verbose_name = _('مسافر')
+        verbose_name_plural = _('مسافرها')
 
     def clean(self):
         if self.passenger_type == 'primary':
@@ -1968,10 +1992,10 @@ class ReservationRoomPassenger(models.Model):
                 raise ValidationError(f'برای مسافر اصلی، فیلدهای {missing_fields} الزامی هستند.')
 
         if self.national_code:
-            validate_national_code(self.national_code)
+            validate_identification_code(self.national_code)
 
     def save(self, *args, **kwargs):
-        self.is_primary = self.passenger_type == 'primary'
+        self.is_primary = (self.passenger_type == 'primary')
         self.full_clean()
         super().save(*args, **kwargs)
         if self.reservation_room:
@@ -1981,7 +2005,8 @@ class ReservationRoomPassenger(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'
-
+    
+    
 
 # دلایل کنسلی رزرو 
 class CancellationReason(models.Model):
