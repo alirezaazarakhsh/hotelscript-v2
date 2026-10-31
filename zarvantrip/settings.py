@@ -181,23 +181,23 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
-# زمان‌بندی تسک‌های Celery Beat
+# زمان‌بندی تسک‌های Celery Beat (اصلاح‌شده و هماهنگ)
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
-        'schedule': 900.0,
+        'schedule': 900.0,  # هر ۱۵ دقیقه
     },
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
-        'schedule': 300.0,
-    },
-    'auto-sync-snapptrip-hotels-every-minute': {
-        'task': 'reservation.tasks.auto_sync_snapptrip_hotels_task',
-        'schedule': 60.0,
+        'schedule': 300.0,  # هر ۵ دقیقه
     },
     'check-pending-snapptrip-inquiries': {
         'task': 'reservation.tasks.check_pending_snapptrip_inquiries_task',
-        'schedule': 120.0,
+        'schedule': 120.0,  # هر ۲ دقیقه یک‌بار (استعلام زنده رزروهای معلق در اسنپ)
+    },
+    'auto-sync-snapptrip-prices-every-2-hours': {
+        'task': 'reservation.tasks.auto_sync_snapptrip_prices_task',
+        'schedule': 7200.0,  # هر ۲ ساعت یک‌بار (بروزرسانی خودکار تقویم و قیمت هتل‌ها)
     },
 }
 
