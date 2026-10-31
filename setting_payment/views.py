@@ -23,6 +23,9 @@ from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel, Wallet, Passenger, ReservationRoomPassenger
 from django.db.models import F
 
+# ایمپورت متد تایید قطعی اسنپ‌تریپ
+from reservation.snapptrip_service import confirm_snapptrip_booking
+
 logger = logging.getLogger(__name__)
 
 # -------------------------
@@ -143,7 +146,6 @@ class ReservationPaymentCheckAPIView(APIView):
     def post(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
-        # 👇 نکته کلیدی: اگر رزرو در حالت مهمان بوده، همینجا به نام کاربر لاگین‌شده سند می‌خورد
         if reservation.buyer is None:
             reservation.buyer = request.user
             reservation.save(update_fields=['buyer'])
@@ -314,7 +316,7 @@ class ReservationPaymentCheckAPIView(APIView):
 
 
 # -------------------------
-# API: callback تراکنش
+# API: callback تراکنش (تایید خودکار رزرو در اسنپ بلافاصله پس از پرداخت موفق)
 # -------------------------
 class PaymentCallbackAPIView(APIView):
     permission_classes = []
@@ -368,7 +370,20 @@ class PaymentCallbackAPIView(APIView):
                     reservation.ref_id = ref_id
                     update_fields.append("ref_id")
                 reservation.save(update_fields=update_fields)
-                
+
+                # =========================================================================
+                # 👇 تایید قطعی در اسنپ‌تریپ بلافاصله پس از پرداخت موفق مسافر
+                # =========================================================================
+                if reservation.payment_status == 'paid' and reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
+                    try:
+                        logger.info(f"🚀 ارسال درخواست قطعی کردن رزرو اسنپ {reservation.snapp_reservation_code}...")
+                        confirm_ok, final_snapp_status, confirm_msg = confirm_snapptrip_booking(reservation.snapp_reservation_code)
+                        reservation.snapp_status = final_snapp_status
+                        reservation.save(update_fields=['snapp_status'])
+                        logger.info(f"✅ نتیجه تایید در اسنپ: {confirm_msg} (وضعیت نهایی: {final_snapp_status})")
+                    except Exception as snapp_err:
+                        logger.error(f"❌ خطا در تایید رزرو اسنپ پس از پرداخت: {snapp_err}")
+
                 # ارسال نوتیف پرداخت به ادمین‌ها
                 from hotel_bot.bot import send_payment_receipt_notification
                 from asgiref.sync import async_to_sync
@@ -546,6 +561,15 @@ class PaymentVerifyAPIView(APIView):
                         reservation.payment_status = 'paid'
                         reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
+
+                        # 👇 تایید در اسنپ پس از verify زرین‌پال
+                        if reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
+                            try:
+                                _, final_stat, _ = confirm_snapptrip_booking(reservation.snapp_reservation_code)
+                                reservation.snapp_status = final_stat
+                                reservation.save(update_fields=['snapp_status'])
+                            except Exception:
+                                pass
                         
                         if reservation.buyer:
                             for res_room in reservation.reservation_rooms.all():
@@ -619,6 +643,15 @@ class PaymentVerifyAPIView(APIView):
                         reservation.payment_status = 'paid'
                         reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
+
+                        # 👇 تایید در اسنپ پس از verify ایران‌درگاه
+                        if reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
+                            try:
+                                _, final_stat, _ = confirm_snapptrip_booking(reservation.snapp_reservation_code)
+                                reservation.snapp_status = final_stat
+                                reservation.save(update_fields=['snapp_status'])
+                            except Exception:
+                                pass
                         
                         if reservation.buyer:
                             for res_room in reservation.reservation_rooms.all():

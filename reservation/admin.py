@@ -59,7 +59,8 @@ from .snapptrip_service import (
     sync_all_snapptrip_hotels_directory, 
     sync_hotel_and_rooms_from_snapp,
     get_snapptrip_booking_status,
-    get_snapptrip_wallet_balance
+    get_snapptrip_wallet_balance,
+    confirm_snapptrip_booking
 )
 
 
@@ -923,8 +924,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_refunded_fa',
         'cancellation_requested_fa',
         'capacity_status_colored', 'payment_status_colored',
-        'snapp_code_fa',
-        'snapp_status_colored',
+        'snapp_code_fa',             # نمایش کد رزرو اسنپ
+        'snapp_status_colored',       # نمایش وضعیت در اسنپ
         'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
     )
     search_fields = (
@@ -941,6 +942,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
     )
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
+    actions = ['confirm_snapp_action_bulk']
     readonly_fields = (
         'tracking_code', 'buyer_phone_number', 'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
         'created_jalali', 'updated_jalali', 'points_assigned_fa',
@@ -1015,10 +1017,11 @@ class ReservationhotelAdmin(NestedModelAdmin):
             )
 
         status_colors = {
-            'confirmed': ('#28a745', 'تأیید نهایی'),
+            'confirmed': ('#28a745', 'تأیید نهایی (سفارش موفق)'),
             'availability_confirmed': ('#28a745', 'تأیید ظرفیت هتل'),
             'availability_checking': ('#e0a800', 'در حال استعلام از هتل'),
             'payment_on': ('#17a2b8', 'قفل موقت (۱۵ دقیقه)'),
+            'draft': ('#6c757d', 'پیش‌نویس (draft)'),
             'availability_rejected': ('#dc3545', 'عدم پذیرش هتل'),
             'failed': ('#dc3545', 'ناموفق'),
             'expired': ('#6c757d', 'منقضی شده'),
@@ -1037,10 +1040,16 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 self.admin_site.admin_view(self.check_snapp_status_action),
                 name='reservation-check-snapp-status',
             ),
+            path(
+                '<int:reservation_id>/confirm-snapp/',
+                self.admin_site.admin_view(self.confirm_snapp_action),
+                name='reservation-confirm-snapp',
+            ),
         ]
         return custom_urls + urls
 
     def check_snapp_status_action(self, request, reservation_id):
+        """استعلام زنده وضعیت رزرو و موجودی کیف‌پول اسنپ"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
@@ -1060,15 +1069,48 @@ class ReservationhotelAdmin(NestedModelAdmin):
         self.message_user(request, msg, messages.INFO)
         return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
 
+    def confirm_snapp_action(self, request, reservation_id):
+        """تایید نهایی و قطعی رزرو در اسنپ از طریق پنل ادمین (ارسال مستقیم به پنل اسنپ)"""
+        obj = self.get_object(request, reservation_id)
+        if not obj or not obj.snapp_reservation_code:
+            self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
+            return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+
+        success, final_stat, msg = confirm_snapptrip_booking(obj.snapp_reservation_code)
+        obj.snapp_status = final_stat
+        obj.save(update_fields=['snapp_status'])
+
+        if success:
+            self.message_user(request, f"✅ رزرو {obj.snapp_reservation_code} با موفقیت در اسنپ قطعی شد: {msg} (وضعیت: {final_stat})", messages.SUCCESS)
+        else:
+            self.message_user(request, f"❌ خطا در قطعی کردن رزرو در اسنپ: {msg}", messages.ERROR)
+
+        return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+
+    @admin.action(description="✅ تایید قطعی رزروهای انتخاب‌شده در اسنپ‌تریپ")
+    def confirm_snapp_action_bulk(self, request, queryset):
+        success_count = 0
+        for obj in queryset.filter(is_snapptrip_reservation=True, snapp_reservation_code__isnull=False):
+            ok, final_stat, _ = confirm_snapptrip_booking(obj.snapp_reservation_code)
+            obj.snapp_status = final_stat
+            obj.save(update_fields=['snapp_status'])
+            if ok:
+                success_count += 1
+        self.message_user(request, f"تعداد {success_count} رزرو با موفقیت در اسنپ قطعی و نهایی شدند.", messages.SUCCESS)
+
     def change_view(self, request, object_id, form_url='', extra_context=None):
         extra_context = extra_context or {}
         obj = self.get_object(request, object_id)
         if obj and obj.snapp_reservation_code:
             check_url = reverse('admin:reservation-check-snapp-status', args=[obj.pk])
+            confirm_url = reverse('admin:reservation-confirm-snapp', args=[obj.pk])
             extra_context['title'] = format_html(
-                '{} &nbsp;&nbsp; <a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام وضعیت و خطای اسنپ</a>',
+                '{} &nbsp;&nbsp; '
+                '<a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام وضعیت اسنپ</a> &nbsp;'
+                '<a class="button" style="background:#28a745; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" onclick="return confirm(\'آیا از تایید نهایی این رزرو در اسنپ و کسر از کیف‌پول مطمئن هستید؟\');" href="{}">✅ تایید قطعی در اسنپ</a>',
                 f"ویرایش رزرو {obj.tracking_code}",
-                check_url
+                check_url,
+                confirm_url
             )
         return super().change_view(request, object_id, form_url, extra_context=extra_context)
 

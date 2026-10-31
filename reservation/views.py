@@ -5267,40 +5267,27 @@ class ReservationInvoiceDetailAPIView(APIView):
             openapi.Parameter(
                 'tracking_code',
                 openapi.IN_PATH,
-                description="کد پیگیری رزرو (مثلاً: sfa1234567890)",
+                description="کد پیگیری رزرو (مثلاً: sfa5518668756)",
                 type=openapi.TYPE_STRING,
                 required=True
             )
         ],
-        responses={
-            200: "فاکتور با موفقیت بازگشت داده شد",
-            404: "رزرو یا هتل یافت نشد"
-        },
         tags=["reservedashboard-api"]
     )
     def get(self, request, tracking_code):
-        # دریافت رزرو با تطابق حروف کوچک و بزرگ
         reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=str(tracking_code).strip())
 
-        # دریافت هتل مرتبط
         hotel = reservation.get_hotel()
         if not hotel:
             first_room = reservation.reservation_rooms.select_related('room__hotel').first()
             if first_room and first_room.room and first_room.room.hotel:
                 hotel = first_room.room.hotel
-            else:
-                return Response(
-                    {"detail": "هتل مرتبط با این رزرو یافت نشد."},
-                    status=status.HTTP_404_NOT_FOUND
-                )
 
-        # ساخت لینک کامل و معتبر تصویر اصلی هتل برای نمایش در واچر
-        site_url = getattr(settings, "SITE_URL", "https://zarvantrip.com")
+        # ساخت آدرس مطلق و استاندارد تصویر برای نمایش در واچر فرانت‌اند
         image_url = ""
-        if hotel.main_image and hasattr(hotel.main_image, 'url'):
-            image_url = f"{site_url}{hotel.main_image.url}"
+        if hotel and hotel.main_image and hasattr(hotel.main_image, 'url'):
+            image_url = request.build_absolute_uri(hotel.main_image.url)
 
-        # تبدیل تاریخ‌های شمسی به رشته استاندارد
         try:
             created_iso = reservation.created_at.strftime('%Y-%m-%dT%H:%M:%S') if reservation.created_at else None
         except Exception:
@@ -5316,7 +5303,6 @@ class ReservationInvoiceDetailAPIView(APIView):
         except Exception:
             check_out_iso = str(reservation.check_out_date) if reservation.check_out_date else None
 
-        # لیست اتاق‌ها
         rooms_data = []
         for res_room in reservation.reservation_rooms.select_related('room').all():
             room = res_room.room
@@ -5330,7 +5316,6 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "half_day_out": res_room.half_day_out_selected,
             })
 
-        # لیست مسافران
         passengers_data = []
         for passenger in ReservationRoomPassenger.objects.filter(reservation_room__reservation=reservation):
             type_map = {
@@ -5345,8 +5330,11 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "type": p_type
             })
 
-        # ساختار نهایی خروجی همراه با لینک عکس هتل در تمام کلیدهای احتمالی فرانت‌اند
+        # ارسال عکس هم در ریشه پاسخ و هم در داخل آبجکت هتل تا فرانت به راحتی لود کند
         data = {
+            "image": image_url,
+            "hotel_image": image_url,
+            "main_image": image_url,
             "reservation": {
                 "reserver_name": f"{reservation.reserver_first_name} {reservation.reserver_last_name}".strip(),
                 "reserver_phone": reservation.reserver_phone_number,
@@ -5355,16 +5343,16 @@ class ReservationInvoiceDetailAPIView(APIView):
                 "check_in_date": check_in_iso,
                 "check_out_date": check_out_iso,
                 "hotel": {
-                    "name": hotel.name,
-                    "address": hotel.address,
-                    "image": image_url,        # 👈 فیلد عکس برای واچر
-                    "main_image": image_url,   # 👈 برای پشتیبانی کامل
+                    "name": getattr(hotel, 'name', 'نامشخص'),
+                    "address": getattr(hotel, 'address', ''),
+                    "image": image_url,
+                    "main_image": image_url,
                 },
-                "hotel_image": image_url,      # 👈 در سطح اول آبجکت
+                "hotel_image": image_url,
                 "hotel_slug": getattr(hotel, 'slug', '') or "",
                 "rooms": rooms_data,
                 "passengers": passengers_data,
-                "hotel_rules": hotel.rules or "قوانین ثبت نشده است."
+                "hotel_rules": getattr(hotel, 'rules', '') or "قوانین ثبت نشده است."
             }
         }
 
