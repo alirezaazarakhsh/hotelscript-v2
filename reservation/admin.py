@@ -909,6 +909,9 @@ class ReservationRoomInline(NestedTabularInline):
         return fields
 
 
+
+
+
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -1053,49 +1056,60 @@ class ReservationhotelAdmin(NestedModelAdmin):
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
-            return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+            return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
-        status_name, raw_res = get_snapptrip_booking_status(obj.snapp_reservation_code)
-        obj.snapp_status = status_name
-        obj.save(update_fields=['snapp_status'])
+        try:
+            status_name, raw_res = get_snapptrip_booking_status(obj.snapp_reservation_code)
+            obj.snapp_status = str(status_name)[:30]
+            obj.save(update_fields=['snapp_status'])
 
-        balance, b_msg = get_snapptrip_wallet_balance()
+            balance, b_msg = get_snapptrip_wallet_balance()
 
-        msg = (
-            f"🔍 وضعیت در اسنپ: {status_name} | "
-            f"موجودی کیف‌پول اسنپ شما: {int(balance):,} تومان | "
-            f"پاسخ کامل سرور اسنپ: {raw_res[:350]}"
-        )
-        self.message_user(request, msg, messages.INFO)
-        return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+            msg = (
+                f"🔍 وضعیت در اسنپ: {status_name} | "
+                f"موجودی کیف‌پول اسنپ شما: {int(balance):,} تومان | "
+                f"پاسخ کامل سرور اسنپ: {raw_res[:350]}"
+            )
+            self.message_user(request, msg, messages.INFO)
+        except Exception as e:
+            self.message_user(request, f"خطا در استعلام اسنپ: {e}", messages.ERROR)
+
+        return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
     def confirm_snapp_action(self, request, reservation_id):
-        """تایید نهایی و قطعی رزرو در اسنپ از طریق پنل ادمین (ارسال مستقیم به پنل اسنپ)"""
+        """تایید نهایی و قطعی رزرو در اسنپ از طریق پنل ادمین (ایمن در برابر ارور ۵۰۰)"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
-            return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+            return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
-        success, final_stat, msg = confirm_snapptrip_booking(obj.snapp_reservation_code)
-        obj.snapp_status = final_stat
-        obj.save(update_fields=['snapp_status'])
+        try:
+            success, final_stat, msg = confirm_snapptrip_booking(obj.snapp_reservation_code)
+            # محدود کردن به ۳۰ کاراکتر جهت جلوگیری از خطای سرریز فیلد در دیتابیس
+            obj.snapp_status = str(final_stat)[:30]
+            obj.save(update_fields=['snapp_status'])
 
-        if success:
-            self.message_user(request, f"✅ رزرو {obj.snapp_reservation_code} با موفقیت در اسنپ قطعی شد: {msg} (وضعیت: {final_stat})", messages.SUCCESS)
-        else:
-            self.message_user(request, f"❌ خطا در قطعی کردن رزرو در اسنپ: {msg}", messages.ERROR)
+            if success:
+                self.message_user(request, f"✅ رزرو {obj.snapp_reservation_code} با موفقیت در اسنپ قطعی شد: {msg}", messages.SUCCESS)
+            else:
+                self.message_user(request, f"❌ {msg}", messages.ERROR)
+        except Exception as e:
+            self.message_user(request, f"خطای غیرمنتظره در ارتباط با اسنپ: {e}", messages.ERROR)
 
-        return redirect(request.META.get('HTTP_REFERER', '/admin/reservation/reservationhotel/'))
+        return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
     @admin.action(description="✅ تایید قطعی رزروهای انتخاب‌شده در اسنپ‌تریپ")
     def confirm_snapp_action_bulk(self, request, queryset):
         success_count = 0
         for obj in queryset.filter(is_snapptrip_reservation=True, snapp_reservation_code__isnull=False):
-            ok, final_stat, _ = confirm_snapptrip_booking(obj.snapp_reservation_code)
-            obj.snapp_status = final_stat
-            obj.save(update_fields=['snapp_status'])
-            if ok:
-                success_count += 1
+            try:
+                ok, final_stat, _ = confirm_snapptrip_booking(obj.snapp_reservation_code)
+                obj.snapp_status = str(final_stat)[:30]
+                obj.save(update_fields=['snapp_status'])
+                if ok:
+                    success_count += 1
+            except Exception:
+                pass
         self.message_user(request, f"تعداد {success_count} رزرو با موفقیت در اسنپ قطعی و نهایی شدند.", messages.SUCCESS)
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
@@ -1274,6 +1288,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     res_room.calculate_half_day_prices()
                     res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
         return form
+    
+    
 
 
 @admin.register(CancellationReason)

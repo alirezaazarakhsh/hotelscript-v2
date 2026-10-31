@@ -146,6 +146,7 @@ class ReservationPaymentCheckAPIView(APIView):
     def post(self, request, tracking_code):
         reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
 
+        # الصاق رزرو مهمان به کاربر لاگین‌شده
         if reservation.buyer is None:
             reservation.buyer = request.user
             reservation.save(update_fields=['buyer'])
@@ -316,7 +317,7 @@ class ReservationPaymentCheckAPIView(APIView):
 
 
 # -------------------------
-# API: callback تراکنش (تایید خودکار رزرو در اسنپ بلافاصله پس از پرداخت موفق)
+# API: callback تراکنش (تایید خودکار در اسنپ و هدایت به واچر بدون خطا)
 # -------------------------
 class PaymentCallbackAPIView(APIView):
     permission_classes = []
@@ -356,8 +357,8 @@ class PaymentCallbackAPIView(APIView):
                     reservation.payment_status = "unpaid"
 
             elif active_gateway == "iraniangateway":
-                if payment_code == "100":
-                    logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code=100).")
+                if payment_code in ["100", "101"]:
+                    logger.info(f"پرداخت ایران‌درگاه برای رزرو {tracking_code} موفق بود (code={payment_code}).")
                     reservation.payment_status = "paid"
                     reservation.ref_id = ref_id or f"iraniangateway_{authority}"
                 else:
@@ -372,43 +373,59 @@ class PaymentCallbackAPIView(APIView):
                 reservation.save(update_fields=update_fields)
 
                 # =========================================================================
-                # 👇 تایید قطعی در اسنپ‌تریپ بلافاصله پس از پرداخت موفق مسافر
+                # تایید خودکار رزرو در اسنپ و کسر از کیف‌پول اسنپ (کاملاً ایزوله در برابر خطا)
                 # =========================================================================
                 if reservation.payment_status == 'paid' and reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
                     try:
-                        logger.info(f"🚀 ارسال درخواست قطعی کردن رزرو اسنپ {reservation.snapp_reservation_code}...")
+                        logger.info(f"🚀 در حال تایید قطعی رزرو اسنپ {reservation.snapp_reservation_code}...")
                         confirm_ok, final_snapp_status, confirm_msg = confirm_snapptrip_booking(reservation.snapp_reservation_code)
-                        reservation.snapp_status = final_snapp_status
+                        # ذخیره حداکثر ۴۰ کاراکتر برای جلوگیری از ارور دیتابیس
+                        reservation.snapp_status = str(final_snapp_status)[:40]
                         reservation.save(update_fields=['snapp_status'])
-                        logger.info(f"✅ نتیجه تایید در اسنپ: {confirm_msg} (وضعیت نهایی: {final_snapp_status})")
+                        logger.info(f"✅ نتیجه تایید در اسنپ: {confirm_msg} (وضعیت: {final_snapp_status})")
                     except Exception as snapp_err:
                         logger.error(f"❌ خطا در تایید رزرو اسنپ پس از پرداخت: {snapp_err}")
 
-                # ارسال نوتیف پرداخت به ادمین‌ها
-                from hotel_bot.bot import send_payment_receipt_notification
-                from asgiref.sync import async_to_sync
-                
-                buyer_phone = (
-                    reservation.buyer.phone_number 
-                    if reservation.buyer 
-                    else reservation.reserver_phone_number or "نامشخص"
-                )
+                # کسر از کیف پول سایت در صورت استفاده کاربر
+                if (
+                    reservation.payment_status == 'paid' 
+                    and reservation.wallet_withdrawal_amount > 0 
+                    and not reservation.wallet_withdrawn 
+                    and reservation.buyer
+                ):
+                    try:
+                        wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
+                        withdrawal_amount = int(reservation.wallet_withdrawal_amount)
+                        if wallet.balance >= withdrawal_amount:
+                            wallet.balance = F('balance') - withdrawal_amount
+                            wallet.save(update_fields=['balance'])
+                            Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
+                            logger.info(f"✅ کیف پول سایت کسر شد: {withdrawal_amount}")
+                    except Exception as e:
+                        logger.error(f"❌ خطا در کسر کیف پول سایت: {e}")
 
-                if reservation.payment_status == 'paid':
+                # ارسال نوتیفیکیشن تلگرام در پس‌زمینه بدون مسدودسازی تراکنش
+                try:
+                    from hotel_bot.bot import send_payment_receipt_notification
+                    from asgiref.sync import async_to_sync
+                    buyer_phone = (
+                        reservation.buyer.phone_number 
+                        if reservation.buyer 
+                        else reservation.reserver_phone_number or "نامشخص"
+                    )
                     total_points = sum(
                         (rr.room.customer_club_points or 0) * rr.quantity
                         for rr in reservation.reservation_rooms.select_related('room').all()
                     )
-                    
                     current_points = 0
                     if reservation.buyer:
                         from bashgah_moshtarian.models import CustomerClubPoint
                         try:
                             customer_points = CustomerClubPoint.objects.get(user=reservation.buyer)
                             current_points = customer_points.points
-                        except CustomerClubPoint.DoesNotExist:
+                        except Exception:
                             current_points = 0
-                    
+
                     async_to_sync(send_payment_receipt_notification)(
                         reservation.tracking_code,
                         buyer_phone,
@@ -419,38 +436,10 @@ class PaymentCallbackAPIView(APIView):
                         int(reservation.final_price),
                         int(total_points),
                         int(current_points),
-                        success=True
+                        success=(reservation.payment_status == 'paid')
                     )
-                else:
-                    async_to_sync(send_payment_receipt_notification)(
-                        reservation.tracking_code,
-                        buyer_phone,
-                        0, 0, 0, 0,
-                        int(reservation.final_price),
-                        0, 0,
-                        success=False
-                    )
-                
-                if (
-                    reservation.payment_status == 'paid' 
-                    and reservation.wallet_withdrawal_amount > 0 
-                    and not reservation.wallet_withdrawn 
-                    and reservation.buyer
-                ):
-                    try:
-                        logger.info(f"🟢 شروع پردازش کیف پول برای رزرو {tracking_code}")
-                        wallet = Wallet.objects.select_for_update().get(user=reservation.buyer)
-                        withdrawal_amount = int(reservation.wallet_withdrawal_amount)
-                        
-                        if wallet.balance >= withdrawal_amount:
-                            wallet.balance = F('balance') - withdrawal_amount
-                            wallet.save(update_fields=['balance'])
-                            Reservationhotel.objects.filter(pk=reservation.pk).update(wallet_withdrawn=True)
-                            logger.info(f"✅ کیف پول پردازش شد: مبلغ {withdrawal_amount} کسر شد")
-                        else:
-                            logger.warning(f"⚠️ موجودی کیف پول کافی نیست")
-                    except Exception as e:
-                        logger.error(f"❌ خطا در پردازش کیف پول: {e}")
+                except Exception as tg_err:
+                    logger.warning(f"عدم ارسال نوتیف تلگرام (بدون وقفه در پرداخت): {tg_err}")
 
             cache_data = {
                 "status": payment_status or payment_code,
@@ -473,20 +462,27 @@ class PaymentCallbackAPIView(APIView):
                 if ref_id:
                     query_params["refId"] = ref_id
 
+            # هدایت مسافر به صفحه واچر فرانت‌اند
             redirect_url = f"{callback_redirect_url}?{urlencode(query_params)}"
             return HttpResponseRedirect(redirect_url)
 
         except Exception as e:
             logger.exception(f"خطا در پردازش callback: {e}")
-            if 'reservation' in locals():
-                with transaction.atomic():
+            if 'reservation' in locals() and reservation.payment_status != 'paid':
+                try:
                     reservation.payment_status = 'unpaid'
                     reservation.save(update_fields=['payment_status'])
+                except Exception:
+                    pass
+            # اگر خطایی رخ داد، باز هم به صفحه فرانت‌اند ریدایرکت می‌کنیم تا ارور JSON ندهد
+            if 'callback_redirect_url' in locals() and 'authority' in locals():
+                err_query = urlencode({"Authority": authority or "", "Status": "NOK", "tracking-code": tracking_code or ""})
+                return HttpResponseRedirect(f"{callback_redirect_url}?{err_query}")
             return Response({"detail": "خطا در پردازش تراکنش"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # -------------------------
-# API: تأیید نهایی تراکنش (اختیاری)
+# API: تأیید نهایی تراکنش (Verify در صورت فراخوانی از فرانت)
 # -------------------------
 class PaymentVerifyAPIView(APIView):
     permission_classes = []
@@ -562,11 +558,11 @@ class PaymentVerifyAPIView(APIView):
                         reservation.ref_id = resp_data["data"].get("ref_id", f"zarinpal_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
 
-                        # 👇 تایید در اسنپ پس از verify زرین‌پال
+                        # تایید خودکار در اسنپ
                         if reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
                             try:
                                 _, final_stat, _ = confirm_snapptrip_booking(reservation.snapp_reservation_code)
-                                reservation.snapp_status = final_stat
+                                reservation.snapp_status = str(final_stat)[:40]
                                 reservation.save(update_fields=['snapp_status'])
                             except Exception:
                                 pass
@@ -644,11 +640,11 @@ class PaymentVerifyAPIView(APIView):
                         reservation.ref_id = resp_data.get("refId", f"iraniangateway_{authority}")
                         reservation.save(update_fields=['payment_status', 'ref_id'])
 
-                        # 👇 تایید در اسنپ پس از verify ایران‌درگاه
+                        # تایید خودکار در اسنپ
                         if reservation.is_snapptrip_reservation and reservation.snapp_reservation_code:
                             try:
                                 _, final_stat, _ = confirm_snapptrip_booking(reservation.snapp_reservation_code)
-                                reservation.snapp_status = final_stat
+                                reservation.snapp_status = str(final_stat)[:40]
                                 reservation.save(update_fields=['snapp_status'])
                             except Exception:
                                 pass
@@ -751,22 +747,22 @@ def cancel_unpaid_reservations():
             reservation.save(update_fields=['capacity_status'])
             logger.info(f"رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.")
             
-            from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
-            buyer_phone = (
-                reservation.buyer.phone_number 
-                if reservation.buyer 
-                else reservation.reserver_phone_number or "مهمان"
-            )
-            notification_text = f"🚫 رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.\n👤 کاربر: {buyer_phone}"
-            for admin_id in SUPER_ADMINS:
-                try:
+            try:
+                from hotel_bot.config import SUPER_ADMINS, BOT_TOKEN
+                buyer_phone = (
+                    reservation.buyer.phone_number 
+                    if reservation.buyer 
+                    else reservation.reserver_phone_number or "مهمان"
+                )
+                notification_text = f"🚫 رزرو {reservation.tracking_code} به دلیل عدم پرداخت بعد از 15 دقیقه کنسل شد.\n👤 کاربر: {buyer_phone}"
+                for admin_id in SUPER_ADMINS:
                     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
                     data = {
                         "chat_id": admin_id,
                         "text": notification_text,
                         "parse_mode": "Markdown"
                     }
-                    requests.post(url, data=data, timeout=10)
-                except Exception:
-                    pass
+                    requests.post(url, data=data, timeout=5)
+            except Exception:
+                pass
     logger.info("پایان کنسل رزروهای پرداخت نشده")

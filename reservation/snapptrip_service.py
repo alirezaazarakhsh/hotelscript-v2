@@ -23,7 +23,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# نگاشت کامل شناسه‌های شهری اسنپ‌تریپ (شامل کدهای ۴ رقمی و اسلاگ‌ها)
+# نگاشت کامل شناسه‌های شهری اسنپ‌تریپ
 IRAN_CITIES_MAP = {
     '6208': 'تهران', 'tehran': 'تهران', '1': 'تهران',
     '6209': 'مشهد', 'mashhad': 'مشهد', '2': 'مشهد',
@@ -172,7 +172,6 @@ def extract_room_title(r_item, default_id):
     if not isinstance(r_item, dict):
         return f"اتاق {default_id}"
 
-    # بررسی آبجکت‌های تودرتوی اسنپ
     for nested_key in ['room_type', 'room', 'details', 'roomType', 'info']:
         nested_obj = r_item.get(nested_key)
         if isinstance(nested_obj, dict):
@@ -191,11 +190,7 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_room_capacity(r_item, room_title=""):
-    """
-    استخراج دقیق و تضمینی ظرفیت اصلی اتاق:
-    ۱. بررسی تمام کلیدهای تودرتوی اسنپ
-    ۲. تحلیل هوشمند عنوان اتاق (مثلاً هفت تخته = ۷ نفر)
-    """
+    """استخراج دقیق و تضمینی ظرفیت اصلی اتاق (از وب‌سرویس و از روی عنوان)"""
     candidate_keys = ['capacity', 'room_capacity', 'standard_capacity', 'base_capacity', 'standard_pax', 'pax', 'adults']
     objects_to_check = [r_item]
 
@@ -215,7 +210,6 @@ def extract_room_capacity(r_item, room_title=""):
         if found_cap is not None:
             break
 
-    # تحلیل عنوان فارسی (مثلاً "هفت تخته" یا "4 نفره")
     title = (room_title or "").strip()
     inferred_cap = None
 
@@ -231,7 +225,6 @@ def extract_room_capacity(r_item, room_title=""):
             fa_to_en = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
             inferred_cap = int(raw_num.translate(fa_to_en))
 
-    # اگر در عنوان مشخصاً تعداد نفرات بیشتر ذکر شده باشد، اولویت با عدد واقعی عنوان است
     if inferred_cap:
         if found_cap is None or found_cap < inferred_cap:
             return inferred_cap
@@ -265,7 +258,6 @@ def extract_extra_capacity(r_item, room_title="", has_extra_bed_price=False):
             return int(raw_num.translate(fa_to_en))
         return 1
 
-    # اگر قیمت تخت اضافه در اسنپ تعریف شده باشد، حداقل ۱ ظرفیت اضافه دارد
     if has_extra_bed_price:
         return 1
 
@@ -432,9 +424,7 @@ def check_room_realtime_availability(hotel_snapp_id: int, room_snapp_id: int, ch
 
 
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
-    """
-    ثبت پیش‌رزرو در اسنپ‌تریپ (POST /booking/create)
-    """
+    """ثبت پیش‌رزرو در اسنپ‌تریپ (POST /booking/create)"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, None, False, "کلید API اسنپ‌تریپ تنظیم نشده است."
@@ -542,25 +532,31 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
-    """تأیید نهایی رزرو پس از پرداخت مسافر (POST /booking/{code}/confirm)"""
+    """
+    تأیید نهایی رزرو پس از پرداخت مسافر (POST /booking/{code}/confirm)
+    ایمن در برابر خطای طول فیلد و ارور ۵۰۰ در دیتابیس
+    """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
 
-    confirm_url = f"{base_url}/booking/{snapp_reservation_code}/confirm"
+    code_str = str(snapp_reservation_code).strip()
+    confirm_url = f"{base_url}/booking/{code_str}/confirm"
     try:
         res = requests.post(confirm_url, json={}, headers=headers, timeout=20)
         
         if res.status_code not in [200, 201]:
             err_msg = res.text[:120]
-            logger.error(f"Confirm failed on Snapp: {res.status_code} - {res.text}")
-            return False, f"failed: {err_msg}", f"خطای تأیید در اسنپ: {err_msg}"
+            logger.error(f"Confirm failed on Snapp ({code_str}): {res.status_code} - {res.text}")
+            # بازگرداندن وضعیت کوتاه 'failed' برای جلوگیری از خطای سرریز فیلد دیتابیس
+            return False, "failed", f"خطای تأیید در اسنپ: {err_msg}"
 
-        final_status, _ = get_snapptrip_booking_status(snapp_reservation_code)
-        return True, final_status, "رزرو با موفقیت در اسنپ قطعی شد."
+        final_status, _ = get_snapptrip_booking_status(code_str)
+        real_status = "confirmed" if final_status in ['confirmed', 'unknown', ''] else final_status
+        return True, real_status[:30], "رزرو با موفقیت در اسنپ قطعی شد."
     except Exception as e:
-        logger.error(f"Error confirming booking {snapp_reservation_code}: {e}")
-        return False, f"failed: {str(e)[:50]}", f"خطای ارتباط با اسنپ: {str(e)}"
+        logger.error(f"Error confirming booking {code_str}: {e}")
+        return False, "failed", f"خطای ارتباط با اسنپ: {str(e)[:50]}"
 
 
 # ==============================================================================
@@ -677,7 +673,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room_title = extract_room_title(r_item, snapp_room_id)
         room_desc = extract_room_description(r_item)
 
-        # استخراج قیمت‌ها
         pricing = r_item.get('pricing') if isinstance(r_item.get('pricing'), dict) else {}
         base_client_sell_price = 0
         base_agency_buy_price = 0
@@ -690,7 +685,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
             base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
 
-        # استخراج دقیق ظرفیت اصلی و اضافه
         room_cap = extract_room_capacity(r_item, room_title)
         extra_cap = extract_extra_capacity(r_item, room_title, has_extra_bed_price=(base_extra_bed_price > 0))
 
