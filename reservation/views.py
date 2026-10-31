@@ -3778,7 +3778,7 @@ class ReservationInvoiceAPIView(APIView):
 
 
 # ==============================================================================
-# API توضیحات تکمیلی رزرو (هماهنگ با کاربر مهمان و فیلد اختیاری)
+# API توضیحات تکمیلی رزرو (هماهنگ با کاربر مهمان و فیلد کاملاً اختیاری)
 # ==============================================================================
 class ReservationDescriptionAPIView(APIView):
     permission_classes = [AllowAny]
@@ -3790,11 +3790,12 @@ class ReservationDescriptionAPIView(APIView):
         tags=["reservation-api"]
     )
     def get(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
+        # اگر رزرو قبلاً به کاربری الصاق شده باشد، غریبه اجازه مشاهده ندارد
         if reservation.buyer is not None and request.user.is_authenticated and reservation.buyer != request.user:
             return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                {"detail": "شما اجازه دسترسی به این رزرو را ندارید.", "message": "شما اجازه دسترسی به این رزرو را ندارید."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -3804,24 +3805,37 @@ class ReservationDescriptionAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="بروزرسانی توضیحات رزرو",
-        operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری.",
+        operation_description="بروزرسانی توضیحات تکمیلی یک رزرو بر اساس کد پیگیری (توضیحات اختیاری است).",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'description': openapi.Schema(type=openapi.TYPE_STRING, description='توضیحات رزرو (اختیاری)')
+            }
+        ),
         tags=["reservation-api"]
     )
     def put(self, request, tracking_code):
-        reservation = get_object_or_404(Reservationhotel, tracking_code=tracking_code)
+        reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-        if reservation.buyer is None:
-            if request.user and request.user.is_authenticated:
+        # اگر کاربر در این مرحله لاگین است و رزرو هنوز مالک ندارد، به کاربر الصاق شود
+        if request.user and request.user.is_authenticated:
+            if reservation.buyer is None:
                 reservation.buyer = request.user
+                reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer'])
-        elif reservation.buyer != request.user:
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            elif reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید.", "message": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
+        # فیلد توضیحات اختیاری است؛ در صورت خالی بودن رشته خالی ذخیره می‌شود و ارور ۴۰۰ نمی‌دهد
         notes = request.data.get('description', '')
-        reservation.additional_notes = str(notes or '').strip()
+        if notes is None:
+            notes = ''
+
+        reservation.additional_notes = str(notes).strip()
+        reservation._skip_price_calculation_on_save = True
         reservation.save(update_fields=['additional_notes'])
 
         return Response({
