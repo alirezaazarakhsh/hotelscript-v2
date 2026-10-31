@@ -1,9 +1,12 @@
 import logging
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from decimal import Decimal
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import jdatetime
 from django.conf import settings
 from django.db.models import Q
@@ -21,40 +24,53 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# سشن سراسری جهت حفظ اتصال TCP و افزایش سرعت پاسخگویی
-_snapp_session = requests.Session()
+# ایجاد سشن اختصاصی سریع با Pool اتصالات و بازآزمایی خودکار
+def create_fast_snapp_session():
+    session = requests.Session()
+    adapter = HTTPAdapter(
+        pool_connections=25,
+        pool_maxsize=25,
+        max_retries=Retry(total=2, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
+    )
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
+_snapp_session = create_fast_snapp_session()
+
+# نگاشت کامل شناسه‌های شهری اسنپ‌تریپ (کدهای ۴ رقمی و استاندارد)
 IRAN_CITIES_MAP = {
-    '1': 'تهران', 'tehran': 'تهران',
-    '2': 'مشهد', 'mashhad': 'مشهد',
-    '3': 'اصفهان', 'isfahan': 'اصفهان',
-    '4': 'شیراز', 'shiraz': 'شیراز',
-    '5': 'تبریز', 'tabriz': 'تبریز',
-    '6': 'کیش', 'kish': 'کیش',
-    '7': 'قشم', 'qeshm': 'قشم',
-    '8': 'یزد', 'yazd': 'یزد',
-    '9': 'رشت', 'rasht': 'رشت',
-    '10': 'ساری', 'sari': 'ساری',
-    '11': 'رامسر', 'ramsar': 'رامسر',
-    '12': 'کرمان', 'kerman': 'کرمان',
-    '13': 'اهواز', 'ahvaz': 'اهواز',
-    '14': 'بندرعباس', 'bandarabbas': 'بندرعباس',
-    '15': 'کرمانشاه', 'kermanshah': 'کرمانشاه',
-    '16': 'همدان', 'hamedan': 'همدان',
-    '17': 'قم', 'qom': 'قم',
-    '18': 'اراک', 'arak': 'اراک',
-    '19': 'زنجان', 'zanjan': 'زنجان',
-    '20': 'سنندج', 'sanandaj': 'سنندج',
-    '21': 'ارومیه', 'urmia': 'ارومیه',
-    '22': 'اردبیل', 'ardabil': 'اردبیل',
-    '23': 'کاشان', 'kashan': 'کاشان',
-    '24': 'گرگان', 'gorgan': 'گرگان',
-    '25': 'چابهار', 'chabahar': 'چابهار',
-    '26': 'بوشهر', 'bushehr': 'بوشهر',
-    '27': 'چالوس', 'chalus': 'چالوس',
-    '28': 'نوشهر', 'noshahr': 'نوشهر',
-    '29': 'لاهیجان', 'lahijan': 'لاهیجان',
-    '30': 'انزلی', 'anzali': 'بندر انزلی',
+    '6208': 'تهران', 'tehran': 'تهران', '1': 'تهران',
+    '6209': 'مشهد', 'mashhad': 'مشهد', '2': 'مشهد',
+    '6216': 'اصفهان', 'isfahan': 'اصفهان', '3': 'اصفهان',
+    '6220': 'شیراز', 'shiraz': 'شیراز', '4': 'شیراز',
+    '6224': 'تبریز', 'tabriz': 'تبریز', '5': 'تبریز',
+    '6225': 'کیش', 'kish': 'کیش', '6': 'کیش',
+    '6234': 'قشم', 'qeshm': 'قشم', '7': 'قشم',
+    '6237': 'یزد', 'yazd': 'یزد', '8': 'یزد',
+    '6260': 'رشت', 'rasht': 'رشت', '9': 'رشت',
+    '6262': 'ساری', 'sari': 'ساری', '10': 'ساری',
+    '6264': 'رامسر', 'ramsar': 'رامسر', '11': 'رامسر',
+    '6269': 'کرمان', 'kerman': 'کرمان', '12': 'کرمان',
+    '6288': 'اهواز', 'ahvaz': 'اهواز', '13': 'اهواز',
+    '6289': 'بندرعباس', 'bandarabbas': 'بندرعباس', '14': 'بندرعباس',
+    '6303': 'کرمانشاه', 'kermanshah': 'کرمانشاه', '15': 'کرمانشاه',
+    '6319': 'همدان', 'hamedan': 'همدان', '16': 'همدان',
+    '6321': 'قم', 'qom': 'قم', '17': 'قم',
+    '6326': 'اراک', 'arak': 'اراک', '18': 'اراک',
+    '6336': 'زنجان', 'zanjan': 'زنجان', '19': 'زنجان',
+    '6341': 'سنندج', 'sanandaj': 'سنندج', '20': 'سنندج',
+    '6349': 'ارومیه', 'urmia': 'ارومیه', '21': 'ارومیه',
+    '6352': 'اردبیل', 'ardabil': 'اردبیل', '22': 'اردبیل',
+    '6363': 'کاشان', 'kashan': 'کاشان', '23': 'کاشان',
+    '6390': 'گرگان', 'gorgan': 'گرگان', '24': 'گرگان',
+    '6433': 'چابهار', 'chabahar': 'چابهار', '25': 'چابهار',
+    '6447': 'بوشهر', 'bushehr': 'بوشهر', '26': 'بوشهر',
+    '6452': 'چالوس', 'chalus': 'چالوس', '27': 'چالوس',
+    '6460': 'نوشهر', 'noshahr': 'نوشهر', '28': 'نوشهر',
+    '6469': 'لاهیجان', 'lahijan': 'لاهیجان', '29': 'لاهیجان',
+    '6497': 'بندر انزلی', 'anzali': 'بندر انزلی', '30': 'انزلی',
+    '6503': 'سرعین', 'sarein': 'سرعین',
 }
 
 BOARD_TYPE_TITLES = {
@@ -66,7 +82,7 @@ BOARD_TYPE_TITLES = {
 
 
 def get_snapptrip_client_config():
-    """خواندن آدرس و کلید API از تنظیمات پنل ادمین"""
+    """خواندن تنظیمات فعال اسنپ‌تریپ"""
     setting = SnappTripSetting.objects.first()
     if setting and setting.is_active and setting.api_key:
         base_url = setting.base_url.rstrip('/')
@@ -84,7 +100,7 @@ def get_snapptrip_client_config():
 
 
 def get_snapptrip_wallet_balance():
-    """استعلام موجودی کیف پول B2B در اسنپ‌تریپ (GET /balance/)"""
+    """استعلام موجودی کیف پول B2B در اسنپ‌تریپ"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return 0, "کلید وب‌سرویس تنظیم نشده است."
@@ -100,22 +116,22 @@ def get_snapptrip_wallet_balance():
 
 
 def fetch_with_rate_limit(url, headers, max_retries=3):
-    """ارسال امن درخواست با مدیریت خطای 429"""
+    """ارسال درخواست به همراه کنترل محدودیت ترافیک"""
     for attempt in range(max_retries):
         try:
-            res = _snapp_session.get(url, headers=headers, timeout=12)
+            res = _snapp_session.get(url, headers=headers, timeout=10)
             if res.status_code == 429:
-                logger.warning("محدودیت Rate Limit اسنپ (429). ۳ ثانیه توقف...")
-                time.sleep(3)
+                logger.warning("محدودیت Rate Limit اسنپ (429). ۲ ثانیه توقف...")
+                time.sleep(2)
                 continue
             return res
         except Exception:
-            time.sleep(1)
+            time.sleep(0.5)
     return None
 
 
 def extract_list_from_response(data):
-    """استخراج هوشمند آرایه از ساختارهای مختلف پاسخ وب‌سرویس اسنپ"""
+    """استخراج هوشمند لیست از انواع ساختارهای خروجی اسنپ"""
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -153,11 +169,10 @@ def extract_room_id(r_item):
 
 
 def extract_room_title(r_item, default_id):
-    """استخراج هوشمند و کامل عنوان فارسی اتاق"""
+    """استخراج نام فارسی و خوانای اتاق از تمام کلیدها و آبجکت‌های تودرتو"""
     if not isinstance(r_item, dict):
         return f"اتاق {default_id}"
 
-    # بررسی آبجکت‌های تودرتوی اسنپ
     for nested_key in ['room_type', 'room', 'details', 'roomType', 'info']:
         nested_obj = r_item.get(nested_key)
         if isinstance(nested_obj, dict):
@@ -167,7 +182,6 @@ def extract_room_title(r_item, default_id):
         elif isinstance(nested_obj, str) and nested_obj.strip() and not nested_obj.strip().isdigit():
             return nested_obj.strip()
 
-    # بررسی کلیدهای عنوان
     keys_to_check = [
         'name_fa', 'title_fa', 'room_type_name', 'room_name', 
         'name', 'title', 'room_title', 'persian_title', 'type_name'
@@ -181,7 +195,7 @@ def extract_room_title(r_item, default_id):
 
 
 def extract_stars_comprehensive(h):
-    """استخراج ستاره‌های هتل"""
+    """استخراج تعداد ستاره‌های هتل"""
     if not isinstance(h, dict):
         return '-'
     for key in ['stars', 'star', 'stars_count', 'star_count', 'star_rating', 'rating']:
@@ -196,7 +210,7 @@ def extract_stars_comprehensive(h):
 
 
 def is_room_online_instant(r_item):
-    """تشخیص رزرو آنی بدون نیاز به تایید طبق ساختار اسنپ"""
+    """تشخیص آنی بودن رزرو اتاق"""
     if r_item.get('is_online') is True or r_item.get('online') is True:
         return True
     booking_type = str(r_item.get('booking_type', '')).lower()
@@ -210,11 +224,11 @@ def is_room_online_instant(r_item):
 
 
 # ==============================================================================
-# بخش ۱: توابع رزرواسیون، لاک و تایید قطعی در اسنپ‌تریپ
+# بخش ۱: عملیات رزرواسیون، لاک و تایید قطعی در اسنپ‌تریپ
 # ==============================================================================
 
 def get_snapptrip_booking_status(snapp_reservation_code: str):
-    """استعلام زنده وضعیت رزرو از اسنپ (GET /booking/{code})"""
+    """استعلام زنده وضعیت رزرو در اسنپ"""
     base_url, headers = get_snapptrip_client_config()
     url = f"{base_url}/booking/{snapp_reservation_code}"
     try:
@@ -234,18 +248,14 @@ def get_snapptrip_booking_status(snapp_reservation_code: str):
 
 
 def lock_snapptrip_booking(snapp_reservation_code: str):
-    """
-    قفل موقت اتاق به مدت ۱۵ دقیقه طبق مستندات اسنپ
-    POST /booking/{code}/lock
-    """
+    """قفل موقت اتاق به مدت ۱۵ دقیقه جهت ارسال به پنل اسنپ"""
     base_url, headers = get_snapptrip_client_config()
     url = f"{base_url}/booking/{snapp_reservation_code}/lock"
     try:
         res = _snapp_session.post(url, json={}, headers=headers, timeout=6)
         if res.status_code in [200, 201]:
-            logger.info(f"✅ رزرو {snapp_reservation_code} به مدت ۱۵ دقیقه در اسنپ لاک شد.")
+            logger.info(f"✅ رزرو {snapp_reservation_code} در اسنپ لاک شد.")
             return True, "payment_on"
-        logger.warning(f"Lock booking returned {res.status_code}: {res.text[:120]}")
         return False, "draft"
     except Exception as e:
         logger.error(f"Error locking booking {snapp_reservation_code}: {e}")
@@ -253,9 +263,7 @@ def lock_snapptrip_booking(snapp_reservation_code: str):
 
 
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
-    """
-    ثبت پیش‌رزرو و لاک در اسنپ‌تریپ
-    """
+    """ثبت پیش‌رزرو در اسنپ و قفل کردن آن برای نمایش در پنل"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, None, False, "کلید API اسنپ‌تریپ تنظیم نشده است."
@@ -373,7 +381,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
-    """تأیید نهایی رزرو پس از پرداخت مسافر"""
+    """تأیید نهایی رزرو پس از پرداخت موفقیت‌آمیز مسافر"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
@@ -402,7 +410,7 @@ def confirm_snapptrip_booking(snapp_reservation_code: str):
 
 
 # ==============================================================================
-# بخش ۲: همگام‌سازی اتاق‌ها و تقویم قیمتی
+# بخش ۲: همگام‌سازی اتاق‌های یک هتل خاص (با نام واقعی و تقویم قیمت)
 # ==============================================================================
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
@@ -429,7 +437,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
     for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
         try:
-            hotel_res = _snapp_session.get(h_url, headers=headers, timeout=10)
+            hotel_res = _snapp_session.get(h_url, headers=headers, timeout=8)
             if hotel_res.status_code == 200:
                 h_data = hotel_res.json()
                 if isinstance(h_data, dict) and 'data' in h_data:
@@ -455,7 +463,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             f"{base_url}/hotels/rooms/{snapp_h_id}/",
         ]:
             try:
-                rooms_res = _snapp_session.get(r_url, headers=headers, timeout=10)
+                rooms_res = _snapp_session.get(r_url, headers=headers, timeout=8)
                 if rooms_res.status_code == 200:
                     extracted = extract_list_from_response(rooms_res.json())
                     if extracted:
@@ -578,54 +586,133 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
 
 
 # ==============================================================================
-# بخش ۳: همگام‌سازی دایرکتوری کلیه هتل‌ها (تابع مورد نیاز admin.py)
+# بخش ۳: بروزرسانی فوق‌سریع و چندنخی بانک هتل‌های اسنپ (Multi-Threaded)
 # ==============================================================================
 
+def _fetch_city_hotels_worker(city_info, base_url, headers):
+    """تابع کمکی جهت دریافت هتل‌های یک شهر در نخ جداگانه"""
+    city_id = city_info['city_id']
+    formatted_city = city_info['formatted_city']
+    hotel_entries = []
+
+    offset = 0
+    limit = 100
+
+    for _ in range(15):
+        url = f"{base_url}/cities/{city_id}/hotels?limit={limit}&offset={offset}"
+        try:
+            res = _snapp_session.get(url, headers=headers, timeout=8)
+            if res.status_code != 200:
+                res = _snapp_session.get(f"{base_url}/cities/{city_id}/hotels", headers=headers, timeout=8)
+
+            if res.status_code == 200:
+                batch = extract_list_from_response(res.json())
+                if not batch:
+                    break
+
+                for h in batch:
+                    if not isinstance(h, dict):
+                        continue
+                    h_id = h.get('id') or h.get('hotel_id') or h.get('code')
+                    if not h_id:
+                        continue
+                    h_name = h.get('name_fa') or h.get('title_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
+                    stars = extract_stars_comprehensive(h)
+
+                    hotel_entries.append(SnappHotelDirectory(
+                        snapp_hotel_id=h_id,
+                        name=str(h_name).strip(),
+                        city_name=formatted_city,
+                        city_id=city_id,
+                        stars=stars
+                    ))
+
+                if len(batch) < limit:
+                    break
+                offset += limit
+            else:
+                break
+        except Exception:
+            break
+
+    return hotel_entries
+
+
 def sync_all_snapptrip_hotels_directory():
-    """همگام‌سازی کامل بانک هتل‌های اسنپ‌تریپ"""
+    """همگام‌سازی موازی و سریع دایرکتوری هتل‌ها با فرمت دقیق (کد شهر - نام شهر)"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
 
-    cities_res = fetch_with_rate_limit(f"{base_url}/cities/", headers)
+    try:
+        cities_res = _snapp_session.get(f"{base_url}/cities/", headers=headers, timeout=10)
+    except Exception as e:
+        return False, f"خطای ارتباط با سرور اسنپ: {e}"
+
     if not cities_res or cities_res.status_code != 200:
         return False, "خطا در دریافت لیست شهرها از اسنپ."
 
     cities_list = extract_list_from_response(cities_res.json())
-    all_hotel_objects = []
+    cities_payload = []
 
     for city in cities_list:
-        city_id = city.get('id') or city.get('city_id')
+        city_id = str(city.get('id') or city.get('city_id') or city.get('code') or '').strip()
         if not city_id:
             continue
-        raw_name = city.get('name_fa') or city.get('name') or str(city_id)
-        pure_name = IRAN_CITIES_MAP.get(str(raw_name).lower()) or raw_name
-        formatted_city = f"{city_id} - {pure_name}"
 
-        url = f"{base_url}/cities/{city_id}/hotels?limit=100&offset=0"
-        res = fetch_with_rate_limit(url, headers)
-        if res and res.status_code == 200:
-            batch = extract_list_from_response(res.json())
-            for h in batch:
-                h_id = h.get('id') or h.get('hotel_id')
-                if not h_id:
-                    continue
-                all_hotel_objects.append(SnappHotelDirectory(
-                    snapp_hotel_id=h_id,
-                    name=str(h.get('name_fa') or h.get('name') or f"هتل {h_id}").strip(),
-                    city_name=formatted_city,
-                    city_id=city_id,
-                    stars=extract_stars_comprehensive(h)
-                ))
-        time.sleep(0.2)
+        raw_name = ""
+        for k in ['title_fa', 'name_fa', 'title', 'name', 'persian_name', 'city_name', 'slug']:
+            val = city.get(k)
+            if val and isinstance(val, str) and not val.strip().isdigit():
+                raw_name = val.strip()
+                break
 
+        pure_name = (
+            IRAN_CITIES_MAP.get(city_id) or 
+            IRAN_CITIES_MAP.get(str(raw_name).lower()) or 
+            raw_name
+        )
+
+        # فرمت استاندارد ادمین شما: کد - نام (مثال: 6208 - تهران)
+        if pure_name and pure_name != city_id:
+            formatted_city = f"{city_id} - {pure_name}"
+        else:
+            formatted_city = f"{city_id}"
+
+        cities_payload.append({
+            'city_id': city_id,
+            'formatted_city': formatted_city
+        })
+
+    all_hotel_objects = []
+
+    # اجرای موازی با ۶ نخ برای افزایش چشمگیر سرعت
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        future_to_city = {
+            executor.submit(_fetch_city_hotels_worker, c_info, base_url, headers): c_info 
+            for c_info in cities_payload
+        }
+        for future in as_completed(future_to_city):
+            try:
+                results = future.result()
+                if results:
+                    all_hotel_objects.extend(results)
+            except Exception as e:
+                logger.error(f"Error in city sync worker: {e}")
+
+    if not all_hotel_objects:
+        return False, "هیچ هتلی از وب‌سرویس اسنپ استخراج نشد."
+
+    # حذف تکراری‌ها براساس شناسه هتل
     unique_hotels = {h.snapp_hotel_id: h for h in all_hotel_objects}
     hotels_to_save = list(unique_hotels.values())
 
+    # ذخیره‌سازی دسته‌ای فوق‌سریع در پایگاه داده
     SnappHotelDirectory.objects.bulk_create(
         hotels_to_save,
+        batch_size=1000,
         update_conflicts=True,
         update_fields=['name', 'city_name', 'city_id', 'stars', 'last_synced'],
         unique_fields=['snapp_hotel_id']
     )
-    return True, f"مجموعاً {len(hotels_to_save)} هتل ذخیره شدند."
+    return True, f"بروزرسانی فوق‌سریع انجام شد: مجموعاً {len(hotels_to_save)} هتل با اطلاعات کامل ذخیره شدند."

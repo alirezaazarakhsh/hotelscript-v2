@@ -191,7 +191,6 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-# Inline برای SEOMeta
 class SEOMetaInlineForm(forms.ModelForm):
     keywords_text = forms.CharField(
         label="کلمات کلیدی",
@@ -265,9 +264,6 @@ class HotelFAQInline(admin.StackedInline):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-# ==========================================
-# Admin اصلی هتل
-# ==========================================
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
@@ -627,9 +623,6 @@ class ClosedDateInline(admin.TabularInline):
     ordering = ('date',)
 
 
-# ==========================================
-# Admin اتاق‌ها
-# ==========================================
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
     list_display = (
@@ -805,7 +798,6 @@ class ReservationApprovalDurationAdmin(admin.ModelAdmin):
         return True
 
 
-# --- فرم اعتبارسنجی رزرو ---
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
@@ -834,7 +826,6 @@ class ReservationhotelAdminForm(forms.ModelForm):
         return amount
 
 
-# --- اینلاین مسافران ---
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 10
@@ -849,7 +840,6 @@ class ReservationRoomPassengerInline(NestedTabularInline):
         return self.max_num
 
 
-# --- اینلاین اتاق‌ها ---
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 10
@@ -918,7 +908,6 @@ class ReservationRoomInline(NestedTabularInline):
         return fields
 
 
-# --- ادمین اصلی رزرو ---
 @admin.register(Reservationhotel)
 class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
@@ -934,19 +923,19 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_refunded_fa',
         'cancellation_requested_fa',
         'capacity_status_colored', 'payment_status_colored',
-        'snapp_code_fa',             # نمایش کد رزرو اسنپ
-        'snapp_status_colored',       # نمایش وضعیت در اسنپ
+        'snapp_code_fa',
+        'snapp_status_colored',
         'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
         'personal_discount_code__code',
-        'snapp_reservation_code',     # امکان جستجو با کد اسنپ
+        'snapp_reservation_code',
     )
     list_filter = (
-        'is_snapptrip_reservation',   # فیلتر رزروهای اسنپی
-        'snapp_status',               # فیلتر وضعیت در اسنپ
+        'is_snapptrip_reservation',
+        'snapp_status',
         'capacity_status', 'payment_status', 'check_in_date', 'check_out_date',
         'cancellation_requested', 'personal_discount_used'
     )
@@ -1004,7 +993,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
         }),
     )
 
-    # کلیک روی کد اسنپ برای استعلام زنده وضعیت
     @admin.display(description='کد رزرو اسنپ')
     def snapp_code_fa(self, obj):
         if obj.snapp_reservation_code:
@@ -1041,7 +1029,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
             color, label
         )
 
-    # متدهای استعلام زنده و عیب‌یابی رزرو اسنپ
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -1054,7 +1041,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
         return custom_urls + urls
 
     def check_snapp_status_action(self, request, reservation_id):
-        """استعلام زنده وضعیت رزرو و موجودی کیف‌پول اسنپ همراه با نمایش پیام خطا"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
@@ -1438,9 +1424,6 @@ class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
         return super().response_change(request, obj)
 
 
-# ==========================================
-# ثبت تنظیمات وب‌سرویس اسنپ در ادمین
-# ==========================================
 @admin.register(SnappTripSetting)
 class SnappTripSettingAdmin(admin.ModelAdmin):
     list_display = ('title', 'base_url', 'is_active', 'has_api_key', 'wallet_balance_display')
