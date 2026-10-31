@@ -3885,15 +3885,17 @@ class ReservationRoomDetailAPIView(APIView):
             tracking_code__iexact=tracking_code
         )
 
-        if reservation.buyer is None:
-            if request.user and request.user.is_authenticated:
+        # اگر کاربر لاگین است و رزرو صاحب ندارد، به نام کاربر سند می‌خورد
+        if request.user and request.user.is_authenticated:
+            if reservation.buyer is None:
                 reservation.buyer = request.user
+                reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer'])
-        elif request.user.is_authenticated and reservation.buyer != request.user:
-            return Response(
-                {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            elif reservation.buyer != request.user:
+                return Response(
+                    {"detail": "شما اجازه دسترسی به این رزرو را ندارید."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         user_wallet_balance = 0
         if request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet:
@@ -3986,10 +3988,13 @@ class ReservationRoomDetailAPIView(APIView):
             with transaction.atomic():
                 reservation = get_object_or_404(Reservationhotel, tracking_code__iexact=tracking_code)
 
-                # ۱. الصاق قطعی رزرو به کاربری که در این مرحله وارد شده است
+                # 👇 حل مشکل ارور ۴۰۳: الصاق رزرو مهمان به کاربر جاری
                 if request.user and request.user.is_authenticated:
-                    reservation.buyer = request.user
-                elif reservation.buyer and reservation.buyer != request.user:
+                    if reservation.buyer is None or reservation.payment_status != 'paid':
+                        reservation.buyer = request.user
+                        reservation._skip_price_calculation_on_save = True
+                        reservation.save(update_fields=['buyer'])
+                elif reservation.buyer is not None and reservation.buyer != request.user:
                     return Response(
                         {"detail": "شما اجازه دسترسی به این رزرو را ندارید.", "message": "شما اجازه دسترسی به این رزرو را ندارید."},
                         status=status.HTTP_403_FORBIDDEN
@@ -4005,12 +4010,11 @@ class ReservationRoomDetailAPIView(APIView):
                 reserver_data = data.get('reserver', {})
                 rooms_data = data.get('rooms', [])
 
-                # توابع پاکسازی ایمن مقادیر اختیاری (تبدیل رشته خالی به None تا ولیدیتور ارور ندهد)
                 def clean_str(val):
                     s = str(val or '').strip()
                     return s if s else None
 
-                # ذخیره مشخصات رزروکننده
+                # ثبت مشخصات رزروکننده
                 res_first = clean_str(reserver_data.get('first_name')) or reservation.reserver_first_name or "رزروکننده"
                 res_last = clean_str(reserver_data.get('last_name')) or reservation.reserver_last_name or "اصلی"
                 res_phone = clean_str(reserver_data.get('phone_number')) or reservation.reserver_phone_number or ""
@@ -4023,7 +4027,7 @@ class ReservationRoomDetailAPIView(APIView):
                 reservation._skip_price_calculation_on_save = True
                 reservation.save(update_fields=['buyer', 'reserver_first_name', 'reserver_last_name', 'reserver_phone_number', 'reserver_national_code'])
 
-                # ذخیره اتاق‌ها و مسافران
+                # ثبت مشخصات اتاق‌ها و مسافران
                 res_rooms_list = list(reservation.reservation_rooms.all())
                 used_res_rooms = []
 
@@ -4055,7 +4059,7 @@ class ReservationRoomDetailAPIView(APIView):
                         'half_day_in_price', 'half_day_out_price'
                     ])
 
-                    # حذف مسافران قبلی این اتاق و ثبت مسافران جدید
+                    # ذخیره مسافران اتاق
                     res_room.passengers.all().delete()
                     main_p = passengers_data.get('main_passenger', {})
                     main_fn = clean_str(main_p.get('first_name')) or res_first
@@ -4063,7 +4067,6 @@ class ReservationRoomDetailAPIView(APIView):
                     main_phone = clean_str(main_p.get('phone_number')) or res_phone
                     main_nat = clean_str(main_p.get('national_code'))
 
-                    # ثبت مسافر اصلی اتاق
                     ReservationRoomPassenger.objects.create(
                         reservation_room=res_room,
                         passenger_type='primary',
@@ -4074,7 +4077,7 @@ class ReservationRoomDetailAPIView(APIView):
                         is_primary=True
                     )
 
-                    # ثبت همراهان (فقط سطرهایی که نام دارند ثبت می‌شوند، سطرهای خالی بدون ارور رد می‌شوند)
+                    # ذخیره همراهان
                     for p_type in ['other_passengers', 'extra_capacity_passengers']:
                         p_db = 'secondary' if p_type == 'other_passengers' else 'extra'
                         for p in passengers_data.get(p_type, []):
@@ -4087,14 +4090,14 @@ class ReservationRoomDetailAPIView(APIView):
                                 ReservationRoomPassenger.objects.create(
                                     reservation_room=res_room,
                                     passenger_type=p_db,
-                                    first_name=p_fn or "مسافر",
-                                    last_name=p_ln or "همراه",
+                                    first_name=p_fn or "همراه",
+                                    last_name=p_ln or "مسافر",
                                     mobile_number=p_phone,
                                     national_code=p_nat,
                                     is_primary=False
                                 )
 
-                # بازمحاسبه مبالغ صورت‌حساب
+                # بازمحاسبه نهایی مبالغ
                 (total_price, total_extra, discount_amount, half_in, half_out,
                  total_half, code_discount, final_price, room_fixed) = reservation.calculate_total_price()
 
@@ -4116,7 +4119,7 @@ class ReservationRoomDetailAPIView(APIView):
 
             user_wallet_balance = int(request.user.wallet.balance) if (request.user and request.user.is_authenticated and hasattr(request.user, 'wallet') and request.user.wallet) else 0
 
-            # ارسال وضعیت زنده به وب‌سوکت
+            # ارسال وضعیت به وب‌سوکت
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 f"reservation_{reservation.tracking_code}",
@@ -4144,7 +4147,6 @@ class ReservationRoomDetailAPIView(APIView):
                 "detail": f"خطا در ثبت اطلاعات: {str(e)}",
                 "message": f"خطا در ثبت اطلاعات: {str(e)}"
             }, status=status.HTTP_400_BAD_REQUEST)
-        
         
     
     
