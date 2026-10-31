@@ -100,19 +100,47 @@ def get_snapptrip_client_config():
 
 
 def get_snapptrip_wallet_balance():
-    """استعلام موجودی کیف پول B2B در اسنپ‌تریپ"""
+    """استعلام دقیق موجودی کیف پول B2B در اسنپ‌تریپ با بررسی تمام ساختارها و تبدیل ریال به تومان"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return 0, "کلید وب‌سرویس تنظیم نشده است."
-    try:
-        res = _snapp_session.get(f"{base_url}/balance/", headers=headers, timeout=6)
-        if res.status_code == 200:
-            data = res.json()
-            balance = data.get('balance', 0)
-            return int(Decimal(str(balance))), "موفق"
-        return 0, f"کد خطا {res.status_code}: {res.text[:100]}"
-    except Exception as e:
-        return 0, str(e)
+
+    candidate_urls = [
+        f"{base_url}/balance",
+        f"{base_url}/balance/",
+        f"{base_url}/wallet/balance",
+    ]
+
+    for url in candidate_urls:
+        try:
+            res = _snapp_session.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                raw_bal = 0
+
+                if isinstance(data, dict):
+                    raw_bal = (
+                        data.get('balance') or 
+                        data.get('credit') or 
+                        data.get('amount') or 
+                        data.get('data', {}).get('balance') or 
+                        data.get('data', {}).get('credit') or 
+                        data.get('data', {}).get('amount') or 0
+                    )
+
+                raw_bal_int = int(Decimal(str(raw_bal)))
+
+                # اگر مقدار به ریال باشد (مثلاً 1,000,000 ریال)، به تومان تبدیل می‌شود (100,000 تومان)
+                if raw_bal_int >= 1000000:
+                    toman_bal = raw_bal_int // 10
+                else:
+                    toman_bal = raw_bal_int
+
+                return toman_bal, "موفق"
+        except Exception:
+            continue
+
+    return 0, "خطا در استعلام موجودی"
 
 
 def fetch_with_rate_limit(url, headers, max_retries=3):
@@ -228,15 +256,18 @@ def is_room_online_instant(r_item):
 # ==============================================================================
 
 def get_snapptrip_booking_status(snapp_reservation_code: str):
-    """استعلام زنده وضعیت رزرو در اسنپ"""
+    """استعلام زنده وضعیت رزرو در اسنپ (پشتیبانی از کلید state و status)"""
     base_url, headers = get_snapptrip_client_config()
     url = f"{base_url}/booking/{snapp_reservation_code}"
     try:
         res = _snapp_session.get(url, headers=headers, timeout=6)
         if res.status_code == 200:
             data = res.json()
+            # اسنپ وضعیت رزرو را در کلید state می‌فرستد
             status_val = (
+                data.get('state') or 
                 data.get('status') or 
+                data.get('data', {}).get('state') or 
                 data.get('data', {}).get('status') or 
                 'unknown'
             )
@@ -248,18 +279,25 @@ def get_snapptrip_booking_status(snapp_reservation_code: str):
 
 
 def lock_snapptrip_booking(snapp_reservation_code: str):
-    """قفل موقت اتاق به مدت ۱۵ دقیقه جهت ارسال به پنل اسنپ"""
+    """قفل موقت اتاق به مدت ۱۵ دقیقه در اسنپ (با پوشش هر دو فرمت آدرس)"""
     base_url, headers = get_snapptrip_client_config()
-    url = f"{base_url}/booking/{snapp_reservation_code}/lock"
-    try:
-        res = _snapp_session.post(url, json={}, headers=headers, timeout=6)
-        if res.status_code in [200, 201]:
-            logger.info(f"✅ رزرو {snapp_reservation_code} در اسنپ لاک شد.")
-            return True, "payment_on"
-        return False, "draft"
-    except Exception as e:
-        logger.error(f"Error locking booking {snapp_reservation_code}: {e}")
-        return False, "draft"
+    code_str = str(snapp_reservation_code).strip()
+
+    candidate_urls = [
+        f"{base_url}/booking/{code_str}/lock",
+        f"{base_url}/booking/{code_str}/lock/",
+    ]
+
+    for url in candidate_urls:
+        try:
+            res = _snapp_session.post(url, json={}, headers=headers, timeout=6)
+            if res.status_code in [200, 201, 204]:
+                logger.info(f"✅ رزرو {code_str} در اسنپ لاک شد.")
+                return True, "payment_on"
+        except Exception:
+            continue
+
+    return False, "draft"
 
 
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
@@ -366,8 +404,9 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         if not snapp_code:
             return False, None, False, f"کد رزرو در پاسخ اسنپ یافت نشد: {res.text[:100]}"
 
-        status_val = res_data.get('status') or res_data.get('data', {}).get('status', '')
-        is_instant = status_val not in ['availability_checking', 'availability_pending', 'offline']
+        # استخراج وضعیت از کلید state یا status
+        state_val = res_data.get('state') or res_data.get('status') or res_data.get('data', {}).get('state', '')
+        is_instant = state_val not in ['availability_checking', 'availability_pending', 'offline']
 
         if is_instant:
             lock_ok, _ = lock_snapptrip_booking(str(snapp_code))

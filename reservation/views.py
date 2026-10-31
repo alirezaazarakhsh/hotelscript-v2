@@ -3227,9 +3227,29 @@ class GetPriceRangeAPI(generics.GenericAPIView):
         
         
 # ==============================================================================
-# API ایجاد رزرو موقت (پرسرعت، دوگانه: محلی + اسنپ‌تریپ)
+# API ایجاد رزرو موقت (پرسرعت، دوگانه: محلی + اسنپ‌تریپ - پاسخ زیر ۱ ثانیه)
 # ==============================================================================
+import threading
+
 logger = logging.getLogger(__name__)
+
+
+def _send_telegram_notification_background(tracking_code, buyer_name, hotel_name, capacity_status, rooms_text, final_price):
+    """ارسال اعلان تلگرام در پس‌زمینه بدون مسدودسازی و معطل کردن مسافر"""
+    try:
+        from hotel_bot.bot import send_reservation_notification
+        async_to_sync(send_reservation_notification)(
+            tracking_code,
+            buyer_name,
+            hotel_name,
+            capacity_status,
+            rooms_text,
+            final_price
+        )
+    except Exception:
+        pass
+
+
 class ReservationCreateAPIView(generics.CreateAPIView):
     """
     ایجاد رزرو موقت با حداکثر سرعت:
@@ -3315,7 +3335,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             'reserver_phone_number': user_phone
         }
 
-        # ذخیره خریدار به صورت None برای مهمان تا خطای 500 برطرف شود
+        # ذخیره خریدار
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             check_in_date=check_in_date,
@@ -3446,22 +3466,23 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             },
         )
 
-        # ارسال اعلان غیرمسدودکننده به تلگرام (عدم ایجاد کندی در پاسخ وب)
-        try:
-            from hotel_bot.bot import send_reservation_notification
-            buyer_name = f"{reserver_data.get('reserver_first_name', '')} {reserver_data.get('reserver_last_name', '')}".strip() or user_phone or "کاربر مهمان"
-            hotel_name = room.hotel.name if room.hotel else 'نامشخص'
-            rooms_text = f"{room.title} (تعداد: {quantity})"
-            async_to_sync(send_reservation_notification)(
+        # ارسال تلگرام در پس‌زمینه (Thread مجزا) تا کاربر به هیچ‌وجه معطل فیلترینگ تلگرام نشود
+        buyer_name = f"{reserver_data.get('reserver_first_name', '')} {reserver_data.get('reserver_last_name', '')}".strip() or user_phone or "کاربر مهمان"
+        hotel_name = room.hotel.name if room.hotel else 'نامشخص'
+        rooms_text = f"{room.title} (تعداد: {quantity})"
+
+        threading.Thread(
+            target=_send_telegram_notification_background,
+            args=(
                 reservation.tracking_code,
                 buyer_name,
                 hotel_name,
                 reservation.capacity_status,
                 rooms_text,
                 reservation.final_price or 0
-            )
-        except Exception as e:
-            logger.warning(f"ارسال اعلان تلگرام انجام نشد (بدون ایجاد وقفه در رزرو): {e}")
+            ),
+            daemon=True
+        ).start()
 
         # زمان‌بندی لغو خودکار در صورت عدم پرداخت پس از ۱۵ دقیقه
         try:
