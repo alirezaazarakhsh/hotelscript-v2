@@ -1479,6 +1479,7 @@ class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
         return super().response_change(request, obj)
 
 
+
 @admin.register(SnappTripSetting)
 class SnappTripSettingAdmin(admin.ModelAdmin):
     list_display = ('title', 'base_url', 'is_active', 'has_api_key', 'wallet_balance_display')
@@ -1496,7 +1497,12 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
 
     def wallet_balance_display(self, obj):
         bal, _ = get_snapptrip_wallet_balance()
-        return f"{int(bal):,} تومان" if bal else "۰ تومان"
+        if not bal:
+            return "۰ تومان"
+        # تبدیل ریال به تومان
+        bal_toman = int(bal) // 10
+        return f"{bal_toman:,} تومان"
+        
     wallet_balance_display.short_description = "موجودی کیف‌پول در اسنپ"
 
     def has_add_permission(self, request):
@@ -1504,6 +1510,7 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
 
 
 @admin.register(SnappHotelDirectory)
@@ -1516,15 +1523,16 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
         'last_synced_jalali',
     )
     search_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id')
-    list_filter = ('city_name', 'stars')
-    readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'stars', 'last_synced')
-    actions = ['trigger_sync_action']
+    list_filter = ('stars', 'city_name')
+    # ستاره را از readonly خارج کردیم تا در صورت نیاز دستی هم قابل تغییر باشد
+    readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'last_synced')
+    actions = ['trigger_sync_action', 'auto_detect_stars_action']
+    list_per_page = 50
 
     @admin.display(description="شهر (کد - نام)", ordering="city_name")
     def city_display(self, obj):
         cname = obj.city_name or ""
         cid = obj.city_id or ""
-        
         if " - " in cname:
             return cname
         if cid and cname and not cname.isdigit():
@@ -1535,15 +1543,55 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
 
     @admin.display(description="تعداد ستاره", ordering="stars")
     def stars_display(self, obj):
-        if not obj.stars or str(obj.stars).strip() in ['-', '', 'None']:
-            return format_html('<span style="color:#888;">—</span>')
+        val = str(obj.stars or '').strip()
         
-        val = str(obj.stars).strip()
-        if val in ['1', '2', '3', '4', '5']:
-            star_num = int(val)
-            stars_icons = "⭐" * star_num
-            return format_html('<span style="font-size: 13px;">{} ({} ستاره)</span>', stars_icons, star_num)
-        return f"{val} ستاره"
+        # تبدیل اعداد فارسی به انگلیسی
+        fa_to_en = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+        val_clean = val.translate(fa_to_en).replace('.0', '').strip()
+
+        star_num = None
+
+        # ۱. بررسی مقدار مستقیم ذخیره‌شده
+        if val_clean in ['1', '2', '3', '4', '5']:
+            star_num = int(val_clean)
+        else:
+            # ۲. اگر اسنپ ستاره نفرستاده بود، استخراج هوشمند از روی نام هتل
+            name = obj.name or ""
+            star_patterns = [
+                ('5', ['۵ ستاره', '5 ستاره', 'پنج ستاره', '5-star', '5 star']),
+                ('4', ['۴ ستاره', '4 ستاره', 'چهار ستاره', '4-star', '4 star']),
+                ('3', ['۳ ستاره', '3 ستاره', 'سه ستاره', '3-star', '3 star']),
+                ('2', ['۲ ستاره', '2 ستاره', 'دو ستاره', '2-star', '2 star']),
+                ('1', ['۱ ستاره', '1 ستاره', 'یک ستاره', '1-star', '1 star']),
+            ]
+            for s_val, s_words in star_patterns:
+                if any(w in name for w in s_words):
+                    star_num = int(s_val)
+                    # به‌روزرسانی خودکار در دیتابیس برای دفعات بعد
+                    SnappHotelDirectory.objects.filter(pk=obj.pk).update(stars=s_val)
+                    break
+
+        # نمایش ستاره‌ها با آیکون گرافیکی طلایی
+        if star_num:
+            gold_stars = "★" * star_num
+            gray_stars = "☆" * (5 - star_num)
+            return format_html(
+                '<span style="color: #f39c12; font-size: 15px; letter-spacing: 1px;">{}</span>'
+                '<span style="color: #ccc; font-size: 15px;">{}</span> '
+                '<span style="font-size: 12px; color: #555;">({} ستاره)</span>',
+                gold_stars, gray_stars, star_num
+            )
+
+        # تشخیص نوع اقامتگاه در صورت نداشتن ستاره
+        name_lower = (obj.name or "")
+        if "هتل آپارتمان" in name_lower:
+            return format_html('<span style="background: #e3f2fd; color: #1976d2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">هتل آپارتمان</span>')
+        if "بوم گردی" in name_lower or "بومگردی" in name_lower or "سنتی" in name_lower:
+            return format_html('<span style="background: #e8f5e9; color: #388e3c; padding: 2px 7px; border-radius: 4px; font-size: 11px;">اقامتگاه سنتی/بوم‌گردی</span>')
+        if "بوتیک" in name_lower:
+            return format_html('<span style="background: #f3e5f5; color: #7b1fa2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">بوتیک هتل</span>')
+
+        return format_html('<span style="color:#aaa;">نامشخص</span>')
 
     def last_synced_jalali(self, obj):
         if obj.last_synced:
@@ -1552,13 +1600,35 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
         return '-'
     last_synced_jalali.short_description = "تاریخ بروزرسانی"
 
-    @admin.action(description="بروزرسانی بانک هتل‌ها از سرور اسنپ‌تریپ")
+    @admin.action(description="🔄 بروزرسانی بانک هتل‌ها از سرور اسنپ‌تریپ")
     def trigger_sync_action(self, request, queryset):
         success, msg = sync_all_snapptrip_hotels_directory()
         if success:
             self.message_user(request, msg, messages.SUCCESS)
         else:
             self.message_user(request, msg, messages.ERROR)
+
+    @admin.action(description="⭐ استخراج و ثبت خودکار ستاره‌ها از نام هتل‌ها")
+    def auto_detect_stars_action(self, request, queryset):
+        """اکشن کمکی برای خواندن ستاره‌ها از روی نام هتل‌ها و ذخیره در دیتابیس"""
+        count = 0
+        star_patterns = [
+            ('5', ['۵ ستاره', '5 ستاره', 'پنج ستاره']),
+            ('4', ['۴ ستاره', '4 ستاره', 'چهار ستاره']),
+            ('3', ['۳ ستاره', '3 ستاره', 'سه ستاره']),
+            ('2', ['۲ ستاره', '2 ستاره', 'دو ستاره']),
+            ('1', ['۱ ستاره', '1 ستاره', 'یک ستاره']),
+        ]
+        for hotel in queryset:
+            name = hotel.name or ""
+            for s_val, s_words in star_patterns:
+                if any(w in name for w in s_words):
+                    if hotel.stars != s_val:
+                        hotel.stars = s_val
+                        hotel.save(update_fields=['stars'])
+                        count += 1
+                    break
+        self.message_user(request, f"تعداد {count} هتل با موفقیت ستاره‌دار شدند.", messages.SUCCESS)
 
     def get_urls(self):
         urls = super().get_urls()
