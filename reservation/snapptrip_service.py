@@ -594,10 +594,16 @@ def auto_confirm_snapp_reservation_if_charged(reservation):
 
 
 # ==============================================================================
-# بخش ۲: همگام‌سازی اتاق‌ها با ظرفیت دقیق نفرات اصلی و اضافه
+# بخش ۲: همگام‌سازی اتاق‌ها با نمایش کامل اتاق‌های تکمیل‌ظرفیت (Sold Out)
 # ==============================================================================
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
+    """
+    همگام‌سازی کامل هتل و اتاق‌ها از اسنپ‌تریپ:
+    - حفظ کلیه اتاق‌های هتل در سیستم، حتی در صورت پر بودن یا تکمیل ظرفیت.
+    - اتاق‌های تکمیل ظرفیت با موجودی صفر ثبت می‌شوند تا در سایت دیده شوند ولی رزرو نشوند.
+    - جلوگیری قطعی از حذف فیزیکی اتاق‌های تکمیل‌ظرفیت.
+    """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
@@ -611,22 +617,37 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         return False, "شناسه اسنپ‌تریپ برای این هتل وارد نشده است."
 
     snapp_h_id = hotel.snapptrip_hotel_id
-    rooms_list = []
-
     now = datetime.now()
     checkin_str = now.strftime('%Y-%m-%d')
     checkout_str = (now + timedelta(days=1)).strftime('%Y-%m-%d')
     calendar_from_str = now.strftime('%Y-%m-%d')
     calendar_to_str = (now + timedelta(days=30)).strftime('%Y-%m-%d')
 
-    for h_url in [f"{base_url}/hotels/{snapp_h_id}/", f"{base_url}/hotels/{snapp_h_id}"]:
+    all_rooms_dict = {}       # تمام اتاق‌های شناخته‌شده هتل (کلید: شناسه اتاق اسنپ)
+    available_room_ids = set() # شناسه‌هایی که در حال حاضر ظرفیت دارند
+
+    # ------------------------------------------------------------------
+    # مرحله ۱: استخراج اطلاعات کامل هتل و کلیه اتاق‌های استاتیک
+    # ------------------------------------------------------------------
+    static_room_urls = [
+        f"{base_url}/hotels/{snapp_h_id}/",
+        f"{base_url}/hotels/{snapp_h_id}",
+        f"{base_url}/hotels/rooms/?hotel_id={snapp_h_id}",
+        f"{base_url}/hotels/{snapp_h_id}/rooms/",
+        f"{base_url}/hotels/rooms/{snapp_h_id}/",
+    ]
+
+    for h_url in static_room_urls:
         try:
             hotel_res = requests.get(h_url, headers=headers, timeout=15)
-            if hotel_res.status_code == 200:
-                h_data = hotel_res.json()
-                if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
-                    h_data = h_data['data']
+            if hotel_res.status_code != 200:
+                continue
 
+            h_data = hotel_res.json()
+            if isinstance(h_data, dict) and 'data' in h_data and isinstance(h_data['data'], dict):
+                h_data = h_data['data']
+
+            if isinstance(h_data, dict):
                 h_rules, h_cancellation = extract_hotel_rules_and_cancellation(h_data)
                 if h_rules:
                     hotel.rules = h_rules
@@ -654,42 +675,91 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 hotel.save(update_fields=['rules', 'important_notes', 'is_snapptrip', 'status', 'city'])
                 CancellationPenalty.objects.get_or_create(hotel=hotel, defaults={'penalty_percentage': 0})
 
-                if isinstance(h_data, dict):
-                    for r_key in ['rooms', 'room', 'room_types', 'accommodations']:
-                        if isinstance(h_data.get(r_key), list) and len(h_data[r_key]) > 0:
-                            rooms_list = h_data[r_key]
-                            break
+            # استخراج ساختار اتاق‌ها
+            extracted = []
+            if isinstance(h_data, list):
+                extracted = h_data
+            elif isinstance(h_data, dict):
+                for r_key in ['rooms', 'room', 'room_types', 'accommodations', 'results', 'data']:
+                    val = h_data.get(r_key)
+                    if isinstance(val, list) and len(val) > 0:
+                        extracted = val
+                        break
+                if not extracted:
+                    extracted = extract_list_from_response(h_data)
+
+            if extracted:
+                for item in extracted:
+                    rid = extract_room_id(item)
+                    if rid:
+                        all_rooms_dict[rid] = item
+                if all_rooms_dict:
+                    logger.info(f"لیست استاتیک هتل {hotel.name} شامل {len(all_rooms_dict)} اتاق با موفقیت بارگذاری شد.")
+                    break
+        except Exception as e:
+            logger.error(f"Error fetching static rooms from {h_url}: {e}")
+
+    # ------------------------------------------------------------------
+    # مرحله ۲: استعلام ظرفیت و قیمت‌های لحظه‌ای (Availability)
+    # ------------------------------------------------------------------
+    avail_urls = [
+        f"{base_url}/availability/hotels/{snapp_h_id}?checkin={checkin_str}&checkout={checkout_str}",
+        f"{base_url}/availability/hotels/{snapp_h_id}/?checkin={checkin_str}&checkout={checkout_str}",
+    ]
+    for a_url in avail_urls:
+        try:
+            avail_res = requests.get(a_url, headers=headers, timeout=15)
+            if avail_res.status_code == 200:
+                avail_items = extract_list_from_response(avail_res.json())
+                for a_item in avail_items:
+                    a_id = extract_room_id(a_item)
+                    if not a_id:
+                        continue
+
+                    # بررسی تکمیل‌ظرفیت بودن صریح در پاسخ
+                    is_sold_out = False
+                    if a_item.get('is_available') is False or a_item.get('available') is False:
+                        is_sold_out = True
+                    if a_item.get('sold_out') is True or str(a_item.get('status')).lower() in ['sold_out', 'full', 'unavailable']:
+                        is_sold_out = True
+
+                    if not is_sold_out:
+                        available_room_ids.add(a_id)
+
+                    # ادغام قیمت‌ها و مشخصات زنده با لیست اتاق‌ها
+                    if a_id in all_rooms_dict:
+                        all_rooms_dict[a_id].update(a_item)
+                    else:
+                        all_rooms_dict[a_id] = a_item
                 break
         except Exception as e:
-            logger.error(f"Error fetching hotel details: {e}")
+            logger.error(f"Error fetching real-time availability: {e}")
 
-    last_error_report = ""
-    if not rooms_list:
-        candidate_room_urls = [
-            f"{base_url}/availability/hotels/{snapp_h_id}?checkin={checkin_str}&checkout={checkout_str}",
-            f"{base_url}/availability/hotels/{snapp_h_id}/?checkin={checkin_str}&checkout={checkout_str}",
+    # ------------------------------------------------------------------
+    # مرحله ۳: فال‌بک تکمیلی اگر هیچ اتاقی استخراج نشد
+    # ------------------------------------------------------------------
+    if not all_rooms_dict:
+        fallback_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/hotels/rooms/{snapp_h_id}/",
-            f"{base_url}/hotels/{snapp_h_id}/rooms/",
-            f"{base_url}/hotels/rooms/?hotel_id={snapp_h_id}",
         ]
-
-        for r_url in candidate_room_urls:
+        for f_url in fallback_urls:
             try:
-                rooms_res = requests.get(r_url, headers=headers, timeout=15)
-                if rooms_res.status_code == 200:
-                    extracted = extract_list_from_response(rooms_res.json())
-                    if extracted:
-                        rooms_list = extracted
+                f_res = requests.get(f_url, headers=headers, timeout=15)
+                if f_res.status_code == 200:
+                    f_items = extract_list_from_response(f_res.json())
+                    for item in f_items:
+                        r_id = extract_room_id(item)
+                        if r_id:
+                            all_rooms_dict[r_id] = item
+                            available_room_ids.add(r_id)
+                    if all_rooms_dict:
                         break
-                else:
-                    last_error_report = f"آدرس {r_url} -> کد {rooms_res.status_code}: {rooms_res.text[:120]}"
-            except Exception as e:
-                last_error_report = str(e)
+            except Exception:
                 continue
 
-    if not rooms_list:
-        return False, f"هیچ اتاقی از اسنپ دریافت نشد. آخرین گزارش: {last_error_report}"
+    if not all_rooms_dict:
+        return False, f"هیچ اتاقی از اسنپ برای هتل {hotel.name} دریافت نشد."
 
     synced_snapp_room_ids = []
     synced_rooms_count = 0
@@ -698,11 +768,10 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     today_j = jdatetime.date.fromgregorian(date=now.date())
     end_30_days_j = jdatetime.date.fromgregorian(date=(now + timedelta(days=30)).date())
 
-    for r_item in rooms_list:
-        snapp_room_id = extract_room_id(r_item)
-        if not snapp_room_id:
-            continue
-
+    # ------------------------------------------------------------------
+    # مرحله ۴: ذخیره و همگام‌سازی اتاق‌ها (هم موجود و هم تکمیل‌ظرفیت)
+    # ------------------------------------------------------------------
+    for snapp_room_id, r_item in all_rooms_dict.items():
         synced_snapp_room_ids.append(snapp_room_id)
         room_title = extract_room_title(r_item, snapp_room_id)
         room_desc = extract_room_description(r_item)
@@ -717,12 +786,18 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             p_orig = int(Decimal(str(pricing.get('original_sell_price') or 0)))
             base_client_sell_price = p_orig if p_orig > 0 else p_price
             base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
-            base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
+            base_extra_bed_price = int(Decimal(str(
+                pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0
+            )))
+
+        # تشخیص وضعیت ظرفیت اتاق:
+        # اگر در پاسخ availability نباشد، یا مشخصاً sold_out باشد -> تکمیل ظرفیت است
+        has_capacity = (snapp_room_id in available_room_ids)
+        if r_item.get('is_available') is False or r_item.get('available') is False or r_item.get('sold_out') is True:
+            has_capacity = False
 
         room_cap = extract_room_capacity(r_item, room_title)
         extra_cap = extract_extra_capacity(r_item, room_title, has_extra_bed_price=(base_extra_bed_price > 0))
-
-        inv_count = 100
         board_type = r_item.get('board_type', 'bed_breakfast')
 
         room_rules = (
@@ -741,10 +816,17 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         elif r_item.get('booking_type') == 'offline':
             is_online = False
 
-        count_val = 0 if is_online else inv_count
-        auto_approved_val = inv_count if is_online else 0
+        # نکته کلیدی: اگر اتاق تکمیل باشد، موجودی 0 می‌شود تا در سایت با برچسب تکمیل ظرفیت نمایش یابد
+        if not has_capacity:
+            inv_count = 0
+            count_val = 0
+            auto_approved_val = 0
+        else:
+            inv_count = 100
+            count_val = 0 if is_online else inv_count
+            auto_approved_val = inv_count if is_online else 0
 
-        room, _ = Room.objects.update_or_create(
+        room, created = Room.objects.update_or_create(
             hotel=hotel,
             snapptrip_room_id=snapp_room_id,
             defaults={
@@ -766,6 +848,17 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
 
+        # بازیابی قیمت قبلی دیتابیس در صورتی که اتاق تکمیل ظرفیت شده و اسنپ قیمت لحظه‌ای نفرستاده
+        if base_client_sell_price <= 0 and not created:
+            last_date_price = RoomDatePrice.objects.filter(room=room).order_by('-id').first()
+            if last_date_price:
+                base_client_sell_price = last_date_price.price
+                base_agency_buy_price = last_date_price.purchase_price
+                base_extra_bed_price = last_date_price.extra_passenger_price
+
+        # ------------------------------------------------------------------
+        # تقویم روزانه نرخ‌ها
+        # ------------------------------------------------------------------
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar/?from={calendar_from_str}&to={calendar_to_str}",
@@ -872,18 +965,14 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        # =====================================================================
-        # اصلاح کلیدی: جلوگیری از ثبت بازه ۳۰ روزه در صورت وجود تقویم روزانه
-        # =====================================================================
+        # در صورت وجود تقویم روزانه، بازه پیش‌فرض ۳۰ روزه قدیمی پاک می‌شود
         if room_calendar_synced:
-            # پاک‌سازی خودکار بازه چندروزه قدیمی که از سینک‌های قبل مانده بود و تداخل ایجاد می‌کرد
             RoomDatePrice.objects.filter(
                 room=room,
                 start_date=today_j,
                 end_date=end_30_days_j
             ).delete()
         else:
-            # اگر تقویم روزانه نیامد، به عنوان فال‌بک از نرخ پایه برای ۳۰ روز استفاده کن
             final_base_price = first_valid_client_price or base_client_sell_price
             final_agency_price = first_valid_agency_price or base_agency_buy_price
             final_extra = first_valid_extra or base_extra_bed_price
@@ -906,24 +995,38 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 )
                 synced_prices_count += 1
 
-        club_points = calculate_customer_club_points(hotel.stars, first_valid_client_price or base_client_sell_price)
+        club_points = calculate_customer_club_points(
+            hotel.stars,
+            first_valid_client_price or base_client_sell_price
+        )
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 
+    # ------------------------------------------------------------------
+    # مرحله ۵: عدم حذف فیزیکی؛ فقط صفر کردن موجودی برای اتاق‌های غایب
+    # ------------------------------------------------------------------
     if synced_snapp_room_ids:
-        deleted_count, _ = Room.objects.filter(
+        # اتاق‌های اسنپی که در این استعلام نیامده‌اند حذف نمی‌شوند، بلکه تکمیل‌ظرفیت (موجودی ۰) می‌شوند
+        missing_count = Room.objects.filter(
             hotel=hotel,
             is_snapptrip=True
         ).exclude(
             snapptrip_room_id__in=synced_snapp_room_ids
-        ).delete()
-        if deleted_count > 0:
-            logger.info(f"تعداد {deleted_count} اتاق نامعتبر از هتل {hotel.name} پاک شدند.")
+        ).update(
+            inventory=0,
+            count=0,
+            auto_approved_count=0
+        )
+        if missing_count > 0:
+            logger.info(f"تعداد {missing_count} اتاق خارج از دسترس به وضعیت تکمیل‌ظرفیت تغییر یافتند.")
 
     if synced_rooms_count == 0:
-        return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
+        return False, f"تعداد {len(all_rooms_dict)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
 
-    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با مشخصات و ظرفیت دقیق ثبت شدند."
+    return True, (
+        f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: "
+        f"{synced_rooms_count} اتاق (شامل موجود و تکمیل‌ظرفیت) ذخیره و بروزرسانی شدند."
+    )
 
 
 def sync_all_snapptrip_hotels_directory():
