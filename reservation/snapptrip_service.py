@@ -436,7 +436,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     checkout_str = check_out_g.strftime('%Y-%m-%d')
 
     buyer = getattr(reservation, 'buyer', None)
-    user_phone = (buyer.phone_number if buyer and getattr(buyer, 'phone_number', None) else "09127752353").strip()
+    user_phone = (buyer.phone_number if buyer and getattr(buyer, 'phone_number', None) else "09383332443").strip()
 
     profile = getattr(buyer, 'natural_profile', None) if buyer else None
     default_fn = (getattr(profile, 'first_name', '') if profile else '') or reservation.reserver_first_name or "مسافر"
