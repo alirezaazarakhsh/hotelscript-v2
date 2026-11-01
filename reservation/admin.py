@@ -1546,7 +1546,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
     )
     search_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id')
     list_filter = ('stars', 'city_name')
-    # ستاره را از readonly خارج کردیم تا در صورت نیاز دستی هم قابل تغییر باشد
     readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'last_synced')
     actions = ['trigger_sync_action', 'auto_detect_stars_action']
     list_per_page = 50
@@ -1589,7 +1588,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
             for s_val, s_words in star_patterns:
                 if any(w in name for w in s_words):
                     star_num = int(s_val)
-                    # به‌روزرسانی خودکار در دیتابیس برای دفعات بعد
                     SnappHotelDirectory.objects.filter(pk=obj.pk).update(stars=s_val)
                     break
 
@@ -1604,16 +1602,23 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
                 gold_stars, gray_stars, star_num
             )
 
-        # تشخیص نوع اقامتگاه در صورت نداشتن ستاره
+        # تشخیص نوع اقامتگاه‌های بدون ستاره از روی نام
         name_lower = (obj.name or "")
-        if "هتل آپارتمان" in name_lower:
+        if "هتل آپارتمان" in name_lower or "آپارتمان" in name_lower:
             return format_html('<span style="background: #e3f2fd; color: #1976d2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">هتل آپارتمان</span>')
+        if "ویلا" in name_lower:
+            return format_html('<span style="background: #fff3e0; color: #e65100; padding: 2px 7px; border-radius: 4px; font-size: 11px;">اقامتگاه ویلایی</span>')
         if "بوم گردی" in name_lower or "بومگردی" in name_lower or "سنتی" in name_lower:
             return format_html('<span style="background: #e8f5e9; color: #388e3c; padding: 2px 7px; border-radius: 4px; font-size: 11px;">اقامتگاه سنتی/بوم‌گردی</span>')
         if "بوتیک" in name_lower:
             return format_html('<span style="background: #f3e5f5; color: #7b1fa2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">بوتیک هتل</span>')
+        if "هاستل" in name_lower:
+            return format_html('<span style="background: #ede7f6; color: #512da8; padding: 2px 7px; border-radius: 4px; font-size: 11px;">هاستل اقتصادی</span>')
+        if "مهمانپذیر" in name_lower or "مهمان‌پذیر" in name_lower or "مهمانسرا" in name_lower:
+            return format_html('<span style="background: #e0f2f1; color: #00695c; padding: 2px 7px; border-radius: 4px; font-size: 11px;">مهمان‌پذیر</span>')
 
-        return format_html('<span style="color:#aaa;">نامشخص</span>')
+        # برچسب شکیل برای اقامتگاه‌هایی که کلاً ستاره ندارند
+        return format_html('<span style="background: #f1f3f5; color: #495057; border: 1px solid #ced4da; padding: 2px 8px; border-radius: 4px; font-size: 11px;">مهمان‌پذیر / بدون ستاره</span>')
 
     def last_synced_jalali(self, obj):
         if obj.last_synced:
