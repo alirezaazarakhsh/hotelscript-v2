@@ -42,7 +42,7 @@ from datetime import date as gdate, datetime as gdt, timedelta
 from django.utils.translation import gettext_lazy as _
 from authentication import serializers
 from safarname24 import settings
-from safarnameh24.pagination import FacilitiesPaginator, Paginator, RoomFacilitiesPaginator
+from safarname24.pagination import FacilitiesPaginator, Paginator, RoomFacilitiesPaginator
 from jdatetime import datetime as jdt
 from .utils import Round
 from rest_framework.generics import CreateAPIView
