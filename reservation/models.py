@@ -1261,7 +1261,6 @@ class BestHotels(models.Model):
 
 
 
-
 # ==============================================================================
 # بخش مدل اصلی رزرو (Reservationhotel) و سیگنال هماهنگ با کیف‌پول و اسنپ
 # ==============================================================================
@@ -1447,7 +1446,10 @@ class Reservationhotel(models.Model):
     def calculate_total_price(self):
         """
         محاسبه بی‌نقص مجموع صورت‌حساب:
-        قیمت به صورت شب‌به‌شب از روی تقویم شمسی خوانده شده و جمع می‌شود (هماهنگ با تغییرات قیمت روزهای هفته).
+        ۱. محاسبه شب‌به‌شب قیمت‌ها از تقویم
+        ۲. محاسبه نفرات اضافه (مستقل از نام مسافر)
+        ۳. نیم‌شارژ ورود = ۵۰٪ شب اول
+        ۴. نیم‌شارژ خروج = ۵۰٪ شب آخر
         """
         if not self.pk or not self.reservation_rooms.exists():
             return (Decimal('0'),) * 9 
@@ -1478,7 +1480,15 @@ class Reservationhotel(models.Model):
                 continue
 
             quantity = res_room.quantity
-            extra_guests = res_room.passengers.filter(passenger_type='extra').count()
+
+            # خواندن تعداد نفرات اضافه حتی اگر فرم مسافران پر نشده باشد
+            extra_guests = max(
+                res_room.extra_passengers_count or 0,
+                res_room.passengers.filter(passenger_type='extra').count()
+            )
+
+            first_night_price = Decimal('0')
+            last_night_price = Decimal('0')
 
             # محاسبه شب‌به‌شب قیمت‌ها به صورت کاملاً شمسی
             for night_idx in range(nights):
@@ -1502,6 +1512,12 @@ class Reservationhotel(models.Model):
                 daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
                 extra_price_per_person = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
 
+                # ثبت دقیق قیمت شب اول و آخر برای محاسبه نیم‌شارژها
+                if night_idx == 0:
+                    first_night_price = daily_price
+                if night_idx == nights - 1:
+                    last_night_price = daily_price
+
                 total += daily_price * quantity
                 total_extra += extra_price_per_person * extra_guests * quantity
 
@@ -1512,11 +1528,19 @@ class Reservationhotel(models.Model):
                     elif not price_obj.discount_date:
                         room_fixed_discount += Decimal(price_obj.discount_value) * quantity
 
-            # محاسبه نیم‌شارژها
-            if hasattr(res_room, 'half_day_in_selected') and res_room.half_day_in_selected and getattr(hotel, 'has_check_in_half_day_charge', False):
-                half_day_in_charge += (res_room.half_day_in_price or Decimal('0')) * quantity
-            if hasattr(res_room, 'half_day_out_selected') and res_room.half_day_out_selected and getattr(hotel, 'has_check_out_half_day_charge', False):
-                half_day_out_charge += (res_room.half_day_out_price or Decimal('0')) * quantity
+            # محاسبه دقیق نیم‌شارژ ورود (نصف شب اول) و نیم‌شارژ خروج (نصف شب آخر)
+            has_in = bool(getattr(hotel, 'has_check_in_half_day_charge', False))
+            has_out = bool(getattr(hotel, 'has_check_out_half_day_charge', False))
+
+            if getattr(res_room, 'half_day_in_selected', False) and has_in:
+                single_half_in = (first_night_price / Decimal('2')).quantize(Decimal('1'), rounding=ROUND_UP)
+                res_room.half_day_in_price = single_half_in
+                half_day_in_charge += single_half_in * quantity
+
+            if getattr(res_room, 'half_day_out_selected', False) and has_out:
+                single_half_out = (last_night_price / Decimal('2')).quantize(Decimal('1'), rounding=ROUND_UP)
+                res_room.half_day_out_price = single_half_out
+                half_day_out_charge += single_half_out * quantity
 
         total_half_day_charge = half_day_in_charge + half_day_out_charge
         base_price_after_all_discounts = total + total_extra + total_half_day_charge - self.discount - room_fixed_discount
@@ -1754,6 +1778,8 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             logger.exception(f"خطا در پردازش سیگنال رزرو {instance.tracking_code}: {e}")
 
     transaction.on_commit(_execute_after_commit)
+
+
 
 
 # ==============================================================================
