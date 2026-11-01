@@ -2,6 +2,7 @@ import os
 import environ
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 import sys
 
 env = environ.Env(
@@ -17,43 +18,64 @@ environ.Env.read_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
-DEBUG = True
+# خواندن SECRET_KEY از متغیر محیطی با مقدار پیش‌فرض
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    "django-insecure-t&tg@de!xd4nbb1ci4(hl9#msk=3=^_^w0h((@m1&k=k8axhnu"
+)
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    "safarnameh24.com",
-    "www.safarnameh24.com",
-    "cps.safarnameh24.com",
-    "www.cps.safarnameh24.com",
-    "chatbot.safarnameh24.com",
-    "www.chatbot.safarnameh24.com",
-    "91.107.140.82",
-]
+# خواندن DEBUG از متغیر محیطی داکر (پیش‌فرض True)
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1')
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://safarnameh24.com",
-    "https://safarnameh24.com",
-    "http://www.safarnameh24.com",
-    "https://www.safarnameh24.com",
-    "http://cps.safarnameh24.com",
-    "https://cps.safarnameh24.com",
-    "http://chatbot.safarnameh24.com",
-    "https://chatbot.safarnameh24.com",
-    "http://www.chatbot.safarnameh24.com",
-    "https://www.chatbot.safarnameh24.com",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# خواندن ALLOWED_HOSTS از محیط Docker یا استفاده از لیست پیش‌فرض
+if os.environ.get('ALLOWED_HOSTS'):
+    ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS').split(',')]
+else:
+    ALLOWED_HOSTS = [
+        "localhost",
+        "127.0.0.1",
+        "safarnameh24.com",
+        "www.safarnameh24.com",
+        "cps.safarnameh24.com",
+        "www.cps.safarnameh24.com",
+        "chatbot.safarnameh24.com",
+        "www.chatbot.safarnameh24.com",
+        "addmins.safarnameh24.com",
+        "www.addmins.safarnameh24.com",
+        "91.107.140.82",
+    ]
+
+# خواندن CSRF_TRUSTED_ORIGINS از متغیر محیطی داکر یا استفاده از لیست پیش‌فرض
+if os.environ.get('CSRF_TRUSTED_ORIGINS'):
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get('CSRF_TRUSTED_ORIGINS').split(',')]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://safarnameh24.com",
+        "https://safarnameh24.com",
+        "http://www.safarnameh24.com",
+        "https://www.safarnameh24.com",
+        "http://cps.safarnameh24.com",
+        "https://cps.safarnameh24.com",
+        "http://chatbot.safarnameh24.com",
+        "https://chatbot.safarnameh24.com",
+        "http://www.chatbot.safarnameh24.com",
+        "https://www.chatbot.safarnameh24.com",
+        "http://addmins.safarnameh24.com",
+        "https://addmins.safarnameh24.com",
+        "http://91.107.140.82",
+        "http://91.107.140.82:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 INSTALLED_APPS = [
+    'daphne',  # برای Channels 4 حتماً باید در سطر اول باشد
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -138,7 +160,7 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [("redis" if os.environ.get('REDIS_HOST') else "127.0.0.1", 6379)],
+            "hosts": [(os.environ.get('REDIS_HOST', '127.0.0.1'), int(os.environ.get('REDIS_PORT', 6379)))],
         },
     },
 }
@@ -147,7 +169,7 @@ CHANNEL_LAYERS = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:6379/1",
+        'LOCATION': f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:{os.environ.get('REDIS_PORT', '6379')}/1",
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
@@ -155,32 +177,36 @@ CACHES = {
 }
 
 # تنظیمات Celery
-CELERY_BROKER_URL = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0' if os.environ.get('REDIS_HOST') else 'redis://127.0.0.1:6379/0'
+_REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
+_REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+CELERY_BROKER_URL = f'redis://{_REDIS_HOST}:{_REDIS_PORT}/0'
+CELERY_RESULT_BACKEND = f'redis://{_REDIS_HOST}:{_REDIS_PORT}/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Tehran'
 
-# زمان‌بندی تسک‌های Celery Beat
+# زمان‌بندی تسک‌های Celery Beat (اصلاح‌شده، ایمن و کامل)
 CELERY_BEAT_SCHEDULE = {
     'check-expired-reservations': {
         'task': 'reservation.tasks.check_and_reject_expired_reservations',
-        'schedule': 900.0,
+        'schedule': 900.0,  # هر ۱۵ دقیقه یک‌بار
     },
     'cancel-unpaid-confirmed-reservations': {
         'task': 'setting_payment.views.cancel_unpaid_reservations',
-        'schedule': 300.0,
+        'schedule': 300.0,  # هر ۵ دقیقه یک‌بار
     },
-    # تسک همگام‌سازی خودکار هتل‌های اسنپ‌تریپ هر ۱ دقیقه (۶۰ ثانیه)
-    'auto-sync-snapptrip-hotels-every-minute': {
-        'task': 'reservation.tasks.auto_sync_snapptrip_hotels_task',
-        'schedule': 60.0,
-    },
-    # تسک پیگیری خودکار وضعیت رزروهای معلق و استعلامی اسنپ هر ۲ دقیقه (۱۲۰ ثانیه)
     'check-pending-snapptrip-inquiries': {
         'task': 'reservation.tasks.check_pending_snapptrip_inquiries_task',
-        'schedule': 120.0,
+        'schedule': 120.0,  # هر ۲ دقیقه یک‌بار (استعلام زنده رزروهای مسافران از اسنپ)
+    },
+    'auto-sync-snapptrip-prices-every-2-hours': {
+        'task': 'reservation.tasks.auto_sync_snapptrip_prices_task',
+        'schedule': 7200.0,  # هر ۲ ساعت یک‌بار (بروزرسانی خودکار قیمت و تقویم هتل‌های فعال)
+    },
+    'auto-sync-snapptrip-directory-weekly': {
+        'task': 'reservation.tasks.auto_sync_snapptrip_directory_task',
+        'schedule': crontab(minute=0, hour=3, day_of_week='fri'),  # جمعه‌ها ساعت ۳:۰۰ صبح (بروزرسانی کل بانک اطلاعاتی هتل‌های کشور)
     },
 }
 
@@ -190,7 +216,7 @@ DATABASES = {
         'NAME': env('DB_NAME'),
         'USER': env('DB_USER'),
         'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST') if not os.environ.get('DB_HOST') else os.environ.get('DB_HOST'),
+        'HOST': os.environ.get('DB_HOST') or env('DB_HOST'),
         'PORT': env('DB_PORT'),
     }
 }
@@ -278,6 +304,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.chatbot.safarnameh24.com",
     "http://addmins.safarnameh24.com",
     "https://addmins.safarnameh24.com",
+    "http://91.107.140.82",
+    "http://91.107.140.82:8000",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -382,4 +410,4 @@ ZARINPAL_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json'
 
 # تنظیمات درگاه ایران‌درگاه
 IRANIANGATEWAY_REFERER = 'https://safarnameh24.com'
-APPEND_SLASH = False
+APPEND_SLASH = True

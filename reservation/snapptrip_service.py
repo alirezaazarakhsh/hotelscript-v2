@@ -1,5 +1,6 @@
 import logging
 import random
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -22,37 +23,39 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+# نگاشت کامل شناسه‌های شهری اسنپ‌تریپ
 IRAN_CITIES_MAP = {
-    '1': 'تهران', 'tehran': 'تهران',
-    '2': 'مشهد', 'mashhad': 'مشهد',
-    '3': 'اصفهان', 'isfahan': 'اصفهان',
-    '4': 'شیراز', 'shiraz': 'شیراز',
-    '5': 'تبریز', 'tabriz': 'تبریز',
-    '6': 'کیش', 'kish': 'کیش',
-    '7': 'قشم', 'qeshm': 'قشم',
-    '8': 'یزد', 'yazd': 'یزد',
-    '9': 'رشت', 'rasht': 'رشت',
-    '10': 'ساری', 'sari': 'ساری',
-    '11': 'رامسر', 'ramsar': 'رامسر',
-    '12': 'کرمان', 'kerman': 'کرمان',
-    '13': 'اهواز', 'ahvaz': 'اهواز',
-    '14': 'بندرعباس', 'bandarabbas': 'بندرعباس',
-    '15': 'کرمانشاه', 'kermanshah': 'کرمانشاه',
-    '16': 'همدان', 'hamedan': 'همدان',
-    '17': 'قم', 'qom': 'قم',
-    '18': 'اراک', 'arak': 'اراک',
-    '19': 'زنجان', 'zanjan': 'زنجان',
-    '20': 'سنندج', 'sanandaj': 'سنندج',
-    '21': 'ارومیه', 'urmia': 'ارومیه',
-    '22': 'اردبیل', 'ardabil': 'اردبیل',
-    '23': 'کاشان', 'kashan': 'کاشان',
-    '24': 'گرگان', 'gorgan': 'گرگان',
-    '25': 'چابهار', 'chabahar': 'چابهار',
-    '26': 'بوشهر', 'bushehr': 'بوشهر',
-    '27': 'چالوس', 'chalus': 'چالوس',
-    '28': 'نوشهر', 'noshahr': 'نوشهر',
-    '29': 'لاهیجان', 'lahijan': 'لاهیجان',
-    '30': 'انزلی', 'anzali': 'بندر انزلی',
+    '6208': 'تهران', 'tehran': 'تهران', '1': 'تهران',
+    '6209': 'مشهد', 'mashhad': 'مشهد', '2': 'مشهد',
+    '6216': 'اصفهان', 'isfahan': 'اصفهان', '3': 'اصفهان',
+    '6220': 'شیراز', 'shiraz': 'شیراز', '4': 'شیراز',
+    '6224': 'تبریز', 'tabriz': 'تبریز', '5': 'تبریز',
+    '6225': 'کیش', 'kish': 'کیش', '6': 'کیش',
+    '6234': 'قشم', 'qeshm': 'قشم', '7': 'قشم',
+    '6237': 'یزد', 'yazd': 'یزد', '8': 'یزد',
+    '6260': 'رشت', 'rasht': 'رشت', '9': 'رشت',
+    '6262': 'ساری', 'sari': 'ساری', '10': 'ساری',
+    '6264': 'رامسر', 'ramsar': 'رامسر', '11': 'رامسر',
+    '6269': 'کرمان', 'kerman': 'کرمان', '12': 'کرمان',
+    '6288': 'اهواز', 'ahvaz': 'اهواز', '13': 'اهواز',
+    '6289': 'بندرعباس', 'bandarabbas': 'بندرعباس', '14': 'بندرعباس',
+    '6303': 'کرمانشاه', 'kermanshah': 'کرمانشاه', '15': 'کرمانشاه',
+    '6319': 'همدان', 'hamedan': 'همدان', '16': 'همدان',
+    '6321': 'قم', 'qom': 'قم', '17': 'قم',
+    '6326': 'اراک', 'arak': 'اراک', '18': 'اراک',
+    '6336': 'زنجان', 'zanjan': 'زنجان', '19': 'زنجان',
+    '6341': 'سنندج', 'sanandaj': 'سنندج', '20': 'سنندج',
+    '6349': 'ارومیه', 'urmia': 'ارومیه', '21': 'ارومیه',
+    '6352': 'اردبیل', 'ardabil': 'اردبیل', '22': 'اردبیل',
+    '6363': 'کاشان', 'kashan': 'کاشان', '23': 'کاشان',
+    '6390': 'گرگان', 'gorgan': 'گرگان', '24': 'گرگان',
+    '6433': 'چابهار', 'chabahar': 'چابهار', '25': 'چابهار',
+    '6447': 'بوشهر', 'bushehr': 'بوشهر', '26': 'بوشهر',
+    '6452': 'چالوس', 'chalus': 'چالوس', '27': 'چالوس',
+    '6460': 'نوشهر', 'noshahr': 'نوشهر', '28': 'نوشهر',
+    '6469': 'لاهیجان', 'lahijan': 'لاهیجان', '29': 'لاهیجان',
+    '6497': 'بندر انزلی', 'anzali': 'بندر انزلی', '30': 'انزلی',
+    '6503': 'سرعین', 'sarein': 'سرعین',
 }
 
 BOARD_TYPE_TITLES = {
@@ -60,6 +63,19 @@ BOARD_TYPE_TITLES = {
     'bed_breakfast': 'صبحانه بوفه رایگان',
     'half_board': 'هافبرد (صبحانه + یک وعده غذا)',
     'full_board': 'فولبرد (صبحانه + ناهار + شام)',
+}
+
+PERSIAN_CAPACITY_WORDS = {
+    'یک': 1, 'سینگل': 1, 'تک': 1,
+    'دو': 2, 'دبل': 2, 'توئین': 2,
+    'سه': 3, 'تریپل': 3,
+    'چهار': 4, 'کواد': 4,
+    'پنج': 5,
+    'شش': 6,
+    'هفت': 7,
+    'هشت': 8,
+    'نه': 9,
+    'ده': 10,
 }
 
 
@@ -152,14 +168,100 @@ def extract_room_id(r_item):
 
 
 def extract_room_title(r_item, default_id):
-    """استخراج عنوان اتاق"""
-    if isinstance(r_item.get('room'), dict):
-        r_item = r_item['room']
-    for key in ['title_fa', 'name_fa', 'name', 'title', 'room_name', 'room_title', 'room_type_name']:
+    """استخراج عنوان واقعی اتاق از تمام کلیدها و آبجکت‌های تودرتوی اسنپ"""
+    if not isinstance(r_item, dict):
+        return f"اتاق {default_id}"
+
+    for nested_key in ['room_type', 'room', 'details', 'roomType', 'info']:
+        nested_obj = r_item.get(nested_key)
+        if isinstance(nested_obj, dict):
+            title = extract_room_title(nested_obj, None)
+            if title and not title.startswith("اتاق None") and not title.isdigit():
+                return title
+        elif isinstance(nested_obj, str) and nested_obj.strip() and not nested_obj.strip().isdigit():
+            return nested_obj.strip()
+
+    for key in ['name_fa', 'title_fa', 'room_type_name', 'room_name', 'name', 'title', 'room_title', 'persian_title']:
         val = r_item.get(key)
-        if val and isinstance(val, str) and val.strip():
+        if val and isinstance(val, str) and val.strip() and not val.strip().isdigit():
             return val.strip()
+
     return f"اتاق {default_id}"
+
+
+def extract_room_capacity(r_item, room_title=""):
+    """استخراج دقیق و تضمینی ظرفیت اصلی اتاق (از وب‌سرویس و از روی عنوان)"""
+    candidate_keys = ['capacity', 'room_capacity', 'standard_capacity', 'base_capacity', 'standard_pax', 'pax', 'adults']
+    objects_to_check = [r_item]
+
+    for nested in ['room', 'room_type', 'details', 'roomType', 'info']:
+        if isinstance(r_item.get(nested), dict):
+            objects_to_check.append(r_item[nested])
+
+    found_cap = None
+    for obj in objects_to_check:
+        for k in candidate_keys:
+            val = obj.get(k)
+            if val is not None and str(val).isdigit():
+                v_int = int(val)
+                if v_int > 0:
+                    found_cap = v_int
+                    break
+        if found_cap is not None:
+            break
+
+    title = (room_title or "").strip()
+    inferred_cap = None
+
+    for word, num in PERSIAN_CAPACITY_WORDS.items():
+        if f"{word} تخته" in title or f"{word}تخته" in title or f"{word} نفره" in title or f"{word}نفره" in title:
+            inferred_cap = num
+            break
+
+    if not inferred_cap:
+        m = re.search(r'([0-9۰-۹]+)\s*(?:تخته|نفره)', title)
+        if m:
+            raw_num = m.group(1)
+            fa_to_en = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+            inferred_cap = int(raw_num.translate(fa_to_en))
+
+    if inferred_cap:
+        if found_cap is None or found_cap < inferred_cap:
+            return inferred_cap
+
+    return found_cap or inferred_cap or 2
+
+
+def extract_extra_capacity(r_item, room_title="", has_extra_bed_price=False):
+    """استخراج هوشمند ظرفیت نفر اضافه"""
+    candidate_keys = ['extra_capacity', 'extra_bed_capacity', 'extra_beds', 'extra_pax', 'extra_guest_capacity', 'extra_guests']
+    objects_to_check = [r_item]
+
+    for nested in ['room', 'room_type', 'details', 'roomType', 'info']:
+        if isinstance(r_item.get(nested), dict):
+            objects_to_check.append(r_item[nested])
+
+    for obj in objects_to_check:
+        for k in candidate_keys:
+            val = obj.get(k)
+            if val is not None and str(val).isdigit():
+                v_int = int(val)
+                if v_int > 0:
+                    return v_int
+
+    title = (room_title or "").strip()
+    if "تخت اضافه" in title or "نفر اضافه" in title:
+        m = re.search(r'([0-9۰-۹]+)\s*(?:تخت|نفر)\s*اضافه', title)
+        if m:
+            raw_num = m.group(1)
+            fa_to_en = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+            return int(raw_num.translate(fa_to_en))
+        return 1
+
+    if has_extra_bed_price:
+        return 1
+
+    return 0
 
 
 def extract_room_description(r_item):
@@ -273,7 +375,7 @@ def calculate_customer_club_points(stars_val, price_val):
 # ==============================================================================
 
 def get_snapptrip_booking_status(snapp_reservation_code: str):
-    """استعلام وضعیت رزرو از اسنپ (GET /booking/{code})"""
+    """استعلام وضعیت رزرو از اسنپ (پشتیبانی از هر دو کلید state و status)"""
     base_url, headers = get_snapptrip_client_config()
     url = f"{base_url}/booking/{snapp_reservation_code}"
     try:
@@ -281,7 +383,9 @@ def get_snapptrip_booking_status(snapp_reservation_code: str):
         if res.status_code == 200:
             data = res.json()
             return (
+                data.get('state') or 
                 data.get('status') or 
+                data.get('data', {}).get('state') or 
                 data.get('data', {}).get('status') or 
                 'confirmed'
             ), res.text
@@ -320,10 +424,7 @@ def check_room_realtime_availability(hotel_snapp_id: int, room_snapp_id: int, ch
 
 
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
-    """
-    ثبت پیش‌رزرو در اسنپ‌تریپ (POST /booking/create)
-    طبق صفحه ۲۰ مستندات: قفل کردن اختیاری است و برای جلوگیری از خطا رزرو مستقیم ثبت می‌شود.
-    """
+    """ثبت پیش‌رزرو در اسنپ‌تریپ (POST /booking/create)"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, None, False, "کلید API اسنپ‌تریپ تنظیم نشده است."
@@ -334,22 +435,13 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     checkin_str = check_in_g.strftime('%Y-%m-%d')
     checkout_str = check_out_g.strftime('%Y-%m-%d')
 
-    # ۱. تنظیم شماره موبایل ثابت رزروکننده برای اسنپ‌تریپ
-    user_phone = "09127752353"
-
-    # ۲. استعلام ظرفیت لحظه‌ای قبل از ثبت
-    is_avail, is_instant, pricing, err = check_room_realtime_availability(
-        hotel_snapp_id, room_snapp_id, checkin_str, checkout_str
-    )
-    if not is_avail:
-        return False, None, False, err
-
-    # ۳. مشخصات مسافر اصلی
     buyer = getattr(reservation, 'buyer', None)
+    user_phone = (buyer.phone_number if buyer and getattr(buyer, 'phone_number', None) else "09127752353").strip()
+
     profile = getattr(buyer, 'natural_profile', None) if buyer else None
     default_fn = (getattr(profile, 'first_name', '') if profile else '') or reservation.reserver_first_name or "مسافر"
     default_ln = (getattr(profile, 'last_name', '') if profile else '') or reservation.reserver_last_name or "اصلی"
-    default_nc = (getattr(profile, 'national_code', '') if profile else '') or reservation.reserver_national_code or ""
+    default_nc = (getattr(profile, 'national_code', '') if profile else '') or reservation.reserver_national_code or "0012345679"
 
     guests_payload = []
     first_room = reservation.reservation_rooms.first()
@@ -378,7 +470,6 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
             "gender": "male"
         })
 
-    # ۴. ساختار دقیق rooms برای سرور Go اسنپ
     rooms_payload = []
     for _ in range(quantity):
         rooms_payload.append({
@@ -417,7 +508,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
         if res.status_code not in [200, 201]:
             logger.error(f"Snapp create booking failed: {res.status_code} - {res.text}")
-            return False, None, is_instant, f"خطای ثبت در اسنپ: {res.text[:220]}"
+            return False, None, False, f"خطای ثبت در اسنپ: {res.text[:220]}"
 
         res_data = res.json()
         snapp_code = (
@@ -428,39 +519,82 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
         )
 
         if not snapp_code:
-            return False, None, is_instant, f"کد پیگیری از اسنپ دریافت نشد: {res.text[:180]}"
+            return False, None, False, f"کد پیگیری از اسنپ دریافت نشد: {res.text[:180]}"
 
-        return True, str(snapp_code), is_instant, "پیش‌رزرو با موفقیت در اسنپ ثبت شد."
+        state_val = res_data.get('state') or res_data.get('status') or 'draft'
+        is_instant = state_val not in ['availability_checking', 'availability_pending', 'offline']
+
+        return True, str(snapp_code), is_instant, state_val
 
     except Exception as e:
         logger.error(f"Error creating booking in Snapp: {e}")
-        return False, None, is_instant, f"خطای ارتباط با سرور اسنپ: {str(e)}"
+        return False, None, False, f"خطای ارتباط با سرور اسنپ: {str(e)}"
 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
-    """تأیید نهایی رزرو پس از پرداخت مسافر"""
+    """
+    تأیید نهایی رزرو پس از پرداخت مسافر (POST /booking/{code}/confirm)
+    ایمن در برابر خطای طول فیلد و ارور ۵۰۰ در دیتابیس
+    """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "failed", "کلید API اسنپ‌تریپ تنظیم نشده است."
 
-    confirm_url = f"{base_url}/booking/{snapp_reservation_code}/confirm"
+    code_str = str(snapp_reservation_code).strip()
+    confirm_url = f"{base_url}/booking/{code_str}/confirm"
     try:
         res = requests.post(confirm_url, json={}, headers=headers, timeout=20)
         
         if res.status_code not in [200, 201]:
             err_msg = res.text[:120]
-            logger.error(f"Confirm failed on Snapp: {res.status_code} - {res.text}")
-            return False, f"failed: {err_msg}", f"خطای تأیید در اسنپ: {err_msg}"
+            logger.error(f"Confirm failed on Snapp ({code_str}): {res.status_code} - {res.text}")
+            return False, "failed", f"خطای تأیید در اسنپ: {err_msg}"
 
-        final_status, _ = get_snapptrip_booking_status(snapp_reservation_code)
-        return True, final_status, "رزرو با موفقیت در اسنپ قطعی شد."
+        final_status, _ = get_snapptrip_booking_status(code_str)
+        real_status = "confirmed" if final_status in ['confirmed', 'unknown', ''] else final_status
+        return True, real_status[:30], "رزرو با موفقیت در اسنپ قطعی شد."
     except Exception as e:
-        logger.error(f"Error confirming booking {snapp_reservation_code}: {e}")
-        return False, f"failed: {str(e)[:50]}", f"خطای ارتباط با اسنپ: {str(e)}"
+        logger.error(f"Error confirming booking {code_str}: {e}")
+        return False, "failed", f"خطای ارتباط با اسنپ: {str(e)[:50]}"
+
+
+def auto_confirm_snapp_reservation_if_charged(reservation):
+    """
+    بررسی خودکار و هوشمند کیف پول اسنپ بعد از پرداخت مسافر:
+    - اگر کیف پول اسنپ شارژ داشت، رزرو را در اسنپ قطعی می‌کند.
+    - اگر شارژ نداشت، وضعیت به 'insufficient_credit' تغییر می‌کند تا ادمین متوجه شود.
+    """
+    if not reservation.is_snapptrip_reservation or not reservation.snapp_reservation_code:
+        return False, "رزرو اسنپی نیست."
+
+    snapp_balance, b_msg = get_snapptrip_wallet_balance()
+    required_price = int(reservation.final_price or reservation.total_price or 0)
+
+    logger.info(f"🔍 بررسی خودکار اسنپ: موجودی کیف‌پول={snapp_balance:,} | مبلغ مورد نیاز={required_price:,} | رزرو={reservation.tracking_code}")
+
+    if snapp_balance < required_price:
+        logger.warning(f"⚠️ کیف پول اسنپ شارژ کافی ندارد ({snapp_balance:,} تومان). وضعیت به insufficient_credit تغییر کرد.")
+        reservation.snapp_status = 'insufficient_credit'
+        reservation.save(update_fields=['snapp_status'])
+        return False, f"کیف‌پول اسنپ شارژ ندارد (موجودی: {snapp_balance:,} تومان)"
+
+    success, final_stat, msg = confirm_snapptrip_booking(reservation.snapp_reservation_code)
+    
+    if success:
+        reservation.snapp_status = str(final_stat)[:30]
+        logger.info(f"✅ رزرو {reservation.snapp_reservation_code} در اسنپ با موفقیت قطعی شد.")
+    else:
+        if "insufficient credit" in msg.lower():
+            reservation.snapp_status = 'insufficient_credit'
+        else:
+            reservation.snapp_status = 'failed'
+
+    reservation.save(update_fields=['snapp_status'])
+    return success, msg
 
 
 # ==============================================================================
-# بخش ۲: همگام‌سازی اتاق‌ها، قوانین و نرخ‌های تقویم هتل
+# بخش ۲: همگام‌سازی اتاق‌ها با ظرفیت دقیق نفرات اصلی و اضافه
 # ==============================================================================
 
 def sync_hotel_and_rooms_from_snapp(hotel_id: int):
@@ -572,8 +706,22 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         synced_snapp_room_ids.append(snapp_room_id)
         room_title = extract_room_title(r_item, snapp_room_id)
         room_desc = extract_room_description(r_item)
-        room_cap = int(r_item.get('capacity') or r_item.get('room_capacity') or r_item.get('standard_capacity') or 2)
-        extra_cap = int(r_item.get('extra_capacity') or r_item.get('extra_bed_capacity') or 0)
+
+        pricing = r_item.get('pricing') if isinstance(r_item.get('pricing'), dict) else {}
+        base_client_sell_price = 0
+        base_agency_buy_price = 0
+        base_extra_bed_price = 0
+
+        if pricing:
+            p_price = int(Decimal(str(pricing.get('price') or 0)))
+            p_orig = int(Decimal(str(pricing.get('original_sell_price') or 0)))
+            base_client_sell_price = p_orig if p_orig > 0 else p_price
+            base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
+            base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
+
+        room_cap = extract_room_capacity(r_item, room_title)
+        extra_cap = extract_extra_capacity(r_item, room_title, has_extra_bed_price=(base_extra_bed_price > 0))
+
         inv_count = 100
         board_type = r_item.get('board_type', 'bed_breakfast')
 
@@ -617,18 +765,6 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         service_title = BOARD_TYPE_TITLES.get(board_type, 'همراه با صبحانه رایگان')
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
-
-        pricing = r_item.get('pricing') if isinstance(r_item.get('pricing'), dict) else {}
-        base_client_sell_price = 0
-        base_agency_buy_price = 0
-        base_extra_bed_price = 0
-
-        if pricing:
-            p_price = int(Decimal(str(pricing.get('price') or 0)))
-            p_orig = int(Decimal(str(pricing.get('original_sell_price') or 0)))
-            base_client_sell_price = p_orig if p_orig > 0 else p_price
-            base_agency_buy_price = p_price if p_price > 0 else base_client_sell_price
-            base_extra_bed_price = int(Decimal(str(pricing.get('extra_bed_price') or pricing.get('extra_passenger_price') or 0)))
 
         cal_candidate_urls = [
             f"{base_url}/availability/hotels/{snapp_h_id}/room/{snapp_room_id}/calendar?from={calendar_from_str}&to={calendar_to_str}",
@@ -736,46 +872,41 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
             except Exception as e:
                 logger.error(f"Error fetching calendar for room {snapp_room_id}: {e}")
 
-        if not room_calendar_synced and base_client_sell_price > 0:
-            RoomDatePrice.objects.update_or_create(
+        # =====================================================================
+        # اصلاح کلیدی: جلوگیری از ثبت بازه ۳۰ روزه در صورت وجود تقویم روزانه
+        # =====================================================================
+        if room_calendar_synced:
+            # پاک‌سازی خودکار بازه چندروزه قدیمی که از سینک‌های قبل مانده بود و تداخل ایجاد می‌کرد
+            RoomDatePrice.objects.filter(
                 room=room,
                 start_date=today_j,
-                end_date=today_j,
-                user_level=None,
-                defaults={
-                    'purchase_price': base_agency_buy_price,
-                    'price': base_client_sell_price,
-                    'extra_passenger_price': base_extra_bed_price,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                    'is_fixed_discount_one_time': False,
-                }
-            )
-            synced_prices_count += 1
+                end_date=end_30_days_j
+            ).delete()
+        else:
+            # اگر تقویم روزانه نیامد، به عنوان فال‌بک از نرخ پایه برای ۳۰ روز استفاده کن
+            final_base_price = first_valid_client_price or base_client_sell_price
+            final_agency_price = first_valid_agency_price or base_agency_buy_price
+            final_extra = first_valid_extra or base_extra_bed_price
 
-        final_base_price = first_valid_client_price or base_client_sell_price
-        final_agency_price = first_valid_agency_price or base_agency_buy_price
-        final_extra = first_valid_extra or base_extra_bed_price
+            if final_base_price > 0:
+                RoomDatePrice.objects.update_or_create(
+                    room=room,
+                    start_date=today_j,
+                    end_date=end_30_days_j,
+                    user_level=None,
+                    defaults={
+                        'purchase_price': final_agency_price,
+                        'price': final_base_price,
+                        'extra_passenger_price': final_extra,
+                        'discount_type': 'none',
+                        'discount_value': 0,
+                        'discount_date': None,
+                        'is_fixed_discount_one_time': False,
+                    }
+                )
+                synced_prices_count += 1
 
-        if final_base_price > 0:
-            RoomDatePrice.objects.update_or_create(
-                room=room,
-                start_date=today_j,
-                end_date=end_30_days_j,
-                user_level=None,
-                defaults={
-                    'purchase_price': final_agency_price,
-                    'price': final_base_price,
-                    'extra_passenger_price': final_extra,
-                    'discount_type': 'none',
-                    'discount_value': 0,
-                    'discount_date': None,
-                    'is_fixed_discount_one_time': False,
-                }
-            )
-
-        club_points = calculate_customer_club_points(hotel.stars, final_base_price)
+        club_points = calculate_customer_club_points(hotel.stars, first_valid_client_price or base_client_sell_price)
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 
@@ -792,10 +923,11 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
     if synced_rooms_count == 0:
         return False, f"تعداد {len(rooms_list)} آیتم اتاق از اسنپ دریافت شد اما شناسه‌های آن‌ها خوانده نشد!"
 
-    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با قیمت دقیق اسنپ ثبت شدند."
+    return True, f"هماهنگ‌سازی هتل {hotel.name} با موفقیت انجام شد: {synced_rooms_count} اتاق با مشخصات و ظرفیت دقیق ثبت شدند."
 
 
 def sync_all_snapptrip_hotels_directory():
+    """همگام‌سازی کامل بانک هتل‌های اسنپ‌تریپ"""
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
         return False, "کلید API اسنپ‌تریپ در تنظیمات وارد نشده است!"
@@ -817,19 +949,19 @@ def sync_all_snapptrip_hotels_directory():
     all_hotel_objects = []
 
     for city in cities_list:
-        city_id = city.get('id') or city.get('city_id') or city.get('code')
+        city_id = str(city.get('id') or city.get('city_id') or city.get('code') or '').strip()
         if not city_id:
             continue
 
         raw_city_name = ""
-        for k in ['name_fa', 'title_fa', 'persian_name', 'name', 'title', 'city_name', 'city']:
+        for k in ['title_fa', 'name_fa', 'persian_name', 'title', 'name', 'city_name', 'city', 'slug']:
             val = city.get(k)
-            if val and isinstance(val, str) and not val.isdigit():
+            if val and isinstance(val, str) and not val.strip().isdigit():
                 raw_city_name = val.strip()
                 break
 
-        pure_name = IRAN_CITIES_MAP.get(str(raw_city_name).lower()) or IRAN_CITIES_MAP.get(str(city_id)) or raw_city_name
-        formatted_city = f"{city_id} - {pure_name}" if pure_name else f"{city_id}"
+        pure_name = IRAN_CITIES_MAP.get(city_id) or IRAN_CITIES_MAP.get(str(raw_city_name).lower()) or raw_city_name
+        formatted_city = f"{city_id} - {pure_name}" if pure_name and pure_name != city_id else f"{city_id}"
 
         offset = 0
         limit = 100
@@ -853,7 +985,7 @@ def sync_all_snapptrip_hotels_directory():
                     h_id = h.get('id') or h.get('hotel_id') or h.get('code')
                     if not h_id:
                         continue
-                    h_name = h.get('name_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
+                    h_name = h.get('name_fa') or h.get('title_fa') or h.get('name') or h.get('title') or f"هتل {h_id}"
                     stars = extract_stars_comprehensive(h)
 
                     all_hotel_objects.append(SnappHotelDirectory(
@@ -870,9 +1002,9 @@ def sync_all_snapptrip_hotels_directory():
             else:
                 break
 
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     if not all_hotel_objects:
         return False, "هیچ هتلی از وب‌سرویس اسنپ استخراج نشد."
