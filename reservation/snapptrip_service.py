@@ -8,6 +8,7 @@ from decimal import Decimal
 import requests
 import jdatetime
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Q
 from .models import (
     Hotel,
@@ -99,19 +100,29 @@ def get_snapptrip_client_config():
 
 def get_snapptrip_wallet_balance():
     """
-    استعلام موجودی کیف پول B2B در اسنپ‌تریپ (GET /balance/)
-    خروجی به صورت خودکار از ریال به «تومان» تبدیل می‌شود (تقسیم بر ۱۰).
+    استعلام موجودی کیف پول B2B در اسنپ‌تریپ با کش ۱ دقیقه‌ای
+    - خروجی به صورت خودکار از ریال به «تومان» تبدیل می‌شود (تقسیم بر ۱۰).
+    - استفاده از Cache از ارسال درخواست‌های تکراری و ایجاد خطای ۴۲۹ جلوگیری می‌کند.
     """
+    cache_key = "snapptrip_wallet_balance_toman"
+    cached_balance = cache.get(cache_key)
+    if cached_balance is not None:
+        return cached_balance, "موفق"
+
     base_url, headers = get_snapptrip_client_config()
     try:
-        res = requests.get(f"{base_url}/balance/", headers=headers, timeout=12)
+        res = requests.get(f"{base_url}/balance/", headers=headers, timeout=10)
         if res.status_code == 200:
             data = res.json()
             raw_balance = data.get('balance', 0)
             # تبدیل ریال به تومان
             balance_toman = int(Decimal(str(raw_balance or 0))) // 10
+            # ذخیره در کش به مدت ۶۰ ثانیه
+            cache.set(cache_key, balance_toman, timeout=60)
             return balance_toman, "موفق"
-        return 0, f"کد {res.status_code}: {res.text[:100]}"
+        elif res.status_code == 429:
+            return 0, "محدودیت موقت اسنپ (سقف درخواست پر شد - ۲ دقیقه صبر کنید)"
+        return 0, f"کد {res.status_code}: {res.text[:80]}"
     except Exception as e:
         return 0, str(e)
 
