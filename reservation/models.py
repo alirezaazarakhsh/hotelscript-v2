@@ -1163,9 +1163,9 @@ def validate_phone_number(value):
 
 
 def validate_identification_code(value):
-    """اعتبارسنجی دوگانه: کد ملی ۱۰ رقمی یا شماره پاسپورت معتبر"""
-    if not value:
-        raise ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
+    """اعتبارسنجی دوگانه (اختیاری): اگر مقداری وارد شود اعتبارسنجی می‌شود، در غیر این صورت مجاز است"""
+    if not value or not str(value).strip():
+        return value
     
     clean_val = str(value).strip()
 
@@ -1175,7 +1175,6 @@ def validate_identification_code(value):
         total = sum(int(clean_val[i]) * (10 - i) for i in range(9)) % 11
         remainder = total % 11
 
-        # کدهای ملی با ارقام تکراری ساختگی نامعتبر هستند
         if len(set(clean_val)) == 1:
             raise ValidationError(_('کد ملی وارد شده معتبر نیست.'))
 
@@ -1189,6 +1188,7 @@ def validate_identification_code(value):
         return clean_val.upper()
 
     raise ValidationError(_('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت ۶ تا ۹ کاراکتر باشد.'))
+
 
 
 class Passenger(models.Model):
@@ -1946,7 +1946,7 @@ class ReservationRoom(models.Model):
 
 
 # ==============================================================================
-# مدل کامل مسافران اتاق (ReservationRoomPassenger) - بدون تابع تکراری
+# مدل کامل مسافران اتاق (تمام فیلدها اختیاری - بدون ایجاد خطا در ثبت)
 # ==============================================================================
 class ReservationRoomPassenger(models.Model):
     PASSENGER_TYPE_CHOICES = [
@@ -1966,12 +1966,33 @@ class ReservationRoomPassenger(models.Model):
         choices=PASSENGER_TYPE_CHOICES,
         verbose_name=_('نوع مسافر')
     )
-    is_primary = models.BooleanField(default=False, verbose_name=_('مسافر اصلی است؟'))
-    first_name = models.CharField(_('نام'), max_length=100)
-    last_name = models.CharField(_('نام خانوادگی'), max_length=100)
-    mobile_number = models.CharField(_('شماره موبایل'), max_length=11, blank=True, null=True)
+    is_primary = models.BooleanField(
+        default=False, 
+        verbose_name=_('مسافر اصلی است؟')
+    )
+    first_name = models.CharField(
+        verbose_name=_('نام'), 
+        max_length=100, 
+        blank=True, 
+        null=True,
+        default=''
+    )
+    last_name = models.CharField(
+        verbose_name=_('نام خانوادگی'), 
+        max_length=100, 
+        blank=True, 
+        null=True,
+        default=''
+    )
+    mobile_number = models.CharField(
+        verbose_name=_('شماره موبایل'), 
+        max_length=11, 
+        blank=True, 
+        null=True,
+        default=''
+    )
     national_code = models.CharField(
-        _('کد شناسایی (کد ملی / پاسپورت)'), 
+        verbose_name=_('کد شناسایی (کد ملی / پاسپورت)'), 
         max_length=12, 
         blank=True, 
         null=True, 
@@ -1983,15 +2004,9 @@ class ReservationRoomPassenger(models.Model):
         verbose_name_plural = _('مسافرها')
 
     def clean(self):
-        if self.passenger_type == 'primary':
-            missing_fields = []
-            for field_name in ['first_name', 'last_name']:
-                if not getattr(self, field_name):
-                    missing_fields.append(field_name)
-            if missing_fields:
-                raise ValidationError(f'برای مسافر اصلی، فیلدهای {missing_fields} الزامی هستند.')
-
-        if self.national_code:
+        # شرط الزامی بودن نام مسافر اصلی حذف شد تا کاملاً اختیاری باشد
+        # فقط در صورتی که کد ملی یا پاسپورت پر شده باشد، صحت آن بررسی می‌شود
+        if self.national_code and str(self.national_code).strip():
             validate_identification_code(self.national_code)
 
     def save(self, *args, **kwargs):
@@ -2004,7 +2019,10 @@ class ReservationRoomPassenger(models.Model):
                 self.reservation_room.reservation.save()
 
     def __str__(self):
-        return f'{self.first_name} {self.last_name} ({self.get_passenger_type_display()})'
+        full_name = f"{self.first_name or ''} {self.last_name or ''}".strip()
+        display_name = full_name if full_name else "مسافر بدون مشخصات"
+        return f"{display_name} ({self.get_passenger_type_display()})"
+    
     
     
 
