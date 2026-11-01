@@ -48,7 +48,7 @@ class Command(BaseCommand):
         )
         
         # Generate provisioning URI with issuer and account name, using base32 secret for iOS compatibility
-        issuer = "zarvantrip.com"
+        issuer = "safarnameh24.com"
         account = phone_number
         # device.bin_key is the raw key, must be base32 encoded for QR
         secret = base64.b32encode(device.bin_key).decode('utf-8').replace('=', '')
