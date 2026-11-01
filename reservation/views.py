@@ -328,6 +328,8 @@ def validate_national_code(value):
     raise ValidationError('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت ۶ تا ۹ کاراکتر باشد.')
 
 
+
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -339,7 +341,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         """محاسبه مقدار تخفیف و قیمت پس از تخفیف"""
         if not price_data:
             return 0, None, None, None, fixed_discount_applied
-            
+
         discount_amount = 0
         price_after_discount = price_data.price
         discount_percentage = None
@@ -366,6 +368,58 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 price_after_discount = int(max(price_data.price - discount_amount, 0))
 
         return discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied
+
+    def _get_snapp_available_room_ids(self, hotel, checkin_g, checkout_g):
+        """
+        یک بار از اسنپ لیست اتاق‌های واقعاً موجود را می‌گیرد.
+        در صورت خطا یا نبود کلید، None برمی‌گرداند تا به منطق محلی برگردیم.
+        """
+        if not hotel.is_snapptrip or not hotel.snapptrip_hotel_id:
+            return None
+
+        try:
+            from reservation.snapptrip_service import (
+                get_snapptrip_client_config,
+                extract_list_from_response,
+                extract_room_id,
+            )
+            import requests
+
+            base_url, headers = get_snapptrip_client_config()
+            if not headers.get('api-key'):
+                logger.warning("کلید API اسنپ تنظیم نشده – فیلتر موجودی اسنپ اعمال نشد.")
+                return None
+
+            checkin_str = checkin_g.strftime('%Y-%m-%d')
+            checkout_str = checkout_g.strftime('%Y-%m-%d')
+            url = f"{base_url}/availability/hotels/{hotel.snapptrip_hotel_id}?checkin={checkin_str}&checkout={checkout_str}"
+
+            res = requests.get(url, headers=headers, timeout=12)
+            if res.status_code == 429:
+                logger.warning("Rate limit اسنپ (429) – فیلتر موجودی اسنپ موقتاً غیرفعال شد.")
+                return None
+            if res.status_code != 200:
+                logger.warning(f"خطا در استعلام موجودی اسنپ: {res.status_code}")
+                return None
+
+            data = res.json()
+            rooms = extract_list_from_response(data)
+
+            available_ids = set()
+            for r in rooms:
+                rid = extract_room_id(r)
+                if rid is not None:
+                    try:
+                        available_ids.add(int(rid))
+                    except (ValueError, TypeError):
+                        pass
+
+            logger.info(f"اسنپ برای هتل {hotel.snapptrip_hotel_id} تعداد {len(available_ids)} اتاق موجود برگرداند.")
+            return available_ids
+
+        except Exception as e:
+            logger.error(f"خطا در چک زنده موجودی اسنپ: {e}")
+            return None
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست اتاق‌های هتل به همراه قیمت و تقویم قیمتی",
@@ -415,6 +469,14 @@ class HotelRoomsView(generics.RetrieveAPIView):
         except Exception:
             return Response({'detail': 'فرمت تاریخ باید yyyy-mm-dd باشد.'}, status=400)
 
+        # تبدیل تاریخ جلالی به میلادی برای اسنپ
+        try:
+            checkin_g = start_date_obj.togregorian()
+            checkout_g = end_date_obj.togregorian()
+        except Exception:
+            checkin_g = start_date_obj
+            checkout_g = end_date_obj
+
         persian_days = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
         persian_months = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
 
@@ -428,14 +490,33 @@ class HotelRoomsView(generics.RetrieveAPIView):
             except NaturalProfile.DoesNotExist:
                 pass
 
-        # تمام اتاق‌های فعال دارای موجودی
+        # ---------- فیلتر اولیه موجودی محلی ----------
         active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
+
+        # ---------- چک زنده موجودی اسنپ (فقط برای هتل‌های اسنپ) ----------
+        snapp_available_ids = self._get_snapp_available_room_ids(hotel, checkin_g, checkout_g)
+
+        if snapp_available_ids is not None:
+            # فقط اتاق‌هایی که هم موجودی محلی دارند و هم در اسنپ واقعاً موجودند
+            active_rooms = active_rooms.filter(
+                is_snapptrip=True,
+                snapptrip_room_id__in=snapp_available_ids
+            )
+            # اتاق‌های غیر اسنپ این هتل (اگر وجود داشته باشند) همچنان با منطق محلی باقی می‌مانند
+            non_snapp_rooms = hotel.rooms.filter(inventory__gt=0, is_snapptrip=False)
+            active_rooms = (active_rooms | non_snapp_rooms).distinct()
 
         if not active_rooms.exists():
             return Response({
-                'detail': 'هیچ اتاقی برای این هتل موجود نیست.',
+                'detail': 'هیچ اتاقی برای این هتل در بازه انتخابی موجود نیست.',
                 'rooms': [],
-                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range((end_date_obj - start_date_obj).days)]
+                'price_calendar': [
+                    {
+                        "date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'),
+                        "status": "close"
+                    }
+                    for i in range((end_date_obj - start_date_obj).days)
+                ]
             }, status=200)
 
         rooms_qs = active_rooms.prefetch_related('date_prices', 'services').select_related('hotel')
@@ -450,26 +531,20 @@ class HotelRoomsView(generics.RetrieveAPIView):
             fixed_discount_applied = False
 
             for date in date_range:
-                # ==============================================================
-                # اصلاح کلیدی: اولویت اول قطعی با قیمت دقیق تک‌روزه همان روز
-                # ==============================================================
                 price_data = None
                 price_data_qs = room.date_prices.filter(
                     start_date__lte=date,
                     end_date__gte=date
                 )
 
-                # اگر رکورد تک‌روزه مختص به همان تاریخ وجود دارد، حتماً همان انتخاب شود
                 exact_day_prices = price_data_qs.filter(start_date=date, end_date=date)
                 target_qs = exact_day_prices if exact_day_prices.exists() else price_data_qs
 
-                # ۱. اولویت سطح کاربری
                 if user_level:
                     level_prices = target_qs.filter(user_level=user_level)
                     if level_prices.exists():
                         price_data = level_prices.order_by('-id').first()
-                
-                # ۲. اولویت قیمت عمومی
+
                 if not price_data:
                     public_prices = target_qs.filter(user_level__isnull=True)
                     if public_prices.exists():
@@ -479,7 +554,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 status = "open" if price_data and not closed_date else "close"
 
                 try:
-                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = self.calculate_discount(price_data, date, fixed_discount_applied)
+                    discount_amount, price_after_discount, discount_percentage, discount_date, fixed_discount_applied = \
+                        self.calculate_discount(price_data, date, fixed_discount_applied)
                 except ValueError as e:
                     return Response({'detail': str(e)}, status=400)
 
@@ -500,15 +576,12 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     } if status == "open" else None
                 })
 
-            # ==============================================================
-            # اصلاح کلیدی first_price_data: اولویت دقیق با روز شروع رزرو
-            # ==============================================================
+            # قیمت شب اول
             first_price_data = None
             first_price_data_qs = room.date_prices.filter(
                 start_date__lte=start_date_obj,
                 end_date__gte=start_date_obj
             )
-
             exact_first_prices = first_price_data_qs.filter(start_date=start_date_obj, end_date=start_date_obj)
             target_first_qs = exact_first_prices if exact_first_prices.exists() else first_price_data_qs
 
@@ -523,11 +596,11 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     first_price_data = public_prices.order_by('-id').first()
 
             try:
-                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = self.calculate_discount(first_price_data, start_date_obj, False)
+                discount_amount, price_after_discount_first, discount_percentage_first, discount_date_first, _ = \
+                    self.calculate_discount(first_price_data, start_date_obj, False)
             except ValueError as e:
                 return Response({'detail': str(e)}, status=400)
 
-            # جمع مبالغ تمام شب‌های بازه انتخابی
             total_price = sum(
                 day['price']['price'] for day in price_calendar
                 if day['status'] == "open" and day['price'] and day['price']['price'] is not None
@@ -580,26 +653,38 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # حالت تک‌اتاق با تعداد مسافر مشخص
         if len(passengers_list) == 1:
             required_capacity = passengers_list[0]
-            filtered_rooms = [r for r in room_data if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']]
+            filtered_rooms = [
+                r for r in room_data
+                if r['capacity'] <= required_capacity <= r['capacity'] + r['extra_capacity']
+            ]
             if not filtered_rooms:
                 return Response({
                     'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.',
                     'rooms': [],
-                    'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
+                    'price_calendar': [
+                        {
+                            "date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'),
+                            "status": "close"
+                        }
+                        for i in range(night_count)
+                    ]
                 }, status=200)
 
             for room in filtered_rooms:
                 room['selected_passenger'] = required_capacity
-            
+
             filtered_rooms.sort(key=lambda x: x['price']['total_price_discount'] or float('inf'))
             return Response(filtered_rooms)
 
-        # حالت بسته‌های چنداتاقه (Pack rooms)
+        # حالت بسته‌های چنداتاقه
         packs = []
         passengers_list.sort()
         room_candidates = {}
         for p in set(passengers_list):
-            room_candidates[p] = [r for r in room_data if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0]
+            room_candidates[p] = [
+                r for r in room_data
+                if r['capacity'] <= p <= r['capacity'] + r['extra_capacity'] and r['room_number'] > 0
+            ]
 
         def generate_packs(current_pack, remaining_groups, used_rooms):
             if not remaining_groups:
@@ -633,7 +718,13 @@ class HotelRoomsView(generics.RetrieveAPIView):
             return Response({
                 'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.',
                 'packs': [],
-                'price_calendar': [{"date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'), "status": "close"} for i in range(night_count)]
+                'price_calendar': [
+                    {
+                        "date": (start_date_obj + jdatetime.timedelta(days=i)).strftime('%Y/%m/%d'),
+                        "status": "close"
+                    }
+                    for i in range(night_count)
+                ]
             }, status=200)
 
         seen = set()
@@ -646,6 +737,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
 
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
+
     
 
 
@@ -3229,8 +3321,9 @@ def _send_telegram_notification_background(tracking_code, buyer_name, hotel_name
 
 
 
+
 # ==============================================================================
-# ۳. API ایجاد رزرو موقت (ReservationCreateAPIView)
+# ۳. API ایجاد رزرو موقت (ReservationCreateAPIView) - نسخه نهایی با خطاهای استاندارد
 # ==============================================================================
 class ReservationCreateAPIView(generics.CreateAPIView):
     serializer_class = ReservationCreateSerializer
@@ -3239,7 +3332,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        from reservation.snapptrip_service import create_snapptrip_booking
+        from reservation.snapptrip_service import (
+            create_snapptrip_booking,
+            check_room_realtime_availability,
+        )
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -3262,15 +3358,36 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 return jdatetime.date.fromgregorian(date=value)
             elif isinstance(value, jdatetime.date):
                 return value
-            raise ValidationError(f"فرمت تاریخ نامعتبر است: {value}")
+            raise ValidationError({
+                "detail": f"فرمت تاریخ نامعتبر است: {value}",
+                "code": "invalid_date_format"
+            })
 
         check_in_date = parse_jdate(data['date']['enter'])
         check_out_date = parse_jdate(data['date']['exit'])
 
         if check_in_date < jdatetime.date.today():
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+            raise ValidationError({
+                "detail": "تاریخ ورود نمی‌تواند قبل از امروز باشد.",
+                "code": "invalid_checkin_date"
+            })
+
         if check_out_date <= check_in_date:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+            raise ValidationError({
+                "detail": "تاریخ خروج باید حداقل یک روز بعد از تاریخ ورود باشد.",
+                "code": "invalid_checkout_date"
+            })
+
+        # تبدیل تاریخ جلالی به میلادی برای اسنپ
+        try:
+            checkin_g = check_in_date.togregorian()
+            checkout_g = check_out_date.togregorian()
+        except Exception:
+            checkin_g = check_in_date
+            checkout_g = check_out_date
+
+        checkin_str = checkin_g.strftime('%Y-%m-%d')
+        checkout_str = checkout_g.strftime('%Y-%m-%d')
 
         is_logged_in = bool(request.user and request.user.is_authenticated)
         current_buyer = request.user if is_logged_in else None
@@ -3284,6 +3401,65 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             'reserver_phone_number': user_phone
         }
 
+        hotel_id = data.get('hotel_id')
+        room_id = data.get('room_id')
+        quantity = int(data.get('room_number', 1))
+
+        # ---------- ۱. پیدا کردن اتاق با قفل ----------
+        try:
+            room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
+        except Room.DoesNotExist:
+            raise ValidationError({
+                "detail": "اتاق یا هتل مورد نظر یافت نشد.",
+                "code": "room_not_found"
+            })
+
+        # ---------- ۲. چک ظرفیت محلی ----------
+        auto_approval = False
+        if room.auto_approved_count >= quantity:
+            auto_approval = True
+        elif room.count >= quantity:
+            auto_approval = False
+        else:
+            raise ValidationError({
+                "detail": f"ظرفیت کافی برای اتاق «{room.title}» در حال حاضر موجود نیست.",
+                "code": "insufficient_local_inventory"
+            })
+
+        # ---------- ۳. چک زنده موجودی اسنپ (قبل از هر چیزی) ----------
+        is_snapp_room = (
+            room.is_snapptrip
+            and room.snapptrip_room_id
+            and room.hotel
+            and room.hotel.snapptrip_hotel_id
+        )
+
+        snapp_pricing = {}
+        if is_snapp_room:
+            available, is_instant, pricing, msg = check_room_realtime_availability(
+                hotel_snapp_id=room.hotel.snapptrip_hotel_id,
+                room_snapp_id=room.snapptrip_room_id,
+                checkin_str=checkin_str,
+                checkout_str=checkout_str,
+            )
+
+            if not available:
+                if msg and ("ظرفیت" in msg or "موجود" in msg or "خالی" in msg):
+                    error_msg = msg
+                elif msg and ("خطا" in msg or "ارتباط" in msg or "سرور" in msg or "کلید" in msg):
+                    error_msg = "در حال حاضر امکان بررسی موجودی اتاق وجود ندارد. لطفاً چند لحظه دیگر دوباره تلاش کنید."
+                else:
+                    error_msg = "این اتاق در بازه تاریخی انتخاب‌شده ظرفیت خالی ندارد. لطفاً تاریخ دیگری انتخاب کنید یا اتاق دیگری را بررسی نمایید."
+
+                raise ValidationError({
+                    "detail": error_msg,
+                    "code": "no_availability"
+                })
+
+            auto_approval = is_instant
+            snapp_pricing = pricing or {}
+
+        # ---------- ۴. ساخت رزرو محلی (فقط بعد از اطمینان از موجودی) ----------
         reservation = Reservationhotel.objects.create(
             tracking_code=tracking_code,
             check_in_date=check_in_date,
@@ -3294,25 +3470,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             **reserver_data
         )
 
-        hotel_id = data.get('hotel_id')
-        room_id = data.get('room_id')
-        quantity = int(data.get('room_number', 1))
         nights = reservation.nights_count or 1
 
-        try:
-            room = Room.objects.select_for_update().get(id=room_id, hotel_id=hotel_id)
-        except Room.DoesNotExist:
-            raise ValidationError("اتاق یا هتل مورد نظر یافت نشد.")
-
-        auto_approval = False
-        if room.auto_approved_count >= quantity:
-            auto_approval = True
-        elif room.count >= quantity:
-            auto_approval = False
-        else:
-            raise ValidationError(f"ظرفیت کافی برای اتاق «{room.title}» در دیتابیس موجود نیست.")
-
-        if room.is_snapptrip and room.snapptrip_room_id and room.hotel.snapptrip_hotel_id:
+        # ---------- ۵. ثبت در اسنپ (اگر اتاق اسنپی باشد) ----------
+        if is_snapp_room:
             success_snapp, snapp_code, is_instant_snapp, snapp_stat = create_snapptrip_booking(
                 reservation=reservation,
                 room_snapp_id=room.snapptrip_room_id,
@@ -3320,7 +3481,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
                 quantity=quantity
             )
             if not success_snapp:
-                raise ValidationError(f"خطای وب‌سرویس اسنپ‌تریپ: {snapp_stat}")
+                raise ValidationError({
+                    "detail": f"ثبت رزرو در سیستم اسنپ‌تریپ با مشکل مواجه شد: {snapp_stat}",
+                    "code": "snapp_booking_failed"
+                })
 
             reservation.is_snapptrip_reservation = True
             reservation.snapp_reservation_code = snapp_code
@@ -3331,8 +3495,10 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             reservation.snapp_reservation_code = None
             reservation.snapp_status = None
 
+        # ---------- ۶. کسر موجودی محلی ----------
         room.adjust_inventory_for_reservation(quantity, auto_approval)
 
+        # ---------- ۷. محاسبه قیمت ----------
         user_level = getattr(profile, 'level', None) if profile else None
         price_qs = room.date_prices.filter(start_date__lte=check_in_date, end_date__gte=check_in_date)
         exact_day_qs = price_qs.filter(start_date=check_in_date, end_date=check_in_date)
@@ -3344,6 +3510,19 @@ class ReservationCreateAPIView(generics.CreateAPIView):
 
         unit_night_price = Decimal(price_obj.price if price_obj else 0)
         extra_unit_price = Decimal(price_obj.extra_passenger_price if price_obj else 0)
+
+        # در صورت نیاز، قیمت از اسنپ را به عنوان پشتیبان استفاده کن
+        if snapp_pricing:
+            try:
+                orig = snapp_pricing.get('original_sell_price') or snapp_pricing.get('price')
+                if orig and unit_night_price <= 0:
+                    unit_night_price = Decimal(str(orig))
+                extra_from_snapp = snapp_pricing.get('extra_bed_price') or snapp_pricing.get('extra_passenger_price')
+                if extra_from_snapp and extra_unit_price <= 0:
+                    extra_unit_price = Decimal(str(extra_from_snapp))
+            except Exception:
+                pass
+
         single_room_subtotal = unit_night_price * nights
 
         reservation_rooms = []
@@ -3386,7 +3565,9 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         reservation._skip_price_calculation_on_save = True
         reservation.save()
 
-        user_balance = int(current_buyer.wallet.balance) if (current_buyer and hasattr(current_buyer, 'wallet') and current_buyer.wallet) else 0
+        user_balance = int(current_buyer.wallet.balance) if (
+            current_buyer and hasattr(current_buyer, 'wallet') and current_buyer.wallet
+        ) else 0
 
         try:
             channel_layer = get_channel_layer()
@@ -3414,7 +3595,7 @@ class ReservationCreateAPIView(generics.CreateAPIView):
             "final_price": int(reservation.final_price)
         }, status=status.HTTP_200_OK)
         
-        
+
 
 
 # ==============================================================================
