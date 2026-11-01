@@ -414,7 +414,9 @@ class HotelRoomsView(generics.RetrieveAPIView):
                     except (ValueError, TypeError):
                         pass
 
-            logger.info(f"اسنپ برای هتل {hotel.snapptrip_hotel_id} تعداد {len(available_ids)} اتاق موجود برگرداند.")
+            logger.info(
+                f"اسنپ برای هتل {hotel.snapptrip_hotel_id} تعداد {len(available_ids)} اتاق موجود برگرداند."
+            )
             return available_ids
 
         except Exception as e:
@@ -493,22 +495,40 @@ class HotelRoomsView(generics.RetrieveAPIView):
         # ---------- فیلتر اولیه موجودی محلی ----------
         active_rooms = hotel.rooms.filter(inventory__gt=0).distinct()
 
-        # ---------- چک زنده موجودی اسنپ (فقط برای هتل‌های اسنپ) ----------
-        snapp_available_ids = self._get_snapp_available_room_ids(hotel, checkin_g, checkout_g)
+        # ---------- چک زنده موجودی اسنپ ----------
+        # فقط وقتی کاربر تاریخ مشخص انتخاب کرده و بازه معقول است (حداکثر ۷ شب)
+        night_count_for_filter = (end_date_obj - start_date_obj).days
+        should_check_snapp_live = (
+            hotel.is_snapptrip
+            and hotel.snapptrip_hotel_id
+            and start_date is not None
+            and end_date is not None
+            and 1 <= night_count_for_filter <= 7
+        )
+
+        snapp_available_ids = None
+        if should_check_snapp_live:
+            snapp_available_ids = self._get_snapp_available_room_ids(hotel, checkin_g, checkout_g)
 
         if snapp_available_ids is not None:
-            # فقط اتاق‌هایی که هم موجودی محلی دارند و هم در اسنپ واقعاً موجودند
-            active_rooms = active_rooms.filter(
+            snapp_rooms = active_rooms.filter(
                 is_snapptrip=True,
                 snapptrip_room_id__in=snapp_available_ids
             )
-            # اتاق‌های غیر اسنپ این هتل (اگر وجود داشته باشند) همچنان با منطق محلی باقی می‌مانند
             non_snapp_rooms = hotel.rooms.filter(inventory__gt=0, is_snapptrip=False)
-            active_rooms = (active_rooms | non_snapp_rooms).distinct()
+            active_rooms = (snapp_rooms | non_snapp_rooms).distinct()
+
+            logger.info(
+                f"فیلتر زنده اسنپ اعمال شد. تعداد اتاق باقی‌مانده: {active_rooms.count()} "
+                f"| موجود در اسنپ: {len(snapp_available_ids)}"
+            )
+        else:
+            logger.info("فیلتر زنده اسنپ اعمال نشد (بازه نامشخص یا طولانی یا خطا).")
 
         if not active_rooms.exists():
             return Response({
-                'detail': 'هیچ اتاقی برای این هتل در بازه انتخابی موجود نیست.',
+                'detail': 'در بازه تاریخی انتخاب‌شده، هیچ اتاقی با ظرفیت خالی یافت نشد.',
+                'code': 'no_availability',
                 'rooms': [],
                 'price_calendar': [
                     {
@@ -660,6 +680,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
             if not filtered_rooms:
                 return Response({
                     'detail': f'اتاقی با ظرفیت {required_capacity} یافت نشد.',
+                    'code': 'no_room_for_capacity',
                     'rooms': [],
                     'price_calendar': [
                         {
@@ -717,6 +738,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         if not packs:
             return Response({
                 'detail': f'پک مناسب با ظرفیت‌های {passengers_list} یافت نشد.',
+                'code': 'no_pack_found',
                 'packs': [],
                 'price_calendar': [
                     {
@@ -738,7 +760,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
         unique_packs.sort(key=lambda x: x['total_price'])
         return Response(unique_packs)
 
-    
+
 
 
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
