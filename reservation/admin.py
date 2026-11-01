@@ -1495,23 +1495,40 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
     has_api_key.boolean = True
     has_api_key.short_description = "کلید ثبت شده؟"
 
+    @admin.display(description="موجودی کیف‌پول در اسنپ")
     def wallet_balance_display(self, obj):
-        bal, _ = get_snapptrip_wallet_balance()
-        if not bal:
-            return "۰ تومان"
-        # تبدیل ریال به تومان
-        bal_toman = int(bal) // 10
-        return f"{bal_toman:,} تومان"
-        
-    wallet_balance_display.short_description = "موجودی کیف‌پول در اسنپ"
+        # این تابع از سرویس اسنپ، خروجی را مستقیماً به «تومان» برمی‌گرداند
+        bal, status_msg = get_snapptrip_wallet_balance()
+
+        try:
+            bal_int = int(bal)
+        except (ValueError, TypeError):
+            bal_int = 0
+
+        if bal_int > 0:
+            return format_html(
+                '<strong style="color: #28a745; font-size: 13px;">{:,} تومان</strong>',
+                bal_int
+            )
+        elif bal_int == 0 and status_msg == "موفق":
+            return format_html(
+                '<span style="color: #dc3545; font-size: 13px;">۰ تومان (کیف‌پول خالی است)</span>'
+            )
+        else:
+            return format_html(
+                '<span style="color: #6c757d; font-size: 12px;">خطا در استعلام: {}</span>',
+                status_msg
+            )
 
     def has_add_permission(self, request):
+        # فقط اجازه وجود یک رکورد تنظیمات را می‌دهد
         return not SnappTripSetting.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
+    
+    
+    
 
 @admin.register(SnappHotelDirectory)
 class SnappHotelDirectoryAdmin(admin.ModelAdmin):

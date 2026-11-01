@@ -98,13 +98,19 @@ def get_snapptrip_client_config():
 
 
 def get_snapptrip_wallet_balance():
-    """استعلام موجودی کیف پول B2B در اسنپ‌تریپ (GET /balance/)"""
+    """
+    استعلام موجودی کیف پول B2B در اسنپ‌تریپ (GET /balance/)
+    خروجی به صورت خودکار از ریال به «تومان» تبدیل می‌شود (تقسیم بر ۱۰).
+    """
     base_url, headers = get_snapptrip_client_config()
     try:
         res = requests.get(f"{base_url}/balance/", headers=headers, timeout=12)
         if res.status_code == 200:
             data = res.json()
-            return data.get('balance', 0), "موفق"
+            raw_balance = data.get('balance', 0)
+            # تبدیل ریال به تومان
+            balance_toman = int(Decimal(str(raw_balance or 0))) // 10
+            return balance_toman, "موفق"
         return 0, f"کد {res.status_code}: {res.text[:100]}"
     except Exception as e:
         return 0, str(e)
@@ -559,14 +565,18 @@ def confirm_snapptrip_booking(snapp_reservation_code: str):
 
 
 def auto_confirm_snapp_reservation_if_charged(reservation):
-    """بررسی خودکار کیف پول اسنپ بعد از پرداخت مسافر و نهایی کردن رزرو"""
+    """
+    بررسی خودکار کیف پول اسنپ به تومان بعد از پرداخت مسافر و نهایی کردن رزرو:
+    هم موجودی اسنپ و هم قیمت رزرو به تومان مقایسه می‌شوند.
+    """
     if not reservation.is_snapptrip_reservation or not reservation.snapp_reservation_code:
         return False, "رزرو اسنپی نیست."
 
+    # موجودی اسنپ از تابع به «تومان» برمی‌گردد
     snapp_balance, b_msg = get_snapptrip_wallet_balance()
     required_price = int(reservation.final_price or reservation.total_price or 0)
 
-    logger.info(f"🔍 بررسی کیف‌پول: موجودی={snapp_balance:,} | نیاز={required_price:,} | رزرو={reservation.tracking_code}")
+    logger.info(f"🔍 بررسی کیف‌پول: موجودی={snapp_balance:,} تومان | نیاز={required_price:,} تومان | رزرو={reservation.tracking_code}")
 
     if snapp_balance < required_price:
         logger.warning(f"⚠️ کیف پول اسنپ شارژ ندارد ({snapp_balance:,} تومان). وضعیت: insufficient_credit")
@@ -647,6 +657,11 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                 if h_cancellation:
                     hotel.important_notes = h_cancellation
 
+                # استخراج و بروزرسانی ستاره هتل
+                h_stars = extract_stars_comprehensive(h_data)
+                if h_stars and h_stars != '-':
+                    hotel.stars = h_stars
+
                 hotel.is_snapptrip = True
                 hotel.status = 'published'
 
@@ -665,7 +680,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
                         if matched_city:
                             hotel.city = matched_city
 
-                hotel.save(update_fields=['rules', 'important_notes', 'is_snapptrip', 'status', 'city'])
+                hotel.save(update_fields=['rules', 'important_notes', 'is_snapptrip', 'status', 'city', 'stars'])
                 CancellationPenalty.objects.get_or_create(hotel=hotel, defaults={'penalty_percentage': 0})
 
             extracted = []
@@ -797,7 +812,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         elif r_item.get('booking_type') == 'offline':
             is_online = False
 
-        # تعیین موجودی صفر برای اتاق‌های پر شده (جهت نمایش تکمیل‌ظرفیت در سایت)
+        # تعیین موجودی صفر برای اتاق‌های پر شده
         if not has_capacity:
             inv_count = 0
             count_val = 0
@@ -829,7 +844,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         board_service, _ = RoomService.objects.get_or_create(title=service_title)
         room.services.add(board_service)
 
-        # حفظ قیمت پیشین دیتابیس اگر اتاق پر شده و قیمت لحظه‌ای خالی برگشته
+        # حفظ آخرین قیمت دیتابیس در صورتی که اتاق پر شده و قیمت لحظه‌ای نیامده
         if base_client_sell_price <= 0 and not created:
             last_date_price = RoomDatePrice.objects.filter(room=room).order_by('-id').first()
             if last_date_price:
@@ -980,7 +995,7 @@ def sync_hotel_and_rooms_from_snapp(hotel_id: int):
         room.customer_club_points = club_points
         room.save(update_fields=['customer_club_points'])
 
-    # ۵. صفر کردن موجودی برای اتاق‌های غایب در استعلام جدید (به جای حذف فیزیکی دیتابیس)
+    # ۵. صفر کردن موجودی برای اتاق‌های غایب به جای حذف فیزیکی دیتابیس
     if synced_snapp_room_ids:
         missing_count = Room.objects.filter(
             hotel=hotel,
@@ -1021,7 +1036,7 @@ def sync_all_hotels_from_snapp():
         except Exception as e:
             logger.error(f"خطا در همگام‌سازی {hotel.name}: {e}")
 
-        # توقف ۲ ثانیه‌ای بین هر هتل برای رعایت سقف درخواست (Rate Limit)
+        # توقف ۲ ثانیه‌ای برای رعایت سقف درخواست (Rate Limit)
         time.sleep(2)
 
     return True
@@ -1033,7 +1048,7 @@ def _auto_sync_loop():
     """
     حلقه زمان‌بندی هوشمند و پویا:
     - آخر هفته‌های ایران (چهارشنبه، پنج‌شنبه، جمعه) و ساعات پیک روز (۱۰ صبح تا ۲۳ شب): بازه ۱۰ دقیقه.
-    - ساعات خلوت شب و روزهای عادی: بازه ۲ ساعت (برای جلوگیری از خطای ۴۲۹ اسنپ).
+    - ساعات خلوت شب و روزهای عادی: بازه ۲ ساعت.
     """
     logger.info("موتور زمان‌بندی هوشمند اسنپ در پس‌زمینه فعال شد.")
     while True:
