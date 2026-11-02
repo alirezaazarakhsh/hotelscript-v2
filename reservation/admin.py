@@ -260,23 +260,8 @@ class HotelFAQInline(admin.StackedInline):
     extra = 10
     verbose_name = 'سوال متداول'
     verbose_name_plural = 'سوالات متداول هتل'
-    fields = ('question', 'answer', 'icon', 'icon_preview')
-    readonly_fields = ('icon_preview',)
-    autocomplete_fields = ('icon',)
-
-    def icon_preview(self, obj):
-        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex; align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
-            )
-        return "-"
-    icon_preview.short_description = "آیکون انتخاب‌شده"
-
+    fields = ('question', 'answer')
+    
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
@@ -476,15 +461,12 @@ class HotelFAQAdmin(admin.ModelAdmin):
         'id',
         'question',
         'hotel',
-        'icon_preview',
     )
     search_fields = (
         'question',
-        'hotel__title',
-        'icon__title_icon',
+        'hotel__name',  # معمولاً نام هتل در مدل Hotel فیلد name است (اگر title است همینطور بگذارید بماند)
     )
-    autocomplete_fields = ('hotel', 'icon',)
-    readonly_fields = ('icon_preview',)
+    autocomplete_fields = ('hotel',)  # 👈 حتماً کامای آخر را بگذارید تا tuple شود
 
     fieldsets = (
         (None, {
@@ -492,24 +474,11 @@ class HotelFAQAdmin(admin.ModelAdmin):
                 'question',
                 'answer',
                 'hotel',
-                'icon',
-                'icon_preview',
             )
         }),
     )
 
-    def icon_preview(self, obj):
-        if obj.icon and hasattr(obj.icon, 'svg_icon') and obj.icon.svg_icon:
-            return format_html(
-                '<div style="display:flex; align-items:center;">'
-                '<img src="{}" width="30" height="30" style="margin-right:8px; object-fit: contain;" />'
-                '<span>{}</span>'
-                '</div>',
-                obj.icon.svg_icon.url,
-                obj.icon.title_icon
-            )
-        return "-"
-    icon_preview.short_description = "آیکون انتخاب‌شده"
+    
 
 
 class CommentPointInline(admin.TabularInline):

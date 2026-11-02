@@ -683,14 +683,6 @@ class HotelFAQ(models.Model):
         verbose_name=_('هتل'),
         related_name='faqs',
     )
-    icon = models.ForeignKey(  
-        IconShortcut,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name=_('آیکون'),
-        related_name='hotel_faqs',
-    )
 
     class Meta:
         verbose_name = 'سوال متداول هتل'
