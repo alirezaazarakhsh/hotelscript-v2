@@ -192,12 +192,15 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+
+
 class SEOMetaInlineForm(forms.ModelForm):
+    # این فیلد کمکی برای راحتی ادمین است تا با کاما وارد کند
     keywords_text = forms.CharField(
         label="کلمات کلیدی",
         required=False,
-        widget=forms.Textarea(attrs={'rows': 2}),
-        help_text="کلمات کلیدی را با کاما جدا کنید، مثل: luxury, resort, family"
+        widget=forms.TextInput(attrs={'style': 'width: 100%;'}),
+        help_text="کلمات کلیدی را با کاما جدا کنید، مثل: هتل, رزرو هتل, هتل های تهران"
     )
 
     class Meta:
@@ -206,13 +209,24 @@ class SEOMetaInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance and self.instance.keywords:
-            self.fields['keywords_text'].initial = ", ".join(self.instance.keywords)
+        if self.instance and self.instance.pk and self.instance.keywords:
+            # اگر در دیتابیس به صورت لیست بود به کاما تبدیل می‌کنیم برای نمایش در ادمین
+            if isinstance(self.instance.keywords, list):
+                self.fields['keywords_text'].initial = ", ".join(self.instance.keywords)
+            elif isinstance(self.instance.keywords, str):
+                # اگر با خط تیره یا کاما ذخیره شده بود، استانداردش می‌کنیم
+                cleaned = self.instance.keywords.replace('-', ', ')
+                self.fields['keywords_text'].initial = cleaned
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         keywords_text = self.cleaned_data.get('keywords_text', '')
-        instance.keywords = [k.strip() for k in keywords_text.split(',') if k.strip()]
+        
+        # ذخیره به صورت لیست یا رشته‌ی جدا شده با کاما (مطابق نیاز API)
+        # در اینجا ما به صورت رشته‌ی استاندارد با کاما ذخیره می‌کنیم
+        keywords_list = [k.strip() for k in keywords_text.split(',') if k.strip()]
+        instance.keywords = ", ".join(keywords_list)  # یا اگر مدل شما JSONField است می‌توانید مستقیم `keywords_list` را قرار دهید.
+        
         if commit:
             instance.save()
         return instance
@@ -229,17 +243,16 @@ class HotelTagPublicInline(admin.TabularInline):
 
 class SEOMetaInline(admin.StackedInline):
     model = SEOMeta
+    form = SEOMetaInlineForm  # 👈 اتصال فرم سفارشی به اینلاین
     extra = 1
     max_num = 1
     can_delete = False
     verbose_name = 'متا سئو'
     verbose_name_plural = 'تنظیم سئوی هتل'
-    fields = ('title_tag', 'keywords', 'description')
-    help_texts = {
-        'title_tag': 'عنوان صفحه برای سئو (حداکثر 70 کاراکتر)',
-        'keywords': 'کلمات کلیدی را با "-" جدا کنید، مثل: هتل-رزرو هتل-هتل های تهران',
-        'description': 'توضیحات متا برای سئو (حداکثر 160 کاراکتر)',
-    }
+    # توجه: چون از فرم سفارشی استفاده می‌کنیم، فیلد keywords_text را اینجا می‌آوریم نه keywords اصلی را
+    fields = ('title_tag', 'keywords_text', 'description', 'canonical_url', 'og_title', 'og_description', 'og_image', 'no_index')
+    
+    
 
 
 class HotelFAQInline(admin.StackedInline):

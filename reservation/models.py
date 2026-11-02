@@ -200,19 +200,51 @@ class SEOMeta(models.Model):
     )
     title_tag = models.CharField(
         max_length=70,
-        verbose_name="عنوان سئو",
+        verbose_name="عنوان سئو (Title)",
         help_text="عنوان صفحه برای سئو (حداکثر 70 کاراکتر)"
-    )
-    keywords = models.TextField(
-        verbose_name="کلمات کلیدی",
-        help_text="کلمات کلیدی را با - یا , جدا کنید. مثال: هتل-رزرو هتل-هتل های تهران",
-        blank=True,
-        default=""
     )
     description = models.TextField(
         max_length=160,
-        verbose_name="توضیحات متا",
+        verbose_name="توضیحات متا (Description)",
         help_text="توضیحات متا برای سئو (حداکثر 160 کاراکتر)"
+    )
+    keywords = models.TextField(
+        verbose_name="کلمات کلیدی",
+        help_text="کلمات کلیدی را با - یا , جدا کنید.",
+        blank=True,
+        default=""
+    )
+    canonical_url = models.URLField(
+        max_length=500,
+        verbose_name="لینک کانونیکال (Canonical)",
+        blank=True,
+        null=True,
+        help_text="اگر خالی باشد، لینک پیش‌فرض هتل در نظر گرفته می‌شود."
+    )
+    og_title = models.CharField(
+        max_length=100,
+        verbose_name="عنوان Open Graph (شبکه اجتماعی)",
+        blank=True,
+        default="",
+        help_text="عنوان برای اشتراک‌گذاری در تلگرام، واتساپ و..."
+    )
+    og_description = models.TextField(
+        max_length=200,
+        verbose_name="توضیحات Open Graph",
+        blank=True,
+        default=""
+    )
+    og_image = models.URLField(
+        max_length=500,
+        verbose_name="تصویر پیش‌نمایش (OG Image)",
+        blank=True,
+        null=True,
+        help_text="لینک مستقیم عکس هتل برای اشتراک‌گذاری در شبکه‌های اجتماعی"
+    )
+    no_index = models.BooleanField(
+        default=False,
+        verbose_name="جلوگیری از ایندکس (NoIndex)",
+        help_text="اگر تیک بخورد، گوگل این صفحه را ایندکس نمی‌کند."
     )
 
     def __str__(self):
@@ -221,6 +253,7 @@ class SEOMeta(models.Model):
     class Meta:
         verbose_name = "تنظیمات سئو"
         verbose_name_plural = "تنظیمات سئو"
+        
 
 
 # مدل امکانات رفاهی و تفریحی هتل 

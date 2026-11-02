@@ -4754,26 +4754,26 @@ class WalletWithdrawAPIView(APIView):
 # ای پی ای سئو هتل ها 
 class HotelSEOView(APIView):
     """
-    API برای دریافت اطلاعات سئوی یک هتل
+    API برای دریافت اطلاعات کامل سئوی یک هتل
     """
     permission_classes = ()  # عمومی
 
     @swagger_auto_schema(
         operation_summary="دریافت متا سئو هتل با slug",
-        operation_description="""
-        این API اطلاعات سئو یک هتل را برمی‌گرداند، شامل:
-        - title_tag: عنوان سئو
-        - description: توضیحات متا
-        - keywords: کلمات کلیدی به صورت لیست
-        """,
+        operation_description="این API اطلاعات کامل سئو و Open Graph هتل را برمی‌گرداند.",
         responses={
             200: openapi.Response(
                 description="اطلاعات سئو هتل با موفقیت بازگشت داده شد",
                 examples={
                     "application/json": {
-                        "title_tag": "هتل لوکس تهران",
-                        "description": "بهترین هتل لوکس تهران با امکانات عالی",
-                        "keywords": ["هتل", "لوکس", "تهران"]
+                        "title_tag": "هتل لوکس پارسیان آزادی تهران | رزرو با تخفیف",
+                        "description": "بهترین قیمت رزرو هتل پارسیان آزادی تهران همراه با امکانات مدرن و واچر آنی.",
+                        "keywords": ["هتل", "تهران", "پارسیان آزادی"],
+                        "canonical_url": "https://zarvantrip.com/best-hotels/parsian-azadi",
+                        "og_title": "هتل پارسیان آزادی تهران",
+                        "og_description": "همین حالا هتل پارسیان آزادی را با تخفیف رزرو کنید.",
+                        "og_image": "https://zarvantrip.com/media/hotels/parsian.jpg",
+                        "no_index": False
                     }
                 }
             ),
@@ -4790,20 +4790,41 @@ class HotelSEOView(APIView):
         try:
             seo = hotel.seo_meta
         except SEOMeta.DoesNotExist:
-            return Response({"detail": "سئوی هتل یافت نشد."}, status=status.HTTP_404_NOT_FOUND)
+            # اگر سئوی دستی نداشتیم، یک سئوی پیش‌فرض بر اساس اطلاعات خود هتل می‌سازیم که صفحه ارور 404 ندهد!
+            default_title = f"رزرو هتل {hotel.name} | زروان تریپ  "
+            default_desc = f"رزرو آنلاین هتل {hotel.name} با بهترین قیمت، امکانات کامل و واچر آنی در زروان تریپ ."
+            return Response({
+                "title_tag": default_title,
+                "description": default_desc,
+                "keywords": [hotel.name, "رزرو هتل", hotel.city_name if hasattr(hotel, 'city_name') else ""],
+                "canonical_url": f"https://zarvantrip.com/best-hotels/{hotel.slug}",
+                "og_title": default_title,
+                "og_description": default_desc,
+                "og_image": hotel.logo_preview if hasattr(hotel, 'logo_preview') else None,
+                "no_index": False
+            }, status=status.HTTP_200_OK)
 
-        # تبدیل رشته keywords با "-" به لیست
-        if isinstance(seo.keywords, str):
-            keywords_list = [k.strip() for k in seo.keywords.split('-') if k.strip()]
-        else:
-            # اگر قبلاً JSON بود، مستقیم استفاده می‌کنیم
-            keywords_list = seo.keywords
+        # مدیریت هوشمند جداکننده‌های کلمات کلیدی (پشتیبانی همزمان از '-' و ',')
+        keywords_list = []
+        if seo.keywords:
+            if ',' in seo.keywords:
+                keywords_list = [k.strip() for k in seo.keywords.split(',') if k.strip()]
+            else:
+                keywords_list = [k.strip() for k in seo.keywords.split('-') if k.strip()]
+
+        # اگر کانونیکال خالی بود، لینک پیش‌فرض سایت را بده
+        canonical = seo.canonical_url if seo.canonical_url else f"https://zarvantrip.com/best-hotels/{hotel.slug}"
 
         return Response(
             {
                 "title_tag": seo.title_tag,
                 "description": seo.description,
-                "keywords": keywords_list
+                "keywords": keywords_list,
+                "canonical_url": canonical,
+                "og_title": seo.og_title if seo.og_title else seo.title_tag,
+                "og_description": seo.og_description if seo.og_description else seo.description,
+                "og_image": seo.og_image,
+                "no_index": seo.no_index
             },
             status=status.HTTP_200_OK
         )
