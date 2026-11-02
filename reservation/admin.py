@@ -257,7 +257,7 @@ class SEOMetaInline(admin.StackedInline):
 
 class HotelFAQInline(admin.StackedInline):
     model = HotelFAQ
-    extra = 1
+    extra = 10
     verbose_name = 'سوال متداول'
     verbose_name_plural = 'سوالات متداول هتل'
     fields = ('question', 'answer', 'icon', 'icon_preview')
