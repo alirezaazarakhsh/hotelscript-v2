@@ -959,30 +959,21 @@ class HotelFAQListView(ListAPIView):
 
     def get_queryset(self):
         hotel_slug = self.kwargs.get('slug')
-        queryset = HotelFAQ.objects.filter(hotel__slug=hotel_slug)
-        return queryset
+        # چک کردن وجود هتل برای برگرداندن 404 در صورت عدم وجود
+        hotel = get_object_or_404(Hotel, slug=hotel_slug)
+        return HotelFAQ.objects.filter(hotel=hotel)
 
     @swagger_auto_schema(
         operation_summary="دریافت سوالات متداول هتل",
-        operation_description="این API لیستی از سوالات متداول مربوط به هتل با slug مشخص شده را باز می‌گرداند.",
+        operation_description="این API لیستی از سوالات متداول مربوط به هتل را باز می‌گرداند.",
         tags=['hotel'],
-        manual_parameters=[
-            openapi.Parameter(
-                name='slug',
-                in_=openapi.IN_PATH,
-                description='شناسه slug هتل برای دریافت سوالات متداول',
-                type=openapi.TYPE_STRING,
-                required=True,
-            ),
-        ],
         responses={
             200: HotelFAQListSerializer(many=True),
-            404: 'هتل یا سوالات متداول پیدا نشد.'
+            404: 'هتل پیدا نشد.'
         }
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
     
     
     
