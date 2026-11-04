@@ -28,7 +28,7 @@ AVAILABLE_PAGES = (
     ('about', 'درباره ما'),
     ('contact', 'تماس با ما'),
     ('magazine', 'مجله گردشگری'),
-    ('best-hotels', 'بهترین هتل‌ها'),
+    ('hotels', 'بهترین هتل‌ها'),
     ('rules', 'قوانین'),
 )
 

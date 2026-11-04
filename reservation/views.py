@@ -269,7 +269,7 @@ class AllFacilitiesView(ListAPIView):
     @swagger_auto_schema(
         operation_summary=" امکانات هتل",
         operation_description="این API لیست تمام امکانات هتل را برای شما باز می گرداند بدون صفحه بندی.",
-        tags=['best-hotel']
+        tags=['hotel']
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -1068,7 +1068,7 @@ class AllRoomFacilitiesView(ListAPIView):
     @swagger_auto_schema(
         operation_summary=" امکانات اتاق‌ها",
         operation_description="این API لیست تمام امکانات اتاق‌ها را بدون توجه به هتل برمی‌گرداند.",
-        tags=['best-hotel'],
+        tags=['hotel'],
         responses={200: RoomFacilitiesSimpleSerializer(many=True)}
     )
     def get(self, request, *args, **kwargs):
@@ -2813,7 +2813,7 @@ class BestHotelspageAPI(ListAPIView):
 
     @swagger_auto_schema(
         operation_summary="دریافت لیست بهترین هتل‌ها با فیلترهای مختلف",
-        tags=["best-hotel"],
+        tags=["hotel"],
         manual_parameters=[
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
@@ -3247,7 +3247,7 @@ class GetPriceRangeAPI(generics.GenericAPIView):
             "این API حداقل و حداکثر قیمت را برمی‌گرداند (بر اساس جمع قیمت‌های روزانه با اعمال تخفیف درصدی). "
             "لیست هتل‌ها بازگردانده نمی‌شود."
         ),
-        tags=["best-hotel"],
+        tags=["hotel"],
         manual_parameters=[
             openapi.Parameter(name='city', in_=openapi.IN_QUERY, description='نام شهر', type=openapi.TYPE_STRING, required=False),
             openapi.Parameter(name='start-date', in_=openapi.IN_QUERY, description='تاریخ شروع به فرمت yyyy-mm-dd', type=openapi.TYPE_STRING, required=False),
@@ -4759,7 +4759,7 @@ class HotelSEOView(APIView):
                         "title_tag": "هتل لوکس پارسیان آزادی تهران | رزرو با تخفیف",
                         "description": "بهترین قیمت رزرو هتل پارسیان آزادی تهران همراه با امکانات مدرن و واچر آنی.",
                         "keywords": ["هتل", "تهران", "پارسیان آزادی"],
-                        "canonical_url": "https://safarnameh24.com/best-hotels/parsian-azadi",
+                        "canonical_url": "https://safarnameh24.com/hotels/parsian-azadi",
                         "og_title": "هتل پارسیان آزادی تهران",
                         "og_description": "همین حالا هتل پارسیان آزادی را با تخفیف رزرو کنید.",
                         "og_image": "https://safarnameh24.com/media/hotels/parsian.jpg",
@@ -4787,7 +4787,7 @@ class HotelSEOView(APIView):
                 "title_tag": default_title,
                 "description": default_desc,
                 "keywords": [hotel.name, "رزرو هتل", hotel.city_name if hasattr(hotel, 'city_name') else ""],
-                "canonical_url": f"https://safarnameh24.com/best-hotels/{hotel.slug}",
+                "canonical_url": f"https://safarnameh24.com/hotels/{hotel.slug}",
                 "og_title": default_title,
                 "og_description": default_desc,
                 "og_image": hotel.logo_preview if hasattr(hotel, 'logo_preview') else None,
@@ -4803,7 +4803,7 @@ class HotelSEOView(APIView):
                 keywords_list = [k.strip() for k in seo.keywords.split('-') if k.strip()]
 
         # اگر کانونیکال خالی بود، لینک پیش‌فرض سایت را بده
-        canonical = seo.canonical_url if seo.canonical_url else f"https://safarnameh24.com/best-hotels/{hotel.slug}"
+        canonical = seo.canonical_url if seo.canonical_url else f"https://safarnameh24.com/hotels/{hotel.slug}"
 
         return Response(
             {
@@ -5546,7 +5546,7 @@ class HotelChatBotListView(APIView):
         operation_description="""
         این API لیست تمام هتل‌های موجود در سایت را با نام و لینک اصلی برمی‌گرداند.
 
-        **لینک خروجی**: `https://safarnameh24.com/best-hotels/{slug}/`
+        **لینک خروجی**: `https://safarnameh24.com/hotels/{slug}/`
 
         مناسب برای:
         - نمایش لیست هتل‌ها در چت‌بات
@@ -5562,11 +5562,11 @@ class HotelChatBotListView(APIView):
                     "application/json": [
                         {
                             "name": "هتل عباسی",
-                            "url": "https://safarnameh24.com/best-hotels/hotel-abbasi/"
+                            "url": "https://safarnameh24.com/hotels/hotel-abbasi/"
                         },
                         {
                             "name": "هتل پارسیان کوثر",
-                            "url": "https://safarnameh24.com/best-hotels/hotel-parsian-kowsar/"
+                            "url": "https://safarnameh24.com/hotels/hotel-parsian-kowsar/"
                         }
                     ]
                 }

@@ -807,4 +807,4 @@ class HotelLinkSerializer(serializers.ModelSerializer):
         fields = ['name', 'url']
 
     def get_url(self, obj):
-        return f'https://safarnameh24.com/best-hotels/{obj.slug}/'
+        return f'https://safarnameh24.com/hotels/{obj.slug}/'

@@ -102,7 +102,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('title', models.CharField(max_length=32, unique=True, verbose_name='عنوان')),
-                ('page', models.CharField(choices=[('home', 'صفحه اصلی'), ('about', 'درباره ما'), ('contact', 'تماس با ما'), ('magazine', 'مجله گردشگری'), ('best-hotels', 'بهترین هتل\u200cها'), ('rules', 'قوانین')], max_length=32, unique=True, verbose_name='صفحه')),
+                ('page', models.CharField(choices=[('home', 'صفحه اصلی'), ('about', 'درباره ما'), ('contact', 'تماس با ما'), ('magazine', 'مجله گردشگری'), ('hotels', 'بهترین هتل\u200cها'), ('rules', 'قوانین')], max_length=32, unique=True, verbose_name='صفحه')),
                 ('path', models.CharField(max_length=255, unique=True, validators=[django.core.validators.RegexValidator(message='مقدار مسیر تنها میتواند شامل حروف و اعداد انگلیسی، - و _ و / باشد.', regex='^[a-zA-Z0-9\\-_/]*$')])),
             ],
             options={
