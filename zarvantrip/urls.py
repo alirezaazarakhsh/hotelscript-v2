@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
@@ -7,6 +8,20 @@ from django.conf import settings
 from django.conf.urls.static import static
 from reservation import views as reservation_views
 from authentication.admin_forms import AdminOTPAuthenticationForm
+
+
+# ------------------------------------------------------------------------------
+# هندلر اختصاصی 404 برای بازگرداندن JSON به جای صفحه زشت HTML
+# ------------------------------------------------------------------------------
+def custom_404_view(request, exception=None):
+    return JsonResponse({
+        "message": "آدرس مورد نظر در سرور یافت نشد (404).",
+        "data": {},
+        "success": False
+    }, status=404)
+
+handler404 = custom_404_view
+
 
 # Configure admin site to use custom login form
 admin.site.login_form = AdminOTPAuthenticationForm
@@ -41,7 +56,7 @@ schema_view_adminpanel_empty = get_schema_view(
 )
 
 urlpatterns = [
-    #تنظیم لینک بک اند وب سایت و پنل ادمین جنگو
+    # تنظیم لینک بک اند وب سایت و پنل ادمین جنگو
     path('admin/', admin.site.urls),
     
     # APIهای سایت (برای کاربران/وب‌سایت)
@@ -50,34 +65,34 @@ urlpatterns = [
         path('config/', include('config.urls', namespace='config')),
         path('contact/', include('contact.urls', namespace='contact')),
         path('blog/', include('blog.urls', namespace='blog')),
+        
+        # پشتیبانی همزمان از هر دو مسیر hotel و best-hotels برای جلوگیری از ارور 404
         path('hotel/', include('reservation.urls', namespace='reservation')),
+        path('best-hotels/', include('reservation.urls')),
+        path('hotels/', include('reservation.urls')),
+        
         path('finance/', include('finance.urls', namespace='finance')),
         path('icons/', include('icons.urls', namespace='icons')),
         path('setting_sms/', include('setting_sms.urls', namespace='setting_sms')),
         path('notification/', include('notification.urls', namespace='notification')),
         path('crm/', include('bashgah_moshtarian.urls', namespace='bashgah')), 
         path('favorite/', include('favorite.urls', namespace='favorites')),
-        path('payment/', include('setting_payment.urls', namespace='payment')),  # اضافه کردن setting_payment
+        path('payment/', include('setting_payment.urls', namespace='payment')),
         
-        # --- اضافه کردن URL های چت بات و تنظیمات جدید ---
-        path('chatbot/', include('chat_api.urls', namespace='chatbot_api')), # این خط را اضافه کنید
-        path('chatbot_settings/', include('settingchatbot.urls', namespace='chatbot_settings')), # این خط را اضافه کنید
-        path('subscription/', include('user_subscription_settings.urls', namespace='subscription')), # اضافه کردن user_subscription_settings
-        # --------------------------------------------------
-
+        # --- URL های چت بات و تنظیمات جدید ---
+        path('chatbot/', include('chat_api.urls', namespace='chatbot_api')),
+        path('chatbot_settings/', include('settingchatbot.urls', namespace='chatbot_settings')),
+        path('subscription/', include('user_subscription_settings.urls', namespace='subscription')),
     ])),
     
     # APIهای پنل گرافیکی (برای تنظیمات/ادمین)
     path('api/v1/adminpanel/', include([
         
-      
     ])),
     
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     path('redoc/adminpanel', schema_view_adminpanel_empty.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
-
-    
 ]
 
 if settings.DEBUG:
@@ -85,4 +100,3 @@ if settings.DEBUG:
         path("__debug__/", include("debug_toolbar.urls"))
     ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
