@@ -56,9 +56,9 @@ urlpatterns = [
     path('hotels/by-hotel-slug/<str:hotel_slug>/', HomeHotelByHotelSlugView.as_view(), name='hotels-by-hotel-slug-legacy'),
 
     path('hotels/search/hotel-city/', views.HotelSearchAPI.as_view(), name='hotel-search'),
-    path('best-hotels/', views.BestHotelsListCreateView.as_view(), name='best-hotels-list-create'),
-    path('best-hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='best-hotels'),
-    path('best-hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
+    path('hotels/', views.BestHotelsListCreateView.as_view(), name='hotels-list-create'),
+    path('hotels/best-filter/', views.BestHotelspageAPI.as_view(), name='hotels'),
+    path('hotels/price-range/', GetPriceRangeAPI.as_view(), name='price-range'),  
 
     # ==== Facilities and Services ====
     path('room-services/', views.RoomServiceListView.as_view(), name='room-service-list'),
