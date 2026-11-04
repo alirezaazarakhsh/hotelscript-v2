@@ -6,6 +6,7 @@ from django.apps import AppConfig
 class ReservationConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'reservation'
+    verbose_name= '1- رزرواسیون - خدمات هتل و اتاق'
 
     def ready(self):
         try:
