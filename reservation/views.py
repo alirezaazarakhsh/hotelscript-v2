@@ -328,6 +328,8 @@ def validate_national_code(value):
     raise ValidationError('کد شناسایی نامعتبر است. باید کد ملی ۱۰ رقمی یا شماره پاسپورت ۶ تا ۹ کاراکتر باشد.')
 
 
+
+
 class HotelRoomsView(generics.RetrieveAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RoomSerializer
@@ -772,6 +774,8 @@ class HotelRoomsView(generics.RetrieveAPIView):
         return Response(unique_packs)
 
 
+
+
 #دریافت تصاویر شاخص و ۴ عکس صفحه داخلی هتل 
 class HotelImagesView(RetrieveAPIView):
     permission_classes = (AllowAny,)
@@ -974,7 +978,6 @@ class HotelFAQListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-    
     
     
     
@@ -3343,6 +3346,7 @@ def _send_telegram_notification_background(tracking_code, buyer_name, hotel_name
 
 
 
+
 # ==============================================================================
 # ۳. API ایجاد رزرو موقت (ReservationCreateAPIView) - نسخه نهایی با خطاهای استاندارد
 # ==============================================================================
@@ -3617,8 +3621,6 @@ class ReservationCreateAPIView(generics.CreateAPIView):
         }, status=status.HTTP_200_OK)
         
 
-        
-        
 
 
 # ==============================================================================
@@ -4779,8 +4781,8 @@ class HotelSEOView(APIView):
             seo = hotel.seo_meta
         except SEOMeta.DoesNotExist:
             # اگر سئوی دستی نداشتیم، یک سئوی پیش‌فرض بر اساس اطلاعات خود هتل می‌سازیم که صفحه ارور 404 ندهد!
-            default_title = f"رزرو هتل {hotel.name} | سفرنامه ۲۴"
-            default_desc = f"رزرو آنلاین هتل {hotel.name} با بهترین قیمت، امکانات کامل و واچر آنی در سفرنامه ۲۴."
+            default_title = f"رزرو هتل {hotel.name} | زروان تریپ  "
+            default_desc = f"رزرو آنلاین هتل {hotel.name} با بهترین قیمت، امکانات کامل و واچر آنی در زروان تریپ ."
             return Response({
                 "title_tag": default_title,
                 "description": default_desc,
@@ -4816,6 +4818,7 @@ class HotelSEOView(APIView):
             },
             status=status.HTTP_200_OK
         )
+        
         
 
 
