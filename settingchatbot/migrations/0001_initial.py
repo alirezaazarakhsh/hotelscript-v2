@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('google_api_key', models.CharField(blank=True, default='', help_text='کلید API گوگل (برای Gemini یا سرویس\u200cهای دیگر). اگر خالی باشد، از .env استفاده می\u200cشود.', max_length=255)),
-                ('system_instruction', models.TextField(default="شما یک دستیار هوشمند و متخصص هتل برای وب\u200cسایت 'safarnameh24.com' هستید. ...", help_text='دستورالعمل سیستم برای مدل AI (مثل Gemini).')),
+                ('system_instruction', models.TextField(default="شما یک دستیار هوشمند و متخصص هتل برای وب\u200cسایت 'zarvantrip.com' هستید. ...", help_text='دستورالعمل سیستم برای مدل AI (مثل Gemini).')),
                 ('default_voice', models.CharField(choices=[('Kore', 'خانم'), ('Puck', 'آقا')], default='Kore', help_text='صدای پیش\u200cفرض بات (برای TTS).', max_length=50)),
                 ('is_bot_voice_enabled', models.BooleanField(default=True, help_text='آیا پاسخ صوتی بات فعال باشد؟')),
                 ('available_fonts', models.JSONField(default=list, help_text="لیست فونت\u200cهای موجود، مثلاً [{'name': 'وزیرمتن', 'family': 'Vazirmatn'}]")),

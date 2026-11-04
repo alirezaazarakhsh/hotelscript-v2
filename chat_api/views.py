@@ -311,8 +311,8 @@ class ChatbotSettingsView(APIView):
                     "is_bot_voice_enabled": True,
                     "available_fonts": [{'name': 'وزیرمتن', 'family': 'Vazirmatn'}],
                     "welcome_title": "چت بات هوشمند سفرنامه ۲۴",
-                    "welcome_message": "به چت بات هوشمند سفرنامه ۲۴ خوش آمدید. اگر نیاز به مشاوره قبل از خرید یا انتخاب دارید، این چت بات نیاز شما را برطرف می‌کند. لطفا safarnameh24.com را دنبال کنید.",
-                    "logo_url": "http://cps.safarnameh24.com/media/images/logo/full-red-gray_mej9jEE.webp",
+                    "welcome_message": "به چت بات هوشمند سفرنامه ۲۴ خوش آمدید. اگر نیاز به مشاوره قبل از خرید یا انتخاب دارید، این چت بات نیاز شما را برطرف می‌کند. لطفا zarvantrip.com را دنبال کنید.",
+                    "logo_url": "http://cps.zarvantrip.com/media/images/logo/full-red-gray_mej9jEE.webp",
                 })
             
             serializer = ChatSettingsSerializer(bot_settings, context={'request': request})

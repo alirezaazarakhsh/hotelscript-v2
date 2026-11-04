@@ -19,7 +19,7 @@ PROXY = os.getenv("PROXY")
 PROJECT_DIR = os.getenv("PROJECT_DIR", "/app")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", os.path.join(PROJECT_DIR, "backups/database"))
 MEDIA_BACKUP_DIR = os.getenv("MEDIA_BACKUP_DIR", os.path.join(PROJECT_DIR, "backups/media"))
-MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.safarnameh24.com/media/")
+MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "https://cps.zarvantrip.com/media/")
 
 # ایجاد دایرکتوری‌های بکاپ در صورت عدم وجود
 try:

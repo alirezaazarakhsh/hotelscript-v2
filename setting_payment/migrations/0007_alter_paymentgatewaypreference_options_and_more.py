@@ -22,12 +22,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='iraniangateway',
             name='callback_redirect_url',
-            field=models.URLField(default='https://safarnameh24.com/payment/watcher-info', help_text='URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info', validators=[django.core.validators.URLValidator()], verbose_name='URL ریدایرکت callback'),
+            field=models.URLField(default='https://zarvantrip.com/payment/watcher-info', help_text='URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://zarvantrip.com/payment/watcher-info', validators=[django.core.validators.URLValidator()], verbose_name='URL ریدایرکت callback'),
         ),
         migrations.AddField(
             model_name='zarinpalgateway',
             name='callback_redirect_url',
-            field=models.URLField(default='https://safarnameh24.com/payment/watcher-info', help_text='URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://safarnameh24.com/payment/watcher-info', validators=[django.core.validators.URLValidator()], verbose_name='URL ریدایرکت callback'),
+            field=models.URLField(default='https://zarvantrip.com/payment/watcher-info', help_text='URL پایه برای ریدایرکت پس از callback پرداخت. مثال: https://zarvantrip.com/payment/watcher-info', validators=[django.core.validators.URLValidator()], verbose_name='URL ریدایرکت callback'),
         ),
         migrations.AlterField(
             model_name='paymentgatewaypreference',

@@ -60,7 +60,7 @@ class HotelSummarySerializer(serializers.ModelSerializer):
     def get_main_image(self, obj):
         request = self.context.get('request')
         image_url = obj.main_image.url if obj.main_image else ''
-        return request.build_absolute_uri(image_url) if request and image_url else f"https://safarnameh24.com{image_url}"
+        return request.build_absolute_uri(image_url) if request and image_url else f"https://zarvantrip.com{image_url}"
 
     def get_price(self, obj):
         price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
@@ -155,10 +155,10 @@ class BaseFavoriteCollectionSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         for fav in obj.favorites.all()[:3]:
             if isinstance(fav.item, Hotel) and fav.item.main_image:
-                url = request.build_absolute_uri(fav.item.main_image.url) if request and fav.item.main_image.url else f"https://safarnameh24.com{fav.item.main_image.url if fav.item.main_image else ''}"
+                url = request.build_absolute_uri(fav.item.main_image.url) if request and fav.item.main_image.url else f"https://zarvantrip.com{fav.item.main_image.url if fav.item.main_image else ''}"
                 thumbs.append(url)
             elif isinstance(fav.item, Article) and fav.item.thumbnail:
-                url = request.build_absolute_uri(fav.item.thumbnail.url) if request and fav.item.thumbnail.url else f"https://safarnameh24.com{fav.item.thumbnail.url if fav.item.thumbnail else ''}"
+                url = request.build_absolute_uri(fav.item.thumbnail.url) if request and fav.item.thumbnail.url else f"https://zarvantrip.com{fav.item.thumbnail.url if fav.item.thumbnail else ''}"
                 thumbs.append(url)
         return thumbs
 
