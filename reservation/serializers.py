@@ -805,3 +805,76 @@ class HotelLinkSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         return f'https://zarvantrip.com/hotels/{obj.slug}/'
+    
+    
+    
+    
+    # ==============================================================================
+# سریالایزر اختصاصی صفحه لیست بهترین هتل‌ها (با بالاترین سرعت و بدون N+1 Query)
+# ==============================================================================
+class UpdatedHotelListSerializer(serializers.ModelSerializer):
+    price = serializers.SerializerMethodField()
+    price_after_discount = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_date = serializers.SerializerMethodField()
+    night_count = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    average_score = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    reservation_count = serializers.SerializerMethodField()
+    public_tags = serializers.SerializerMethodField()
+    main_image = serializers.SerializerMethodField()
+    city = CitySerializer(read_only=True)
+    residence_type = serializers.CharField(source='type.title', default='')
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'residence_type',
+            'price', 'price_after_discount', 'discount_percentage',
+            'discount_date', 'night_count', 'rating', 'average_score',
+            'comment_count', 'reservation_count', 'public_tags',
+        )
+
+    def get_main_image(self, obj):
+        # ساخت لینک کامل تصویر برای لود بدون مشکل در کامپوننت Image نکست‌جی‌اس
+        request = self.context.get('request')
+        if obj.main_image and hasattr(obj.main_image, 'url'):
+            return request.build_absolute_uri(obj.main_image.url) if request else f"https://zarvantrip.com{obj.main_image.url}"
+        return None
+
+    def get_price(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('original_total_price', 0)
+
+    def get_price_after_discount(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('total_price', 0)
+
+    def get_discount_percentage(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('discount_percentage', None)
+
+    def get_discount_date(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('discount_date', None)
+
+    def get_rating(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('rating', obj.rating or 0)
+
+    def get_average_score(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('average_score', 0.0)
+
+    def get_reservation_count(self, obj):
+        return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('reservation_count', obj.reservation_count or 0)
+
+    def get_public_tags(self, obj):
+        # خواندن مستقیم از رم (Prefetch شده) تا کوئری اضافه نزند
+        request = self.context.get('request')
+        return HotelTagPublicSerializer(
+            obj.public_tags.all(),
+            many=True,
+            context={'request': request}
+        ).data
+
+    def get_night_count(self, obj):
+        return self.context.get("night_count", 0)
+
+    def get_comment_count(self, obj):
+        return self.context.get('hotel_comment_count_map', {}).get(obj.id, 0)
