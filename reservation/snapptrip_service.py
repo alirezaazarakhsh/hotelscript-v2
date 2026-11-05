@@ -25,7 +25,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 # شماره رزروکننده ثابت برای تمام درخواست‌های ارسالی به اسنپ‌تریپ
-DEFAULT_SNAPP_ORGANIZATION_PHONE = "09127752353"
+DEFAULT_SNAPP_ORGANIZATION_PHONE = "09383332443"
 
 # نگاشت کامل شناسه‌های شهری اسنپ‌تریپ
 IRAN_CITIES_MAP = {
