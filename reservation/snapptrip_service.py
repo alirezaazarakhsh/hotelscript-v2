@@ -24,8 +24,8 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# شماره مالک اکانت B2B در اسنپ‌تریپ (علیرضا آذرخش) جهت انتساب قطعی به «سفرهای من»
-DEFAULT_SNAPP_ORGANIZATION_PHONE = "09120759419"
+# شماره رزروکننده ثابت برای تمام درخواست‌های ارسالی به اسنپ‌تریپ
+DEFAULT_SNAPP_ORGANIZATION_PHONE = "09127752353"
 
 # نگاشت کامل شناسه‌های شهری اسنپ‌تریپ
 IRAN_CITIES_MAP = {
@@ -464,7 +464,7 @@ def check_room_realtime_availability(hotel_snapp_id: int, room_snapp_id: int, ch
 def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, hotel_snapp_id: int, quantity: int = 1):
     """
     ثبت رزرو در اسنپ طبق Step 3 مستندات رسمی اسنپ‌تریپ (/booking/create)
-    کلید اصلی: متصل کردن فیلد اصلی رزروکننده به شماره اکانت سازمانی اسنپ تا مستقیماً در «سفرهای من» بنشیند.
+    شماره رزروکننده اصلی در هر درخواست: 09127752353
     """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
@@ -479,17 +479,16 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     buyer = getattr(reservation, 'buyer', None)
     profile = getattr(buyer, 'natural_profile', None) if buyer else None
 
-    # مسافر واقعی که اقامت دارد
+    # مشخصات مسافر مقیم هتل
     passenger_fn = reservation.reserver_first_name or (getattr(profile, 'first_name', '') if profile else '') or "علیرضا"
     passenger_ln = reservation.reserver_last_name or (getattr(profile, 'last_name', '') if profile else '') or "آذرخش"
     passenger_nc = reservation.reserver_national_code or (getattr(profile, 'national_code', '') if profile else '') or "0012345679"
-    passenger_phone = (reservation.reserver_phone_number or getattr(buyer, 'phone_number', '') or DEFAULT_SNAPP_ORGANIZATION_PHONE).strip()
 
     passengers_payload = []
     first_room = reservation.reservation_rooms.first()
     if first_room and first_room.passengers.exists():
         for p in first_room.passengers.all():
-            p_phone = (p.mobile_number or passenger_phone).strip()
+            p_phone = (p.mobile_number or DEFAULT_SNAPP_ORGANIZATION_PHONE).strip()
             passengers_payload.append({
                 "first_name": p.first_name or passenger_fn,
                 "last_name": p.last_name or passenger_ln,
@@ -505,9 +504,9 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
             "first_name": passenger_fn,
             "last_name": passenger_ln,
             "national_code": passenger_nc,
-            "phone": passenger_phone,
-            "phone_number": passenger_phone,
-            "mobile": passenger_phone,
+            "phone": DEFAULT_SNAPP_ORGANIZATION_PHONE,
+            "phone_number": DEFAULT_SNAPP_ORGANIZATION_PHONE,
+            "mobile": DEFAULT_SNAPP_ORGANIZATION_PHONE,
             "foreigner": False,
             "gender": "male"
         })
@@ -522,13 +521,12 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
     create_url = f"{base_url}/booking/create"
     
-    # 🔥 نکته کلیدی اتصال به «سفرهای من»:
-    # فیلد phone ریشه باید حتماً روی شماره اکانت اسنپ (09120759419) باشد تا اسنپ آن را به پنل شما منتسب کند!
+    # تنظیم شماره رزروکننده روی 09127752353 برای کلیه درخواست‌ها
     payload = {
         "hotel_id": int(hotel_snapp_id),
         "checkin": checkin_str,
         "checkout": checkout_str,
-        "phone": DEFAULT_SNAPP_ORGANIZATION_PHONE,
+        "phone": DEFAULT_SNAPP_ORGANIZATION_PHONE, # 09127752353
         "phone_number": DEFAULT_SNAPP_ORGANIZATION_PHONE,
         "mobile": DEFAULT_SNAPP_ORGANIZATION_PHONE,
         "booker_phone": DEFAULT_SNAPP_ORGANIZATION_PHONE,
@@ -539,7 +537,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
     }
 
     try:
-        logger.info(f"📤 ارسال درخواست ایجاد رزرو به اسنپ: {payload}")
+        logger.info(f"📤 ارسال درخواست ایجاد رزرو به اسنپ با شماره {DEFAULT_SNAPP_ORGANIZATION_PHONE}: {payload}")
         res = requests.post(create_url, json=payload, headers=headers, timeout=20)
         
         if res.status_code not in [200, 201]:
@@ -582,8 +580,7 @@ def create_snapptrip_booking(reservation: Reservationhotel, room_snapp_id: int, 
 
 def confirm_snapptrip_booking(snapp_reservation_code: str):
     """
-    تأیید و قطعی‌سازی قطعی رزرو طبق Step 4b مستندات اسنپ‌تریپ (/booking/{code}/confirm)
-    همراه با کسر مبلغ از کیف پول و ثبت قطعی در سیستم اسنپ
+    تأیید و قطعی‌سازی رزرو طبق Step 4b مستندات اسنپ‌تریپ (/booking/{code}/confirm)
     """
     base_url, headers = get_snapptrip_client_config()
     if not headers.get('api-key'):
