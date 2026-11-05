@@ -1469,13 +1469,6 @@ class Reservationhotel(models.Model):
         ])
 
     def calculate_total_price(self):
-        """
-        محاسبه بی‌نقص مجموع صورت‌حساب:
-        ۱. محاسبه شب‌به‌شب قیمت‌ها از تقویم
-        ۲. محاسبه نفرات اضافه (مستقل از نام مسافر)
-        ۳. نیم‌شارژ ورود = ۵۰٪ شب اول
-        ۴. نیم‌شارژ خروج = ۵۰٪ شب آخر
-        """
         if not self.pk or not self.reservation_rooms.exists():
             return (Decimal('0'),) * 9 
 
@@ -1506,7 +1499,6 @@ class Reservationhotel(models.Model):
 
             quantity = res_room.quantity
 
-            # خواندن تعداد نفرات اضافه حتی اگر فرم مسافران پر نشده باشد
             extra_guests = max(
                 res_room.extra_passengers_count or 0,
                 res_room.passengers.filter(passenger_type='extra').count()
@@ -1515,7 +1507,6 @@ class Reservationhotel(models.Model):
             first_night_price = Decimal('0')
             last_night_price = Decimal('0')
 
-            # محاسبه شب‌به‌شب قیمت‌ها به صورت کاملاً شمسی
             for night_idx in range(nights):
                 target_date_j = self.check_in_date + jdatetime.timedelta(days=night_idx)
 
@@ -1524,7 +1515,6 @@ class Reservationhotel(models.Model):
                     end_date__gte=target_date_j
                 )
 
-                # اولویت قطعی با نرخ روزانه همان تاریخ
                 exact_day_qs = price_qs.filter(start_date=target_date_j, end_date=target_date_j)
                 target_qs = exact_day_qs if exact_day_qs.exists() else price_qs
 
@@ -1537,7 +1527,6 @@ class Reservationhotel(models.Model):
                 daily_price = Decimal(price_obj.price) if price_obj else Decimal('0')
                 extra_price_per_person = Decimal(price_obj.extra_passenger_price) if price_obj else Decimal('0')
 
-                # ثبت دقیق قیمت شب اول و آخر برای محاسبه نیم‌شارژها
                 if night_idx == 0:
                     first_night_price = daily_price
                 if night_idx == nights - 1:
@@ -1546,14 +1535,12 @@ class Reservationhotel(models.Model):
                 total += daily_price * quantity
                 total_extra += extra_price_per_person * extra_guests * quantity
 
-                # اعمال تخفیف ثابت اولین شب
                 if night_idx == 0 and price_obj and price_obj.discount_type == 'fixed' and price_obj.is_fixed_discount_one_time:
                     if price_obj.discount_date and self.check_in_date <= price_obj.discount_date:
                         room_fixed_discount += Decimal(price_obj.discount_value) * quantity
                     elif not price_obj.discount_date:
                         room_fixed_discount += Decimal(price_obj.discount_value) * quantity
 
-            # محاسبه دقیق نیم‌شارژ ورود (نصف شب اول) و نیم‌شارژ خروج (نصف شب آخر)
             has_in = bool(getattr(hotel, 'has_check_in_half_day_charge', False))
             has_out = bool(getattr(hotel, 'has_check_out_half_day_charge', False))
 
@@ -1663,21 +1650,15 @@ def get_skip_points_and_sms():
 
 
 # ==============================================================================
-# سیگنال مدیریت وضعیت پرداخت، کسر کیف پول و تایید قطعی اسنپ‌تریپ (فقط یک‌بار)
+# سیگنال مدیریت وضعیت پرداخت، کسر کیف پول و تایید قطعی اسنپ‌تریپ
 # ==============================================================================
 @receiver(post_save, sender=Reservationhotel)
 def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
-    """
-    مدیریت پرداخت موفق:
-    ۱. کسر قطعی مبلغ از کیف پول سایت مسافر
-    ۲. هماهنگی و تایید رزرو در اسنپ‌تریپ با بررسی شارژ حساب B2B
-    ۳. مصرف کد تخفیف و تخصیص امتیاز باشگاه
-    ۴. ارسال وب‌سوکت وضعیت به فرانت‌اند
-    """
     if get_skip_points_and_sms():
         return
 
     update_fields = kwargs.get('update_fields')
+    # جلوگیری از لوپ روی فیلدهای داخلی
     if update_fields and set(update_fields).issubset({'wallet_withdrawn', 'points_assigned', 'discount_processed', 'snapp_status'}):
         return
 
@@ -1688,13 +1669,14 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             cache_key_discount = f"discount_process_lock_{instance.tracking_code}"
 
             if instance.capacity_status == 'rejected':
+                from reservation.models import ReservationRoom, Room
                 rooms = ReservationRoom.objects.filter(reservation=instance).select_related('room')
                 with transaction.atomic():
                     for r in rooms:
                         if r.room:
                             room = Room.objects.select_for_update().get(pk=r.room.pk)
                             room.revert_inventory_for_cancellation(r.quantity, getattr(r, 'was_auto_approved', False))
-                logger.info(f"رزرو {instance.tracking_code} رد شد؛ ظرفیت اتاق‌ها در دیتابیس آزاد شد.")
+                logger.info(f"رزرو {instance.tracking_code} رد شد؛ ظرفیت اتاق‌ها آزاد شد.")
 
             elif instance.payment_status == 'paid':
                 logger.info(f"🔵 پرداخت موفق برای رزرو {instance.tracking_code}. شروع پردازش...")
@@ -1714,24 +1696,36 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                                 res_lock.save(update_fields=['wallet_withdrawn'])
                                 instance.wallet_withdrawn = True
                                 logger.info(f"✅ مبلغ {res_lock.wallet_withdrawal_amount:,} تومان از کیف پول کاربر در سایت کسر شد.")
-                            else:
-                                logger.error(f"❌ موجودی کیف پول سایت کاربر برای کسر کافی نیست!")
 
-                # گام دوم: هماهنگی هوشمند و قطعی کردن رزرو در اسنپ‌تریپ
-                if (
-                    getattr(instance, 'is_snapptrip_reservation', False)
-                    and instance.snapp_reservation_code
-                    and instance.snapp_status != 'confirmed'
-                ):
+                # گام دوم: تایید قطعی در اسنپ‌تریپ با بررسی مستقیم از سرور اسنپ (اصلاح باگ اصلی)
+                if getattr(instance, 'is_snapptrip_reservation', False) and instance.snapp_reservation_code:
                     try:
-                        from reservation.snapptrip_service import auto_confirm_snapp_reservation_if_charged
-                        ok, msg = auto_confirm_snapp_reservation_if_charged(instance)
-                        if ok:
-                            logger.info(f"✅ رزرو اسنپ {instance.snapp_reservation_code} قطعی شد: {msg}")
+                        from reservation.snapptrip_service import (
+                            auto_confirm_snapp_reservation_if_charged,
+                            get_snapptrip_booking_status
+                        )
+
+                        # استعلام آنلاین از خودِ سرور اسنپ
+                        real_snapp_state, _ = get_snapptrip_booking_status(instance.snapp_reservation_code)
+                        logger.info(f"🔍 وضعیت زنده رزرو {instance.snapp_reservation_code} در سرور اسنپ: {real_snapp_state}")
+
+                        # اگر در اسنپ هنوز قطعی نشده، فوراً تایید را ارسال کن
+                        if real_snapp_state not in ['confirmed', 'paid', 'approved']:
+                            logger.info(f"🚀 در حال ارسال دستور Confirm به اسنپ برای رزرو {instance.snapp_reservation_code}...")
+                            ok, msg = auto_confirm_snapp_reservation_if_charged(instance)
+                            if ok:
+                                logger.info(f"✅ رزرو {instance.snapp_reservation_code} با موفقیت در اسنپ قطعی شد.")
+                            else:
+                                logger.warning(f"⚠️ عدم موفقیت در تایید اسنپ: {msg}")
                         else:
-                            logger.warning(f"⚠️ وضعیت اسنپ برای رزرو {instance.snapp_reservation_code}: {msg}")
+                            logger.info(f"✓ رزرو {instance.snapp_reservation_code} قبلاً در اسنپ قطعی شده است.")
+                            if instance.snapp_status != 'confirmed':
+                                instance.snapp_status = 'confirmed'
+                                instance._skip_price_calculation_on_save = True
+                                instance.save(update_fields=['snapp_status'])
+
                     except Exception as snapp_err:
-                        logger.error(f"❌ خطا در هماهنگی رزرو با اسنپ‌تریپ: {snapp_err}")
+                        logger.error(f"❌ خطا در هماهنگی با اسنپ: {snapp_err}")
 
                 # گام سوم: مصرف کد تخفیف
                 if instance.applied_discount_code and not instance.discount_processed and not cache.get(cache_key_discount):
@@ -1803,8 +1797,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             logger.exception(f"خطا در پردازش سیگنال رزرو {instance.tracking_code}: {e}")
 
     transaction.on_commit(_execute_after_commit)
-
-
 
 
 # ==============================================================================
