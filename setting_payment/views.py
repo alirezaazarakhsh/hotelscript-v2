@@ -17,7 +17,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from urllib.parse import urlencode
 
-from safarname24 import settings
+from zarvantrip import settings
 from .models import PaymentGatewayPreference, ZarinpalGateway, IranianGateway
 from reservation.models import Reservationhotel, Wallet, Passenger, ReservationRoomPassenger
 from django.db.models import F
@@ -48,7 +48,7 @@ def get_merchant_code(active_gateway):
                 'https://payment.zarinpal.com/pg/StartPay',
                 'https://payment.zarinpal.com/pg/v4/payment/verify.json',
                 'production',
-                'https://safarnameh24.com/payment/watcher-info'
+                'https://zarvantrip.com/payment/watcher-info'
             )
         logger.info(f"مرچنت‌کد زرین‌پال: {gw.merchant_code}, حالت: {gw.mode}")
         return (
@@ -69,7 +69,7 @@ def get_merchant_code(active_gateway):
                 'https://dargaah.ir/ird/startpay',
                 'https://dargaah.ir/verification',
                 None,
-                'https://safarnameh24.com/payment/watcher-info'
+                'https://zarvantrip.com/payment/watcher-info'
             )
         logger.info(f"مرچنت‌کد ایران‌درگاه: {gw.merchant_code}")
         return (
@@ -275,7 +275,7 @@ class ReservationPaymentCheckAPIView(APIView):
                     "cardNumber": "1234123412341234" if mode is None and merchant_code == "TEST" else None,
                     "description": f"پرداخت رزرو {tracking_code}"
                 }
-                headers = {"Content-Type": "application/json", "Referer": "https://safarnameh24.com"}
+                headers = {"Content-Type": "application/json", "Referer": "https://zarvantrip.com"}
                 resp = make_payment_request(request_url, data, headers)
                 
                 try:
@@ -511,7 +511,7 @@ class PaymentVerifyAPIView(APIView):
                     "amount": amount,
                     "orderId": order_id
                 }
-                headers = {"Content-Type": "application/json", "Referer": "https://safarnameh24.com"}
+                headers = {"Content-Type": "application/json", "Referer": "https://zarvantrip.com"}
                 resp = make_payment_request(verify_url, data, headers)
                 resp_data = resp.json()
 
