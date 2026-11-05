@@ -529,7 +529,7 @@ class Hotel(models.Model):
 
     class Meta:
         verbose_name = 'هتل'
-        verbose_name_plural = 'هتل ها'
+        verbose_name_plural = '1- افزودن هتل - لیست هتل ها'
 
     def clean(self):
         super().clean()
@@ -940,7 +940,7 @@ class Room(models.Model):
 
     class Meta:
         verbose_name = 'اتاق'
-        verbose_name_plural = 'اتاق‌ها'
+        verbose_name_plural = '2- افزودن اتاق - لیست اتاق ها'
         constraints = [
             models.CheckConstraint(
                 check=models.Q(count__gte=0),
