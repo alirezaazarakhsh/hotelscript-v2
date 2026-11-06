@@ -216,43 +216,52 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل
+# بخش ۲: اینلاین کامل اتاق درون هتل (شامل تمام فیلدها + دکمه تقویم و نرخ)
 # ==============================================================================
 
-class RoomInline(admin.TabularInline):
+class RoomInline(admin.StackedInline):
     """
-    اینلاین اتاق‌ها با پاپ‌آپ استاندارد و فوق‌سریع برای تنظیم نرخ بدون خروج از صفحه هتل
+    اینلاین جامع اتاق‌ها درون صفحه هتل:
+    شامل تمام مشخصات اتاق + دکمه باز کردن اختصاصی تقویم و قیمت‌ها
     """
     model = Room
     extra = 0
-    fields = (
-        'title', 
-        'board_type', 
-        'room_capacity', 
-        'extra_capacity', 
-        'inventory', 
-        'count', 
-        'auto_approved_count',
-        'is_snapptrip',
-        'manage_room_link'
-    )
-    readonly_fields = ('manage_room_link',)
-    show_change_link = False
+    filter_horizontal = ('services',)
     verbose_name = 'اتاق'
     verbose_name_plural = 'اتاق‌های این هتل'
 
-    def manage_room_link(self, obj):
-        if obj.pk:
-            url = reverse('admin:reservation_room_change', args=[obj.pk])
+    fieldsets = (
+        ('مشخصات اصلی و ظرفیت اتاق', {
+            'fields': (
+                ('title', 'board_type'),
+                ('room_capacity', 'extra_capacity'),
+                ('inventory', 'count', 'auto_approved_count'),
+                'customer_club_points',
+                'services',
+                'description',
+                'rules',
+                ('snapptrip_room_id', 'is_snapptrip'),
+                'price_calendar_button',
+            )
+        }),
+    )
+    readonly_fields = ('price_calendar_button',)
+
+    def price_calendar_button(self, obj):
+        if obj and obj.pk:
+            url = reverse('admin:reservation_room_change', args=[obj.pk]) + '?_popup=1&prices_only=1'
             return format_html(
-                '<a class="button" style="background:#0284c7; color:white; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; text-decoration:none; display:inline-block;" '
-                'onclick="window.open(\'{url}?_popup=1\', \'room_{id}\', \'width=1150,height=750,top=100,left=200,resizable=yes,scrollbars=yes\'); return false;" href="{url}">'
-                '⚙️ تنظیم قیمت و تقویم'
-                '</a>',
+                '<div style="margin: 10px 0; padding: 10px; background: #f8fafc; border: 1px dashed #0284c7; border-radius: 6px;">'
+                '<a class="button" style="background:#0284c7; color:white; padding:8px 16px; border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(2,132,199,0.25);" '
+                'onclick="window.open(\'{url}\', \'prices_{id}\', \'width=1150,height=750,top=100,left=150,resizable=yes,scrollbars=yes\'); return false;" href="{url}">'
+                '📅 باز کردن تقویم و قیمت‌های این اتاق (کلیک کنید)'
+                '</a>'
+                '<span style="margin-right:12px; font-size:12px; color:#475569;">(با کلیک روی این دکمه فقط جدول بازه‌های زمانی و قیمت‌های این اتاق برای ویرایش باز می‌شود)</span>'
+                '</div>',
                 url=url, id=obj.pk
             )
-        return "-"
-    manage_room_link.short_description = "مدیریت تقویم و نرخ"
+        return format_html('<span style="color:#64748b; font-size:12px;">(پس از ذخیره هتل، دکمه تنظیم تقویم و قیمت برای این اتاق جدید فعال خواهد شد)</span>')
+    price_calendar_button.short_description = "تقویم و نرخ‌گذاری"
 
 
 class SEOMetaInlineForm(forms.ModelForm):
@@ -333,7 +342,7 @@ class CancellationPenaltyInline(admin.StackedInline):
 
 
 # ==============================================================================
-# بخش ۳: مدیریت اصلی هتل‌ها
+# بخش ۳: مدیریت هتل‌ها
 # ==============================================================================
 
 @admin.register(Hotel)
@@ -413,13 +422,14 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
+    # اینلاین اتاق‌ها دقیقاً زیر جریمه کنسلی قرار دارند
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,
-        RoomInline
+        CancellationPenaltyInline,  # جریمه کنسلی
+        RoomInline                  # اتاق‌های هتل
     ]
 
     @admin.display(description="وضعیت انتشار", ordering="status")
@@ -569,7 +579,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
+# بخش ۶: مدیریت مستقل اتاق‌ها (نمایش اختصاصی تقویم و قیمت در حالت پاپ‌آپ)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -588,6 +598,8 @@ class RoomDateInline(admin.TabularInline):
         'is_fixed_discount_one_time',
     )
     ordering = ('start_date',)
+    verbose_name = 'بازه زمانی و قیمت اتاق'
+    verbose_name_plural = 'بازه‌های زمانی و قیمت‌های این اتاق'
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -637,9 +649,38 @@ class RoomAdmin(admin.ModelAdmin):
 
     inlines = [RoomDateInline]
 
+    def room_info_display(self, obj):
+        if not obj:
+            return "-"
+        hotel_name = obj.hotel.name if obj.hotel else "نامشخص"
+        return format_html(
+            '<div style="background:#f0fdf4; border:1px solid #86efac; padding:12px 18px; border-radius:8px; margin-bottom:12px;">'
+            '<h3 style="margin:0 0 6px 0; color:#166534; font-size:15px; font-weight:bold;">🏨 هتل: {} &nbsp;|&nbsp; 🛏️ اتاق: {}</h3>'
+            '<p style="margin:0; color:#15803d; font-size:12px;">مشخصات کلی اتاق در صفحه هتل ذخیره می‌شود. در جدول زیر فقط بازه‌های زمانی و قیمت‌های این اتاق را تعریف یا ویرایش کرده و دکمه <b>ذخیره</b> در پایین را بزنید.</p>'
+            '</div>',
+            hotel_name, obj.title or f"اتاق {obj.pk}"
+        )
+    room_info_display.short_description = "مشخصات اتاق"
+
+    def get_fieldsets(self, request, obj=None):
+        # اگر دکمه از داخل هتل کلیک شده باشد، فقط جدول بازه‌های زمانی نمایش داده می‌شود
+        if request.GET.get('prices_only'):
+            return (
+                (None, {
+                    'fields': ('room_info_display',)
+                }),
+            )
+        return super().get_fieldsets(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if request.GET.get('prices_only'):
+            readonly.append('room_info_display')
+        return readonly
+
 
 # ==============================================================================
-# بخش ۷: مسافران و برندها (با پیش‌نمایش تصویر لوگو)
+# بخش ۷: مسافران و برندها (با پیش‌نمایش لوگو)
 # ==============================================================================
 
 @admin.register(Passenger)
@@ -677,7 +718,7 @@ class BestHotelsAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۸: مدیریت رزروها (بدون هیچ فیلتر و با تعریف صحیح فرم)
+# بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
 # ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):
