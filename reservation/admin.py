@@ -54,7 +54,8 @@ from .models import (
     CancellationPenalty,
     ReservationInvoiceSettings,
     SnappTripSetting,
-    SnappHotelDirectory
+    SnappHotelDirectory,
+    SuggestedCommentItem
 )
 from .snapptrip_service import (
     sync_all_snapptrip_hotels_directory, 
@@ -92,9 +93,9 @@ class CountryAdmin(admin.ModelAdmin):
             return format_html(
                 '<div>'
                 '<img src="{}" width="90" height="60" style="object-fit:cover; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);" />'
-                '<p style="margin-top:6px; color:#555; font-size:12px;">لینک مستقیم CDN: <a href="{}" target="_blank">مشاهده فایل SVG</a></p>'
+                '<p style="margin-top:6px; color:#555; font-size:12px;">کد پرچم: {} | <a href="{}" target="_blank">مشاهده SVG مستقیم</a></p>'
                 '</div>',
-                obj.flag_url, obj.flag_url
+                obj.flag_url, obj.code, obj.flag_url
             )
         return "کد ۲ حرفی کشور را ذخیره کنید تا پرچم به صورت آنلاین نمایش داده شود."
     flag_preview_large.short_description = "پیش‌نمایش پرچم"
@@ -122,7 +123,7 @@ class CityAdmin(admin.ModelAdmin):
     form = CityAdminForm
     list_display = ('id', 'name', 'slug', 'image', 'province', 'show_in_homepage')
     search_fields = ('name', 'slug', 'province__name')
-    list_filter = ('province__country', 'province', 'show_in_homepage')
+    list_filter = ('province', 'show_in_homepage')
     autocomplete_fields = ('province',)
 
 
@@ -186,14 +187,20 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+@admin.register(RoomService)
+class RoomServiceAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title')
+    search_fields = ('title',)
+
+
 # ==============================================================================
-# بخش ۲: اینلاین‌های هتل (اتاق اختیاری، اماکن، جریمه، سئو و سوالات)
+# بخش ۲: اینلاین‌های هتل (شامل اتاق بدون تصویر و کاملاً اختیاری)
 # ==============================================================================
 
 class RoomInline(admin.StackedInline):
     """
     اینلاین اتاق‌ها درون هتل:
-    به دلیل extra=0 کاملاً اختیاری است و فرم اجباری اضافه نمی‌کند.
+    تصویر و پیش‌نمایش تصویر به طور کامل برداشته شده و با extra=0 ثبت آن اختیاری است.
     """
     model = Room
     extra = 0
@@ -209,7 +216,6 @@ class RoomInline(admin.StackedInline):
         'description',
         'rules',
         ('snapptrip_room_id', 'is_snapptrip'),
-        'image',
     )
     classes = ('collapse',)
 
@@ -283,7 +289,7 @@ class NearbyPlaceInline(admin.TabularInline):
 
 class CancellationPenaltyInline(admin.StackedInline):
     model = CancellationPenalty
-    extra = 1
+    extra = 0
     max_num = 1
     can_delete = False
     verbose_name = 'درصد جریمه کنسلی'
@@ -370,9 +376,8 @@ class HotelAdmin(admin.ModelAdmin):
 
     search_fields = ('name', 'address', 'public_tags__title', 'snapptrip_hotel_id')
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
-    list_filter = ('status', 'is_snapptrip', 'city__province__country', 'city', 'type', 'stars')
+    list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # تجمیع تمامی اینلاین‌ها در یک صفحه
     inlines = [
         RoomInline,
         HotelTagPublicInline, 
@@ -481,6 +486,18 @@ class HotelGalleryAdmin(admin.ModelAdmin):
 # بخش ۵: نظرات هتل‌ها
 # ==============================================================================
 
+@admin.register(SuggestedCommentItem)
+class SuggestedCommentItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title')
+    search_fields = ('title',)
+
+
+@admin.register(CommentPointItem)
+class CommentPointItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'is_positive', 'is_negative')
+    search_fields = ('title',)
+
+
 class CommentPointInline(admin.TabularInline):
     model = CommentPoint
     extra = 1
@@ -529,7 +546,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها و نرخ‌گذاری روزانه
+# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -560,6 +577,7 @@ class RoomDateInline(admin.TabularInline):
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
+    # فیلدهای تصویر و پیش‌نمایش طبق درخواست برداشته شدند
     list_display = (
         'id',
         'hotel',
@@ -572,7 +590,6 @@ class RoomAdmin(admin.ModelAdmin):
         'auto_approved_count',
         'room_capacity',
         'extra_capacity',
-        'thumbnail_preview',
     )
     search_fields = ('title', 'hotel__name', 'snapptrip_room_id')
     list_filter = ('is_snapptrip', 'board_type', 'hotel')
@@ -593,36 +610,13 @@ class RoomAdmin(admin.ModelAdmin):
         'room_capacity',
         'extra_capacity',
         'services',
-        'image',
-        'image_preview',
     )
 
     inlines = [RoomDateInline]
-    readonly_fields = ('thumbnail_preview', 'image_preview')
-
-    def thumbnail_preview(self, obj):
-        if obj.image:
-            return format_html(
-                '<img src="{}" style="width: 80px; height: 60px; object-fit: cover; border-radius: 4px;" />',
-                obj.image.url
-            )
-        return "(بدون تصویر)"
-    thumbnail_preview.short_description = 'پیش‌نمایش'
-
-    def image_preview(self, obj):
-        if obj.image:
-            return format_html(
-                '<div style="margin-top: 10px;">'
-                '<img src="{}" style="max-width: 300px; max-height: 200px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />'
-                '</div>',
-                obj.image.url
-            )
-        return "(هنوز تصویری انتخاب نشده)"
-    image_preview.short_description = 'پیش‌نمایش تصویر'
 
 
 # ==============================================================================
-# بخش ۷: مسافران و برندها
+# بخش ۷: مسافران و برندها (همراه با پیش‌نمایش تصویر لوگو)
 # ==============================================================================
 
 @admin.register(Passenger)
@@ -634,13 +628,33 @@ class PassengerAdmin(admin.ModelAdmin):
 @admin.register(BestHotels)
 class BestHotelsAdmin(admin.ModelAdmin):
     form = BestHotelsAdminForm
-    list_display = ('order', 'title_logo', 'image_logo_hotel')
+    list_display = ('order', 'logo_preview', 'title_logo')
     search_fields = ('title_logo',)
     list_filter = ('order',)
+    readonly_fields = ('logo_preview_large',)
+    fields = ('order', 'title_logo', 'image_logo_hotel', 'logo_preview_large')
+
+    def logo_preview(self, obj):
+        if obj.image_logo_hotel:
+            return format_html(
+                '<img src="{}" style="height: 38px; width: 75px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: #fafafa; padding: 2px;" />',
+                obj.image_logo_hotel.url
+            )
+        return "-"
+    logo_preview.short_description = "پیش‌نمایش لوگو"
+
+    def logo_preview_large(self, obj):
+        if obj.image_logo_hotel:
+            return format_html(
+                '<img src="{}" style="max-height: 120px; max-width: 250px; object-fit: contain; border-radius: 6px; border: 1px solid #ccc; padding: 4px;" />',
+                obj.image_logo_hotel.url
+            )
+        return "هنوز تصویری انتخاب نشده است."
+    logo_preview_large.short_description = "پیش‌نمایش تصویر انتخاب‌شده"
 
 
 # ==============================================================================
-# بخش ۸: مدیریت جامع رزروها
+# بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
 # ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):
@@ -724,11 +738,10 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
         'snapp_reservation_code',
     )
-    list_filter = (
-        'is_snapptrip_reservation',
-        'capacity_status', 'payment_status', 'snapp_status',
-        'cancellation_requested', 'check_in_date', 'check_out_date'
-    )
+
+    # طبق دستور، فیلترها کاملاً حذف شدند
+    list_filter = ()
+
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
     actions = ['confirm_snapp_action_bulk']

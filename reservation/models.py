@@ -72,7 +72,7 @@ def validate_phone_number_custom(value):
 
 
 def validate_identification_code(value):
-    """اعتبارسنجی دوگانه (اختیاری): کد ملی ایرانی یا شماره پاسپورت خارجی"""
+    """اعتبارسنجی دوگانه: کد ملی ایرانی یا شماره پاسپورت خارجی"""
     if not value or not str(value).strip():
         return value
     
@@ -536,7 +536,6 @@ class Room(models.Model):
     room_capacity = models.PositiveIntegerField(verbose_name=_('ظرفیت اتاق'), default=0)
     extra_capacity = models.PositiveIntegerField(verbose_name=_('ظرفیت نفر اضافه'), default=0)
     services = models.ManyToManyField(RoomService, verbose_name=_('خدمات'), related_name='rooms', blank=True)
-    image = models.ImageField(upload_to='room_images/', verbose_name=_('تصویر اتاق'), null=True, blank=True)
     snapptrip_room_id = models.PositiveIntegerField(verbose_name=_('شناسه اتاق در اسنپ‌تریپ'), null=True, blank=True)
     board_type = models.CharField(
         verbose_name=_('نوع پذیرایی (Board Type)'),
@@ -687,7 +686,7 @@ class RoomDatePrice(models.Model):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
 
 
-# برای پشتیبانی و سازگاری با ایمپورت‌های بخش‌های قدیمی (ویوها)
+# برای پشتیبانی و سازگاری کامل با ایمپورت‌های ویوها
 RoomDate = RoomDatePrice
 
 
