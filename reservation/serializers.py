@@ -1,12 +1,14 @@
 import re
-from pydantic import ValidationError
-from rest_framework import serializers
 import jdatetime
+from decimal import Decimal
+from rest_framework import serializers
 from django.utils import timezone
 from django.db import models
-from authentication import models
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from config.serializers import PageSerializer
+from icons.models import IconShortcut
+
 from .models import (
     BestHotels,
     ClosedDate,
@@ -31,12 +33,13 @@ from .models import (
     Comment,
     CommentPoint,
     CommentPointItem,
- 
-
 )
-from icons.models import IconShortcut
 
-# Updated IconShortcutSerializer with explicit ref_name
+
+# ==============================================================================
+# ۱. آیکون‌ها و جغرافیا
+# ==============================================================================
+
 class IconShortcutSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source='title_icon', read_only=True)
     link = serializers.SerializerMethodField()
@@ -44,7 +47,7 @@ class IconShortcutSerializer(serializers.ModelSerializer):
     class Meta:
         model = IconShortcut
         fields = ('title', 'link')
-        ref_name = "ReservationIconShortcutSerializer"  # Unique ref_name to avoid conflict
+        ref_name = "ReservationIconShortcutSerializer"
 
     def get_link(self, obj):
         if not obj.svg_icon:
@@ -53,10 +56,12 @@ class IconShortcutSerializer(serializers.ModelSerializer):
         url = obj.svg_icon.url
         return request.build_absolute_uri(url) if request else f"https://zarvantrip.com{url}"
 
+
 class ProvinceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Province
         fields = ('name',)
+
 
 class CitySerializer(serializers.ModelSerializer):
     province = serializers.SerializerMethodField()
@@ -72,126 +77,16 @@ class CitySerializer(serializers.ModelSerializer):
     def get_hotels_number(self, obj):
         return obj.hotels.filter(status='published').count()
 
+
 class HotelTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelType
         fields = ('id', 'title')
 
-class FavoriteHotelSerializer(serializers.ModelSerializer):
-    city = CitySerializer()
-    type = serializers.SerializerMethodField()
-    main_image = serializers.SerializerMethodField()
-    original_total_price = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
-    rating = serializers.SerializerMethodField()
-    discount_percentage = serializers.SerializerMethodField()
-    discount_expiry = serializers.SerializerMethodField()
 
-    class Meta:
-        model = Hotel
-        fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
-            'is_special_offer', 'is_flash_sale', 'is_best_seller',
-            'original_total_price', 'total_price', 'rating',
-            'discount_percentage', 'discount_expiry'
-        )
-
-    def get_type(self, obj):
-        return obj.type.title if obj.type else None
-
-    def get_main_image(self, obj):
-        request = self.context.get('request')
-        image_url = obj.main_image.url if obj.main_image else ''
-        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
-
-    def get_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        return price_data.get('total_price', None)
-
-    def get_original_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        return price_data.get('original_total_price', None)
-
-    def get_rating(self, obj):
-        return getattr(obj, 'rating', None)
-
-    def get_discount_percentage(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        discount_type = price_data.get('discount_type', 'none')
-        discount_value = price_data.get('discount_value', 0)
-        if discount_type == 'percentage':
-            return discount_value
-        elif discount_type == 'fixed':
-            original_price = price_data.get('original_total_price', 0)
-            if original_price > 0:
-                return round((discount_value / original_price) * 100, 1)
-        return 0
-
-    def get_discount_expiry(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
-        discount_date = price_data.get('discount_date', None)
-        return discount_date.strftime('%Y-%m-%d') if discount_date else None
-
-
-class HotelListSerializer(serializers.ModelSerializer):
-    city = CitySerializer()
-    type = serializers.SerializerMethodField()
-    main_image = serializers.SerializerMethodField()
-    original_total_price = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
-    rating = serializers.SerializerMethodField()
-    discount_percentage = serializers.SerializerMethodField()
-    discount_expiry = serializers.SerializerMethodField()
-    reservation_count = serializers.IntegerField()
-
-    class Meta:
-        model = Hotel
-        fields = (
-            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
-            'is_special_offer', 'is_flash_sale', 'is_best_seller',
-            'original_total_price', 'total_price', 'rating',
-            'discount_percentage', 'discount_expiry', 'reservation_count'
-        )
-
-    def get_type(self, obj):
-        return obj.type.title if obj.type else None
-
-    def get_main_image(self, obj):
-        request = self.context.get('request')
-        image_url = obj.main_image.url if obj.main_image else ''
-        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
-
-    def get_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        return price_data.get('total_price') if price_data else None
-
-    def get_original_total_price(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        if price_data and price_data.get('discount_type') == 'percentage':
-            return price_data.get('original_total_price')
-        return None
-
-    def get_rating(self, obj):
-        return getattr(obj, 'rating', None)
-
-    def get_discount_percentage(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        if price_data and price_data.get('discount_type') == 'percentage':
-            return price_data.get('discount_value')
-        return None
-
-    def get_discount_expiry(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        if price_data and price_data.get('discount_type') == 'percentage':
-            return price_data.get('discount_date')
-        return None
-
-    # اضافه شده: نمایش سطح کاربر
-    def get_user_level(self, obj):
-        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
-        return price_data.get('user_level') if price_data else "عمومی"
-    
-
+# ==============================================================================
+# ۲. امکانات و برچسب‌ها
+# ==============================================================================
 
 class FacilitiesSerializer(serializers.ModelSerializer):
     icon = IconShortcutSerializer(read_only=True)
@@ -199,23 +94,22 @@ class FacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilities
         fields = ('id', 'title', 'icon')
-        
-        
-#all facility
+
+
 class FacilitySerializer(serializers.ModelSerializer):
     icon = IconShortcutSerializer(read_only=True)
 
     class Meta:
         model = Facilities
-        fields = ['id', 'title','icon']   
-        
+        fields = ['id', 'title', 'icon']
+
 
 class RoomFacilitiesSimpleSerializer(serializers.ModelSerializer):
     icon = IconShortcutSerializer(read_only=True)
 
     class Meta:
         model = RoomFacilities
-        fields = ['id', 'title','icon']  
+        fields = ['id', 'title', 'icon']
 
 
 class RoomFacilitiesSerializer(serializers.ModelSerializer):
@@ -226,6 +120,7 @@ class RoomFacilitiesSerializer(serializers.ModelSerializer):
         fields = ('id', 'title', 'icon')
         ref_name = "RoomFacilitiesSerializerCustom"
 
+
 class HotelFacilitiesSerializer(serializers.ModelSerializer):
     facilities = FacilitiesSerializer(many=True, read_only=True)
     room_facilities = RoomFacilitiesSerializer(many=True, read_only=True)
@@ -233,20 +128,29 @@ class HotelFacilitiesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('id', 'name', 'slug', 'facilities', 'room_facilities')
-        
-        
 
-        
 
 class RoomServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomService
         fields = ('title',)
 
+
 class HotelTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelTag
-        fields = ('title',)
+        fields = ('id', 'title')
+
+
+class HotelTagPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HotelTagPublic
+        fields = ('id', 'title')
+
+
+# ==============================================================================
+# ۳. تصاویر و جزئیات هتل
+# ==============================================================================
 
 class HotelImagesSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
@@ -267,11 +171,13 @@ class HotelImagesSerializer(serializers.ModelSerializer):
                 urls.append(url)
 
         return urls
-    
+
+
 class HotelDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('description',)
+
 
 class HotelIntroductionSerializer(serializers.ModelSerializer):
     logo_preview = serializers.SerializerMethodField()
@@ -280,7 +186,7 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = (
-            'id','name', 'city_name', 'latitude', 'longitude', 'best_logo', 'logo_preview',
+            'id', 'name', 'city_name', 'latitude', 'longitude', 'best_logo', 'logo_preview',
             'stars', 'address', 'floors_count', 'rooms_count',
             'check_in_time', 'check_out_time'
         )
@@ -295,10 +201,12 @@ class HotelIntroductionSerializer(serializers.ModelSerializer):
     def get_city_name(self, obj):
         return obj.city.name if obj.city else None
 
+
 class HotelFurtherDescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hotel
         fields = ('further_description',)
+
 
 class HotelRulesSerializer(serializers.ModelSerializer):
     class Meta:
@@ -309,7 +217,7 @@ class HotelRulesSerializer(serializers.ModelSerializer):
 class HotelFAQListSerializer(serializers.ModelSerializer):
     class Meta:
         model = HotelFAQ
-        fields = ('question', 'answer') # فیلد icon حذف شد
+        fields = ('question', 'answer')
 
 
 class NearbyPlaceListSerializer(serializers.ModelSerializer):
@@ -319,37 +227,6 @@ class NearbyPlaceListSerializer(serializers.ModelSerializer):
             'title', 'distance', 'driving_time', 'walking_time', 'image', 'latitude', 'longitude'
         )
 
-class PassengerSerializer(serializers.ModelSerializer):
-    identification_code = serializers.CharField(required=True)
-    phone_number = serializers.CharField(required=True)
-
-    def validate_identification_code(self, value):
-        if not value:
-            raise serializers.ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
-        if re.match(r'^\d{10}$', value) or re.match(r'^[A-Z0-9]{6,9}$', value):
-            return value
-        raise serializers.ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
-
-    def validate_phone_number(self, value):
-        if not value:
-            raise serializers.ValidationError(_('شماره موبایل نمی‌تواند خالی باشد.'))
-        if not re.match(r'^09\d{9}$', value):
-            raise serializers.ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
-        return value
-
-    class Meta:
-        model = Passenger
-        fields = (
-            'id',
-            'first_name',
-            'last_name',
-            'identification_code',
-            'phone_number',
-        )
-        
-        
-from rest_framework import serializers
-from .models import BestHotels, Hotel
 
 class BestHotelsSerializer(serializers.ModelSerializer):
     hotel_slug = serializers.SerializerMethodField()
@@ -359,16 +236,9 @@ class BestHotelsSerializer(serializers.ModelSerializer):
         fields = ['order', 'title_logo', 'image_logo_hotel', 'hotel_slug']
 
     def get_hotel_slug(self, obj):
-        # دریافت اولین هتل مرتبط از طریق رابطه معکوس
         hotel = obj.hotels.first() if obj.hotels.exists() else None
         return hotel.slug if hotel and hasattr(hotel, 'slug') else None
 
-
-    
-class HotelTagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HotelTag
-        fields = ('id', 'title')
 
 class HotelGalleryImageSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
@@ -398,11 +268,180 @@ class HotelGallerySerializer(serializers.ModelSerializer):
             for img in obj.images.all()
         ]
 
+
+# ==============================================================================
+# ۴. اتاق‌ها، تقویم و نرخ‌ها (اصلاح کامل باگ ارور ۵۰۰)
+# ==============================================================================
+
+class ClosedDateSerializer(serializers.ModelSerializer):
+    month = serializers.SerializerMethodField()
+    reason = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClosedDate
+        fields = ['date', 'reason', 'user_level', 'month']
+
+    def get_month(self, obj):
+        if obj.date:
+            try:
+                return obj.date.strftime('%B')
+            except Exception:
+                return str(obj.date)
+        return None
+
+    def get_reason(self, obj):
+        return getattr(obj, 'reason', 'تکمیل ظرفیت')
+
+
+class RoomDatePriceSerializer(serializers.ModelSerializer):
+    closed_dates = serializers.SerializerMethodField()
+    month = serializers.SerializerMethodField()
+    user_level = serializers.StringRelatedField()
+    room_capacity = serializers.IntegerField(source='room.room_capacity', read_only=True)
+    extra_capacity = serializers.IntegerField(source='room.extra_capacity', read_only=True)
+    discount_start = serializers.SerializerMethodField()
+    discount_end = serializers.SerializerMethodField()
+    foreign_passenger_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RoomDatePrice
+        fields = [
+            'start_date', 'end_date', 'price', 'extra_passenger_price', 'foreign_passenger_price',
+            'discount_type', 'discount_value', 'discount_start', 'discount_end',
+            'room_capacity', 'extra_capacity', 'closed_dates', 'month', 'user_level'
+        ]
+
+    def get_closed_dates(self, obj):
+        closed_qs = obj.closed_dates.filter(date__gte=obj.start_date, date__lte=obj.end_date)
+        return ClosedDateSerializer(closed_qs, many=True).data
+
+    def get_month(self, obj):
+        if obj.start_date:
+            try:
+                return obj.start_date.strftime('%B')
+            except Exception:
+                return str(obj.start_date)
+        return None
+
+    def get_discount_start(self, obj):
+        return str(obj.start_date) if hasattr(obj, 'start_date') and obj.start_date else None
+
+    def get_discount_end(self, obj):
+        return str(obj.discount_date) if hasattr(obj, 'discount_date') and obj.discount_date else None
+
+    def get_foreign_passenger_price(self, obj):
+        return getattr(obj, 'extra_passenger_price', 0)
+
+
+class RoomSerializer(serializers.ModelSerializer):
+    services = RoomServiceSerializer(many=True, read_only=True)
+    date_prices = serializers.SerializerMethodField()
+    min_price = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+    board_type_display = serializers.CharField(source='get_board_type_display', read_only=True)
+
+    class Meta:
+        model = Room
+        fields = [
+            'id',
+            'hotel',
+            'title',
+            'description',
+            'inventory',
+            'count',
+            'auto_approved_count',
+            'customer_club_points',
+            'room_capacity',
+            'extra_capacity',
+            'board_type',
+            'board_type_display',
+            'image',
+            'services',
+            'date_prices',
+            'min_price'
+        ]
+        ref_name = "ReservationRoomSerializer"
+
+    def get_image(self, obj):
+        if hasattr(obj, 'image') and obj.image:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.image.url) if request else f"https://zarvantrip.com{obj.image.url}"
+        return None
+
+    def get_date_prices(self, obj):
+        user_level = self.context.get('user_level')
+        start_date = self.context.get('start_date')
+        end_date = self.context.get('end_date')
+
+        prices = obj.date_prices.all()
+
+        if start_date and end_date:
+            prices = prices.filter(
+                start_date__lte=end_date,
+                end_date__gte=start_date,
+            )
+
+        # رفع باگ models.Q با استفاده مستقیم از کلاس Q
+        if user_level:
+            prices = prices.filter(
+                Q(user_level=user_level) | Q(user_level__isnull=True)
+            )
+
+        def final_price(price_obj):
+            price = price_obj.price or 0
+            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
+                price = price * (100 - price_obj.discount_value) / 100
+            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
+                price = price - price_obj.discount_value
+            return price
+
+        prices = sorted(prices, key=final_price)
+        return RoomDatePriceSerializer(prices, many=True, context=self.context).data
+
+    def get_min_price(self, obj):
+        user_level = self.context.get('user_level')
+        start_date = self.context.get('start_date')
+        end_date = self.context.get('end_date')
+
+        prices = obj.date_prices.all()
+
+        if start_date and end_date:
+            prices = prices.filter(
+                start_date__lte=end_date,
+                end_date__gte=start_date,
+            )
+
+        # رفع باگ models.Q با استفاده مستقیم از کلاس Q
+        if user_level:
+            prices = prices.filter(
+                Q(user_level=user_level) | Q(user_level__isnull=True)
+            )
+
+        if not prices.exists():
+            return None
+
+        def final_price(price_obj):
+            price = price_obj.price or 0
+            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
+                price = price * (100 - price_obj.discount_value) / 100
+            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
+                price = price - price_obj.discount_value
+            return price
+
+        min_p = min(prices, key=final_price)
+        return final_price(min_p)
+
+
+# ==============================================================================
+# ۵. کامنت‌ها و نظرات
+# ==============================================================================
+
 class SuggestedCommentItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuggestedCommentItem
         fields = ['id', 'title']
         ref_name = "SuggestedCommentItemSerializer"
+
 
 class CommentPointSerializer(serializers.ModelSerializer):
     comment_point_item = SuggestedCommentItemSerializer(read_only=True)
@@ -417,11 +456,13 @@ class CommentPointSerializer(serializers.ModelSerializer):
         fields = ['id', 'comment_point_item', 'comment_point_item_id', 'point']
         ref_name = "CommentPointSerializer"
 
+
 class CommentPointItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommentPointItem
         fields = ['id', 'title', 'is_positive', 'is_negative']
         ref_name = "CommentPointItemSerializer"
+
 
 class SuggestedItemWithRatingSerializer(serializers.Serializer):
     suggested_item_id = serializers.PrimaryKeyRelatedField(
@@ -431,6 +472,7 @@ class SuggestedItemWithRatingSerializer(serializers.Serializer):
         allow_null=True
     )
     rating = serializers.FloatField(min_value=0.0, max_value=5.0, required=False, allow_null=True)
+
 
 class CommentSerializer(serializers.ModelSerializer):
     strengths = CommentPointItemSerializer(many=True, read_only=True)
@@ -548,6 +590,7 @@ class CommentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'stars': 'این فیلد الزامی است.'})
         return data
 
+
 class HotelCommentListSerializer(serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()
     last_name = serializers.SerializerMethodField()
@@ -592,118 +635,38 @@ class HotelCommentListSerializer(serializers.ModelSerializer):
             return obj.created_jalali.split(" ساعت ")[1]
         return None
 
-class ClosedDateSerializer(serializers.ModelSerializer):
-    month = serializers.SerializerMethodField()
+
+# ==============================================================================
+# ۶. جستجو، رزرو و صفحات لیست
+# ==============================================================================
+
+class PassengerSerializer(serializers.ModelSerializer):
+    identification_code = serializers.CharField(required=True)
+    phone_number = serializers.CharField(required=True)
+
+    def validate_identification_code(self, value):
+        if not value:
+            raise serializers.ValidationError(_('کد شناسایی نمی‌تواند خالی باشد.'))
+        if re.match(r'^\d{10}$', value) or re.match(r'^[A-Z0-9]{6,9}$', value):
+            return value
+        raise serializers.ValidationError(_('کد شناسایی نامعتبر است. باید یا کد ملی ۱۰ رقمی باشد یا پاسپورت بین ۶ تا ۹ کاراکتر شامل حروف و اعداد.'))
+
+    def validate_phone_number(self, value):
+        if not value:
+            raise serializers.ValidationError(_('شماره موبایل نمی‌تواند خالی باشد.'))
+        if not re.match(r'^09\d{9}$', value):
+            raise serializers.ValidationError(_('شماره موبایل باید ۱۱ رقم باشد و با 09 شروع شود. مثال: 09123456789'))
+        return value
 
     class Meta:
-        model = ClosedDate
-        fields = ['date', 'reason', 'user_level', 'month']
-
-    def get_month(self, obj):
-        return obj.date.strftime('%B')
-
-class RoomDatePriceSerializer(serializers.ModelSerializer):
-    closed_dates = serializers.SerializerMethodField()
-    month = serializers.SerializerMethodField()
-    user_level = serializers.StringRelatedField()
-
-    class Meta:
-        model = RoomDatePrice
-        fields = [
-            'start_date', 'end_date', 'price', 'extra_passenger_price', 'foreign_passenger_price',
-            'discount_type', 'discount_value', 'discount_start', 'discount_end',
-            'room_capacity', 'extra_capacity', 'closed_dates', 'month', 'user_level'
-        ]
-
-    def get_closed_dates(self, obj):
-        closed_qs = obj.closed_dates.filter(date__gte=obj.start_date, date__lte=obj.end_date)
-        return ClosedDateSerializer(closed_qs, many=True).data
-
-    def get_month(self, obj):
-        return obj.start_date.strftime('%B')
-
-class RoomSerializer(serializers.ModelSerializer):
-    services = RoomServiceSerializer(many=True, read_only=True)
-    date_prices = serializers.SerializerMethodField()
-    min_price = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Room
-        fields = [
+        model = Passenger
+        fields = (
             'id',
-            'hotel',
-            'title',
-            'description',
-            'inventory',
-            'count',
-            'auto_approved_count',
-            'customer_club_points',
-            'services',
-            'date_prices',
-            'min_price'
-        ]
-    ref_name = "ReservationRoomSerializer"  
-    def get_date_prices(self, obj):
-        user_level = self.context.get('user_level')
-        start_date = self.context.get('start_date')
-        end_date = self.context.get('end_date')
-
-        prices = obj.date_prices.all()
-
-        if start_date and end_date:
-            prices = prices.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date,
-            )
-
-        if user_level:
-            prices = prices.filter(
-                models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
-            )
-
-        def final_price(price_obj):
-            price = price_obj.price
-            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
-                price = price * (100 - price_obj.discount_value) / 100
-            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
-                price = price - price_obj.discount_value
-            return price
-
-        prices = sorted(prices, key=final_price)
-        return RoomDatePriceSerializer(prices, many=True).data
-
-    def get_min_price(self, obj):
-        user_level = self.context.get('user_level')
-        start_date = self.context.get('start_date')
-        end_date = self.context.get('end_date')
-
-        prices = obj.date_prices.all()
-
-        if start_date and end_date:
-            prices = prices.filter(
-                start_date__lte=end_date,
-                end_date__gte=start_date,
-            )
-
-        if user_level:
-            prices = prices.filter(
-                models.Q(user_level=user_level) | models.Q(user_level__isnull=True)
-            )
-
-        if not prices.exists():
-            return None
-
-        def final_price(price_obj):
-            price = price_obj.price
-            if price_obj.discount_type == 'percentage' and price_obj.discount_value:
-                price = price * (100 - price_obj.discount_value) / 100
-            elif price_obj.discount_type == 'fixed' and price_obj.discount_value:
-                price = price - price_obj.discount_value
-            return price
-
-        min_p = min(prices, key=final_price)
-        return final_price(min_p)
-
+            'first_name',
+            'last_name',
+            'identification_code',
+            'phone_number',
+        )
 
 
 class HotelSearchSerializer(serializers.Serializer):
@@ -743,17 +706,6 @@ class HotelSearchSerializer(serializers.Serializer):
             }
             for city in cities
         ]
-        
-        
-class HotelTagPublicSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HotelTagPublic
-        fields = ('id', 'title')
-        
-        
-
-
-
 
 
 class ReservationCreateSerializer(serializers.Serializer):
@@ -766,11 +718,11 @@ class ReservationCreateSerializer(serializers.Serializer):
         help_text="تاریخ ورود و خروج با کلیدهای 'enter' و 'exit'"
     )
 
+
 class ReservationCreateResponseSerializer(serializers.Serializer):
     reservation_id = serializers.CharField(read_only=True, help_text="کد رزرو با فرمت sfaXXXXXXXXXX")
-    
-    
-    
+
+
 class ReservationListSerializer(serializers.ModelSerializer):
     hotel_name = serializers.CharField(source='reservation_rooms.first.room.hotel.name', default="نامشخص")
     created_at = serializers.SerializerMethodField()
@@ -788,12 +740,9 @@ class ReservationListSerializer(serializers.ModelSerializer):
         ]
 
     def get_created_at(self, obj):
-        # تبدیل jDateTimeField به رشته جلالی
         if obj.created_at:
             return obj.created_at.strftime('%Y/%m/%d %H:%M')
         return None
-    
-
 
 
 class HotelLinkSerializer(serializers.ModelSerializer):
@@ -805,13 +754,122 @@ class HotelLinkSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         return f'https://zarvantrip.com/hotels/{obj.slug}/'
-    
-    
-    
-    
-    # ==============================================================================
-# سریالایزر اختصاصی صفحه لیست بهترین هتل‌ها (با بالاترین سرعت و بدون N+1 Query)
-# ==============================================================================
+
+
+class FavoriteHotelSerializer(serializers.ModelSerializer):
+    city = CitySerializer()
+    type = serializers.SerializerMethodField()
+    main_image = serializers.SerializerMethodField()
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_expiry = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
+            'is_special_offer', 'is_flash_sale', 'is_best_seller',
+            'original_total_price', 'total_price', 'rating',
+            'discount_percentage', 'discount_expiry'
+        )
+
+    def get_type(self, obj):
+        return obj.type.title if obj.type else None
+
+    def get_main_image(self, obj):
+        request = self.context.get('request')
+        image_url = obj.main_image.url if obj.main_image else ''
+        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
+
+    def get_total_price(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        return price_data.get('total_price', None)
+
+    def get_original_total_price(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        return price_data.get('original_total_price', None)
+
+    def get_rating(self, obj):
+        return getattr(obj, 'rating', None)
+
+    def get_discount_percentage(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        discount_type = price_data.get('discount_type', 'none')
+        discount_value = price_data.get('discount_value', 0)
+        if discount_type == 'percentage':
+            return discount_value
+        elif discount_type == 'fixed':
+            original_price = price_data.get('original_total_price', 0)
+            if original_price > 0:
+                return round((discount_value / original_price) * 100, 1)
+        return 0
+
+    def get_discount_expiry(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id, {})
+        discount_date = price_data.get('discount_date', None)
+        return discount_date.strftime('%Y-%m-%d') if discount_date else None
+
+
+class HotelListSerializer(serializers.ModelSerializer):
+    city = CitySerializer()
+    type = serializers.SerializerMethodField()
+    main_image = serializers.SerializerMethodField()
+    original_total_price = serializers.SerializerMethodField()
+    total_price = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    discount_expiry = serializers.SerializerMethodField()
+    reservation_count = serializers.IntegerField()
+
+    class Meta:
+        model = Hotel
+        fields = (
+            'name', 'slug', 'city', 'address', 'main_image', 'stars', 'type',
+            'is_special_offer', 'is_flash_sale', 'is_best_seller',
+            'original_total_price', 'total_price', 'rating',
+            'discount_percentage', 'discount_expiry', 'reservation_count'
+        )
+
+    def get_type(self, obj):
+        return obj.type.title if obj.type else None
+
+    def get_main_image(self, obj):
+        request = self.context.get('request')
+        image_url = obj.main_image.url if obj.main_image else ''
+        return request.build_absolute_uri(image_url) if request else f"https://zarvantrip.com{image_url}"
+
+    def get_total_price(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return price_data.get('total_price') if price_data else None
+
+    def get_original_total_price(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('original_total_price')
+        return None
+
+    def get_rating(self, obj):
+        return getattr(obj, 'rating', None)
+
+    def get_discount_percentage(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('discount_value')
+        return None
+
+    def get_discount_expiry(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        if price_data and price_data.get('discount_type') == 'percentage':
+            return price_data.get('discount_date')
+        return None
+
+    def get_user_level(self, obj):
+        price_data = self.context.get('hotel_min_price_map', {}).get(obj.id)
+        return price_data.get('user_level') if price_data else "عمومی"
+
+
 class UpdatedHotelListSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
     price_after_discount = serializers.SerializerMethodField()
@@ -837,7 +895,6 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
         )
 
     def get_main_image(self, obj):
-        # ساخت لینک کامل تصویر برای لود بدون مشکل در کامپوننت Image نکست‌جی‌اس
         request = self.context.get('request')
         if obj.main_image and hasattr(obj.main_image, 'url'):
             return request.build_absolute_uri(obj.main_image.url) if request else f"https://zarvantrip.com{obj.main_image.url}"
@@ -865,7 +922,6 @@ class UpdatedHotelListSerializer(serializers.ModelSerializer):
         return self.context.get('hotel_min_price_map', {}).get(obj.id, {}).get('reservation_count', obj.reservation_count or 0)
 
     def get_public_tags(self, obj):
-        # خواندن مستقیم از رم (Prefetch شده) تا کوئری اضافه نزند
         request = self.context.get('request')
         return HotelTagPublicSerializer(
             obj.public_tags.all(),
