@@ -309,7 +309,7 @@ class SEOMetaInline(admin.StackedInline):
 class HotelTagPublicInline(admin.TabularInline):
     model = HotelTagPublic
     extra = 2
-    max_num = 5
+    max_num = 3
     fields = ('title',)
     verbose_name = _('تگ عمومی')
     verbose_name_plural = _('تگ‌های عمومی هتل')
