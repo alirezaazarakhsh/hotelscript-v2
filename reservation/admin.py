@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# بخش ۱: کشور، استان، شهر و تعاریف پایه
+# بخش ۱: تعاریف پایه و جغرافیا
 # ==============================================================================
 
 @admin.register(Country)
@@ -93,7 +93,7 @@ class CountryAdmin(admin.ModelAdmin):
             return format_html(
                 '<div>'
                 '<img src="{}" width="90" height="60" style="object-fit:cover; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);" />'
-                '<p style="margin-top:6px; color:#555; font-size:12px;">کد پرچم: {} | <a href="{}" target="_blank">مشاهده فایل SVG</a></p>'
+                '<p style="margin-top:6px; color:#555; font-size:12px;">کد پرچم: {} | <a href="{}" target="_blank">مشاهده SVG مستقیم</a></p>'
                 '</div>',
                 obj.flag_url, obj.code, obj.flag_url
             )
@@ -216,7 +216,7 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: فرم سفارشی اتاق و اینلاین‌های هتل (آکاردئونی و با زیر‌اینلاین قیمت)
+# بخش ۲: فرم‌ها و اینلاین‌های هتل (آکاردئونی و با زیر‌اینلاین قیمت)
 # ==============================================================================
 
 class RoomInlineForm(forms.ModelForm):
@@ -224,14 +224,12 @@ class RoomInlineForm(forms.ModelForm):
         model = Room
         fields = '__all__'
         widgets = {
-            'services': forms.CheckboxSelectMultiple(),  # حذف تداخل Select2 برای کلیک بی‌نقص
+            'services': forms.CheckboxSelectMultiple(),
         }
 
 
 class RoomDatePriceNestedInline(NestedTabularInline):
-    """
-    اینلاین بازه‌های زمانی و قیمت‌ها: دقیقاً درون هر اتاق قرار گرفته است.
-    """
+    """اینلاین بازه‌های زمانی و قیمت‌ها که درون هر اتاق قرار گرفته است"""
     model = RoomDatePrice
     extra = 0
     fields = (
@@ -251,18 +249,13 @@ class RoomDatePriceNestedInline(NestedTabularInline):
 
 
 class RoomInline(NestedStackedInline):
-    """
-    اینلاین اتاق‌ها درون صفحه هتل:
-    - قرار گرفته در زیر جریمه کنسلی
-    - دارای حالت آکاردئونی
-    - دارای اینلاین بازه قیمت درون خودش
-    """
+    """اینلاین اتاق‌ها درون صفحه هتل زیر جریمه کنسلی"""
     model = Room
     form = RoomInlineForm
     extra = 0
     inlines = [RoomDatePriceNestedInline]
     verbose_name = 'اتاق'
-    verbose_name_plural = 'اتاق‌های این هتل (کلیک برای باز و بسته شدن آکاردئونی)'
+    verbose_name_plural = 'اتاق‌های این هتل (برای ویرایش یا افزودن بازه‌های قیمت باز کنید)'
     fields = (
         ('title', 'board_type'),
         ('room_capacity', 'extra_capacity'),
@@ -433,23 +426,15 @@ class HotelAdmin(NestedModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # ترتیب اینلاین‌ها: اتاق‌ها دقیقاً زیر جریمه کنسلی قرار گرفتند
+    # اینلاین‌ها: اتاق‌ها بعد از جریمه کنسلی قرار دارند
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,  # 👈 جریمه کنسلی
-        RoomInline                  # 👈 اتاق‌ها زیر جریمه کنسلی با تقویم قیمت درونی
+        CancellationPenaltyInline,  # جریمه کنسلی
+        RoomInline                  # اتاق‌ها زیر جریمه کنسلی
     ]
-
-    class Media:
-        # استایل‌های بهینه‌سازی آکاردئون اتاق‌ها برای جمع‌وجور شدن صفحه هتل
-        css = {
-            'all': (
-                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css',
-            )
-        }
 
     @admin.display(description="وضعیت انتشار", ordering="status")
     def status_colored(self, obj):
@@ -708,6 +693,35 @@ class BestHotelsAdmin(admin.ModelAdmin):
 # ==============================================================================
 # بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
 # ==============================================================================
+
+# تعریف دقیق فرم رزرو قبل از کلاس ReservationhotelAdmin برای جلوگیری از NameError
+class ReservationhotelAdminForm(forms.ModelForm):
+    class Meta:
+        model = Reservationhotel
+        fields = '__all__'
+
+    def clean_check_in_date(self):
+        check_in = self.cleaned_data['check_in_date']
+        today_j = jdatetime.date.today()
+        if check_in < today_j:
+            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
+        return check_in
+
+    def clean_check_out_date(self):
+        check_in = self.cleaned_data.get('check_in_date')
+        check_out = self.cleaned_data['check_out_date']
+        if check_in and check_out <= check_in:
+            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
+        return check_out
+
+    def clean_wallet_withdrawal_amount(self):
+        amount = self.cleaned_data['wallet_withdrawal_amount']
+        if amount < 0:
+            raise ValidationError("مبلغ برداشت از کیف پول نمی‌تواند منفی باشد.")
+        if amount > 0 and amount < 10000:
+            raise ValidationError("مبلغ برداشت باید حداقل ۱۰,۰۰۰ تومان باشد.")
+        return amount
+
 
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
