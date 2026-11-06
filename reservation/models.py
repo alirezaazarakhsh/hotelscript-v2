@@ -648,6 +648,8 @@ class RoomDatePrice(models.Model):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
 
 
+RoomDate = RoomDatePrice
+
 class ClosedDate(models.Model):
     room_date = models.ForeignKey('RoomDatePrice', on_delete=models.CASCADE, related_name='closed_dates', verbose_name=_('بازه زمانی اتاق'))
     date = jmodels.jDateField(verbose_name=_('تاریخ بسته شده'))
