@@ -12,7 +12,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.translation import gettext_lazy as _
-from nested_admin import NestedModelAdmin, NestedTabularInline
+from nested_admin import NestedModelAdmin, NestedTabularInline, NestedStackedInline
 
 from authentication.models import BaseUser
 from reservation.forms import (
@@ -93,7 +93,7 @@ class CountryAdmin(admin.ModelAdmin):
             return format_html(
                 '<div>'
                 '<img src="{}" width="90" height="60" style="object-fit:cover; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);" />'
-                '<p style="margin-top:6px; color:#555; font-size:12px;">کد پرچم: {} | <a href="{}" target="_blank">مشاهده SVG مستقیم</a></p>'
+                '<p style="margin-top:6px; color:#555; font-size:12px;">کد پرچم: {} | <a href="{}" target="_blank">مشاهده فایل SVG</a></p>'
                 '</div>',
                 obj.flag_url, obj.code, obj.flag_url
             )
@@ -187,27 +187,74 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+# مدل‌های کمکی که از منو سایدبار مخفی هستند ولی دکمه + آن‌ها فعال است
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
     search_fields = ('title',)
 
+    def has_module_permission(self, request):
+        return False  # مخفی از سایدبار
+
+
+@admin.register(SuggestedCommentItem)
+class SuggestedCommentItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title')
+    search_fields = ('title',)
+
+    def has_module_permission(self, request):
+        return False  # مخفی از سایدبار
+
+
+@admin.register(CommentPointItem)
+class CommentPointItemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'is_positive', 'is_negative')
+    search_fields = ('title',)
+
+    def has_module_permission(self, request):
+        return False  # مخفی از سایدبار
+
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های هتل (شامل اینلاین اتاق با نمایش کامل)
+# بخش ۲: اینلاین‌های هتل (همراه با اینلاین بازه زمانی زیر هر اتاق و آکاردئونی)
 # ==============================================================================
 
-class RoomInline(admin.StackedInline):
+class RoomDatePriceNestedInline(NestedTabularInline):
+    """
+    اینلاین بازه‌های زمانی و قیمت‌ها که دقیقاً درون و زیر هر اتاق نمایش داده می‌شود.
+    """
+    model = RoomDatePrice
+    extra = 1
+    fields = (
+        'user_level',
+        'start_date',
+        'end_date',
+        'purchase_price',
+        'price',
+        'extra_passenger_price',
+        'discount_type',
+        'discount_value',
+        'discount_date',
+        'is_fixed_discount_one_time',
+    )
+    verbose_name = 'بازه زمانی و قیمت اتاق'
+    verbose_name_plural = 'بازه‌های زمانی و قیمت‌های این اتاق'
+
+
+class RoomInline(NestedStackedInline):
     """
     اینلاین اتاق‌ها درون صفحه هتل:
-    بدون فیلد تصویر، کاملاً باز و در دید ادمین.
-    به دلیل extra=0 اگر نخواهید اجباری به افزودن اتاق نیست و با دکمه پایین فرم اضافه می‌شود.
+    - زیر درصد جریمه کنسلی قرار می‌گیرد.
+    - بازه زمانی هر اتاق درون خودش به عنوان ساب‌اینلاین قرار دارد.
+    - حالت باز و بسته شدن آکاردئونی دارد.
     """
     model = Room
     extra = 0
+    inlines = [RoomDatePriceNestedInline]
     verbose_name = 'اتاق'
-    verbose_name_plural = 'اتاق‌های این هتل (در صورت تمایل می‌توانید اتاق‌ها را همین‌جا اضافه یا ویرایش کنید)'
+    verbose_name_plural = 'اتاق‌های این هتل (برای ویرایش یا افزودن بازه‌های قیمت باز کنید)'
     autocomplete_fields = ('services',)
+    classes = ('collapse',)  # آکاردئونی تاشو
     fields = (
         ('title', 'board_type'),
         ('room_capacity', 'extra_capacity'),
@@ -251,7 +298,7 @@ class SEOMetaInlineForm(forms.ModelForm):
         return instance
 
 
-class SEOMetaInline(admin.StackedInline):
+class SEOMetaInline(NestedStackedInline):
     model = SEOMeta
     form = SEOMetaInlineForm
     extra = 1
@@ -262,7 +309,7 @@ class SEOMetaInline(admin.StackedInline):
     fields = ('title_tag', 'keywords_text', 'description', 'canonical_url', 'og_title', 'og_description', 'og_image', 'no_index')
 
 
-class HotelTagPublicInline(admin.TabularInline):
+class HotelTagPublicInline(NestedTabularInline):
     model = HotelTagPublic
     extra = 2
     max_num = 5
@@ -271,7 +318,7 @@ class HotelTagPublicInline(admin.TabularInline):
     verbose_name_plural = _('تگ‌های عمومی هتل')
 
 
-class HotelFAQInline(admin.StackedInline):
+class HotelFAQInline(NestedStackedInline):
     model = HotelFAQ
     extra = 1
     verbose_name = 'سوال متداول'
@@ -279,7 +326,7 @@ class HotelFAQInline(admin.StackedInline):
     fields = ('question', 'answer')
 
 
-class NearbyPlaceInline(admin.TabularInline):
+class NearbyPlaceInline(NestedTabularInline):
     model = NearbyPlace
     extra = 0
     verbose_name = 'مکان نزدیک'
@@ -287,7 +334,7 @@ class NearbyPlaceInline(admin.TabularInline):
     fields = ('title', 'distance', 'driving_time', 'walking_time', 'latitude', 'longitude', 'image')
 
 
-class CancellationPenaltyInline(admin.StackedInline):
+class CancellationPenaltyInline(NestedStackedInline):
     model = CancellationPenalty
     extra = 0
     max_num = 1
@@ -302,7 +349,7 @@ class CancellationPenaltyInline(admin.StackedInline):
 # ==============================================================================
 
 @admin.register(Hotel)
-class HotelAdmin(admin.ModelAdmin):
+class HotelAdmin(NestedModelAdmin):
     form = HotelAdminForm
 
     fieldsets = (
@@ -378,14 +425,14 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # اینلاین اتاق در اول لیست قرار گرفت تا بلافاصله زیر اطلاعات هتل در دسترس باشد
+    # ترتیب اینلاین‌ها: اتاق‌ها دقیقاً زیر جریمه کنسلی قرار گرفتند
     inlines = [
-        RoomInline,
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline
+        CancellationPenaltyInline,  # 👈 جریمه کنسلی بالا
+        RoomInline                  # 👈 اتاق‌ها زیر جریمه کنسلی با تقویم قیمت درونی
     ]
 
     @admin.display(description="وضعیت انتشار", ordering="status")
@@ -487,18 +534,6 @@ class HotelGalleryAdmin(admin.ModelAdmin):
 # بخش ۵: نظرات هتل‌ها
 # ==============================================================================
 
-@admin.register(SuggestedCommentItem)
-class SuggestedCommentItemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title')
-    search_fields = ('title',)
-
-
-@admin.register(CommentPointItem)
-class CommentPointItemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title', 'is_positive', 'is_negative')
-    search_fields = ('title',)
-
-
 class CommentPointInline(admin.TabularInline):
     model = CommentPoint
     extra = 1
@@ -578,7 +613,6 @@ class RoomDateInline(admin.TabularInline):
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    # فیلدهای تصویر و پیش‌نمایش برداشته شدند
     list_display = (
         'id',
         'hotel',
@@ -739,9 +773,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
         'snapp_reservation_code',
     )
-
-    # طبق دستور، فیلترها کاملاً برداشته شدند
-    list_filter = ()
+    list_filter = ()  # بدون فیلتر طبق درخواست
 
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
