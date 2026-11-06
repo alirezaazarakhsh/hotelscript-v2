@@ -1,32 +1,42 @@
-# استفاده از ایمیج پایه پایتون 3.10
+# استفاده از ایمیج پایدار پایتون 3.11 مبتنی بر دبیان ۱۲ (bookworm)
 FROM python:3.11-slim-bookworm
-# تنظیم مسیر کاری
+
+# تنظیم دایرکتوری کاری
 WORKDIR /app
 
-# جلوگیری از نوشتن فایل‌های pyc و فعال کردن خروجی فوری
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# متغیرهای محیطی برای جلوگیری از تولید فایل‌های اضافی، لاگ آنی و افزایش تایم‌اوت pip
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# نصب ابزارهای مورد نیاز
-RUN apt-get update && \
+# ۱. رفع تایم‌اوت با فورس کردن IPv4
+# ۲. تغییر میرور دبیان به سرور سریع و بدون قطعی
+# ۳. نصب ابزارهای مورد نیاز
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 && \
+    (sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true) && \
+    (sed -i 's/deb.debian.org/mirror.yandex.ru/g' /etc/apt/sources.list 2>/dev/null || true) && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     postgresql-client \
     tar \
     curl \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
-# به‌روزرسانی pip
-RUN pip install --upgrade pip
+# ارتقای pip
+RUN pip install --no-cache-dir --upgrade pip
 
-# کپی requirements و نصب آنها
+# کپی فایل وابستگی‌ها و نصب پکیج‌ها (استفاده از کش لایه‌ای داکر)
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# کپی کل پروژه
+# کپی کل فایل‌های پروژه
 COPY . /app/
 
-# دادن دسترسی اجرایی به اسکریپت‌ها
-RUN chmod +x /app/start.sh /app/backup.sh
+# حذف کاراکترهای مخفی ویندوز (\r) از اسکریپت‌ها و اعطای دسترسی اجرایی
+RUN (sed -i 's/\r$//' /app/start.sh /app/backup.sh 2>/dev/null || true) && \
+    chmod +x /app/start.sh /app/backup.sh
 
-# دستور پیش‌فرض (توسط docker-compose override می‌شود)
+# دستور پیش‌فرض برای اجرای کانتینر
 CMD ["bash", "/app/start.sh"]
