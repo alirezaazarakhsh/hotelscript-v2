@@ -108,7 +108,7 @@ class Country(models.Model):
         verbose_name=_('کد ۲ حرفی کشور (ISO 3166-1 alpha-2)'),
         max_length=2,
         unique=True,
-        help_text=_('کد استاندارد ۲ حرفی انگلیسی مانند: IR (ایران), TR (ترکیه), AE (امارات), GE (گرجستان), AM (ارمنستان)')
+        help_text=_('کد استاندارد ۲ حرفی انگلیسی مانند: IR (ایران), TR (ترکیه), AE (امارات), GE (گرجستان), AM (ارمنستان) - کد کشور رو از این لینک بردارید: https://catamphetamine.gitlab.io/country-flag-icons/3x2/')
     )
 
     class Meta:

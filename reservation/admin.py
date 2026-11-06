@@ -187,14 +187,14 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-# مدل‌های کمکی که از منو سایدبار مخفی هستند ولی دکمه + آن‌ها فعال است
+# مدل‌های کمکی که از منوی سایدبار مخفی هستند ولی دکمه + آن‌ها فعال است
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
     search_fields = ('title',)
 
     def has_module_permission(self, request):
-        return False  # مخفی از سایدبار
+        return False
 
 
 @admin.register(SuggestedCommentItem)
@@ -203,7 +203,7 @@ class SuggestedCommentItemAdmin(admin.ModelAdmin):
     search_fields = ('title',)
 
     def has_module_permission(self, request):
-        return False  # مخفی از سایدبار
+        return False
 
 
 @admin.register(CommentPointItem)
@@ -212,19 +212,28 @@ class CommentPointItemAdmin(admin.ModelAdmin):
     search_fields = ('title',)
 
     def has_module_permission(self, request):
-        return False  # مخفی از سایدبار
+        return False
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های هتل (همراه با اینلاین بازه زمانی زیر هر اتاق و آکاردئونی)
+# بخش ۲: فرم سفارشی اتاق و اینلاین‌های هتل (آکاردئونی و با زیر‌اینلاین قیمت)
 # ==============================================================================
+
+class RoomInlineForm(forms.ModelForm):
+    class Meta:
+        model = Room
+        fields = '__all__'
+        widgets = {
+            'services': forms.CheckboxSelectMultiple(),  # حذف تداخل Select2 برای کلیک بی‌نقص
+        }
+
 
 class RoomDatePriceNestedInline(NestedTabularInline):
     """
-    اینلاین بازه‌های زمانی و قیمت‌ها که دقیقاً درون و زیر هر اتاق نمایش داده می‌شود.
+    اینلاین بازه‌های زمانی و قیمت‌ها: دقیقاً درون هر اتاق قرار گرفته است.
     """
     model = RoomDatePrice
-    extra = 1
+    extra = 0
     fields = (
         'user_level',
         'start_date',
@@ -244,17 +253,16 @@ class RoomDatePriceNestedInline(NestedTabularInline):
 class RoomInline(NestedStackedInline):
     """
     اینلاین اتاق‌ها درون صفحه هتل:
-    - زیر درصد جریمه کنسلی قرار می‌گیرد.
-    - بازه زمانی هر اتاق درون خودش به عنوان ساب‌اینلاین قرار دارد.
-    - حالت باز و بسته شدن آکاردئونی دارد.
+    - قرار گرفته در زیر جریمه کنسلی
+    - دارای حالت آکاردئونی
+    - دارای اینلاین بازه قیمت درون خودش
     """
     model = Room
+    form = RoomInlineForm
     extra = 0
     inlines = [RoomDatePriceNestedInline]
     verbose_name = 'اتاق'
-    verbose_name_plural = 'اتاق‌های این هتل (برای ویرایش یا افزودن بازه‌های قیمت باز کنید)'
-    autocomplete_fields = ('services',)
-    classes = ('collapse',)  # آکاردئونی تاشو
+    verbose_name_plural = 'اتاق‌های این هتل (کلیک برای باز و بسته شدن آکاردئونی)'
     fields = (
         ('title', 'board_type'),
         ('room_capacity', 'extra_capacity'),
@@ -431,9 +439,17 @@ class HotelAdmin(NestedModelAdmin):
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,  # 👈 جریمه کنسلی بالا
+        CancellationPenaltyInline,  # 👈 جریمه کنسلی
         RoomInline                  # 👈 اتاق‌ها زیر جریمه کنسلی با تقویم قیمت درونی
     ]
+
+    class Media:
+        # استایل‌های بهینه‌سازی آکاردئون اتاق‌ها برای جمع‌وجور شدن صفحه هتل
+        css = {
+            'all': (
+                'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css',
+            )
+        }
 
     @admin.display(description="وضعیت انتشار", ordering="status")
     def status_colored(self, obj):
@@ -555,7 +571,7 @@ class CommentAdmin(admin.ModelAdmin):
     )
     search_fields = ('text', 'strengths__title', 'weaknesses__title')
     list_filter = ('is_approved', 'stars')
-    autocomplete_fields = ['user', 'hotel', 'suggested_items']
+    autocomplete_fields = ['user', 'hotel']
     exclude = ['suggested_items']
     inlines = [CommentPointInline]
 
@@ -628,7 +644,8 @@ class RoomAdmin(admin.ModelAdmin):
     )
     search_fields = ('title', 'hotel__name', 'snapptrip_room_id')
     list_filter = ('is_snapptrip', 'board_type', 'hotel')
-    autocomplete_fields = ('hotel', 'services')
+    autocomplete_fields = ('hotel',)
+    filter_horizontal = ('services',)
 
     fields = (
         'hotel',
@@ -692,34 +709,6 @@ class BestHotelsAdmin(admin.ModelAdmin):
 # بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
 # ==============================================================================
 
-class ReservationhotelAdminForm(forms.ModelForm):
-    class Meta:
-        model = Reservationhotel
-        fields = '__all__'
-
-    def clean_check_in_date(self):
-        check_in = self.cleaned_data['check_in_date']
-        today_j = jdatetime.date.today()
-        if check_in < today_j:
-            raise ValidationError("تاریخ ورود نمی‌تواند قبل از امروز باشد.")
-        return check_in
-
-    def clean_check_out_date(self):
-        check_in = self.cleaned_data.get('check_in_date')
-        check_out = self.cleaned_data['check_out_date']
-        if check_in and check_out <= check_in:
-            raise ValidationError("تاریخ خروج باید بعد از تاریخ ورود باشد.")
-        return check_out
-
-    def clean_wallet_withdrawal_amount(self):
-        amount = self.cleaned_data['wallet_withdrawal_amount']
-        if amount < 0:
-            raise ValidationError("مبلغ برداشت از کیف پول نمی‌تواند منفی باشد.")
-        if amount > 0 and amount < 10000:
-            raise ValidationError("مبلغ برداشت باید حداقل ۱۰,۰۰۰ تومان باشد.")
-        return amount
-
-
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 0
@@ -773,7 +762,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
         'snapp_reservation_code',
     )
-    list_filter = ()  # بدون فیلتر طبق درخواست
+    list_filter = ()
 
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
