@@ -658,7 +658,7 @@ class HotelRoomsView(generics.RetrieveAPIView):
                 "hotel_name": str(room.hotel) or "",
                 "capacity": room.room_capacity,
                 "extra_capacity": room.extra_capacity,
-                "image": request.build_absolute_uri(room.image.url) if room.image else None,
+                # "image": request.build_absolute_uri(room.image.url) if room.image else None,
                 # فیلدهای مهم برای بستن دکمه رزرو در فرانت
                 "can_book": is_snapp_available,
                 "is_available": is_snapp_available,
