@@ -12,7 +12,6 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.translation import gettext_lazy as _
-from nested_admin import NestedModelAdmin, NestedTabularInline, NestedStackedInline
 
 from authentication.models import BaseUser
 from reservation.forms import (
@@ -69,7 +68,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# بخش ۱: تعاریف پایه و جغرافیا
+# بخش ۱: کشور، استان، شهر و تعاریف پایه
 # ==============================================================================
 
 @admin.register(Country)
@@ -215,64 +214,41 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: فرم‌ها و اینلاین‌های هتل (آکاردئونی و با بازه زمانی درون هر اتاق)
+# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل
 # ==============================================================================
 
-class RoomInlineForm(forms.ModelForm):
-    class Meta:
-        model = Room
-        fields = '__all__'
-        widgets = {
-            'services': forms.CheckboxSelectMultiple(),
-        }
-
-
-class RoomDatePriceNestedInline(NestedTabularInline):
-    """اینلاین بازه‌های زمانی و قیمت‌ها که زیر هر اتاق قرار دارد"""
-    model = RoomDatePrice
-    fk_name = 'room'
-    extra = 1
-    fields = (
-        'user_level',
-        'start_date',
-        'end_date',
-        'purchase_price',
-        'price',
-        'extra_passenger_price',
-        'discount_type',
-        'discount_value',
-        'discount_date',
-        'is_fixed_discount_one_time',
-    )
-    verbose_name = 'بازه زمانی و قیمت اتاق'
-    verbose_name_plural = 'بازه‌های زمانی و قیمت‌های این اتاق'
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        if 'purchase_price' in formset.form.base_fields:
-            formset.form.base_fields['purchase_price'].required = False
-        return formset
-
-
-class RoomInline(NestedStackedInline):
-    """اینلاین اتاق‌ها به صورت آکاردئونی در زیر جریمه کنسلی"""
+class RoomInline(admin.TabularInline):
+    """
+    اینلاین فوق‌العاده سبک و بهینه اتاق‌ها درون هتل:
+    دارای دکمه لینک مستقیم برای ویرایش اتاق و بازه‌های قیمتی بدون سنگین شدن صفحه هتل
+    """
     model = Room
-    form = RoomInlineForm
-    fk_name = 'hotel'
     extra = 0
-    inlines = [RoomDatePriceNestedInline]
+    fields = (
+        'title', 
+        'board_type', 
+        'room_capacity', 
+        'extra_capacity', 
+        'inventory', 
+        'count', 
+        'auto_approved_count',
+        'is_snapptrip',
+        'manage_room_link'
+    )
+    readonly_fields = ('manage_room_link',)
+    show_change_link = True
     verbose_name = 'اتاق'
     verbose_name_plural = 'اتاق‌های این هتل'
-    fields = (
-        ('title', 'board_type'),
-        ('room_capacity', 'extra_capacity'),
-        ('inventory', 'count', 'auto_approved_count'),
-        'customer_club_points',
-        'services',
-        'description',
-        'rules',
-        ('snapptrip_room_id', 'is_snapptrip'),
-    )
+
+    def manage_room_link(self, obj):
+        if obj.pk:
+            url = reverse('admin:reservation_room_change', args=[obj.pk])
+            return format_html(
+                '<a class="button" style="background:#0284c7; color:white; padding:4px 8px; border-radius:4px; text-decoration:none; font-size:11px;" href="{}" target="_blank">⚙️ تنظیم قیمت و تقویم</a>',
+                url
+            )
+        return "-"
+    manage_room_link.short_description = "مدیریت تقویم و نرخ"
 
 
 class SEOMetaInlineForm(forms.ModelForm):
@@ -353,11 +329,11 @@ class CancellationPenaltyInline(admin.StackedInline):
 
 
 # ==============================================================================
-# بخش ۳: مدیریت اصلی هتل‌ها (با آکاردئون تمیز و بدون خطای ۵۰۰)
+# بخش ۳: مدیریت اصلی هتل‌ها
 # ==============================================================================
 
 @admin.register(Hotel)
-class HotelAdmin(NestedModelAdmin):
+class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
 
     fieldsets = (
@@ -433,14 +409,14 @@ class HotelAdmin(NestedModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # ترتیب اینلاین‌ها: اتاق‌ها دقیقاً زیر جریمه کنسلی قرار گرفتند
+    # اینلاین اتاق‌ها دقیقاً زیر جریمه کنسلی هتل
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,  # جریمه کنسلی هتل
-        RoomInline                  # اتاق‌ها زیر جریمه کنسلی
+        CancellationPenaltyInline,  # جریمه کنسلی
+        RoomInline                  # اتاق‌های هتل
     ]
 
     @admin.display(description="وضعیت انتشار", ordering="status")
@@ -508,83 +484,6 @@ class HotelAdmin(NestedModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
-
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        """افزودن اسکریپت آکاردئونی بدون تداخل با قالب جنگو"""
-        extra_context = extra_context or {}
-        accordion_js = mark_safe("""
-        <style>
-            .djn-group-nested_admin_room > .djn-inline-form {
-                border: 2px solid #cbd5e1 !important;
-                border-radius: 8px !important;
-                margin-bottom: 12px !important;
-                background: #ffffff !important;
-            }
-            .room-acc-toggle {
-                background: #f1f5f9;
-                padding: 10px 15px;
-                cursor: pointer;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid #e2e8f0;
-                font-weight: bold;
-                color: #1e293b;
-            }
-            .room-acc-toggle:hover {
-                background: #e2e8f0;
-            }
-        </style>
-        <script>
-            (function($) {
-                function applyAccordion() {
-                    $('.djn-group-nested_admin_room > .djn-inline-form').each(function() {
-                        var $form = $(this);
-                        if ($form.hasClass('djn-empty-form') || $form.data('accordion-done')) return;
-                        $form.data('accordion-done', true);
-
-                        var title = $form.find('input[name$="-title"]').val() || 'اتاق جدید';
-                        var $h3 = $form.find('> h3').hide();
-
-                        var $bar = $(
-                            '<div class="room-acc-toggle">' +
-                            '<span>🏨 ' + title + '</span>' +
-                            '<span class="acc-btn-state" style="color:#0284c7;">➕ باز کردن مشخصات</span>' +
-                            '</div>'
-                        );
-
-                        $form.prepend($bar);
-                        var $content = $form.children().not($bar);
-
-                        if ($form.find('input[name$="-id"]').val()) {
-                            $content.hide();
-                        } else {
-                            $bar.find('.acc-btn-state').text('➖ بستن').css('color', '#ef4444');
-                        }
-
-                        $bar.on('click', function(e) {
-                            if ($(e.target).is('input, button, a')) return;
-                            $content.slideToggle(200, function() {
-                                var isOpen = $content.is(':visible');
-                                $bar.find('.acc-btn-state').text(isOpen ? '➖ بستن' : '➕ باز کردن مشخصات')
-                                    .css('color', isOpen ? '#ef4444' : '#0284c7');
-                            });
-                        });
-
-                        $form.find('input[name$="-title"]').on('input', function() {
-                            $bar.find('span:first').text('🏨 ' + ($(this).val() || 'اتاق جدید'));
-                        });
-                    });
-                }
-                $(document).ready(applyAccordion);
-                $(document).on('djnesting:added formset:added', function() {
-                    setTimeout(applyAccordion, 100);
-                });
-            })(django.jQuery);
-        </script>
-        """)
-        extra_context['title'] = format_html("{}{}", extra_context.get('title', f"ویرایش هتل"), accordion_js)
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
 
 # ==============================================================================
@@ -667,7 +566,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
+# بخش ۶: مدیریت مستقل اتاق‌ها (همراه با تقویم کامل قیمت‌ها)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -806,7 +705,7 @@ class ReservationhotelAdminForm(forms.ModelForm):
         return amount
 
 
-class ReservationRoomPassengerInline(NestedTabularInline):
+class ReservationRoomPassengerInline(admin.TabularInline):
     model = ReservationRoomPassenger
     extra = 0
     max_num = 10
@@ -814,7 +713,7 @@ class ReservationRoomPassengerInline(NestedTabularInline):
     can_delete = True
 
 
-class ReservationRoomInline(NestedTabularInline):
+class ReservationRoomInline(admin.TabularInline):
     model = ReservationRoom
     extra = 1
     max_num = 10
@@ -830,19 +729,10 @@ class ReservationRoomInline(NestedTabularInline):
     show_change_link = False
     can_delete = True
     autocomplete_fields = ('room',)
-    inlines = [ReservationRoomPassengerInline]
-
-    def primary_passengers_count(self, obj):
-        return obj.room.room_capacity if obj.room else 0
-    primary_passengers_count.short_description = _('تعداد نفر اصلی')
-
-    def extra_passengers_count(self, obj):
-        return obj.room.extra_capacity if obj.room else 0
-    extra_passengers_count.short_description = _('تعداد نفر اضافه')
 
 
 @admin.register(Reservationhotel)
-class ReservationhotelAdmin(NestedModelAdmin):
+class ReservationhotelAdmin(admin.ModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
