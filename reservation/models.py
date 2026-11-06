@@ -477,7 +477,7 @@ class CommentPointItem(models.Model):
 
     class Meta:
         verbose_name = 'معیار امتیاز'
-        verbose_name_plural = 'معیارهای مثبت و منفی نظرات'
+        verbose_name_plural = '20- معیارهای مثبت و منفی نظرات'
 
     def __str__(self):
         return self.title
@@ -488,7 +488,7 @@ class SuggestedCommentItem(models.Model):
 
     class Meta:
         verbose_name = 'پیشنهاد نظر'
-        verbose_name_plural = 'پیشنهادهای نظرات'
+        verbose_name_plural = '21- پیشنهادهای نظرات'
 
     def __str__(self):
         return self.title
@@ -519,7 +519,7 @@ class RoomService(models.Model):
     
     class Meta:
         verbose_name = 'خدمات اتاق'
-        verbose_name_plural = 'خدمات اتاق'
+        verbose_name_plural = '19- خدمات اتاق'
 
     def __str__(self):
         return self.title

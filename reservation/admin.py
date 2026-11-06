@@ -194,18 +194,19 @@ class RoomServiceAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های هتل (شامل اتاق بدون تصویر و کاملاً اختیاری)
+# بخش ۲: اینلاین‌های هتل (شامل اینلاین اتاق با نمایش کامل)
 # ==============================================================================
 
 class RoomInline(admin.StackedInline):
     """
-    اینلاین اتاق‌ها درون هتل:
-    تصویر و پیش‌نمایش تصویر به طور کامل برداشته شده و با extra=0 ثبت آن اختیاری است.
+    اینلاین اتاق‌ها درون صفحه هتل:
+    بدون فیلد تصویر، کاملاً باز و در دید ادمین.
+    به دلیل extra=0 اگر نخواهید اجباری به افزودن اتاق نیست و با دکمه پایین فرم اضافه می‌شود.
     """
     model = Room
     extra = 0
     verbose_name = 'اتاق'
-    verbose_name_plural = 'اتاق‌های این هتل (اختیاری - در صورت تمایل اینجا ثبت کنید)'
+    verbose_name_plural = 'اتاق‌های این هتل (در صورت تمایل می‌توانید اتاق‌ها را همین‌جا اضافه یا ویرایش کنید)'
     autocomplete_fields = ('services',)
     fields = (
         ('title', 'board_type'),
@@ -217,7 +218,6 @@ class RoomInline(admin.StackedInline):
         'rules',
         ('snapptrip_room_id', 'is_snapptrip'),
     )
-    classes = ('collapse',)
 
 
 class SEOMetaInlineForm(forms.ModelForm):
@@ -378,6 +378,7 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
+    # اینلاین اتاق در اول لیست قرار گرفت تا بلافاصله زیر اطلاعات هتل در دسترس باشد
     inlines = [
         RoomInline,
         HotelTagPublicInline, 
@@ -577,7 +578,7 @@ class RoomDateInline(admin.TabularInline):
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    # فیلدهای تصویر و پیش‌نمایش طبق درخواست برداشته شدند
+    # فیلدهای تصویر و پیش‌نمایش برداشته شدند
     list_display = (
         'id',
         'hotel',
@@ -616,7 +617,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۷: مسافران و برندها (همراه با پیش‌نمایش تصویر لوگو)
+# بخش ۷: مسافران و برندها (با پیش‌نمایش تصویر لوگو)
 # ==============================================================================
 
 @admin.register(Passenger)
@@ -739,7 +740,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'snapp_reservation_code',
     )
 
-    # طبق دستور، فیلترها کاملاً حذف شدند
+    # طبق دستور، فیلترها کاملاً برداشته شدند
     list_filter = ()
 
     autocomplete_fields = ('buyer',)
