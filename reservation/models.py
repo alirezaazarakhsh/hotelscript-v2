@@ -1409,7 +1409,7 @@ class Reservationhotel(models.Model):
 
     class Meta:
         verbose_name = _('رزرو')
-        verbose_name_plural = _('رزرو‌ها')
+        verbose_name_plural = _('3- لیست رزرو ها -افزودن رزرو')
 
     def __str__(self):
         buyer_phone = self.buyer.phone_number if self.buyer else "کاربر مهمان"

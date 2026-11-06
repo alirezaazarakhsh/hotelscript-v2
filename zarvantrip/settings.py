@@ -104,8 +104,6 @@ INSTALLED_APPS = [
     'notification',
     'setting_payment',
     'favorite',
-    'settingchatbot',
-    'chat_api',
     'user_subscription_settings',
     'hotel_backup',
     

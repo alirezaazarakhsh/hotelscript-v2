@@ -80,8 +80,6 @@ urlpatterns = [
         path('payment/', include('setting_payment.urls', namespace='payment')),
         
         # --- URL های چت بات و تنظیمات جدید ---
-        path('chatbot/', include('chat_api.urls', namespace='chatbot_api')),
-        path('chatbot_settings/', include('settingchatbot.urls', namespace='chatbot_settings')),
         path('subscription/', include('user_subscription_settings.urls', namespace='subscription')),
     ])),
     
