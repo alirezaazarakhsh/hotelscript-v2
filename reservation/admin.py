@@ -1,23 +1,26 @@
-from asyncio.log import logger
-from datetime import date
-from decimal import Decimal
 import logging
 import re
+from datetime import date
+from decimal import Decimal
 import jdatetime
 
 from django import forms
 from django.contrib import admin, messages
-from django.forms import ModelForm
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.translation import gettext_lazy as _
 from nested_admin import NestedModelAdmin, NestedTabularInline
-from pydantic import ValidationError
 
 from authentication.models import BaseUser
-from reservation.forms import BestHotelsAdminForm, CityAdminForm, HotelAdminForm, ReservationInvoiceSettingsAdminForm
+from reservation.forms import (
+    BestHotelsAdminForm, 
+    CityAdminForm, 
+    HotelAdminForm, 
+    ReservationInvoiceSettingsAdminForm
+)
 from .models import (
     BestHotels,
     CancellationPenalty,
@@ -35,8 +38,6 @@ from .models import (
     RoomDatePrice,
     RoomFacilities,
     Hotel,
-    DraftHotel,
-    PublishedHotel,
     HotelGallery,
     HotelGalleryImage,
     NearbyPlace,
@@ -63,81 +64,47 @@ from .snapptrip_service import (
     confirm_snapptrip_booking
 )
 
+logger = logging.getLogger(__name__)
+
+
+# ==============================================================================
+# بخش ۱: تعاریف پایه جغرافیایی و امکانات
+# ==============================================================================
 
 @admin.register(Province)
 class ProvinceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'name',
-        'slug',
-    )
-    search_fields = (
-        'name',
-        'slug',
-    )
+    list_display = ('id', 'name', 'slug')
+    search_fields = ('name', 'slug')
 
 
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
     form = CityAdminForm
-    list_display = (
-        'id',
-        'name',
-        'slug',
-        'image',
-        'province',
-        'show_in_homepage',
-    )
-    search_fields = (
-        'name',
-        'slug',
-    )
+    list_display = ('id', 'name', 'slug', 'image', 'province', 'show_in_homepage')
+    search_fields = ('name', 'slug')
+    list_filter = ('province', 'show_in_homepage')
 
 
 @admin.register(HotelType)
 class HotelTypeAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
 @admin.register(HotelTag)
 class HotelTagAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
+    list_display = ('id', 'title')
+    search_fields = ('title',)
 
 
 @admin.register(Facilities)
 class FacilitiesAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'icon_preview',
-    )
-    search_fields = (
-        'title',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'title', 'icon_preview')
+    search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
-
     fieldsets = (
-        (None, {
-            'fields': (
-                'title',
-                'icon',
-                'icon_preview',
-            )
-        }),
+        (None, {'fields': ('title', 'icon', 'icon_preview')}),
     )
 
     def icon_preview(self, obj):
@@ -156,26 +123,12 @@ class FacilitiesAdmin(admin.ModelAdmin):
 
 @admin.register(RoomFacilities)
 class RoomFacilitiesAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'icon_preview',
-    )
-    search_fields = (
-        'title',
-        'icon__title_icon',
-    )
+    list_display = ('id', 'title', 'icon_preview')
+    search_fields = ('title', 'icon__title_icon')
     autocomplete_fields = ('icon',)
     readonly_fields = ('icon_preview',)
-
     fieldsets = (
-        (None, {
-            'fields': (
-                'title',
-                'icon',
-                'icon_preview',
-            )
-        }),
+        (None, {'fields': ('title', 'icon', 'icon_preview')}),
     )
 
     def icon_preview(self, obj):
@@ -192,15 +145,16 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-
+# ==============================================================================
+# بخش ۲: اینلاین‌های اختصاصی هتل (تجمع تمام تنظیمات هتل در یک صفحه)
+# ==============================================================================
 
 class SEOMetaInlineForm(forms.ModelForm):
-    # این فیلد کمکی برای راحتی ادمین است تا با کاما وارد کند
     keywords_text = forms.CharField(
         label="کلمات کلیدی",
         required=False,
         widget=forms.TextInput(attrs={'style': 'width: 100%;'}),
-        help_text="کلمات کلیدی را با کاما جدا کنید، مثل: هتل, رزرو هتل, هتل های تهران"
+        help_text="کلمات کلیدی را با کاما جدا کنید، مثل: هتل، رزرو هتل، هتل های مشهد"
     )
 
     class Meta:
@@ -210,64 +164,81 @@ class SEOMetaInlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk and self.instance.keywords:
-            # اگر در دیتابیس به صورت لیست بود به کاما تبدیل می‌کنیم برای نمایش در ادمین
             if isinstance(self.instance.keywords, list):
                 self.fields['keywords_text'].initial = ", ".join(self.instance.keywords)
             elif isinstance(self.instance.keywords, str):
-                # اگر با خط تیره یا کاما ذخیره شده بود، استانداردش می‌کنیم
                 cleaned = self.instance.keywords.replace('-', ', ')
                 self.fields['keywords_text'].initial = cleaned
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         keywords_text = self.cleaned_data.get('keywords_text', '')
-        
-        # ذخیره به صورت لیست یا رشته‌ی جدا شده با کاما (مطابق نیاز API)
-        # در اینجا ما به صورت رشته‌ی استاندارد با کاما ذخیره می‌کنیم
         keywords_list = [k.strip() for k in keywords_text.split(',') if k.strip()]
-        instance.keywords = ", ".join(keywords_list)  # یا اگر مدل شما JSONField است می‌توانید مستقیم `keywords_list` را قرار دهید.
-        
+        instance.keywords = ", ".join(keywords_list)
         if commit:
             instance.save()
         return instance
 
 
-class HotelTagPublicInline(admin.TabularInline):
-    model = HotelTagPublic
-    extra = 3
-    max_num = 3
-    fields = ('title',)
-    verbose_name = _('تگ عمومی')
-    verbose_name_plural = _('تگ‌های عمومی')
-
-
 class SEOMetaInline(admin.StackedInline):
     model = SEOMeta
-    form = SEOMetaInlineForm  # 👈 اتصال فرم سفارشی به اینلاین
+    form = SEOMetaInlineForm
     extra = 1
     max_num = 1
     can_delete = False
-    verbose_name = 'متا سئو'
-    verbose_name_plural = 'تنظیم سئوی هتل'
-    # توجه: چون از فرم سفارشی استفاده می‌کنیم، فیلد keywords_text را اینجا می‌آوریم نه keywords اصلی را
+    verbose_name = 'سئو و متاتگ‌ها'
+    verbose_name_plural = 'تنظیمات سئوی هتل'
     fields = ('title_tag', 'keywords_text', 'description', 'canonical_url', 'og_title', 'og_description', 'og_image', 'no_index')
-    
-    
+
+
+class HotelTagPublicInline(admin.TabularInline):
+    model = HotelTagPublic
+    extra = 2
+    max_num = 5
+    fields = ('title',)
+    verbose_name = _('تگ عمومی')
+    verbose_name_plural = _('تگ‌های عمومی هتل')
 
 
 class HotelFAQInline(admin.StackedInline):
     model = HotelFAQ
-    extra = 10
+    extra = 2
     verbose_name = 'سوال متداول'
     verbose_name_plural = 'سوالات متداول هتل'
     fields = ('question', 'answer')
-    
+
+
+class NearbyPlaceInline(admin.TabularInline):
+    model = NearbyPlace
+    extra = 1
+    verbose_name = 'مکان نزدیک'
+    verbose_name_plural = 'اماکن مهم و دیدنی اطراف هتل'
+    fields = ('title', 'distance', 'driving_time', 'walking_time', 'latitude', 'longitude', 'image')
+
+
+class CancellationPenaltyInline(admin.StackedInline):
+    model = CancellationPenalty
+    extra = 1
+    max_num = 1
+    can_delete = False
+    verbose_name = 'درصد جریمه کنسلی'
+    verbose_name_plural = 'قوانین جریمه کنسلی هتل'
+    fields = ('penalty_percentage',)
+
+
+# ==============================================================================
+# بخش ۳: مدیریت اصلی هتل‌ها (مرکزی و کامل)
+# ==============================================================================
 
 @admin.register(Hotel)
 class HotelAdmin(admin.ModelAdmin):
     form = HotelAdminForm
 
     fieldsets = (
+        ('وضعیت انتشار هتل', {
+            'fields': ('status',),
+            'description': 'اگر هنوز تمام اطلاعات و عکس‌های هتل آماده نیست، وضعیت را روی «پیش‌نویس» بگذارید.'
+        }),
         ('اطلاعات پایه هتل', {
             'fields': (
                 'name',
@@ -311,10 +282,7 @@ class HotelAdmin(admin.ModelAdmin):
                 'sync_from_snapptrip',
                 'is_snapptrip',
             ),
-            'description': 'برای اتصال این هتل به اسنپ‌تریپ، شناسه هتل در اسنپ را وارد کرده و تیک همگام‌سازی را بزنید.'
-        }),
-        ('وضعیت انتشار هتل', {
-            'fields': ('status',),
+            'description': 'شناسه هتل در اسنپ را وارد کرده و تیک همگام‌سازی را فعال کنید.'
         }),
     )
 
@@ -324,22 +292,35 @@ class HotelAdmin(admin.ModelAdmin):
         'id',
         'name',
         'city',
+        'status_colored',
         'snapptrip_hotel_id',
         'is_snapptrip',
         'sync_button_display',
         'stars',
         'rating',
         'type',
-        'status',
         'logo_preview',
         'show_public_tags',
     )
 
     search_fields = ('name', 'address', 'public_tags__title', 'snapptrip_hotel_id')
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
-    list_filter = ('is_snapptrip', 'city', 'type', 'stars', 'status')
+    list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    inlines = [HotelTagPublicInline, SEOMetaInline, HotelFAQInline]
+    # تجمیع تمامی اینلاین‌ها در یک صفحه
+    inlines = [
+        HotelTagPublicInline, 
+        SEOMetaInline, 
+        HotelFAQInline, 
+        NearbyPlaceInline, 
+        CancellationPenaltyInline
+    ]
+
+    @admin.display(description="وضعیت انتشار", ordering="status")
+    def status_colored(self, obj):
+        if obj.status == 'published':
+            return format_html('<span style="color:white; background:#28a745; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px;">منتشر شده</span>')
+        return format_html('<span style="color:white; background:#ffc107; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px; color:#333;">پیش‌نویس</span>')
 
     def sync_button_display(self, obj):
         if obj.snapptrip_hotel_id:
@@ -383,7 +364,7 @@ class HotelAdmin(admin.ModelAdmin):
         if obj.best_logo and obj.best_logo.image_logo_hotel:
             return format_html(
                 '<div style="display:flex;align-items:center;">'
-                '<img src="{}" width="100" height="100" style="margin-right:8px; object-fit: contain;" />'
+                '<img src="{}" width="80" height="80" style="object-fit: contain;" />'
                 '</div>',
                 obj.best_logo.image_logo_hotel.url
             )
@@ -402,17 +383,9 @@ class HotelAdmin(admin.ModelAdmin):
     show_public_tags.short_description = 'تگ‌های عمومی'
 
 
-@admin.register(DraftHotel)
-class DraftHotelAdmin(HotelAdmin):
-    def get_queryset(self, request):
-        return self.model.objects.filter(is_draft=True)
-
-
-@admin.register(PublishedHotel)
-class PublishedHotelAdmin(HotelAdmin):
-    def get_queryset(self, request):
-        return self.model.objects.filter(status='published')
-
+# ==============================================================================
+# بخش ۴: گالری عکس‌های اضافی هتل
+# ==============================================================================
 
 class HotelGalleryImageInline(admin.TabularInline):
     model = HotelGalleryImage
@@ -438,48 +411,9 @@ class HotelGalleryAdmin(admin.ModelAdmin):
     inlines = [HotelGalleryImageInline]
 
 
-@admin.register(NearbyPlace)
-class NearbyPlaceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-        'hotel',
-        'distance',
-        'driving_time',
-        'walking_time',
-        'latitude',
-        'longitude',
-    )
-    search_fields = (
-        'title',
-    )
-
-
-@admin.register(HotelFAQ)
-class HotelFAQAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'question',
-        'hotel',
-    )
-    search_fields = (
-        'question',
-        'hotel__name',  # معمولاً نام هتل در مدل Hotel فیلد name است (اگر title است همینطور بگذارید بماند)
-    )
-    autocomplete_fields = ('hotel',)  # 👈 حتماً کامای آخر را بگذارید تا tuple شود
-
-    fieldsets = (
-        (None, {
-            'fields': (
-                'question',
-                'answer',
-                'hotel',
-            )
-        }),
-    )
-
-    
-
+# ==============================================================================
+# بخش ۵: نظرات هتل‌ها
+# ==============================================================================
 
 class CommentPointInline(admin.TabularInline):
     model = CommentPoint
@@ -500,15 +434,8 @@ class CommentAdmin(admin.ModelAdmin):
         'is_approved',
         'created_jalali',
     )
-    search_fields = (
-        'text',
-        'strengths__title',
-        'weaknesses__title',
-    )
-    list_filter = (
-        'is_approved',
-        'stars',
-    )
+    search_fields = ('text', 'strengths__title', 'weaknesses__title')
+    list_filter = ('is_approved', 'stars')
     autocomplete_fields = ['user', 'hotel', 'suggested_items']
     exclude = ['suggested_items']
     inlines = [CommentPointInline]
@@ -517,60 +444,27 @@ class CommentAdmin(admin.ModelAdmin):
         qs = obj.strengths.all()
         if not qs.exists():
             return "-"
-        return format_html_join(
-            mark_safe('<br>'),
-            '{}',
-            ((s.title,) for s in qs)
-        )
+        return format_html_join(mark_safe('<br>'), '{}', ((s.title,) for s in qs))
     show_strengths.short_description = 'نقاط قوت'
 
     def show_weaknesses(self, obj):
         qs = obj.weaknesses.all()
         if not qs.exists():
             return "-"
-        return format_html_join(
-            mark_safe('<br>'),
-            '{}',
-            ((w.title,) for w in qs)
-        )
+        return format_html_join(mark_safe('<br>'), '{}', ((w.title,) for w in qs))
     show_weaknesses.short_description = 'نقاط ضعف'
 
     def created_jalali(self, obj):
         if obj.created:
-            return jdatetime.datetime.fromgregorian(datetime=obj.created).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=obj.created).strftime('%Y/%m/%d %H:%M')
         return '-'
-    
     created_jalali.admin_order_field = 'created'
     created_jalali.short_description = 'تاریخ ایجاد (شمسی)'
 
 
-@admin.register(CommentPointItem)
-class CommentPointItemAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
-
-
-@admin.register(SuggestedCommentItem)
-class SuggestedCommentItemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'title')
-    search_fields = ['title']
-
-
-@admin.register(RoomService)
-class RoomServiceAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'title',
-    )
-    search_fields = (
-        'title',
-    )
-
+# ==============================================================================
+# بخش ۶: مدیریت اتاق‌ها و نرخ‌گذاری روزانه (درون خود اتاق)
+# ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
     model = RoomDatePrice
@@ -596,14 +490,6 @@ class RoomDateInline(admin.TabularInline):
         except Exception:
             pass
         return formset
-
-
-class ClosedDateInline(admin.TabularInline):
-    model = ClosedDate
-    extra = 1
-    fields = ('date', 'user_level')
-    autocomplete_fields = ('user_level',)
-    ordering = ('date',)
 
 
 @admin.register(Room)
@@ -661,7 +547,6 @@ class RoomAdmin(admin.ModelAdmin):
         if obj.image:
             return format_html(
                 '<div style="margin-top: 10px;">'
-                '<p style="margin: 5px 0; font-weight: bold; color: #555;">تصویر فعلی:</p>'
                 '<img src="{}" style="max-width: 300px; max-height: 200px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />'
                 '</div>',
                 obj.image.url
@@ -670,116 +555,27 @@ class RoomAdmin(admin.ModelAdmin):
     image_preview.short_description = 'پیش‌نمایش تصویر'
 
 
-@admin.register(RoomDatePrice)
-class RoomDatePriceAdmin(admin.ModelAdmin):
-    list_display = (
-        'room',
-        'user_level',
-        'start_date',
-        'end_date',
-        'purchase_price',
-        'price',
-        'discount_type',
-        'discount_value',
-        'discount_date',
-        'is_fixed_discount_one_time',
-    )
-    list_filter = (
-        'room',
-        'user_level',
-        'discount_type',
-        'is_fixed_discount_one_time',
-    )
-    search_fields = (
-        'room__title',
-        'user_level__title',
-    )
-    autocomplete_fields = ('room', 'user_level')
-    ordering = ('room', 'start_date', 'user_level')
-    fieldsets = (
-        (_('اطلاعات بازه و اتاق'), {
-            'fields': (
-                'room',
-                'user_level',
-                'start_date',
-                'end_date',
-            )
-        }),
-        (_('قیمت‌گذاری'), {
-            'fields': (
-                'purchase_price',
-                'price',
-                'extra_passenger_price',
-            )
-        }),
-        (_('تخفیف'), {
-            'fields': (
-                'discount_type',
-                'discount_value',
-                'discount_date',
-                'is_fixed_discount_one_time',
-            )
-        }),
-    )
-    inlines = [ClosedDateInline]
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        try:
-            if 'purchase_price' in form.base_fields:
-                form.base_fields['purchase_price'].required = False
-        except Exception:
-            pass
-        return form
-
+# ==============================================================================
+# بخش ۷: مسافران و برندها
+# ==============================================================================
 
 @admin.register(Passenger)
 class PassengerAdmin(admin.ModelAdmin):
-    list_display = (
-        'id',
-        'user',
-        'first_name',
-        'last_name',
-        'identification_code',
-        'phone_number',
-    )
-    search_fields = (
-        'first_name',
-        'last_name',
-        'identification_code',
-        'phone_number',
-    )
+    list_display = ('id', 'user', 'first_name', 'last_name', 'identification_code', 'phone_number')
+    search_fields = ('first_name', 'last_name', 'identification_code', 'phone_number')
 
 
 @admin.register(BestHotels)
 class BestHotelsAdmin(admin.ModelAdmin):
     form = BestHotelsAdminForm
-    list_display = (
-        'order',
-        'title_logo',
-        'image_logo_hotel',
-    )
-    search_fields = (
-        'title_logo',
-    )
-    list_filter = (
-        'order',
-    )
+    list_display = ('order', 'title_logo', 'image_logo_hotel')
+    search_fields = ('title_logo',)
+    list_filter = ('order',)
 
 
-@admin.register(ReservationApprovalDuration)
-class ReservationApprovalDurationAdmin(admin.ModelAdmin):
-    list_display = ('duration_minutes',)
-    search_fields = ('duration_minutes',)
-    fields = ('duration_minutes',)
-    ordering = ('duration_minutes',)
-
-    def has_add_permission(self, request):
-        count = ReservationApprovalDuration.objects.count()
-        if count >= 1:
-            return False
-        return True
-
+# ==============================================================================
+# بخش ۸: مدیریت جامع رزروها (سیستم اصلی فروش)
+# ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
@@ -811,21 +607,15 @@ class ReservationhotelAdminForm(forms.ModelForm):
 
 class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
-    extra = 10
+    extra = 0
     max_num = 10
     fields = ('passenger_type', 'first_name', 'last_name', 'mobile_number', 'national_code')
     can_delete = True
-    autocomplete_fields = ()
-
-    def get_max_num(self, request, obj=None, **kwargs):
-        if obj and hasattr(obj, 'room') and obj.room:
-            return (obj.room.room_capacity + obj.room.extra_capacity) * obj.quantity
-        return self.max_num
 
 
 class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
-    extra = 10
+    extra = 1
     max_num = 10
     fields = (
         'room', 'price_per_night', 'extra_passenger_price', 'fixed_discount', 'subtotal',
@@ -842,56 +632,12 @@ class ReservationRoomInline(NestedTabularInline):
     inlines = [ReservationRoomPassengerInline]
 
     def primary_passengers_count(self, obj):
-        if obj.room:
-            return obj.room.room_capacity
-        return 0
+        return obj.room.room_capacity if obj.room else 0
     primary_passengers_count.short_description = _('تعداد نفر اصلی')
 
     def extra_passengers_count(self, obj):
-        if obj.room:
-            return obj.room.extra_capacity
-        return 0
+        return obj.room.extra_capacity if obj.room else 0
     extra_passengers_count.short_description = _('تعداد نفر اضافه')
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        formset.form.base_fields['room'].required = False
-        if 'half_day_in_selected' not in formset.form.base_fields:
-            formset.form.base_fields['half_day_in_selected'] = forms.BooleanField(
-                label=_('نیم‌شارژ ورود'),
-                required=False,
-                initial=False
-            )
-        if 'half_day_out_selected' not in formset.form.base_fields:
-            formset.form.base_fields['half_day_out_selected'] = forms.BooleanField(
-                label=_('نیم‌شارژ خروج'),
-                required=False,
-                initial=False
-            )
-        formset.form.base_fields['half_day_in_selected'].widget.attrs['class'] = 'vCheckboxField'
-        formset.form.base_fields['half_day_out_selected'].widget.attrs['class'] = 'vCheckboxField'
-        return formset
-
-    def get_fields(self, request, obj=None):
-        fields = list(super().get_fields(request, obj))
-        if obj and obj.reservation_rooms.exists():
-            try:
-                hotel = obj.reservation_rooms.first().room.hotel
-                if not getattr(hotel, 'has_check_in_half_day_charge', False):
-                    if 'half_day_in_selected' in fields:
-                        fields.remove('half_day_in_selected')
-                if not getattr(hotel, 'has_check_out_half_day_charge', False):
-                    if 'half_day_out_selected' in fields:
-                        fields.remove('half_day_out_selected')
-            except AttributeError:
-                if 'half_day_in_selected' in fields:
-                    fields.remove('half_day_in_selected')
-                if 'half_day_out_selected' in fields:
-                    fields.remove('half_day_out_selected')
-        return fields
-
-
-
 
 
 @admin.register(Reservationhotel)
@@ -899,31 +645,23 @@ class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
-        'reserver_phone_number', 'check_in_date', 'check_out_date',
-        'nights_count_fa', 'total_rooms_fa', 'total_guests_fa',
-        'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
-        'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
-        'room_fixed_discount_fa', 'wallet_withdrawal_amount_fa', 'wallet_withdrawn_fa',
-        'final_price_fa',
-        'cancellation_penalty_fa',
-        'cancellation_refunded_fa',
-        'cancellation_requested_fa',
+        'check_in_date', 'check_out_date', 'nights_count_fa',
+        'total_price_fa', 'final_price_fa',
         'capacity_status_colored', 'payment_status_colored',
-        'snapp_code_fa',             # نمایش کد رزرو اسنپ
-        'snapp_status_colored',       # نمایش وضعیت در اسنپ با برچسب هوشمند
-        'points_assigned_fa', 'discount_processed_fa', 'personal_discount_used', 'created_jalali'
+        'snapp_code_fa',
+        'snapp_status_colored',
+        'cancellation_requested_fa',
+        'created_jalali'
     )
     search_fields = (
         'tracking_code', 'buyer__phone_number', 'reserver_first_name',
         'reserver_last_name', 'reserver_phone_number', 'reserver_national_code',
-        'personal_discount_code__code',
         'snapp_reservation_code',
     )
     list_filter = (
         'is_snapptrip_reservation',
-        'snapp_status',
-        'capacity_status', 'payment_status', 'check_in_date', 'check_out_date',
-        'cancellation_requested', 'personal_discount_used'
+        'capacity_status', 'payment_status', 'snapp_status',
+        'cancellation_requested', 'check_in_date', 'check_out_date'
     )
     autocomplete_fields = ('buyer',)
     inlines = [ReservationRoomInline]
@@ -939,6 +677,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         'cancellation_penalty_fa', 'cancellation_refunded_fa', 'cancellation_requested_fa',
         'is_snapptrip_reservation', 'snapp_reservation_code', 'snapp_status',
     )
+
     fieldsets = (
         (_('اطلاعات رزرو کننده'), {
             'fields': (
@@ -946,26 +685,24 @@ class ReservationhotelAdmin(NestedModelAdmin):
                 'reserver_phone_number', 'reserver_national_code', 'additional_notes'
             )
         }),
-        (_('تاریخ رزرو'), {
+        (_('تاریخ اقامت'), {
             'fields': ('check_in_date', 'check_out_date')
         }),
-        (_('قیمت و وضعیت'), {
+        (_('قیمت و وضعیت مالی'), {
             'fields': (
                 'total_price_fa', 'total_extra_passenger_charge_fa', 'half_day_in_charge_fa',
                 'half_day_out_charge_fa', 'total_half_day_charge_fa', 'discount_fa',
                 'room_fixed_discount_fa', 'wallet_withdrawal_amount', 'wallet_withdrawn_fa',
-                'personal_discount_code', 'personal_discount_used',
                 'final_price_fa', 'capacity_status', 'payment_status',
                 'points_assigned_fa', 'discount_processed_fa', 'ref_id'
             )
         }),
-        (_('پیگیری اسنپ‌تریپ (B2B SnappTrip)'), {
+        (_('وضعیت وب‌سرویس اسنپ‌تریپ'), {
             'fields': (
                 'is_snapptrip_reservation',
                 'snapp_reservation_code',
                 'snapp_status',
             ),
-            'description': 'اطلاعات سیستمی تراکنش متصل به وب‌سرویس اسنپ‌تریپ'
         }),
         (_('کنسلی'), {
             'fields': (
@@ -985,7 +722,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
         if obj.snapp_reservation_code:
             url = reverse('admin:reservation-check-snapp-status', args=[obj.pk])
             return format_html(
-                '<a href="{}" title="کلیک برای استعلام زنده وضعیت و خطای اسنپ" style="font-family: monospace; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 2px 6px; border-radius: 4px; text-decoration: none;">🔍 {}</a>',
+                '<a href="{}" title="کلیک برای استعلام آنلاین وضعیت" style="font-family: monospace; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 2px 6px; border-radius: 4px; text-decoration: none;">🔍 {}</a>',
                 url, obj.snapp_reservation_code
             )
         return "-"
@@ -993,24 +730,16 @@ class ReservationhotelAdmin(NestedModelAdmin):
     @admin.display(description='وضعیت در اسنپ')
     def snapp_status_colored(self, obj):
         if not obj.is_snapptrip_reservation:
-            return format_html('<span style="color:#aaa;">رزرو محلی</span>')
-
-        if obj.snapp_status and obj.snapp_status.startswith('failed'):
-            return format_html(
-                '<span style="color: white; background: #dc3545; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;" title="{}">ناموفق ⚠️</span>',
-                obj.snapp_status
-            )
+            return format_html('<span style="color:#aaa;">رزرو مستقیم</span>')
 
         status_colors = {
-            'confirmed': ('#28a745', 'تأیید نهایی (سفارش موفق)'),
+            'confirmed': ('#28a745', 'تأیید نهایی'),
             'availability_confirmed': ('#28a745', 'تأیید ظرفیت هتل'),
-            'availability_checking': ('#e0a800', 'در حال استعلام از هتل'),
-            'payment_on': ('#17a2b8', 'قفل موقت (۱۵ دقیقه)'),
-            'draft': ('#6c757d', 'پیش‌نویس (draft)'),
-            'insufficient_credit': ('#fd7e14', 'کسری شارژ کیف‌پول اسنپ ⚠️'),
-            'availability_rejected': ('#dc3545', 'عدم پذیرش هتل'),
+            'availability_checking': ('#e0a800', 'در حال استعلام'),
+            'payment_on': ('#17a2b8', 'قفل موقت ۱۵ دقیقه'),
+            'draft': ('#6c757d', 'پیش‌نویس'),
+            'insufficient_credit': ('#fd7e14', 'کسری کیف‌پول اسنپ ⚠️'),
             'failed': ('#dc3545', 'ناموفق'),
-            'expired': ('#6c757d', 'منقضی شده'),
         }
         color, label = status_colors.get(obj.snapp_status, ('#6c757d', obj.snapp_status or 'نامشخص'))
         return format_html(
@@ -1021,21 +750,12 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path(
-                '<int:reservation_id>/check-snapp-status/',
-                self.admin_site.admin_view(self.check_snapp_status_action),
-                name='reservation-check-snapp-status',
-            ),
-            path(
-                '<int:reservation_id>/confirm-snapp/',
-                self.admin_site.admin_view(self.confirm_snapp_action),
-                name='reservation-confirm-snapp',
-            ),
+            path('<int:reservation_id>/check-snapp-status/', self.admin_site.admin_view(self.check_snapp_status_action), name='reservation-check-snapp-status'),
+            path('<int:reservation_id>/confirm-snapp/', self.admin_site.admin_view(self.confirm_snapp_action), name='reservation-confirm-snapp'),
         ]
         return custom_urls + urls
 
     def check_snapp_status_action(self, request, reservation_id):
-        """استعلام زنده وضعیت رزرو و موجودی کیف‌پول اسنپ"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
@@ -1045,22 +765,14 @@ class ReservationhotelAdmin(NestedModelAdmin):
             status_name, raw_res = get_snapptrip_booking_status(obj.snapp_reservation_code)
             obj.snapp_status = str(status_name)[:30]
             obj.save(update_fields=['snapp_status'])
-
-            balance, b_msg = get_snapptrip_wallet_balance()
-
-            msg = (
-                f"🔍 وضعیت در اسنپ: {status_name} | "
-                f"موجودی کیف‌پول اسنپ شما: {int(balance):,} تومان | "
-                f"پاسخ کامل سرور اسنپ: {raw_res[:350]}"
-            )
+            balance, _ = get_snapptrip_wallet_balance()
+            msg = f"🔍 وضعیت در اسنپ: {status_name} | موجودی کیف‌پول اسنپ: {int(balance):,} تومان"
             self.message_user(request, msg, messages.INFO)
         except Exception as e:
             self.message_user(request, f"خطا در استعلام اسنپ: {e}", messages.ERROR)
-
         return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
     def confirm_snapp_action(self, request, reservation_id):
-        """تایید هوشمند رزرو در اسنپ (بررسی خودکار موجودی کیف‌پول قبل از ثبت)"""
         obj = self.get_object(request, reservation_id)
         if not obj or not obj.snapp_reservation_code:
             self.message_user(request, "این رزرو کد اسنپ ندارد.", messages.WARNING)
@@ -1069,17 +781,15 @@ class ReservationhotelAdmin(NestedModelAdmin):
         try:
             from .snapptrip_service import auto_confirm_snapp_reservation_if_charged
             success, msg = auto_confirm_snapp_reservation_if_charged(obj)
-
             if success:
-                self.message_user(request, f"✅ {msg} (سفارش در پنل اسنپ قطعی شد)", messages.SUCCESS)
+                self.message_user(request, f"✅ {msg}", messages.SUCCESS)
             else:
                 self.message_user(request, f"⚠️ {msg}", messages.WARNING)
         except Exception as e:
-            self.message_user(request, f"خطای سیستمی در ارتباط با اسنپ: {e}", messages.ERROR)
-
+            self.message_user(request, f"خطای ارتباط با اسنپ: {e}", messages.ERROR)
         return redirect(reverse('admin:reservation_reservationhotel_change', args=[reservation_id]))
 
-    @admin.action(description="✅ بررسی شارژ و تایید قطعی رزروهای انتخاب‌شده در اسنپ")
+    @admin.action(description="✅ تایید قطعی رزروهای انتخاب‌شده در اسنپ")
     def confirm_snapp_action_bulk(self, request, queryset):
         from .snapptrip_service import auto_confirm_snapp_reservation_if_charged
         success_count = 0
@@ -1090,7 +800,7 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     success_count += 1
             except Exception:
                 pass
-        self.message_user(request, f"تعداد {success_count} رزرو با موفقیت در اسنپ قطعی و نهایی شدند.", messages.SUCCESS)
+        self.message_user(request, f"تعداد {success_count} رزرو با موفقیت در اسنپ قطعی شدند.", messages.SUCCESS)
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         extra_context = extra_context or {}
@@ -1100,8 +810,8 @@ class ReservationhotelAdmin(NestedModelAdmin):
             confirm_url = reverse('admin:reservation-confirm-snapp', args=[obj.pk])
             extra_context['title'] = format_html(
                 '{} &nbsp;&nbsp; '
-                '<a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام وضعیت اسنپ</a> &nbsp;'
-                '<a class="button" style="background:#28a745; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" onclick="return confirm(\'آیا از تایید نهایی این رزرو در اسنپ و کسر از کیف‌پول اسنپ مطمئن هستید؟\');" href="{}">✅ تایید در اسنپ (بررسی شارژ)</a>',
+                '<a class="button" style="background:#17a2b8; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" href="{}">🔍 استعلام اسنپ</a> &nbsp;'
+                '<a class="button" style="background:#28a745; color:white; padding:4px 10px; border-radius:4px; text-decoration:none; font-size:12px;" onclick="return confirm(\'آیا از تایید نهایی در اسنپ مطمئن هستید؟\');" href="{}">✅ تایید نهایی در اسنپ</a>',
                 f"ویرایش رزرو {obj.tracking_code}",
                 check_url,
                 confirm_url
@@ -1110,22 +820,20 @@ class ReservationhotelAdmin(NestedModelAdmin):
 
     @admin.display(description=_('موبایل خریدار'))
     def buyer_phone_number(self, obj):
-        if obj.buyer:
-            return getattr(obj.buyer, 'phone_number', '-')
-        return "-"
+        return getattr(obj.buyer, 'phone_number', '-') if obj.buyer else "-"
 
-    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
+    @admin.display(description=_('تاریخ ثبت'))
     def created_jalali(self, obj):
         if obj.created_at:
             dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M')
         return '-'
 
-    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
+    @admin.display(description=_('تاریخ به‌روزرسانی'))
     def updated_jalali(self, obj):
         if obj.updated_at:
             dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M')
         return '-'
 
     @admin.display(description=_('تعداد شب‌ها'))
@@ -1148,48 +856,45 @@ class ReservationhotelAdmin(NestedModelAdmin):
     def total_extra_passenger_charge_fa(self, obj):
         return "{:,}".format(obj.total_extra_passenger_charge) if obj.total_extra_passenger_charge else "-"
 
-    @admin.display(description=_('هزینه نیم روز ورود'))
+    @admin.display(description=_('هزینه نیم‌روز ورود'))
     def half_day_in_charge_fa(self, obj):
         return "{:,}".format(obj.half_day_in_charge) if obj.half_day_in_charge else "-"
 
-    @admin.display(description=_('هزینه نیم روز خروج'))
+    @admin.display(description=_('هزینه نیم‌روز خروج'))
     def half_day_out_charge_fa(self, obj):
         return "{:,}".format(obj.half_day_out_charge) if obj.half_day_out_charge else "-"
 
-    @admin.display(description=_('کل هزینه نیم روز'))
+    @admin.display(description=_('کل هزینه نیم‌روز'))
     def total_half_day_charge_fa(self, obj):
         return "{:,}".format(obj.total_half_day_charge) if obj.total_half_day_charge else "-"
 
-    @admin.display(description=_('تخفیف کد'))
+    @admin.display(description=_('تخفیف'))
     def discount_fa(self, obj):
         return "{:,}".format(obj.discount) if obj.discount else "-"
 
-    @admin.display(description=_('تخفیف ثابت اتاق'))
+    @admin.display(description=_('تخفیف اتاق'))
     def room_fixed_discount_fa(self, obj):
         return "{:,}".format(obj.room_fixed_discount) if obj.room_fixed_discount else "-"
 
-    @admin.display(description=_('مبلغ برداشت از کیف پول'))
+    @admin.display(description=_('برداشت از کیف پول'))
     def wallet_withdrawal_amount_fa(self, obj):
         return "{:,}".format(obj.wallet_withdrawal_amount) if obj.wallet_withdrawal_amount else "-"
 
-    @admin.display(description=_('وضعیت برداشت از کیف پول'))
+    @admin.display(description=_('برداشت انجام شده'), boolean=True)
     def wallet_withdrawn_fa(self, obj):
-        return '✓' if obj.wallet_withdrawn else '✗'
-    wallet_withdrawn_fa.short_description = _('برداشت انجام شده')
+        return obj.wallet_withdrawn
 
     @admin.display(description=_('قیمت نهایی'))
     def final_price_fa(self, obj):
         return "{:,}".format(obj.final_price) if obj.final_price else "-"
 
-    @admin.display(description=_('امتیازهای تخصیص داده شده'))
+    @admin.display(description=_('امتیاز باشگاه'), boolean=True)
     def points_assigned_fa(self, obj):
-        return '✓' if obj.points_assigned else '✗'
-    points_assigned_fa.short_description = _('امتیازهای تخصیص داده شده')
+        return obj.points_assigned
 
-    @admin.display(description=_('پردازش کد تخفیف انجام شده'))
+    @admin.display(description=_('پردازش تخفیف'), boolean=True)
     def discount_processed_fa(self, obj):
-        return '✓' if obj.discount_processed else '✗'
-    discount_processed_fa.short_description = _('پردازش کد تخفیف')
+        return obj.discount_processed
 
     @admin.display(description='جریمه کنسلی')
     def cancellation_penalty_fa(self, obj):
@@ -1227,9 +932,6 @@ class ReservationhotelAdmin(NestedModelAdmin):
             color, obj.get_payment_status_display()
         )
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
@@ -1260,42 +962,23 @@ class ReservationhotelAdmin(NestedModelAdmin):
                     'half_day_out_charge', 'total_half_day_charge', 'final_price'
                 ])
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if obj and obj.reservation_rooms.exists():
-            for res_room in obj.reservation_rooms.all():
-                if hasattr(res_room, 'calculate_half_day_prices'):
-                    res_room.calculate_half_day_prices()
-                    res_room.save(update_fields=['half_day_in_price', 'half_day_out_price'])
-        return form
-    
 
-
-@admin.register(CancellationReason)
-class CancellationReasonAdmin(admin.ModelAdmin):
-    list_display = ('title',)
-    search_fields = ('title',)
-
-    def has_add_permission(self, request):
-        if CancellationReason.objects.count() >= 5:
-            return False
-        return super().has_add_permission(request)
-
+# ==============================================================================
+# بخش ۹: کنسلی‌ها و تنظیمات سیستمی
+# ==============================================================================
 
 @admin.register(UserCancellation)
 class UserCancellationAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'reservation_tracking_code',
-        'show_reasons',
         'penalty_type',
         'penalty_value',
         'status',
         'created_jalali',
-        'updated_jalali',
     )
-    list_filter = ('status', 'created_at', 'updated_at')
-    search_fields = ('reservation__tracking_code', 'reasons__title', 'description')
+    list_filter = ('status', 'created_at')
+    search_fields = ('reservation__tracking_code', 'description')
     autocomplete_fields = ('reservation',)
     filter_horizontal = ('reasons',)
     readonly_fields = ('created_jalali', 'updated_jalali')
@@ -1313,29 +996,18 @@ class UserCancellationAdmin(admin.ModelAdmin):
         return obj.reservation.tracking_code if obj.reservation else '-'
     reservation_tracking_code.short_description = 'کد پیگیری رزرو'
 
-    def show_reasons(self, obj):
-        qs = obj.reasons.all()
-        if not qs.exists():
-            return "-"
-        return format_html_join(
-            mark_safe('<br>'),
-            '{}',
-            ((r.title,) for r in qs)
-        )
-    show_reasons.short_description = 'دلایل کنسلی'
-
-    @admin.display(description=_('تاریخ ایجاد (شمسی)'))
+    @admin.display(description=_('تاریخ ثبت'))
     def created_jalali(self, obj):
         if obj.created_at:
             dt = obj.created_at.togregorian() if hasattr(obj.created_at, 'togregorian') else obj.created_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M')
         return '-'
 
-    @admin.display(description=_('تاریخ به‌روزرسانی (شمسی)'))
+    @admin.display(description=_('تاریخ بررسی'))
     def updated_jalali(self, obj):
         if obj.updated_at:
             dt = obj.updated_at.togregorian() if hasattr(obj.updated_at, 'togregorian') else obj.updated_at
-            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d ساعت %H:%M:%S')
+            return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M')
         return '-'
 
     def save_model(self, request, obj, form, change):
@@ -1345,121 +1017,29 @@ class UserCancellationAdmin(admin.ModelAdmin):
                 result = obj.process_cancellation()
                 messages.success(
                     request,
-                    f"کنسلی با موفقیت پردازش شد. جریمه: {result['penalty_amount']} تومان، "
-                    f"برگشت به کیف پول: {result['refund_amount']} تومان"
+                    f"کنسلی پردازش شد. جریمه: {result['penalty_amount']:,} تومان | برگشت به کیف‌پول: {result['refund_amount']:,} تومان"
                 )
-            except ValidationError as e:
-                messages.error(request, f"خطا در پردازش کنسلی: {e}")
             except Exception as e:
-                messages.error(request, f"خطای غیرمنتظره در پردازش کنسلی: {str(e)}")
-
-
-class CancellationPenaltyForm(forms.ModelForm):
-    class Meta:
-        model = CancellationPenalty
-        fields = ['hotel', 'penalty_percentage']
-
-    def clean_penalty_percentage(self):
-        value = self.cleaned_data.get('penalty_percentage')
-        if value and value > 100:
-            raise ValidationError("درصد جریمه نمی‌تواند بیشتر از ۱۰۰ باشد.")
-        return value
-
-    def clean_hotel(self):
-        hotel = self.cleaned_data.get('hotel')
-        if hotel:
-            existing = CancellationPenalty.objects.filter(hotel=hotel)
-            if self.instance.pk:
-                existing = existing.exclude(pk=self.instance.pk)
-            if existing.exists():
-                raise ValidationError("برای این هتل قبلاً جریمه ثبت شده است.")
-        return hotel
-
-
-@admin.register(CancellationPenalty)
-class CancellationPenaltyAdmin(admin.ModelAdmin):
-    form = CancellationPenaltyForm
-    list_display = ('id', 'hotel_link', 'penalty_percentage', 'hotel_city')
-    list_filter = ('hotel__city', 'penalty_percentage')
-    search_fields = ('hotel__name', 'hotel__city__name')
-    autocomplete_fields = ('hotel',)
-    ordering = ('hotel__name',)
-
-    fieldsets = (
-        (None, {
-            'fields': ('hotel', 'penalty_percentage')
-        }),
-    )
-
-    @admin.display(description='هتل', ordering='hotel__name')
-    def hotel_link(self, obj):
-        if obj.hotel:
-            url = reverse("admin:reservation_hotel_change", args=[obj.hotel.pk])
-            return format_html('<a href="{}">{}</a>', url, obj.hotel.name)
-        return "-"
-
-    @admin.display(description='شهر')
-    def hotel_city(self, obj):
-        return obj.hotel.city.name if obj.hotel and hasattr(obj.hotel, 'city') and obj.hotel.city else "-"
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related('hotel', 'hotel__city')
+                messages.error(request, f"خطا در پردازش کنسلی: {e}")
 
 
 @admin.register(ReservationInvoiceSettings)
 class ReservationInvoiceSettingsAdmin(admin.ModelAdmin):
     form = ReservationInvoiceSettingsAdminForm
-    list_display = (
-        'title',
-        'contact_number_1',
-        'contact_number_2',
-        'signature_preview_list',
-        'edit_link',
-    )
+    list_display = ('title', 'contact_number_1', 'contact_number_2', 'signature_preview_list')
     search_fields = ('title', 'contact_number_1', 'contact_number_2')
-
-    fieldsets = (
-        ('تنظیمات فاکتور رزرو', {
-            'fields': (
-                'title',
-                'contact_number_1',
-                'contact_number_2',
-                'postal_address',
-                'signature_image',
-            )
-        }),
-    )
 
     def signature_preview_list(self, obj):
         if obj.signature_image:
-            return format_html(
-                '<img src="{}" style="max-height: 40px; border-radius: 4px; border: 1px solid #ddd;" />',
-                obj.signature_image.url
-            )
-        return format_html('<span class="text-muted">—</span>')
-    signature_preview_list.short_description = "امضا"
-
-    def edit_link(self, obj):
-        if obj.pk:
-            url = reverse('admin:reservation_reservationinvoicesettings_change', args=[obj.pk])
-            return format_html('<a class="btn btn-sm btn-primary" href="{}">ویرایش</a>', url)
+            return format_html('<img src="{}" style="max-height: 35px; border-radius: 4px;" />', obj.signature_image.url)
         return "-"
-    edit_link.short_description = "عملیات"
+    signature_preview_list.short_description = "امضا"
 
     def has_add_permission(self, request):
         return not ReservationInvoiceSettings.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-    def response_add(self, request, obj):
-        messages.success(request, "تنظیمات فاکتور با موفقیت ایجاد شد.")
-        return super().response_add(request, obj)
-
-    def response_change(self, request, obj):
-        messages.success(request, "تنظیمات فاکتور با موفقیت به‌روزرسانی شد.")
-        return super().response_change(request, obj)
-
 
 
 @admin.register(SnappTripSetting)
@@ -1468,7 +1048,6 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
     fieldsets = (
         ('اطلاعات احراز هویت وب‌سرویس اسنپ‌تریپ', {
             'fields': ('title', 'base_url', 'swagger_url', 'api_key', 'is_active'),
-            'description': 'آدرس سرور، سواگر و API Key دریافتی از اسنپ‌تریپ را در اینجا وارد کنید.'
         }),
     )
 
@@ -1477,131 +1056,55 @@ class SnappTripSettingAdmin(admin.ModelAdmin):
     has_api_key.boolean = True
     has_api_key.short_description = "کلید ثبت شده؟"
 
-    @admin.display(description="موجودی کیف‌پول در اسنپ")
+    @admin.display(description="موجودی کیف‌پول اسنپ")
     def wallet_balance_display(self, obj):
         try:
             bal, status_msg = get_snapptrip_wallet_balance()
-
-            try:
-                bal_int = int(bal)
-            except (ValueError, TypeError):
-                bal_int = 0
-
-            # ابتدا عدد را با کاما فرمت می‌کنیم تا format_html کرش نکند
-            bal_formatted = f"{bal_int:,}"
-
+            bal_int = int(bal or 0)
             if bal_int > 0:
-                return format_html(
-                    '<strong style="color: #28a745; font-size: 13px;">{} تومان</strong>',
-                    bal_formatted
-                )
+                return format_html('<strong style="color: #28a745;">{} تومان</strong>', f"{bal_int:,}")
             elif bal_int == 0 and status_msg == "موفق":
-                return format_html(
-                    '<span style="color: #dc3545; font-size: 13px;">۰ تومان (کیف‌پول خالی است)</span>'
-                )
-            else:
-                return format_html(
-                    '<span style="color: #6c757d; font-size: 12px;">خطا در استعلام: {}</span>',
-                    str(status_msg)[:50]
-                )
+                return format_html('<span style="color: #dc3545;">۰ تومان (کیف‌پول خالی است)</span>')
+            return format_html('<span style="color: #6c757d;">{}</span>', str(status_msg)[:40])
         except Exception as e:
-            return format_html(
-                '<span style="color: red; font-size: 12px;">خطا: {}</span>',
-                str(e)[:50]
-            )
+            return format_html('<span style="color: red;">خطا: {}</span>', str(e)[:30])
 
     def has_add_permission(self, request):
         return not SnappTripSetting.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
-    
-    
+
 
 @admin.register(SnappHotelDirectory)
 class SnappHotelDirectoryAdmin(admin.ModelAdmin):
-    list_display = (
-        'snapp_hotel_id',
-        'name',
-        'city_display',
-        'stars_display',
-        'last_synced_jalali',
-    )
+    list_display = ('snapp_hotel_id', 'name', 'city_display', 'stars_display', 'last_synced_jalali')
     search_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id')
     list_filter = ('stars', 'city_name')
     readonly_fields = ('snapp_hotel_id', 'name', 'city_name', 'city_id', 'last_synced')
     actions = ['trigger_sync_action', 'auto_detect_stars_action']
     list_per_page = 50
 
-    @admin.display(description="شهر (کد - نام)", ordering="city_name")
+    @admin.display(description="شهر", ordering="city_name")
     def city_display(self, obj):
-        cname = obj.city_name or ""
-        cid = obj.city_id or ""
-        if " - " in cname:
-            return cname
-        if cid and cname and not cname.isdigit():
-            return f"{cid} - {cname}"
-        if cid:
-            return f"{cid}"
-        return cname or "-"
+        return obj.city_name or str(obj.city_id or "-")
 
     @admin.display(description="تعداد ستاره", ordering="stars")
     def stars_display(self, obj):
         val = str(obj.stars or '').strip()
-        
-        # تبدیل اعداد فارسی به انگلیسی
         fa_to_en = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
         val_clean = val.translate(fa_to_en).replace('.0', '').strip()
 
-        star_num = None
-
-        # ۱. بررسی مقدار مستقیم ذخیره‌شده
         if val_clean in ['1', '2', '3', '4', '5']:
             star_num = int(val_clean)
-        else:
-            # ۲. اگر اسنپ ستاره نفرستاده بود، استخراج هوشمند از روی نام هتل
-            name = obj.name or ""
-            star_patterns = [
-                ('5', ['۵ ستاره', '5 ستاره', 'پنج ستاره', '5-star', '5 star']),
-                ('4', ['۴ ستاره', '4 ستاره', 'چهار ستاره', '4-star', '4 star']),
-                ('3', ['۳ ستاره', '3 ستاره', 'سه ستاره', '3-star', '3 star']),
-                ('2', ['۲ ستاره', '2 ستاره', 'دو ستاره', '2-star', '2 star']),
-                ('1', ['۱ ستاره', '1 ستاره', 'یک ستاره', '1-star', '1 star']),
-            ]
-            for s_val, s_words in star_patterns:
-                if any(w in name for w in s_words):
-                    star_num = int(s_val)
-                    SnappHotelDirectory.objects.filter(pk=obj.pk).update(stars=s_val)
-                    break
-
-        # نمایش ستاره‌ها با آیکون گرافیکی طلایی
-        if star_num:
             gold_stars = "★" * star_num
             gray_stars = "☆" * (5 - star_num)
             return format_html(
-                '<span style="color: #f39c12; font-size: 15px; letter-spacing: 1px;">{}</span>'
-                '<span style="color: #ccc; font-size: 15px;">{}</span> '
-                '<span style="font-size: 12px; color: #555;">({} ستاره)</span>',
-                gold_stars, gray_stars, star_num
+                '<span style="color: #f39c12; font-size: 14px;">{}</span>'
+                '<span style="color: #ccc; font-size: 14px;">{}</span>',
+                gold_stars, gray_stars
             )
-
-        # تشخیص نوع اقامتگاه‌های بدون ستاره از روی نام
-        name_lower = (obj.name or "")
-        if "هتل آپارتمان" in name_lower or "آپارتمان" in name_lower:
-            return format_html('<span style="background: #e3f2fd; color: #1976d2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">هتل آپارتمان</span>')
-        if "ویلا" in name_lower:
-            return format_html('<span style="background: #fff3e0; color: #e65100; padding: 2px 7px; border-radius: 4px; font-size: 11px;">اقامتگاه ویلایی</span>')
-        if "بوم گردی" in name_lower or "بومگردی" in name_lower or "سنتی" in name_lower:
-            return format_html('<span style="background: #e8f5e9; color: #388e3c; padding: 2px 7px; border-radius: 4px; font-size: 11px;">اقامتگاه سنتی/بوم‌گردی</span>')
-        if "بوتیک" in name_lower:
-            return format_html('<span style="background: #f3e5f5; color: #7b1fa2; padding: 2px 7px; border-radius: 4px; font-size: 11px;">بوتیک هتل</span>')
-        if "هاستل" in name_lower:
-            return format_html('<span style="background: #ede7f6; color: #512da8; padding: 2px 7px; border-radius: 4px; font-size: 11px;">هاستل اقتصادی</span>')
-        if "مهمانپذیر" in name_lower or "مهمان‌پذیر" in name_lower or "مهمانسرا" in name_lower:
-            return format_html('<span style="background: #e0f2f1; color: #00695c; padding: 2px 7px; border-radius: 4px; font-size: 11px;">مهمان‌پذیر</span>')
-
-        # برچسب شکیل برای اقامتگاه‌هایی که کلاً ستاره ندارند
-        return format_html('<span style="background: #f1f3f5; color: #495057; border: 1px solid #ced4da; padding: 2px 8px; border-radius: 4px; font-size: 11px;">مهمان‌پذیر / بدون ستاره</span>')
+        return format_html('<span style="background: #f1f3f5; color: #495057; padding: 2px 6px; border-radius: 4px; font-size: 11px;">مهمان‌پذیر / بوم‌گردی</span>')
 
     def last_synced_jalali(self, obj):
         if obj.last_synced:
@@ -1620,7 +1123,6 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
 
     @admin.action(description="⭐ استخراج و ثبت خودکار ستاره‌ها از نام هتل‌ها")
     def auto_detect_stars_action(self, request, queryset):
-        """اکشن کمکی برای خواندن ستاره‌ها از روی نام هتل‌ها و ذخیره در دیتابیس"""
         count = 0
         star_patterns = [
             ('5', ['۵ ستاره', '5 ستاره', 'پنج ستاره']),
@@ -1643,11 +1145,7 @@ class SnappHotelDirectoryAdmin(admin.ModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path(
-                'sync-all-snapp-hotels/',
-                self.admin_site.admin_view(self.sync_all_view),
-                name='sync-all-snapp-hotels',
-            ),
+            path('sync-all-snapp-hotels/', self.admin_site.admin_view(self.sync_all_view), name='sync-all-snapp-hotels'),
         ]
         return custom_urls + urls
 
