@@ -22,21 +22,15 @@ from reservation.forms import (
     ReservationInvoiceSettingsAdminForm
 )
 from .models import (
-    BestHotels,
-    CancellationPenalty,
-    CancellationReason,
-    ClosedDate,
-    HotelTagPublic,
+    Country,
     Province,
     City,
     HotelType,
     HotelTag,
+    HotelTagPublic,
     Facilities,
-    ReservationApprovalDuration,
-    ReservationInvoiceSettings,
-    Reservationhotel,
-    RoomDatePrice,
     RoomFacilities,
+    BestHotels,
     Hotel,
     HotelGallery,
     HotelGalleryImage,
@@ -47,14 +41,20 @@ from .models import (
     CommentPointItem,
     RoomService,
     Room,
+    RoomDatePrice,
+    ClosedDate,
+    ReservationApprovalDuration,
     Passenger,
     SEOMeta,
-    SnappHotelDirectory,
-    SnappTripSetting,
-    SuggestedCommentItem,
+    Reservationhotel,
     ReservationRoom,
     ReservationRoomPassenger,
-    UserCancellation
+    CancellationReason,
+    UserCancellation,
+    CancellationPenalty,
+    ReservationInvoiceSettings,
+    SnappTripSetting,
+    SnappHotelDirectory
 )
 from .snapptrip_service import (
     sync_all_snapptrip_hotels_directory, 
@@ -68,21 +68,62 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# بخش ۱: تعاریف پایه جغرافیایی و امکانات
+# بخش ۱: کشور، استان، شهر و تعاریف پایه
 # ==============================================================================
+
+@admin.register(Country)
+class CountryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'flag_preview', 'name', 'code', 'slug')
+    search_fields = ('name', 'code', 'slug')
+    readonly_fields = ('flag_preview_large',)
+    fields = ('name', 'slug', 'code', 'flag_preview_large')
+
+    def flag_preview(self, obj):
+        if obj.flag_url:
+            return format_html(
+                '<img src="{}" width="30" height="20" style="object-fit:cover; border:1px solid #ddd; border-radius:3px; vertical-align:middle;" />',
+                obj.flag_url
+            )
+        return "-"
+    flag_preview.short_description = "پرچم"
+
+    def flag_preview_large(self, obj):
+        if obj.flag_url:
+            return format_html(
+                '<div>'
+                '<img src="{}" width="90" height="60" style="object-fit:cover; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.15);" />'
+                '<p style="margin-top:6px; color:#555; font-size:12px;">لینک مستقیم CDN: <a href="{}" target="_blank">مشاهده فایل SVG</a></p>'
+                '</div>',
+                obj.flag_url, obj.flag_url
+            )
+        return "کد ۲ حرفی کشور را ذخیره کنید تا پرچم به صورت آنلاین نمایش داده شود."
+    flag_preview_large.short_description = "پیش‌نمایش پرچم"
+
 
 @admin.register(Province)
 class ProvinceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'slug')
-    search_fields = ('name', 'slug')
+    list_display = ('id', 'name', 'country_flag', 'country', 'slug')
+    search_fields = ('name', 'slug', 'country__name')
+    list_filter = ('country',)
+    autocomplete_fields = ('country',)
+
+    def country_flag(self, obj):
+        if obj.country and obj.country.flag_url:
+            return format_html(
+                '<img src="{}" width="24" height="16" style="object-fit:cover; border:1px solid #ddd; border-radius:2px; vertical-align:middle;" />',
+                obj.country.flag_url
+            )
+        return "-"
+    country_flag.short_description = "پرچم کشور"
 
 
 @admin.register(City)
 class CityAdmin(admin.ModelAdmin):
     form = CityAdminForm
     list_display = ('id', 'name', 'slug', 'image', 'province', 'show_in_homepage')
-    search_fields = ('name', 'slug')
-    list_filter = ('province', 'show_in_homepage')
+    search_fields = ('name', 'slug', 'province__name')
+    list_filter = ('province__country', 'province', 'show_in_homepage')
+    autocomplete_fields = ('province',)
 
 
 @admin.register(HotelType)
@@ -146,8 +187,32 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های اختصاصی هتل (تجمع تمام تنظیمات هتل در یک صفحه)
+# بخش ۲: اینلاین‌های هتل (اتاق اختیاری، اماکن، جریمه، سئو و سوالات)
 # ==============================================================================
+
+class RoomInline(admin.StackedInline):
+    """
+    اینلاین اتاق‌ها درون هتل:
+    به دلیل extra=0 کاملاً اختیاری است و فرم اجباری اضافه نمی‌کند.
+    """
+    model = Room
+    extra = 0
+    verbose_name = 'اتاق'
+    verbose_name_plural = 'اتاق‌های این هتل (اختیاری - در صورت تمایل اینجا ثبت کنید)'
+    autocomplete_fields = ('services',)
+    fields = (
+        ('title', 'board_type'),
+        ('room_capacity', 'extra_capacity'),
+        ('inventory', 'count', 'auto_approved_count'),
+        'customer_club_points',
+        'services',
+        'description',
+        'rules',
+        ('snapptrip_room_id', 'is_snapptrip'),
+        'image',
+    )
+    classes = ('collapse',)
+
 
 class SEOMetaInlineForm(forms.ModelForm):
     keywords_text = forms.CharField(
@@ -202,7 +267,7 @@ class HotelTagPublicInline(admin.TabularInline):
 
 class HotelFAQInline(admin.StackedInline):
     model = HotelFAQ
-    extra = 2
+    extra = 1
     verbose_name = 'سوال متداول'
     verbose_name_plural = 'سوالات متداول هتل'
     fields = ('question', 'answer')
@@ -210,7 +275,7 @@ class HotelFAQInline(admin.StackedInline):
 
 class NearbyPlaceInline(admin.TabularInline):
     model = NearbyPlace
-    extra = 1
+    extra = 0
     verbose_name = 'مکان نزدیک'
     verbose_name_plural = 'اماکن مهم و دیدنی اطراف هتل'
     fields = ('title', 'distance', 'driving_time', 'walking_time', 'latitude', 'longitude', 'image')
@@ -227,7 +292,7 @@ class CancellationPenaltyInline(admin.StackedInline):
 
 
 # ==============================================================================
-# بخش ۳: مدیریت اصلی هتل‌ها (مرکزی و کامل)
+# بخش ۳: مدیریت اصلی هتل‌ها
 # ==============================================================================
 
 @admin.register(Hotel)
@@ -304,11 +369,12 @@ class HotelAdmin(admin.ModelAdmin):
     )
 
     search_fields = ('name', 'address', 'public_tags__title', 'snapptrip_hotel_id')
-    autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo']
-    list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
+    autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
+    list_filter = ('status', 'is_snapptrip', 'city__province__country', 'city', 'type', 'stars')
 
     # تجمیع تمامی اینلاین‌ها در یک صفحه
     inlines = [
+        RoomInline,
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
@@ -320,7 +386,7 @@ class HotelAdmin(admin.ModelAdmin):
     def status_colored(self, obj):
         if obj.status == 'published':
             return format_html('<span style="color:white; background:#28a745; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px;">منتشر شده</span>')
-        return format_html('<span style="color:white; background:#ffc107; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px; color:#333;">پیش‌نویس</span>')
+        return format_html('<span style="color:#333; background:#ffc107; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:11px;">پیش‌نویس</span>')
 
     def sync_button_display(self, obj):
         if obj.snapptrip_hotel_id:
@@ -384,7 +450,7 @@ class HotelAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۴: گالری عکس‌های اضافی هتل
+# بخش ۴: گالری عکس‌های هتل
 # ==============================================================================
 
 class HotelGalleryImageInline(admin.TabularInline):
@@ -463,7 +529,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت اتاق‌ها و نرخ‌گذاری روزانه (درون خود اتاق)
+# بخش ۶: مدیریت مستقل اتاق‌ها و نرخ‌گذاری روزانه
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -574,7 +640,7 @@ class BestHotelsAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۸: مدیریت جامع رزروها (سیستم اصلی فروش)
+# بخش ۸: مدیریت جامع رزروها
 # ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):

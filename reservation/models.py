@@ -78,7 +78,6 @@ def validate_identification_code(value):
     
     clean_val = str(value).strip()
 
-    # حالت ۱: بررسی کد ملی ایرانی (۱۰ رقم همراه با Checksum)
     if re.match(r'^\d{10}$', clean_val):
         check_digit = int(clean_val[9])
         total = sum(int(clean_val[i]) * (10 - i) for i in range(9)) % 11
@@ -92,7 +91,6 @@ def validate_identification_code(value):
             raise ValidationError(_('کد ملی وارد شده معتبر نیست.'))
         return clean_val
 
-    # حالت ۲: بررسی شماره پاسپورت اتباع خارجی (۶ تا ۹ کاراکتر الفبانومریک)
     if 6 <= len(clean_val) <= 9 and re.match(r'^[A-Za-z0-9]+$', clean_val):
         return clean_val.upper()
 
@@ -100,11 +98,51 @@ def validate_identification_code(value):
 
 
 # ==============================================================================
-# بخش ۱: مدل‌های پایه و دسته‌بندی‌ها
+# بخش ۱: کشور، استان، شهر و تعاریف پایه
 # ==============================================================================
 
+class Country(models.Model):
+    name = models.CharField(verbose_name=_('نام کشور'), max_length=64, unique=True)
+    slug = models.SlugField(verbose_name=_('اسلاگ'), max_length=64, unique=True)
+    code = models.CharField(
+        verbose_name=_('کد ۲ حرفی کشور (ISO 3166-1 alpha-2)'),
+        max_length=2,
+        unique=True,
+        help_text=_('کد استاندارد ۲ حرفی انگلیسی مانند: IR (ایران), TR (ترکیه), AE (امارات), GE (گرجستان), AM (ارمنستان)')
+    )
+
+    class Meta:
+        verbose_name = 'کشور'
+        verbose_name_plural = '08- کشورها'
+        ordering = ['name']
+
+    @property
+    def flag_url(self):
+        if self.code:
+            return f"https://catamphetamine.gitlab.io/country-flag-icons/3x2/{self.code.strip().upper()}.svg"
+        return ""
+
+    def clean(self):
+        super().clean()
+        if self.code:
+            self.code = self.code.strip().upper()
+            if len(self.code) != 2:
+                raise ValidationError({'code': 'کد کشور باید دقیقاً ۲ حرف لاتین باشد (مثال: IR).'})
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
 class Province(models.Model):
-    name = models.CharField(verbose_name=_('نام'), max_length=32, unique=True)
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.CASCADE,
+        verbose_name=_('کشور'),
+        related_name='provinces',
+        null=True,
+        blank=True
+    )
+    name = models.CharField(verbose_name=_('نام استان'), max_length=32, unique=True)
     slug = models.SlugField(verbose_name=_('اسلاگ'), max_length=32, unique=True)
 
     class Meta:
@@ -112,11 +150,12 @@ class Province(models.Model):
         verbose_name_plural = '09- استان‌ها'
 
     def __str__(self):
-        return self.name
+        country_str = f" ({self.country.name})" if self.country else ""
+        return f"{self.name}{country_str}"
 
 
 class City(models.Model):
-    name = models.CharField(verbose_name=_('نام'), max_length=32)
+    name = models.CharField(verbose_name=_('نام شهر'), max_length=32)
     slug = models.SlugField(verbose_name=_('اسلاگ'), max_length=32, unique=True)
     image = models.ImageField(verbose_name=_('عکس شهر'), upload_to='cities/', null=True, blank=True)
     province = models.ForeignKey(Province, on_delete=models.CASCADE, verbose_name=_('استان'), related_name='cities')
@@ -124,7 +163,7 @@ class City(models.Model):
 
     class Meta:
         verbose_name = 'شهر'
-        verbose_name_plural = '08- شهرها'
+        verbose_name_plural = '10- شهرها'
         constraints = [
             models.UniqueConstraint(fields=["name", "province"], name="unique_name_province")
         ]
@@ -138,7 +177,7 @@ class HotelType(models.Model):
 
     class Meta:
         verbose_name = 'نوع اقامتگاه'
-        verbose_name_plural = '10- انواع اقامتگاه'
+        verbose_name_plural = '11- انواع اقامتگاه'
 
     def __str__(self):
         return self.title
@@ -149,7 +188,7 @@ class HotelTag(models.Model):
 
     class Meta:
         verbose_name = 'برچسب هتل'
-        verbose_name_plural = '13- برچسب‌های هتل'
+        verbose_name_plural = '14- برچسب‌های هتل'
 
     def __str__(self):
         return self.title
@@ -173,7 +212,7 @@ class Facilities(models.Model):
 
     class Meta:
         verbose_name = 'امکانات رفاهی و تفریحی'
-        verbose_name_plural = '11- امکانات رفاهی هتل'
+        verbose_name_plural = '12- امکانات رفاهی هتل'
 
     def __str__(self):
         return self.title
@@ -185,7 +224,7 @@ class RoomFacilities(models.Model):
 
     class Meta:
         verbose_name = 'امکانات داخل اتاق'
-        verbose_name_plural = '12- امکانات داخل اتاق'
+        verbose_name_plural = '13- امکانات داخل اتاق'
 
     def __str__(self):
         return self.title
@@ -198,7 +237,7 @@ class BestHotels(models.Model):
 
     class Meta:
         verbose_name = _("لوگو هتل")
-        verbose_name_plural = _("15- برند و لوگوی هتل‌ها")
+        verbose_name_plural = _("16- برند و لوگوی هتل‌ها")
         ordering = ['order']
 
     def __str__(self):
@@ -206,7 +245,7 @@ class BestHotels(models.Model):
 
 
 # ==============================================================================
-# بخش ۲: مدل‌های اصلی هتل
+# بخش ۲: مدل اصلی هتل و متعلقات
 # ==============================================================================
 
 class Hotel(models.Model):
@@ -215,14 +254,14 @@ class Hotel(models.Model):
 
     name = models.CharField(verbose_name=_('نام'), max_length=256, blank=True, default='')
     slug = models.SlugField(verbose_name=_('اسلاگ'), max_length=256, unique=True, blank=True, default='')
-    city = models.ForeignKey('City', on_delete=models.CASCADE, verbose_name=_('شهر'), related_name='hotels', null=True, blank=True)
+    city = models.ForeignKey(City, on_delete=models.CASCADE, verbose_name=_('شهر'), related_name='hotels', null=True, blank=True)
     address = models.TextField(verbose_name=_('آدرس'), blank=True, default='')
     main_image = models.ImageField(verbose_name=_('تصویر اصلی'), upload_to=hotel_image_upload_to, null=True, blank=True)
     image1 = models.ImageField(verbose_name=_('تصویر 1'), upload_to=hotel_image_upload_to, null=True, blank=True)
     image2 = models.ImageField(verbose_name=_('تصویر 2'), upload_to=hotel_image_upload_to, null=True, blank=True)
     image3 = models.ImageField(verbose_name=_('تصویر 3'), upload_to=hotel_image_upload_to, null=True, blank=True)
     image4 = models.ImageField(verbose_name=_('تصویر 4'), upload_to=hotel_image_upload_to, null=True, blank=True)
-    best_logo = models.ForeignKey('BestHotels', verbose_name=_('لوگوی هتل'), on_delete=models.SET_NULL, null=True, blank=True, related_name='hotels')
+    best_logo = models.ForeignKey(BestHotels, verbose_name=_('لوگوی هتل'), on_delete=models.SET_NULL, null=True, blank=True, related_name='hotels')
     stars = models.PositiveSmallIntegerField(verbose_name=_('تعداد ستاره'), null=True, blank=True)
     rating = models.DecimalField(
         verbose_name=_('امتیاز هتل'),
@@ -236,7 +275,7 @@ class Hotel(models.Model):
         default=0,
         help_text=_('این مقدار فقط در نمایش هتل در قسمت هتل‌های پرفروش تاثیر دارد.')
     )
-    type = models.ForeignKey('HotelType', on_delete=models.CASCADE, verbose_name=_('نوع اقامتگاه'), related_name='hotels', null=True, blank=True)
+    type = models.ForeignKey(HotelType, on_delete=models.CASCADE, verbose_name=_('نوع اقامتگاه'), related_name='hotels', null=True, blank=True)
     description = models.TextField(verbose_name=_('توضیحات هتل'), blank=True, default='')
     further_description = models.TextField(verbose_name=_('توضیحات تکمیلی'), blank=True, default='')
     floors_count = models.PositiveSmallIntegerField(verbose_name=_('تعداد طبقات هتل'), null=True, blank=True)
@@ -261,9 +300,9 @@ class Hotel(models.Model):
         null=True,
         blank=True,
     )
-    tags = models.ManyToManyField('HotelTag', verbose_name=_('برچسب های هتل'), related_name='hotels', blank=True)
-    facilities = models.ManyToManyField('Facilities', verbose_name=_('امکانات رفاهی و تفریحی'), related_name='hotels', blank=True)
-    room_facilities = models.ManyToManyField('RoomFacilities', verbose_name=_('امکانات داخل اتاق'), related_name='hotels', blank=True)
+    tags = models.ManyToManyField(HotelTag, verbose_name=_('برچسب های هتل'), related_name='hotels', blank=True)
+    facilities = models.ManyToManyField(Facilities, verbose_name=_('امکانات رفاهی و تفریحی'), related_name='hotels', blank=True)
+    room_facilities = models.ManyToManyField(RoomFacilities, verbose_name=_('امکانات داخل اتاق'), related_name='hotels', blank=True)
     is_special_offer = models.BooleanField(verbose_name=_('پیشنهاد ویژه صفحه اصلی'), default=False)
     is_flash_sale = models.BooleanField(verbose_name=_('شگفت‌انگیز صفحه اصلی'), default=False)
     is_best_seller = models.BooleanField(verbose_name=_('پرفروش‌ترین‌های صفحه اصلی'), default=False)
@@ -308,7 +347,7 @@ class Hotel(models.Model):
 
 
 class SEOMeta(models.Model):
-    hotel = models.OneToOneField('Hotel', on_delete=models.CASCADE, related_name='seo_meta', verbose_name='هتل', null=True, blank=True)
+    hotel = models.OneToOneField(Hotel, on_delete=models.CASCADE, related_name='seo_meta', verbose_name='هتل', null=True, blank=True)
     title_tag = models.CharField(max_length=70, verbose_name="عنوان سئو (Title)")
     description = models.TextField(max_length=160, verbose_name="توضیحات متا (Description)")
     keywords = models.TextField(verbose_name="کلمات کلیدی", blank=True, default="")
@@ -332,7 +371,7 @@ class HotelGallery(models.Model):
 
     class Meta:
         verbose_name = 'گالری تصاویر هتل'
-        verbose_name_plural = '14- گالری تصاویر هتل‌ها'
+        verbose_name_plural = '15- گالری تصاویر هتل‌ها'
 
     def __str__(self):
         return f'{self.title} ({self.hotel})'
@@ -487,7 +526,7 @@ class RoomService(models.Model):
 
 
 class Room(models.Model):
-    hotel = models.ForeignKey('Hotel', on_delete=models.CASCADE, verbose_name=_('هتل'), related_name='rooms', null=True, blank=True)
+    hotel = models.ForeignKey(Hotel, on_delete=models.CASCADE, verbose_name=_('هتل'), related_name='rooms', null=True, blank=True)
     title = models.CharField(verbose_name=_('نام اتاق'), max_length=256, null=True, blank=True)
     description = models.TextField(verbose_name=_('توضیحات اتاق'), blank=True, default='', null=True)
     inventory = models.PositiveIntegerField(verbose_name=_('موجودی فعلی'), default=0)
@@ -496,7 +535,7 @@ class Room(models.Model):
     customer_club_points = models.PositiveIntegerField(verbose_name=_('امتیاز باشگاه مشتریان'), default=0, null=True, blank=True)
     room_capacity = models.PositiveIntegerField(verbose_name=_('ظرفیت اتاق'), default=0)
     extra_capacity = models.PositiveIntegerField(verbose_name=_('ظرفیت نفر اضافه'), default=0)
-    services = models.ManyToManyField('RoomService', verbose_name=_('خدمات'), related_name='rooms', blank=True)
+    services = models.ManyToManyField(RoomService, verbose_name=_('خدمات'), related_name='rooms', blank=True)
     image = models.ImageField(upload_to='room_images/', verbose_name=_('تصویر اتاق'), null=True, blank=True)
     snapptrip_room_id = models.PositiveIntegerField(verbose_name=_('شناسه اتاق در اسنپ‌تریپ'), null=True, blank=True)
     board_type = models.CharField(
@@ -576,7 +615,7 @@ class Room(models.Model):
                     send_room_availability_sms(
                         room_name=f"{room.title} (ID: {room.pk})",
                         status="صفر شد",
-                        hotel_name=room.hotel.title if room.hotel else "نامشخص"
+                        hotel_name=room.hotel.name if room.hotel else "نامشخص"
                     )
                 except Exception as e:
                     logger.error(f"Failed to send SMS for room {room.pk}: {str(e)}")
@@ -648,7 +687,9 @@ class RoomDatePrice(models.Model):
         return f'{self.room} | {self.user_level} | {self.start_date} تا {self.end_date}'
 
 
+# برای پشتیبانی و سازگاری با ایمپورت‌های بخش‌های قدیمی (ویوها)
 RoomDate = RoomDatePrice
+
 
 class ClosedDate(models.Model):
     room_date = models.ForeignKey('RoomDatePrice', on_delete=models.CASCADE, related_name='closed_dates', verbose_name=_('بازه زمانی اتاق'))
@@ -1049,7 +1090,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
             elif instance.payment_status == 'paid':
                 logger.info(f"🔵 پرداخت موفق برای رزرو {instance.tracking_code}. شروع پردازش...")
 
-                # گام اول: کسر کیف پول
                 if instance.buyer and instance.wallet_withdrawal_amount > 0 and not instance.wallet_withdrawn:
                     with transaction.atomic():
                         res_lock = Reservationhotel.objects.select_for_update().get(pk=instance.pk)
@@ -1064,7 +1104,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                                 res_lock.save(update_fields=['wallet_withdrawn'])
                                 instance.wallet_withdrawn = True
 
-                # گام دوم: تایید قطعی اسنپ‌تریپ
                 if getattr(instance, 'is_snapptrip_reservation', False) and instance.snapp_reservation_code:
                     try:
                         from reservation.snapptrip_service import auto_confirm_snapp_reservation_if_charged, get_snapptrip_booking_status
@@ -1081,7 +1120,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     except Exception as snapp_err:
                         logger.error(f"❌ خطا در هماهنگی با اسنپ: {snapp_err}")
 
-                # گام سوم: مصرف کد تخفیف
                 if instance.applied_discount_code and not instance.discount_processed and not cache.get(cache_key_discount):
                     cache.set(cache_key_discount, True, timeout=60)
                     try:
@@ -1091,7 +1129,6 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
                     finally:
                         cache.delete(cache_key_discount)
 
-                # گام چهارم: امتیاز باشگاه مشتریان
                 if instance.buyer and not instance.points_assigned and not cache.get(cache_key_points):
                     cache.set(cache_key_points, True, timeout=60)
                     with transaction.atomic():
@@ -1154,7 +1191,7 @@ def notify_status_change_and_assign_points(sender, instance, created, **kwargs):
 
 
 # ==============================================================================
-# بخش ۸: مدل‌های فرعی رزرواسیون (اتاق رزرو شده و مسافران)
+# بخش ۸: مدل‌های فرعی رزرواسیون
 # ==============================================================================
 
 class ReservationRoom(models.Model):
@@ -1518,7 +1555,7 @@ class ReservationInvoiceSettings(models.Model):
 
     class Meta:
         verbose_name = "تنظیمات فاکتور رزرو"
-        verbose_name_plural = "17- تنظیمات فاکتور رزرو"
+        verbose_name_plural = "18- تنظیمات فاکتور رزرو"
 
     def __str__(self):
         return self.title
@@ -1533,7 +1570,7 @@ class SnappTripSetting(models.Model):
 
     class Meta:
         verbose_name = _("تنظیمات API اسنپ‌تریپ")
-        verbose_name_plural = _("16- تنظیمات وب‌سرویس اسنپ‌تریپ")
+        verbose_name_plural = _("17- تنظیمات وب‌سرویس اسنپ‌تریپ")
 
     def __str__(self):
         return self.title
