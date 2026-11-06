@@ -4,7 +4,7 @@ FROM python:3.11-slim-bookworm
 # تنظیم دایرکتوری کاری
 WORKDIR /app
 
-# متغیرهای محیطی برای جلوگیری از تولید فایل‌های اضافی، لاگ آنی و افزایش تایم‌اوت pip
+# متغیرهای محیطی
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DEFAULT_TIMEOUT=120 \
@@ -24,12 +24,11 @@ RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 && \
     bash \
     && rm -rf /var/lib/apt/lists/*
 
-# ارتقای pip
-RUN pip install --no-cache-dir --upgrade pip
-
-# کپی فایل وابستگی‌ها و نصب پکیج‌ها (استفاده از کش لایه‌ای داکر)
+# کپی فایل وابستگی‌ها و نصب پکیج‌ها با میرور پرسرعت و بدون تایم‌اوت
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com
 
 # کپی کل فایل‌های پروژه
 COPY . /app/
