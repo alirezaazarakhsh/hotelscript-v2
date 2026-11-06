@@ -12,6 +12,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.translation import gettext_lazy as _
+from nested_admin import NestedModelAdmin, NestedTabularInline
 
 from authentication.models import BaseUser
 from reservation.forms import (
@@ -186,6 +187,7 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
+# مدل‌های کمکی که از منوی سایدبار مخفی هستند
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
@@ -214,13 +216,12 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل
+# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل (با پاپ‌آپ تنظیم نرخ)
 # ==============================================================================
 
 class RoomInline(admin.TabularInline):
     """
-    اینلاین فوق‌العاده سبک و بهینه اتاق‌ها درون هتل:
-    دارای دکمه لینک مستقیم برای ویرایش اتاق و بازه‌های قیمتی بدون سنگین شدن صفحه هتل
+    اینلاین اتاق‌ها با دکمه پاپ‌آپ برای مدیریت قیمت و تقویم در همان صفحه
     """
     model = Room
     extra = 0
@@ -236,16 +237,20 @@ class RoomInline(admin.TabularInline):
         'manage_room_link'
     )
     readonly_fields = ('manage_room_link',)
-    show_change_link = True
+    show_change_link = False
     verbose_name = 'اتاق'
     verbose_name_plural = 'اتاق‌های این هتل'
 
     def manage_room_link(self, obj):
         if obj.pk:
             url = reverse('admin:reservation_room_change', args=[obj.pk])
+            title_text = obj.title or f"اتاق {obj.pk}"
             return format_html(
-                '<a class="button" style="background:#0284c7; color:white; padding:4px 8px; border-radius:4px; text-decoration:none; font-size:11px;" href="{}" target="_blank">⚙️ تنظیم قیمت و تقویم</a>',
-                url
+                '<button type="button" class="button" style="background:#0284c7; color:white; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; border:none; box-shadow:0 1px 3px rgba(0,0,0,0.1);" '
+                'onclick="openRoomPriceModal(\'{}\', \'{}\');">'
+                '⚙️ تنظیم قیمت و تقویم'
+                '</button>',
+                url, title_text
             )
         return "-"
     manage_room_link.short_description = "مدیریت تقویم و نرخ"
@@ -409,7 +414,7 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # اینلاین اتاق‌ها دقیقاً زیر جریمه کنسلی هتل
+    # اینلاین اتاق‌ها در زیر جریمه کنسلی
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
@@ -484,6 +489,40 @@ class HotelAdmin(admin.ModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """تزریق پاپ‌آپ لایت‌باکس مدرن برای تنظیم تقویم بدون ترک صفحه هتل"""
+        extra_context = extra_context or {}
+        modal_html = mark_safe("""
+        <div id="roomPriceModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.7); z-index:999999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+            <div style="background:#ffffff; width:92%; max-width:1200px; height:88vh; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
+                <div style="background:#0f172a; color:#ffffff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center;">
+                    <span id="modalRoomTitle" style="font-weight:bold; font-size:14px;">⚙️ تنظیم قیمت و تقویم اتاق</span>
+                    <button type="button" onclick="closeRoomPriceModal();" style="background:#ef4444; color:#fff; border:none; padding:4px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">✖ بستن پنجره</button>
+                </div>
+                <iframe id="roomPriceIframe" src="" style="width:100%; height:100%; border:none;"></iframe>
+            </div>
+        </div>
+        <script>
+            function openRoomPriceModal(url, title) {
+                var modal = document.getElementById('roomPriceModal');
+                var iframe = document.getElementById('roomPriceIframe');
+                var titleSpan = document.getElementById('modalRoomTitle');
+                
+                titleSpan.textContent = '⚙️ تنظیم قیمت و تقویم: ' + title;
+                iframe.src = url + (url.indexOf('?') !== -1 ? '&_popup=1' : '?_popup=1');
+                modal.style.display = 'flex';
+            }
+            function closeRoomPriceModal() {
+                var modal = document.getElementById('roomPriceModal');
+                var iframe = document.getElementById('roomPriceIframe');
+                modal.style.display = 'none';
+                iframe.src = '';
+            }
+        </script>
+        """)
+        extra_context['title'] = format_html("{}{}", extra_context.get('title', 'ویرایش هتل'), modal_html)
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
 
 # ==============================================================================
@@ -566,7 +605,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (همراه با تقویم کامل قیمت‌ها)
+# بخش ۶: مدیریت مستقل اتاق‌ها (بدون فیلد تصویر)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -674,7 +713,7 @@ class BestHotelsAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
+# بخش ۸: مدیریت رزروها (بدون فیلتر و با تعریف صحیح فرم قبل از کلاس)
 # ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):
@@ -705,7 +744,7 @@ class ReservationhotelAdminForm(forms.ModelForm):
         return amount
 
 
-class ReservationRoomPassengerInline(admin.TabularInline):
+class ReservationRoomPassengerInline(NestedTabularInline):
     model = ReservationRoomPassenger
     extra = 0
     max_num = 10
@@ -713,7 +752,7 @@ class ReservationRoomPassengerInline(admin.TabularInline):
     can_delete = True
 
 
-class ReservationRoomInline(admin.TabularInline):
+class ReservationRoomInline(NestedTabularInline):
     model = ReservationRoom
     extra = 1
     max_num = 10
@@ -729,10 +768,19 @@ class ReservationRoomInline(admin.TabularInline):
     show_change_link = False
     can_delete = True
     autocomplete_fields = ('room',)
+    inlines = [ReservationRoomPassengerInline]
+
+    def primary_passengers_count(self, obj):
+        return obj.room.room_capacity if obj.room else 0
+    primary_passengers_count.short_description = _('تعداد نفر اصلی')
+
+    def extra_passengers_count(self, obj):
+        return obj.room.extra_capacity if obj.room else 0
+    extra_passengers_count.short_description = _('تعداد نفر اضافه')
 
 
 @admin.register(Reservationhotel)
-class ReservationhotelAdmin(admin.ModelAdmin):
+class ReservationhotelAdmin(NestedModelAdmin):
     form = ReservationhotelAdminForm
     list_display = (
         'tracking_code', 'buyer_phone_number', 'reserver_first_name', 'reserver_last_name',
