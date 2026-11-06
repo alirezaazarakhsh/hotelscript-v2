@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# بخش ۱: کشور، استان، شهر و تعاریف پایه
+# بخش ۱: تعاریف پایه و جغرافیا
 # ==============================================================================
 
 @admin.register(Country)
@@ -187,7 +187,6 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-# مدل‌های کمکی که از منوی سایدبار مخفی هستند
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
@@ -216,7 +215,7 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: فرم و اینلاین‌های هتل (آکاردئونی و بازه زمانی در زیر هر اتاق)
+# بخش ۲: فرم‌ها و اینلاین‌های هتل (آکاردئونی و با بازه زمانی درون هر اتاق)
 # ==============================================================================
 
 class RoomInlineForm(forms.ModelForm):
@@ -232,7 +231,7 @@ class RoomDatePriceNestedInline(NestedTabularInline):
     """اینلاین بازه‌های زمانی و قیمت‌ها که زیر هر اتاق قرار دارد"""
     model = RoomDatePrice
     fk_name = 'room'
-    extra = 1  # وجود حداقل ۱ فرم برای فعال‌ماندن کلیک افزودن بازه
+    extra = 1
     fields = (
         'user_level',
         'start_date',
@@ -307,7 +306,7 @@ class SEOMetaInlineForm(forms.ModelForm):
         return instance
 
 
-class SEOMetaInline(NestedStackedInline):
+class SEOMetaInline(admin.StackedInline):
     model = SEOMeta
     form = SEOMetaInlineForm
     extra = 1
@@ -318,7 +317,7 @@ class SEOMetaInline(NestedStackedInline):
     fields = ('title_tag', 'keywords_text', 'description', 'canonical_url', 'og_title', 'og_description', 'og_image', 'no_index')
 
 
-class HotelTagPublicInline(NestedTabularInline):
+class HotelTagPublicInline(admin.TabularInline):
     model = HotelTagPublic
     extra = 2
     max_num = 5
@@ -327,7 +326,7 @@ class HotelTagPublicInline(NestedTabularInline):
     verbose_name_plural = _('تگ‌های عمومی هتل')
 
 
-class HotelFAQInline(NestedStackedInline):
+class HotelFAQInline(admin.StackedInline):
     model = HotelFAQ
     extra = 1
     verbose_name = 'سوال متداول'
@@ -335,7 +334,7 @@ class HotelFAQInline(NestedStackedInline):
     fields = ('question', 'answer')
 
 
-class NearbyPlaceInline(NestedTabularInline):
+class NearbyPlaceInline(admin.TabularInline):
     model = NearbyPlace
     extra = 0
     verbose_name = 'مکان نزدیک'
@@ -343,7 +342,7 @@ class NearbyPlaceInline(NestedTabularInline):
     fields = ('title', 'distance', 'driving_time', 'walking_time', 'latitude', 'longitude', 'image')
 
 
-class CancellationPenaltyInline(NestedStackedInline):
+class CancellationPenaltyInline(admin.StackedInline):
     model = CancellationPenalty
     extra = 0
     max_num = 1
@@ -354,7 +353,7 @@ class CancellationPenaltyInline(NestedStackedInline):
 
 
 # ==============================================================================
-# بخش ۳: مدیریت اصلی هتل‌ها (با استایل و رفتار آکاردئونی واقعی)
+# بخش ۳: مدیریت اصلی هتل‌ها (با آکاردئون تمیز و بدون خطای ۵۰۰)
 # ==============================================================================
 
 @admin.register(Hotel)
@@ -434,7 +433,7 @@ class HotelAdmin(NestedModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # ترتیب اینلاین‌ها: اتاق‌ها بعد از جریمه کنسلی قرار دارند
+    # ترتیب اینلاین‌ها: اتاق‌ها دقیقاً زیر جریمه کنسلی قرار گرفتند
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
@@ -510,109 +509,82 @@ class HotelAdmin(NestedModelAdmin):
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
 
-    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
-        """تزریق استایل و اسکریپت آکاردئونی هوشمند برای مدیریت آسان اتاق‌ها"""
-        accordion_script = mark_safe("""
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """افزودن اسکریپت آکاردئونی بدون تداخل با قالب جنگو"""
+        extra_context = extra_context or {}
+        accordion_js = mark_safe("""
         <style>
-            /* استایل باکس آکاردئونی هر اتاق */
             .djn-group-nested_admin_room > .djn-inline-form {
                 border: 2px solid #cbd5e1 !important;
                 border-radius: 8px !important;
-                margin-bottom: 14px !important;
+                margin-bottom: 12px !important;
                 background: #ffffff !important;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.04);
             }
-            .room-acc-header {
+            .room-acc-toggle {
                 background: #f1f5f9;
-                padding: 12px 18px;
+                padding: 10px 15px;
                 cursor: pointer;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 border-bottom: 1px solid #e2e8f0;
-                user-select: none;
-                transition: background 0.2s;
-            }
-            .room-acc-header:hover {
-                background: #e2e8f0;
-            }
-            .room-acc-title {
                 font-weight: bold;
-                font-size: 14px;
                 color: #1e293b;
             }
-            .room-acc-btn {
-                background: #0284c7;
-                color: white;
-                padding: 3px 10px;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            .room-acc-btn.is-open {
-                background: #ef4444;
+            .room-acc-toggle:hover {
+                background: #e2e8f0;
             }
         </style>
         <script>
             (function($) {
-                function setupRoomAccordion() {
+                function applyAccordion() {
                     $('.djn-group-nested_admin_room > .djn-inline-form').each(function() {
                         var $form = $(this);
-                        if ($form.hasClass('djn-empty-form') || $form.data('acc-ready')) return;
-                        $form.data('acc-ready', true);
+                        if ($form.hasClass('djn-empty-form') || $form.data('accordion-done')) return;
+                        $form.data('accordion-done', true);
 
-                        var titleVal = $form.find('input[name$="-title"]').val() || 'اتاق جدید (در حال تعریف)';
-                        var capVal = $form.find('input[name$="-room_capacity"]').val();
-                        var capText = capVal ? ' (ظرفیت: ' + capVal + ' نفر)' : '';
+                        var title = $form.find('input[name$="-title"]').val() || 'اتاق جدید';
+                        var $h3 = $form.find('> h3').hide();
 
-                        var $h3 = $form.find('> h3');
-                        $h3.hide(); // مخفی کردن سربرگ پیش‌فرض جنگو
-
-                        var $accHeader = $(
-                            '<div class="room-acc-header">' +
-                            '<span class="room-acc-title">🏨 ' + titleVal + capText + '</span>' +
-                            '<span class="room-acc-btn">➕ باز کردن مشخصات و نرخ‌ها</span>' +
+                        var $bar = $(
+                            '<div class="room-acc-toggle">' +
+                            '<span>🏨 ' + title + '</span>' +
+                            '<span class="acc-btn-state" style="color:#0284c7;">➕ باز کردن مشخصات</span>' +
                             '</div>'
                         );
 
-                        $form.prepend($accHeader);
-                        var $body = $form.children().not($accHeader);
+                        $form.prepend($bar);
+                        var $content = $form.children().not($bar);
 
-                        // اگر اتاق از قبل وجود داشته باشد بسته شروع می‌شود تا صفحه خلوت بماند
                         if ($form.find('input[name$="-id"]').val()) {
-                            $body.hide();
+                            $content.hide();
                         } else {
-                            // اتاق جدید باز نمایش داده می‌شود
-                            $accHeader.find('.room-acc-btn').text('➖ بستن').addClass('is-open');
+                            $bar.find('.acc-btn-state').text('➖ بستن').css('color', '#ef4444');
                         }
 
-                        $accHeader.on('click', function(e) {
+                        $bar.on('click', function(e) {
                             if ($(e.target).is('input, button, a')) return;
-                            $body.slideToggle(200, function() {
-                                var isOpen = $body.is(':visible');
-                                $accHeader.find('.room-acc-btn')
-                                    .text(isOpen ? '➖ بستن' : '➕ باز کردن مشخصات و نرخ‌ها')
-                                    .toggleClass('is-open', isOpen);
+                            $content.slideToggle(200, function() {
+                                var isOpen = $content.is(':visible');
+                                $bar.find('.acc-btn-state').text(isOpen ? '➖ بستن' : '➕ باز کردن مشخصات')
+                                    .css('color', isOpen ? '#ef4444' : '#0284c7');
                             });
                         });
 
-                        // به‌روزرسانی زنده نام اتاق در سربرگ هنگام تایپ
                         $form.find('input[name$="-title"]').on('input', function() {
-                            var liveTitle = $(this).val() || 'اتاق جدید';
-                            $accHeader.find('.room-acc-title').text('🏨 ' + liveTitle);
+                            $bar.find('span:first').text('🏨 ' + ($(this).val() || 'اتاق جدید'));
                         });
                     });
                 }
-
-                $(document).ready(setupRoomAccordion);
+                $(document).ready(applyAccordion);
                 $(document).on('djnesting:added formset:added', function() {
-                    setTimeout(setupRoomAccordion, 100);
+                    setTimeout(applyAccordion, 100);
                 });
             })(django.jQuery);
         </script>
         """)
-        context['title'] = format_html("{}{}", context.get('title', ''), accordion_script)
-        return super().render_change_form(request, context, add, change, form_url, obj)
+        extra_context['title'] = format_html("{}{}", extra_context.get('title', f"ویرایش هتل"), accordion_js)
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
 
 # ==============================================================================
@@ -695,7 +667,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (بدون فیلد تصویر)
+# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
