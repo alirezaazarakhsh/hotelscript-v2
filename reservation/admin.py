@@ -216,12 +216,12 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل (با پاپ‌آپ تنظیم نرخ)
+# بخش ۲: اینلاین‌های سبک، سریع و بهینه هتل
 # ==============================================================================
 
 class RoomInline(admin.TabularInline):
     """
-    اینلاین اتاق‌ها با دکمه پاپ‌آپ برای مدیریت قیمت و تقویم در همان صفحه
+    اینلاین اتاق‌ها با پاپ‌آپ استاندارد و فوق‌سریع برای تنظیم نرخ بدون خروج از صفحه هتل
     """
     model = Room
     extra = 0
@@ -244,13 +244,12 @@ class RoomInline(admin.TabularInline):
     def manage_room_link(self, obj):
         if obj.pk:
             url = reverse('admin:reservation_room_change', args=[obj.pk])
-            title_text = obj.title or f"اتاق {obj.pk}"
             return format_html(
-                '<button type="button" class="button" style="background:#0284c7; color:white; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; border:none; box-shadow:0 1px 3px rgba(0,0,0,0.1);" '
-                'onclick="openRoomPriceModal(\'{}\', \'{}\');">'
+                '<a class="button" style="background:#0284c7; color:white; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; text-decoration:none; display:inline-block;" '
+                'onclick="window.open(\'{url}?_popup=1\', \'room_{id}\', \'width=1150,height=750,top=100,left=200,resizable=yes,scrollbars=yes\'); return false;" href="{url}">'
                 '⚙️ تنظیم قیمت و تقویم'
-                '</button>',
-                url, title_text
+                '</a>',
+                url=url, id=obj.pk
             )
         return "-"
     manage_room_link.short_description = "مدیریت تقویم و نرخ"
@@ -414,14 +413,13 @@ class HotelAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # اینلاین اتاق‌ها در زیر جریمه کنسلی
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,  # جریمه کنسلی
-        RoomInline                  # اتاق‌های هتل
+        CancellationPenaltyInline,
+        RoomInline
     ]
 
     @admin.display(description="وضعیت انتشار", ordering="status")
@@ -489,40 +487,6 @@ class HotelAdmin(admin.ModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
-
-    def change_view(self, request, object_id, form_url='', extra_context=None):
-        """تزریق پاپ‌آپ لایت‌باکس مدرن برای تنظیم تقویم بدون ترک صفحه هتل"""
-        extra_context = extra_context or {}
-        modal_html = mark_safe("""
-        <div id="roomPriceModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.7); z-index:999999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
-            <div style="background:#ffffff; width:92%; max-width:1200px; height:88vh; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);">
-                <div style="background:#0f172a; color:#ffffff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center;">
-                    <span id="modalRoomTitle" style="font-weight:bold; font-size:14px;">⚙️ تنظیم قیمت و تقویم اتاق</span>
-                    <button type="button" onclick="closeRoomPriceModal();" style="background:#ef4444; color:#fff; border:none; padding:4px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">✖ بستن پنجره</button>
-                </div>
-                <iframe id="roomPriceIframe" src="" style="width:100%; height:100%; border:none;"></iframe>
-            </div>
-        </div>
-        <script>
-            function openRoomPriceModal(url, title) {
-                var modal = document.getElementById('roomPriceModal');
-                var iframe = document.getElementById('roomPriceIframe');
-                var titleSpan = document.getElementById('modalRoomTitle');
-                
-                titleSpan.textContent = '⚙️ تنظیم قیمت و تقویم: ' + title;
-                iframe.src = url + (url.indexOf('?') !== -1 ? '&_popup=1' : '?_popup=1');
-                modal.style.display = 'flex';
-            }
-            function closeRoomPriceModal() {
-                var modal = document.getElementById('roomPriceModal');
-                var iframe = document.getElementById('roomPriceIframe');
-                modal.style.display = 'none';
-                iframe.src = '';
-            }
-        </script>
-        """)
-        extra_context['title'] = format_html("{}{}", extra_context.get('title', 'ویرایش هتل'), modal_html)
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
 
 
 # ==============================================================================
@@ -605,7 +569,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (بدون فیلد تصویر)
+# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -675,7 +639,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۷: مسافران و برندها (با پیش‌نمایش لوگو)
+# بخش ۷: مسافران و برندها (با پیش‌نمایش تصویر لوگو)
 # ==============================================================================
 
 @admin.register(Passenger)
@@ -713,7 +677,7 @@ class BestHotelsAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۸: مدیریت رزروها (بدون فیلتر و با تعریف صحیح فرم قبل از کلاس)
+# بخش ۸: مدیریت رزروها (بدون هیچ فیلتر و با تعریف صحیح فرم)
 # ==============================================================================
 
 class ReservationhotelAdminForm(forms.ModelForm):
