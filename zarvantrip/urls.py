@@ -95,6 +95,8 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += [
-        path("__debug__/", include("debug_toolbar.urls"))
+        path("__debug__/", include("debug_toolbar.urls")),
+        path('_nested_admin/', include('nested_admin.urls')),  # 👈 این خط برای کارکرد دکمه‌های افزودن الزامی است
+
     ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

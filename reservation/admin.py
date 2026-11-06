@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
-# بخش ۱: تعاریف پایه و جغرافیا
+# بخش ۱: کشور، استان، شهر و تعاریف پایه
 # ==============================================================================
 
 @admin.register(Country)
@@ -187,7 +187,7 @@ class RoomFacilitiesAdmin(admin.ModelAdmin):
     icon_preview.short_description = "آیکون انتخاب‌شده"
 
 
-# مدل‌های کمکی که از منوی سایدبار مخفی هستند ولی دکمه + آن‌ها فعال است
+# مدل‌های کمکی که از منوی سایدبار مخفی هستند
 @admin.register(RoomService)
 class RoomServiceAdmin(admin.ModelAdmin):
     list_display = ('id', 'title')
@@ -216,7 +216,7 @@ class CommentPointItemAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۲: فرم‌ها و اینلاین‌های هتل (آکاردئونی و با زیر‌اینلاین قیمت)
+# بخش ۲: فرم و اینلاین‌های هتل (آکاردئونی و بازه زمانی در زیر هر اتاق)
 # ==============================================================================
 
 class RoomInlineForm(forms.ModelForm):
@@ -229,9 +229,10 @@ class RoomInlineForm(forms.ModelForm):
 
 
 class RoomDatePriceNestedInline(NestedTabularInline):
-    """اینلاین بازه‌های زمانی و قیمت‌ها که درون هر اتاق قرار گرفته است"""
+    """اینلاین بازه‌های زمانی و قیمت‌ها که زیر هر اتاق قرار دارد"""
     model = RoomDatePrice
-    extra = 0
+    fk_name = 'room'
+    extra = 1  # وجود حداقل ۱ فرم برای فعال‌ماندن کلیک افزودن بازه
     fields = (
         'user_level',
         'start_date',
@@ -247,15 +248,22 @@ class RoomDatePriceNestedInline(NestedTabularInline):
     verbose_name = 'بازه زمانی و قیمت اتاق'
     verbose_name_plural = 'بازه‌های زمانی و قیمت‌های این اتاق'
 
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        if 'purchase_price' in formset.form.base_fields:
+            formset.form.base_fields['purchase_price'].required = False
+        return formset
+
 
 class RoomInline(NestedStackedInline):
-    """اینلاین اتاق‌ها درون صفحه هتل زیر جریمه کنسلی"""
+    """اینلاین اتاق‌ها به صورت آکاردئونی در زیر جریمه کنسلی"""
     model = Room
     form = RoomInlineForm
+    fk_name = 'hotel'
     extra = 0
     inlines = [RoomDatePriceNestedInline]
     verbose_name = 'اتاق'
-    verbose_name_plural = 'اتاق‌های این هتل (برای ویرایش یا افزودن بازه‌های قیمت باز کنید)'
+    verbose_name_plural = 'اتاق‌های این هتل'
     fields = (
         ('title', 'board_type'),
         ('room_capacity', 'extra_capacity'),
@@ -346,7 +354,7 @@ class CancellationPenaltyInline(NestedStackedInline):
 
 
 # ==============================================================================
-# بخش ۳: مدیریت اصلی هتل‌ها
+# بخش ۳: مدیریت اصلی هتل‌ها (با استایل و رفتار آکاردئونی واقعی)
 # ==============================================================================
 
 @admin.register(Hotel)
@@ -426,13 +434,13 @@ class HotelAdmin(NestedModelAdmin):
     autocomplete_fields = ['tags', 'facilities', 'room_facilities', 'best_logo', 'city']
     list_filter = ('status', 'is_snapptrip', 'city', 'type', 'stars')
 
-    # اینلاین‌ها: اتاق‌ها بعد از جریمه کنسلی قرار دارند
+    # ترتیب اینلاین‌ها: اتاق‌ها بعد از جریمه کنسلی قرار دارند
     inlines = [
         HotelTagPublicInline, 
         SEOMetaInline, 
         HotelFAQInline, 
         NearbyPlaceInline, 
-        CancellationPenaltyInline,  # جریمه کنسلی
+        CancellationPenaltyInline,  # جریمه کنسلی هتل
         RoomInline                  # اتاق‌ها زیر جریمه کنسلی
     ]
 
@@ -501,6 +509,110 @@ class HotelAdmin(NestedModelAdmin):
             ((tag.title,) for tag in qs)
         )
     show_public_tags.short_description = 'تگ‌های عمومی'
+
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        """تزریق استایل و اسکریپت آکاردئونی هوشمند برای مدیریت آسان اتاق‌ها"""
+        accordion_script = mark_safe("""
+        <style>
+            /* استایل باکس آکاردئونی هر اتاق */
+            .djn-group-nested_admin_room > .djn-inline-form {
+                border: 2px solid #cbd5e1 !important;
+                border-radius: 8px !important;
+                margin-bottom: 14px !important;
+                background: #ffffff !important;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            }
+            .room-acc-header {
+                background: #f1f5f9;
+                padding: 12px 18px;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid #e2e8f0;
+                user-select: none;
+                transition: background 0.2s;
+            }
+            .room-acc-header:hover {
+                background: #e2e8f0;
+            }
+            .room-acc-title {
+                font-weight: bold;
+                font-size: 14px;
+                color: #1e293b;
+            }
+            .room-acc-btn {
+                background: #0284c7;
+                color: white;
+                padding: 3px 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            .room-acc-btn.is-open {
+                background: #ef4444;
+            }
+        </style>
+        <script>
+            (function($) {
+                function setupRoomAccordion() {
+                    $('.djn-group-nested_admin_room > .djn-inline-form').each(function() {
+                        var $form = $(this);
+                        if ($form.hasClass('djn-empty-form') || $form.data('acc-ready')) return;
+                        $form.data('acc-ready', true);
+
+                        var titleVal = $form.find('input[name$="-title"]').val() || 'اتاق جدید (در حال تعریف)';
+                        var capVal = $form.find('input[name$="-room_capacity"]').val();
+                        var capText = capVal ? ' (ظرفیت: ' + capVal + ' نفر)' : '';
+
+                        var $h3 = $form.find('> h3');
+                        $h3.hide(); // مخفی کردن سربرگ پیش‌فرض جنگو
+
+                        var $accHeader = $(
+                            '<div class="room-acc-header">' +
+                            '<span class="room-acc-title">🏨 ' + titleVal + capText + '</span>' +
+                            '<span class="room-acc-btn">➕ باز کردن مشخصات و نرخ‌ها</span>' +
+                            '</div>'
+                        );
+
+                        $form.prepend($accHeader);
+                        var $body = $form.children().not($accHeader);
+
+                        // اگر اتاق از قبل وجود داشته باشد بسته شروع می‌شود تا صفحه خلوت بماند
+                        if ($form.find('input[name$="-id"]').val()) {
+                            $body.hide();
+                        } else {
+                            // اتاق جدید باز نمایش داده می‌شود
+                            $accHeader.find('.room-acc-btn').text('➖ بستن').addClass('is-open');
+                        }
+
+                        $accHeader.on('click', function(e) {
+                            if ($(e.target).is('input, button, a')) return;
+                            $body.slideToggle(200, function() {
+                                var isOpen = $body.is(':visible');
+                                $accHeader.find('.room-acc-btn')
+                                    .text(isOpen ? '➖ بستن' : '➕ باز کردن مشخصات و نرخ‌ها')
+                                    .toggleClass('is-open', isOpen);
+                            });
+                        });
+
+                        // به‌روزرسانی زنده نام اتاق در سربرگ هنگام تایپ
+                        $form.find('input[name$="-title"]').on('input', function() {
+                            var liveTitle = $(this).val() || 'اتاق جدید';
+                            $accHeader.find('.room-acc-title').text('🏨 ' + liveTitle);
+                        });
+                    });
+                }
+
+                $(document).ready(setupRoomAccordion);
+                $(document).on('djnesting:added formset:added', function() {
+                    setTimeout(setupRoomAccordion, 100);
+                });
+            })(django.jQuery);
+        </script>
+        """)
+        context['title'] = format_html("{}{}", context.get('title', ''), accordion_script)
+        return super().render_change_form(request, context, add, change, form_url, obj)
 
 
 # ==============================================================================
@@ -583,7 +695,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۶: مدیریت مستقل اتاق‌ها (بدون تصویر و پیش‌نمایش تصویر)
+# بخش ۶: مدیریت مستقل اتاق‌ها (بدون فیلد تصویر)
 # ==============================================================================
 
 class RoomDateInline(admin.TabularInline):
@@ -653,7 +765,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 
 # ==============================================================================
-# بخش ۷: مسافران و برندها (با پیش‌نمایش تصویر لوگو)
+# بخش ۷: مسافران و برندها (با پیش‌نمایش لوگو)
 # ==============================================================================
 
 @admin.register(Passenger)
@@ -694,7 +806,6 @@ class BestHotelsAdmin(admin.ModelAdmin):
 # بخش ۸: مدیریت رزروها (بدون هیچ فیلتر)
 # ==============================================================================
 
-# تعریف دقیق فرم رزرو قبل از کلاس ReservationhotelAdmin برای جلوگیری از NameError
 class ReservationhotelAdminForm(forms.ModelForm):
     class Meta:
         model = Reservationhotel
