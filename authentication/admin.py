@@ -1,13 +1,11 @@
 from django.contrib import admin
 from django import forms
-from django.core.files.storage import default_storage
 from django.http import JsonResponse
 from django.urls import path
 from django.db.models import Q
 from django_jalali.db import models as jmodels
 from jalali_date.widgets import AdminJalaliDateWidget  
 from django.utils.html import format_html
-from django.utils import timezone  
 import jdatetime
 from django.contrib.auth.models import Group
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -18,7 +16,7 @@ import base64
 import random
 import string
 from django.core.files.base import ContentFile
-
+from django.core.files.storage import default_storage
 
 from .models import (
     BaseUser,
@@ -69,18 +67,6 @@ class BaseUserChangeForm(forms.ModelForm):
         if commit:
             user.save()
         return user
-
-
-class AdminSMSPatternInlineForm(forms.ModelForm):
-    class Meta:
-        model = Admin.sms_patterns.through
-        fields = ('smspattern',)
-
-    smspattern = forms.ModelChoiceField(
-        queryset=SMSPattern.objects.all(),
-        label="پترن پیامکی",
-        to_field_name="id",
-    )
 
 
 # ==========================================
@@ -160,13 +146,11 @@ class AdminAdmin(admin.ModelAdmin):
         
         html = '<div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px;">'
         html += '<h3>🔐 دستگاه‌های OTP فعال:</h3>'
-        
         for device in devices:
             html += f'<div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">'
             html += f'<p><strong>Device ID:</strong> {device.id}</p>'
             html += f'<p><strong>نام:</strong> {device.name}</p>'
             html += f'<p><strong>Key:</strong> <code>{device.key}</code></p>'
-            
             if hasattr(device, "created_at") and device.created_at:
                 jalali_date = jdatetime.datetime.fromgregorian(datetime=device.created_at)
                 date_str = jalali_date.strftime("%Y/%m/%d - %H:%M:%S")
@@ -179,15 +163,12 @@ class AdminAdmin(admin.ModelAdmin):
             qr.add_data(uri)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
-            
             buffer = BytesIO()
             img.save(buffer, format='PNG')
             img_str = base64.b64encode(buffer.getvalue()).decode()
-            
             html += f'<p><strong>QR Code:</strong></p>'
             html += f'<img src="data:image/png;base64,{img_str}" style="width: 200px; height: 200px;" />'
             html += '</div>'
-        
         html += '</div>'
         return format_html(html)
     otp_details.short_description = 'جزئیات OTP'
@@ -647,7 +628,8 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     inlines = [JuridicalProfileDocumentInline, JuridicalCardNumberInline]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('natural_profile', 'natural_profile__base_user')
+        qs = super().get_queryset(request)
+        return qs.select_related('natural_profile', 'natural_profile__base_user')
 
     def get_base_user_phone_number(self, obj):
         if obj.pk and obj.natural_profile and obj.natural_profile.base_user:
@@ -676,26 +658,49 @@ class OTPAdmin(admin.ModelAdmin):
 
 
 # ==========================================
-# مدیریت دستگاه‌های OTP و توکن‌های ثابت (درخواست جدید)
+# مدیریت پروکسی مدل‌های OTP جهت انتقال به اپلیکیشن 2- مدیریت کاربران و ادمین ها
 # ==========================================
 
-try:
-    admin.site.unregister(TOTPDevice)
-except admin.sites.NotRegistered:
-    pass
-
-try:
-    admin.site.unregister(StaticDevice)
-except admin.sites.NotRegistered:
-    pass
-
-try:
-    admin.site.unregister(StaticToken)
-except admin.sites.NotRegistered:
-    pass
+# پاکسازی ثبت‌های قبلی در صورت وجود
+for model in [TOTPDevice, StaticDevice, StaticToken]:
+    try:
+        admin.site.unregister(model)
+    except admin.sites.NotRegistered:
+        pass
 
 
-@admin.register(TOTPDevice)
+class AuthProxyAppMixin:
+    """میکسینی برای تغییر app_label به اپلیکیشن authentication جهت انتقال منو به بخش مدیریت کاربران"""
+    @classmethod
+    def get_app_list(cls, request, app_label=None):
+        pass
+
+
+class TOTPDeviceProxy(TOTPDevice):
+    class Meta:
+        proxy = True
+        app_label = 'authentication'
+        verbose_name = 'دستگاه TOTP'
+        verbose_name_plural = 'دستگاه‌های TOTP (Google Authenticator)'
+
+
+class StaticDeviceProxy(StaticDevice):
+    class Meta:
+        proxy = True
+        app_label = 'authentication'
+        verbose_name = 'دستگاه توکن ثابت'
+        verbose_name_plural = 'دستگاه‌های توکن ثابت'
+
+
+class StaticTokenProxy(StaticToken):
+    class Meta:
+        proxy = True
+        app_label = 'authentication'
+        verbose_name = 'توکن ثابت'
+        verbose_name_plural = 'توکن‌های ثابت'
+
+
+@admin.register(TOTPDeviceProxy)
 class TOTPDeviceAdmin(admin.ModelAdmin):
     list_display = ('id', 'user_phone', 'name', 'confirmed_status', 'created_at_jalali')
     search_fields = ('user__phone_number',)
@@ -765,7 +770,7 @@ class TOTPDeviceAdmin(admin.ModelAdmin):
     qr_code_display.short_description = 'نمایش QR Code'
 
 
-@admin.register(StaticDevice)
+@admin.register(StaticDeviceProxy)
 class StaticDeviceAdmin(admin.ModelAdmin):
     list_display = ('id', 'user_phone', 'name', 'confirmed_status', 'token_count', 'created_at_jalali')
     search_fields = ('user__phone_number', 'name')
@@ -800,7 +805,7 @@ class StaticDeviceAdmin(admin.ModelAdmin):
                 obj.confirmed = True
                 obj.save()
                 token = ''.join(random.choices(string.digits, k=6))
-                StaticToken.objects.create(device=obj, token=token)
+                StaticToken.objects.create(device_id=obj.id, token=token)
     
     def user_phone(self, obj):
         return obj.user.phone_number
@@ -850,7 +855,7 @@ class StaticDeviceAdmin(admin.ModelAdmin):
     token_list_display.short_description = 'توکن‌های ثابت'
 
 
-@admin.register(StaticToken)
+@admin.register(StaticTokenProxy)
 class StaticTokenAdmin(admin.ModelAdmin):
     list_display = ('id', 'device_user', 'token_preview', 'token_status', 'device_created_at_jalali')
     search_fields = ('device__user__phone_number', 'token')
@@ -905,24 +910,6 @@ class StaticTokenAdmin(admin.ModelAdmin):
             )
         return "-"
     device_created_at_display.short_description = 'تاریخ دستگاه'
-
-
-# تنظیم نام‌های فارسی برای پکیج‌های OTP در پنل ادمین جنگو
-TOTPDevice._meta.verbose_name = 'دستگاه TOTP'
-TOTPDevice._meta.verbose_name_plural = 'دستگاه‌های TOTP (Google Authenticator)'
-
-StaticDevice._meta.verbose_name = 'دستگاه توکن ثابت'
-StaticDevice._meta.verbose_name_plural = 'دستگاه‌های توکن ثابت'
-
-StaticToken._meta.verbose_name = 'توکن ثابت'
-StaticToken._meta.verbose_name_plural = 'توکن‌های ثابت'
-
-from django.apps import apps
-try:
-    apps.get_app_config('otp_totp').verbose_name = 'احراز هویت TOTP'
-    apps.get_app_config('otp_static').verbose_name = 'احراز هویت توکن ثابت'
-except Exception:
-    pass
 
 
 # ==========================================
