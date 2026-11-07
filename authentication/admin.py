@@ -21,11 +21,11 @@ from django.core.files.storage import default_storage
 from .models import (
     BaseUser,
     Admin,
-    CardNumber,
-    JuridicalCardNumber,
     NaturalProfile,
     JuridicalProfile,
     JuridicalProfileDocument,
+    CardNumber,
+    JuridicalCardNumber,
     OTP,
     SMSPattern,
     GroupExtension,
@@ -70,178 +70,7 @@ class BaseUserChangeForm(forms.ModelForm):
 
 
 # ==========================================
-# مدیریت ادمین‌های سایت (Admin)
-# ==========================================
-
-@admin.register(Admin)
-class AdminAdmin(admin.ModelAdmin):
-    form = AdminForm
-    list_display = (
-        'id',
-        'base_user_info',
-        'admin_avatar',
-        'otp_status',
-        'get_groups',
-    )
-    search_fields = (
-        'base_user__phone_number',
-        'first_name',
-        'last_name',
-    )
-    autocomplete_fields = ['base_user']
-    ordering = ('-id',)
-    filter_horizontal = ('sms_patterns',)
-    actions = ['setup_otp', 'recreate_otp', 'remove_otp']
-    
-    fieldsets = (
-        ('اطلاعات پایه', {
-            'fields': ('base_user', 'first_name', 'last_name', 'image', 'signature')
-        }),
-        ('دسترسی‌های پیامکی', {
-            'fields': ('sms_patterns',),
-        }),
-        ('تنظیمات دسترسی', {
-            'fields': ('admin_groups', 'is_superuser', 'admin_password1', 'admin_password2'),
-            'description': 'گروه‌های دسترسی، سوپر یوزر و رمز عبور را در اینجا تنظیم کنید.',
-        }),
-        ('احراز هویت دو مرحله‌ای (OTP)', {
-            'fields': ('otp_details',),
-            'classes': ('collapse',),
-        }),
-    )
-    
-    readonly_fields = ('otp_details',)
-
-    def base_user_info(self, obj):
-        profile_name = f"{obj.first_name or ''} {obj.last_name or ''}".strip()
-        return f"{obj.base_user.phone_number} ({profile_name or 'بدون نام'})"
-    base_user_info.short_description = 'موبایل و نام'
-
-    def admin_avatar(self, obj):
-        if obj.image:
-            return format_html('<img src="{}" style="width:50px; height:50px; border-radius:10%;" />', obj.image.url)
-        return "—"
-    admin_avatar.short_description = "عکس"
-    
-    def get_groups(self, obj):
-        if obj.base_user.is_superuser:
-            return format_html('<span style="color: red; font-weight: bold;">⭐ ادمین کل</span>')
-        groups = obj.base_user.groups.all()
-        if groups:
-            return format_html('<br>'.join([f'🔹 {g.name}' for g in groups]))
-        return "—"
-    get_groups.short_description = 'گروه‌های دسترسی'
-    
-    def otp_status(self, obj):
-        devices = TOTPDevice.objects.filter(user=obj.base_user, confirmed=True)
-        if devices.exists():
-            return format_html('<span style="color: green; font-weight: bold;">🔐 فعال</span>')
-        return format_html('<span style="color: gray;">⚪ غیرفعال</span>')
-    otp_status.short_description = 'وضعیت OTP'
-    
-    def otp_details(self, obj):
-        devices = TOTPDevice.objects.filter(user=obj.base_user, confirmed=True)
-        if not devices.exists():
-            return format_html('<p style="color: gray;">❌ OTP فعال نیست</p>')
-        
-        html = '<div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px;">'
-        html += '<h3>🔐 دستگاه‌های OTP فعال:</h3>'
-        for device in devices:
-            html += f'<div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">'
-            html += f'<p><strong>Device ID:</strong> {device.id}</p>'
-            html += f'<p><strong>نام:</strong> {device.name}</p>'
-            html += f'<p><strong>Key:</strong> <code>{device.key}</code></p>'
-            if hasattr(device, "created_at") and device.created_at:
-                jalali_date = jdatetime.datetime.fromgregorian(datetime=device.created_at)
-                date_str = jalali_date.strftime("%Y/%m/%d - %H:%M:%S")
-                html += f'<p><strong>تاریخ ایجاد:</strong> {date_str}</p>'
-            else:
-                html += f'<p><strong>تاریخ ایجاد:</strong> N/A</p>'
-            
-            uri = device.config_url
-            qr = qrcode.QRCode(version=1, box_size=5, border=2)
-            qr.add_data(uri)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            buffer = BytesIO()
-            img.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
-            html += f'<p><strong>QR Code:</strong></p>'
-            html += f'<img src="data:image/png;base64,{img_str}" style="width: 200px; height: 200px;" />'
-            html += '</div>'
-        html += '</div>'
-        return format_html(html)
-    otp_details.short_description = 'جزئیات OTP'
-    
-    def setup_otp(self, request, queryset):
-        created = 0
-        already_exists = 0
-        for admin in queryset:
-            existing = TOTPDevice.objects.filter(user=admin.base_user, confirmed=True)
-            if existing.exists():
-                already_exists += 1
-                continue
-            TOTPDevice.objects.create(user=admin.base_user, name='default', confirmed=True)
-            created += 1
-        if created:
-            self.message_user(request, f"✅ {created} OTP جدید ایجاد شد.")
-        if already_exists:
-            self.message_user(request, f"⚠️ {already_exists} ادمین از قبل OTP دارند.", level='warning')
-    setup_otp.short_description = "🔐 فعال‌سازی OTP"
-    
-    def recreate_otp(self, request, queryset):
-        recreated = 0
-        for admin in queryset:
-            TOTPDevice.objects.filter(user=admin.base_user).delete()
-            TOTPDevice.objects.create(user=admin.base_user, name='default', confirmed=True)
-            recreated += 1
-        self.message_user(request, f"✅ {recreated} OTP حذف و مجدداً ساخته شد.")
-    recreate_otp.short_description = "🔄 ساخت مجدد OTP"
-    
-    def remove_otp(self, request, queryset):
-        deleted = 0
-        for admin in queryset:
-            count, _ = TOTPDevice.objects.filter(user=admin.base_user).delete()
-            deleted += count
-        if deleted:
-            self.message_user(request, f"✅ {deleted} OTP حذف شد.")
-        else:
-            self.message_user(request, "⚠️ هیچ OTP فعالی پیدا نشد.", level='warning')
-    remove_otp.short_description = "🗑️ حذف OTP"
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                'base-user-autocomplete/',
-                self.admin_site.admin_view(self.base_user_autocomplete),
-                name='base_user_autocomplete',
-            ),
-        ]
-        return custom_urls + urls
-
-    def base_user_autocomplete(self, request):
-        query = request.GET.get('q', '')
-        users = BaseUser.objects.filter(
-            Q(phone_number__icontains=query) |
-            Q(natural_profile__first_name__icontains=query) |
-            Q(natural_profile__last_name__icontains=query)
-        )[:10]
-
-        results = []
-        for user in users:
-            profile_name = ""
-            if hasattr(user, 'natural_profile') and user.natural_profile:
-                profile_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
-            results.append({
-                'id': user.id,
-                'text': f"{user.phone_number} ({profile_name})" if profile_name else user.phone_number
-            })
-        return JsonResponse({'results': results})
-
-
-# ==========================================
-# مدیریت کاربران پایه (BaseUser)
+# 01- کاربران پایه (BaseUser)
 # ==========================================
 
 @admin.register(BaseUser)
@@ -459,7 +288,178 @@ class BaseUserAdmin(admin.ModelAdmin):
 
 
 # ==========================================
-# پروفایل‌های حقیقی و حقوقی
+# 02- مدیریت ادمین‌های سایت (Admin)
+# ==========================================
+
+@admin.register(Admin)
+class AdminAdmin(admin.ModelAdmin):
+    form = AdminForm
+    list_display = (
+        'id',
+        'base_user_info',
+        'admin_avatar',
+        'otp_status',
+        'get_groups',
+    )
+    search_fields = (
+        'base_user__phone_number',
+        'first_name',
+        'last_name',
+    )
+    autocomplete_fields = ['base_user']
+    ordering = ('-id',)
+    filter_horizontal = ('sms_patterns',)
+    actions = ['setup_otp', 'recreate_otp', 'remove_otp']
+    
+    fieldsets = (
+        ('اطلاعات پایه', {
+            'fields': ('base_user', 'first_name', 'last_name', 'image', 'signature')
+        }),
+        ('دسترسی‌های پیامکی', {
+            'fields': ('sms_patterns',),
+        }),
+        ('تنظیمات دسترسی', {
+            'fields': ('admin_groups', 'is_superuser', 'admin_password1', 'admin_password2'),
+            'description': 'گروه‌های دسترسی، سوپر یوزر و رمز عبور را در اینجا تنظیم کنید.',
+        }),
+        ('احراز هویت دو مرحله‌ای (OTP)', {
+            'fields': ('otp_details',),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    readonly_fields = ('otp_details',)
+
+    def base_user_info(self, obj):
+        profile_name = f"{obj.first_name or ''} {obj.last_name or ''}".strip()
+        return f"{obj.base_user.phone_number} ({profile_name or 'بدون نام'})"
+    base_user_info.short_description = 'موبایل و نام'
+
+    def admin_avatar(self, obj):
+        if obj.image:
+            return format_html('<img src="{}" style="width:50px; height:50px; border-radius:10%;" />', obj.image.url)
+        return "—"
+    admin_avatar.short_description = "عکس"
+    
+    def get_groups(self, obj):
+        if obj.base_user.is_superuser:
+            return format_html('<span style="color: red; font-weight: bold;">⭐ ادمین کل</span>')
+        groups = obj.base_user.groups.all()
+        if groups:
+            return format_html('<br>'.join([f'🔹 {g.name}' for g in groups]))
+        return "—"
+    get_groups.short_description = 'گروه‌های دسترسی'
+    
+    def otp_status(self, obj):
+        devices = TOTPDevice.objects.filter(user=obj.base_user, confirmed=True)
+        if devices.exists():
+            return format_html('<span style="color: green; font-weight: bold;">🔐 فعال</span>')
+        return format_html('<span style="color: gray;">⚪ غیرفعال</span>')
+    otp_status.short_description = 'وضعیت OTP'
+    
+    def otp_details(self, obj):
+        devices = TOTPDevice.objects.filter(user=obj.base_user, confirmed=True)
+        if not devices.exists():
+            return format_html('<p style="color: gray;">❌ OTP فعال نیست</p>')
+        
+        html = '<div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px;">'
+        html += '<h3>🔐 دستگاه‌های OTP فعال:</h3>'
+        for device in devices:
+            html += f'<div style="margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">'
+            html += f'<p><strong>Device ID:</strong> {device.id}</p>'
+            html += f'<p><strong>نام:</strong> {device.name}</p>'
+            html += f'<p><strong>Key:</strong> <code>{device.key}</code></p>'
+            if hasattr(device, "created_at") and device.created_at:
+                jalali_date = jdatetime.datetime.fromgregorian(datetime=device.created_at)
+                date_str = jalali_date.strftime("%Y/%m/%d - %H:%M:%S")
+                html += f'<p><strong>تاریخ ایجاد:</strong> {date_str}</p>'
+            else:
+                html += f'<p><strong>تاریخ ایجاد:</strong> N/A</p>'
+            
+            uri = device.config_url
+            qr = qrcode.QRCode(version=1, box_size=5, border=2)
+            qr.add_data(uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+            html += f'<p><strong>QR Code:</strong></p>'
+            html += f'<img src="data:image/png;base64,{img_str}" style="width: 200px; height: 200px;" />'
+            html += '</div>'
+        html += '</div>'
+        return format_html(html)
+    otp_details.short_description = 'جزئیات OTP'
+    
+    def setup_otp(self, request, queryset):
+        created = 0
+        already_exists = 0
+        for admin in queryset:
+            existing = TOTPDevice.objects.filter(user=admin.base_user, confirmed=True)
+            if existing.exists():
+                already_exists += 1
+                continue
+            TOTPDevice.objects.create(user=admin.base_user, name='default', confirmed=True)
+            created += 1
+        if created:
+            self.message_user(request, f"✅ {created} OTP جدید ایجاد شد.")
+        if already_exists:
+            self.message_user(request, f"⚠️ {already_exists} ادمین از قبل OTP دارند.", level='warning')
+    setup_otp.short_description = "🔐 فعال‌سازی OTP"
+    
+    def recreate_otp(self, request, queryset):
+        recreated = 0
+        for admin in queryset:
+            TOTPDevice.objects.filter(user=admin.base_user).delete()
+            TOTPDevice.objects.create(user=admin.base_user, name='default', confirmed=True)
+            recreated += 1
+        self.message_user(request, f"✅ {recreated} OTP حذف و مجدداً ساخته شد.")
+    recreate_otp.short_description = "🔄 ساخت مجدد OTP"
+    
+    def remove_otp(self, request, queryset):
+        deleted = 0
+        for admin in queryset:
+            count, _ = TOTPDevice.objects.filter(user=admin.base_user).delete()
+            deleted += count
+        if deleted:
+            self.message_user(request, f"✅ {deleted} OTP حذف شد.")
+        else:
+            self.message_user(request, "⚠️ هیچ OTP فعالی پیدا نشد.", level='warning')
+    remove_otp.short_description = "🗑️ حذف OTP"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'base-user-autocomplete/',
+                self.admin_site.admin_view(self.base_user_autocomplete),
+                name='base_user_autocomplete',
+            ),
+        ]
+        return custom_urls + urls
+
+    def base_user_autocomplete(self, request):
+        query = request.GET.get('q', '')
+        users = BaseUser.objects.filter(
+            Q(phone_number__icontains=query) |
+            Q(natural_profile__first_name__icontains=query) |
+            Q(natural_profile__last_name__icontains=query)
+        )[:10]
+
+        results = []
+        for user in users:
+            profile_name = ""
+            if hasattr(user, 'natural_profile') and user.natural_profile:
+                profile_name = f"{user.natural_profile.first_name or ''} {user.natural_profile.last_name or ''}".strip()
+            results.append({
+                'id': user.id,
+                'text': f"{user.phone_number} ({profile_name})" if profile_name else user.phone_number
+            })
+        return JsonResponse({'results': results})
+
+
+# ==========================================
+# 03- پروفایل حقیقی کاربران
 # ==========================================
 
 class CardNumberInline(admin.TabularInline):
@@ -532,6 +532,10 @@ class NaturalProfileAdmin(admin.ModelAdmin):
             self.save_formset(request, form, formset, change=change)
 
 
+# ==========================================
+# 04- پروفایل حقوقی
+# ==========================================
+
 class JuridicalProfileDocumentInline(admin.TabularInline):
     model = JuridicalProfileDocument
     extra = 3
@@ -555,8 +559,6 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'get_base_user_phone_number',
-        'get_natural_profile_first_name',
-        'get_natural_profile_last_name',
         'organization_name',
         'national_id',
         'registration_number',
@@ -566,14 +568,12 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'status',
     )
     search_fields = (
-        'natural_profile__base_user__phone_number',
-        'natural_profile__first_name',
-        'natural_profile__last_name',
         'organization_name',
         'national_id',
-        'registeration_number',
+        'registration_number',
         'economical_code',
         'phone_number',
+        'natural_profile__base_user__phone_number',
     )
     autocomplete_fields = ['natural_profile']
     ordering = ('-id',)
@@ -584,36 +584,27 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         return qs.select_related('natural_profile', 'natural_profile__base_user')
 
     def get_base_user_phone_number(self, obj):
-        if obj.pk and obj.natural_profile and obj.natural_profile.base_user:
-            return obj.natural_profile.base_user.phone_number
-        return ''
-    get_base_user_phone_number.short_description = 'موبایل'
+        try:
+            if obj.natural_profile and obj.natural_profile.base_user:
+                return obj.natural_profile.base_user.phone_number
+        except Exception:
+            pass
+        return '-'
+    get_base_user_phone_number.short_description = 'موبایل کاربر'
 
-    def get_natural_profile_first_name(self, obj):
-        if obj.pk and obj.natural_profile:
-            return obj.natural_profile.first_name or ''
-        return ''
-    get_natural_profile_first_name.short_description = 'نام'
 
-    def get_natural_profile_last_name(self, obj):
-        if obj.pk and obj.natural_profile:
-            return obj.natural_profile.last_name or ''
-        return ''
-    get_natural_profile_last_name.short_description = 'نام خانوادگی'
-
+# ==========================================
+# 08- رمز یک بار مصرف (OTP)
+# ==========================================
 
 @admin.register(OTP)
 class OTPAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'code', 'created')
-    search_fields = ('user',)
+    search_fields = ('user__phone_number',)
     ordering = ('-id',)
 
 
-# ==========================================
-# پروکسی مدل‌ها (Groups, TOTP, Static Devices) جهت انتقال به اپلیکیشن 2- مدیریت کاربران و ادمین ها
-# ==========================================
-
-# پاکسازی ثبت‌های قبلی
+# پاکسازی ثبت‌های قبلی پروکسی‌ها
 for model in [Group, TOTPDevice, StaticDevice, StaticToken]:
     try:
         admin.site.unregister(model)
@@ -625,32 +616,24 @@ class GroupProxy(Group):
     class Meta:
         proxy = True
         app_label = 'authentication'
-        verbose_name = 'گروه'
-        verbose_name_plural = 'گروه‌ها'
+        verbose_name = '09- گروه دسترسی'
+        verbose_name_plural = '09- گروه‌های دسترسی'
 
 
 class TOTPDeviceProxy(TOTPDevice):
     class Meta:
         proxy = True
         app_label = 'authentication'
-        verbose_name = 'دستگاه TOTP'
-        verbose_name_plural = 'دستگاه‌های TOTP (Google Authenticator)'
+        verbose_name = '10- دستگاه TOTP'
+        verbose_name_plural = '10- دستگاه‌های TOTP (Google Authenticator)'
 
 
 class StaticDeviceProxy(StaticDevice):
     class Meta:
         proxy = True
         app_label = 'authentication'
-        verbose_name = 'دستگاه توکن ثابت'
-        verbose_name_plural = 'دستگاه‌های توکن ثابت'
-
-
-class StaticTokenProxy(StaticToken):
-    class Meta:
-        proxy = True
-        app_label = 'authentication'
-        verbose_name = 'توکن ثابت'
-        verbose_name_plural = 'توکن‌های ثابت'
+        verbose_name = '11- دستگاه توکن ثابت'
+        verbose_name_plural = '11- دستگاه‌های توکن ثابت'
 
 
 class GroupExtensionInline(admin.StackedInline):
@@ -663,6 +646,9 @@ class GroupExtensionInline(admin.StackedInline):
     classes = []
 
 
+# ==========================================
+# 09- گروه دسترسی
+# ==========================================
 @admin.register(GroupProxy)
 class GroupAdmin(admin.ModelAdmin):
     list_display = ("name", "get_icon", "get_order", "admin_members_count")
@@ -692,6 +678,9 @@ class GroupAdmin(admin.ModelAdmin):
     admin_members_count.short_description = "تعداد ادمین‌های سایت"
 
 
+# ==========================================
+# 10- دستگاه TOTP
+# ==========================================
 @admin.register(TOTPDeviceProxy)
 class TOTPDeviceAdmin(admin.ModelAdmin):
     list_display = ('id', 'user_phone', 'name', 'confirmed_status', 'created_at_jalali')
@@ -762,6 +751,9 @@ class TOTPDeviceAdmin(admin.ModelAdmin):
     qr_code_display.short_description = 'نمایش QR Code'
 
 
+# ==========================================
+# 11- دستگاه توکن ثابت
+# ==========================================
 @admin.register(StaticDeviceProxy)
 class StaticDeviceAdmin(admin.ModelAdmin):
     list_display = ('id', 'user_phone', 'name', 'confirmed_status', 'token_count', 'created_at_jalali')
@@ -847,70 +839,11 @@ class StaticDeviceAdmin(admin.ModelAdmin):
     token_list_display.short_description = 'توکن‌های ثابت'
 
 
-@admin.register(StaticTokenProxy)
-class StaticTokenAdmin(admin.ModelAdmin):
-    list_display = ('id', 'device_user', 'token_preview', 'token_status', 'device_created_at_jalali')
-    search_fields = ('device__user__phone_number', 'token')
-    list_filter = ('device__confirmed',)
-    ordering = ('-id',)
-    readonly_fields = ('device_created_at_display', 'device')
-    
-    fieldsets = (
-        ('اطلاعات دستگاه', {
-            'fields': ('device',)
-        }),
-        ('توکن ثابت', {
-            'fields': ('token',),
-            'description': '<div style="color: #666; background: #f9f9f9; padding: 10px; border-radius: 5px;"><strong>راهنما:</strong> کد 6-8 رقمی را وارد کنید</div>'
-        }),
-        ('اطلاعات سیستم', {
-            'fields': ('device_created_at_display',),
-            'classes': ('collapse',),
-        }),
-    )
-    
-    def device_user(self, obj):
-        return f"{obj.device.user.phone_number} ({obj.device.name})"
-    device_user.short_description = 'کاربر / دستگاه'
-    
-    def token_preview(self, obj):
-        return format_html(f'<code style="background: #f0f0f0; padding: 5px; border-radius: 3px; font-weight: bold;">{obj.token}</code>')
-    token_preview.short_description = 'توکن ثابت'
-    
-    def token_status(self, obj):
-        if obj.device.confirmed:
-            return format_html('<span style="color: green; font-weight: bold;">✅ فعال</span>')
-        return format_html('<span style="color: gray;">⏳ غیرفعال</span>')
-    token_status.short_description = 'وضعیت'
-    
-    def device_created_at_jalali(self, obj):
-        if obj.device and obj.device.created_at:
-            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.device.created_at)
-            return jalali_date.strftime("%Y/%m/%d - %H:%M:%S")
-        return "-"
-    device_created_at_jalali.short_description = 'تاریخ دستگاه'
-    
-    def device_created_at_display(self, obj):
-        if obj.device and obj.device.created_at:
-            jalali_date = jdatetime.datetime.fromgregorian(datetime=obj.device.created_at)
-            gregorian = obj.device.created_at.strftime("%Y-%m-%d %H:%M:%S")
-            return format_html(
-                '<div style="background: #f5f5f5; padding: 10px; border-radius: 5px;">'
-                f'<strong>🗓️ شمسی:</strong> {jalali_date.strftime("%Y/%m/%d - %H:%M:%S")}<br>'
-                f'<strong>📅 میلادی:</strong> {gregorian}'
-                '</div>'
-            )
-        return "-"
-    device_created_at_display.short_description = 'تاریخ دستگاه'
-
-
 # ==========================================
 # TinyMCE Upload View
 # ==========================================
 
 def tinymce_upload(request):
-    if request.model == 'POST' and request.FILES.get('file'): # type: ignore
-        pass
     if request.method == 'POST' and request.FILES.get('file'):
         file = request.FILES['file']
         file_name = default_storage.save(f'tinymce/{file.name}', ContentFile(file.read()))

@@ -34,9 +34,6 @@ from config.models import (
 
 # مدل گروه‌بندی اپلیکیشن‌ها - حالا به Group متصل می‌شود
 class GroupExtension(models.Model):
-    """
-    افزودن فیلدهای اضافی به Group برای گروه‌بندی اپلیکیشن‌ها
-    """
     group = models.OneToOneField(
         Group,
         on_delete=models.CASCADE,
@@ -78,10 +75,6 @@ class GroupExtension(models.Model):
         return self.display_name or self.group.name
 
 
-# حذف مدل AppGroup قدیمی - حالا از GroupExtension استفاده می‌کنیم
-
-
-
 LEGAL_PROFILE_STATUSES = (
     ('checking','در حال بررسی'),
     ('accpeted','تایید شده'),
@@ -89,7 +82,7 @@ LEGAL_PROFILE_STATUSES = (
 )
 
 
-
+# ۱. کاربران پایه (بالاترین اولویت)
 class BaseUser(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(
         verbose_name=_('موبایل'),
@@ -100,7 +93,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         verbose_name=_('فعال'),
         default=True,
     )
-    # اضافه شدن is_staff به عنوان یک فیلد واقعی در دیتابیس برای جلوگیری از خطای NotNullViolation
     is_staff = models.BooleanField(
         verbose_name=_('کارمند / دسترسی پنل'),
         default=False,
@@ -121,8 +113,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         blank=True,
         help_text=_('رمز عبور برای ورود به پنل جنگو (فقط برای سوپر یوزرها)')
     )
-    # Stores the raw password if set_password() is called so that it can
-    # be passed to password_changed() after the model is saved.
     _password = None
 
     objects = UserManager()
@@ -131,8 +121,8 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = []
 
     class Meta:
-        verbose_name = "کاربر"
-        verbose_name_plural = "کاربران"
+        verbose_name = "01- کاربر پایه"
+        verbose_name_plural = "01- کاربران پایه"
 
     def __str__(self):
         profile_name = ""
@@ -161,12 +151,7 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
             return self.natural_profile.last_name
         return None
 
-    # توجه: متد is_staff از حالت property خارج شد تا مستقیماً با ستون دیتابیس کار کند.
-    # برای اطمینان از اینکه ادمین‌ها و سوپریوزرها همیشه دسترسی داشته باشند، 
-    # می‌توانید مقدار آن را هنگام ذخیره یا از طریق دستورات مدیریت True کنید.
-
     def save(self, *args, **kwargs):
-        # اگر کاربر سوپریوزر بود، به طور خودکار is_staff را هم True کن
         if self.is_superuser or hasattr(self, 'admin') and self.admin:
             self.is_staff = True
             
@@ -184,13 +169,11 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
             return False
         def setter(raw_password):
             self.set_password(raw_password)
-            # Password hash upgrades shouldn't be considered password changes.
             self._password = None
             self.save(update_fields=["password"])
         return check_password(raw_password, self.password, setter)
 
     def get_session_auth_hash(self):
-        """Return an HMAC of the password field."""
         return self._get_session_auth_hash()
 
     def get_session_auth_fallback_hash(self):
@@ -207,8 +190,7 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         ).hexdigest()
 
 
-
-#مدل پروفایل ادمین ها 
+# ۲. ادمین‌های سایت
 class Admin(models.Model):
     base_user = models.OneToOneField(
         BaseUser,  
@@ -233,9 +215,7 @@ class Admin(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
-        validators=[
-            FileSizeValidator(10),  
-        ],
+        validators=[FileSizeValidator(10)],
     )
     signature = models.CharField(
         verbose_name=_('امضای ادمین'),
@@ -258,13 +238,12 @@ class Admin(models.Model):
     )
 
     class Meta:
-        verbose_name = "ادمین"
-        verbose_name_plural = "ادمین‌ها"
+        verbose_name = "02- ادمین سایت"
+        verbose_name_plural = "02- ادمین‌های سایت"
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
-    # مدیریت رمز عبور پنل گرافیکی
     _password = None
 
     def set_panel_password(self, raw_password):
@@ -277,24 +256,20 @@ class Admin(models.Model):
         def setter(raw_password):
             self.set_panel_password(raw_password)
             self._password = None
-            if self.pk:  # اگر object ذخیره شده، update_fields استفاده کن
+            if self.pk:
                 self.save(update_fields=["panel_password"])
             else:
                 self.save()
         return check_password(raw_password, self.panel_password, setter)
-    
-    
-    
 
 
-#پروفایل حقیقی کاربران
+# ۳. پروفایل حقیقی کاربران
 class NaturalProfile(models.Model):
     base_user = models.OneToOneField(
         BaseUser,
         on_delete=models.CASCADE,
         related_name='natural_profile',
         verbose_name=_('کاربرگرامی'),
-
     )
     first_name = models.CharField(
         verbose_name=_('نام'),
@@ -316,9 +291,7 @@ class NaturalProfile(models.Model):
     national_code = models.CharField(
         verbose_name=_('کد ملی'),
         max_length=10,
-        validators=(
-            validate_national_code,
-        ),
+        validators=(validate_national_code,),
         null=True,
         blank=True,
     )
@@ -327,16 +300,12 @@ class NaturalProfile(models.Model):
         upload_to='images/profiles/',
         null=True,
         blank=True,
-        validators=[
-            FileSizeValidator(10),
-        ]
+        validators=[FileSizeValidator(10)]
     )
     postal_code = models.CharField(
         verbose_name=_('کد پستی'),
         max_length=10,
-        validators=(
-            validate_postal_code,
-        ),
+        validators=(validate_postal_code,),
         null=True,
         blank=True,
     )
@@ -368,7 +337,7 @@ class NaturalProfile(models.Model):
         verbose_name=_('تاریخ انقضای سطح'),
         null=True,
         blank=True,
-        help_text=_('اگر خالی باشد، سطح دائمی است. در غیر این صورت، پس از این تاریخ سطح به قبلی برمی‌گردد.'),
+        help_text=_('اگر خالی باشد، سطح دائمی است.'),
     )
     previous_level = models.ForeignKey(
         UserLevel,
@@ -377,17 +346,14 @@ class NaturalProfile(models.Model):
         related_name='previous_natural_profile',
         null=True,
         blank=True,
-        help_text=_('سطح قبلی کاربر قبل از ارتقای موقتی'),
     )
     auto_renewal_enabled = models.BooleanField(
         default=False,
         verbose_name=_('تمدید خودکار اشتراک'),
-        help_text=_('اگر فعال باشد، اشتراک به صورت خودکار از کیف پول تمدید می‌شود'),
     )
     manual_level_override = models.BooleanField(
         default=False,
         verbose_name=_('بازنویسی دستی سطح'),
-        help_text=_('اگر فعال باشد، سطح کاربری بر اساس خرید آپدیت نمی‌شود و سطح دستی حفظ می‌گردد'),
     )
     subscription_package = models.ForeignKey(
         'user_subscription_settings.SubscriptionPackage',
@@ -395,7 +361,6 @@ class NaturalProfile(models.Model):
         null=True,
         blank=True,
         verbose_name=_('پکیج اشتراک فعلی'),
-        help_text=_('پکیج اشتراکی که کاربر خریداری کرده'),
     )
     progress_target = models.DecimalField(
         verbose_name=_('هدف پیشرفت خرید'),
@@ -403,129 +368,22 @@ class NaturalProfile(models.Model):
         decimal_places=0,
         null=True,
         blank=True,
-        help_text=_('مبلغ هدف برای ارتقای سطح در دوره زمانی مشخص'),
     )
     progress_deadline = models.DateField(
         verbose_name=_('ددلاین پیشرفت'),
         null=True,
         blank=True,
-        help_text=_('تاریخ پایان دوره پیشرفت'),
     )
 
     class Meta:
-        verbose_name = "پروفایل حقیقی"
-        verbose_name_plural = "پروفایل‌ های حقیقی"
-    
-    def update_level(self):
-        """به‌روزرسانی سطح کاربری بر اساس مجموع خرید"""
-        from config.models import UserLevel
-        from django.utils import timezone
-        
-        # اگر بازنویسی دستی فعال باشد، سطح را تغییر نده
-        if self.manual_level_override:
-            return
-        
-        # اول چک انقضا
-        if self.expiration_date and self.expiration_date < timezone.now().date() and self.previous_level:
-            self.level = self.previous_level
-            self.previous_level = None
-            self.expiration_date = None
-            self.save(update_fields=['level', 'previous_level', 'expiration_date'])
-            return
-        
-        # سپس ارتقا بر اساس خرید
-        try:
-            # اگر progress_target وجود داشته باشد، بر اساس آن ارتقا بده
-            if self.progress_target and self.progress_deadline and timezone.now().date() <= self.progress_deadline:
-                if self.total_purchase >= self.progress_target:
-                    if self.level.title == 'میهمان':
-                        level_title = 'نقره‌ای'
-                    elif self.level.title == 'نقره‌ای':
-                        level_title = 'طلایی'
-                    else:
-                        level_title = self.level.title  # بدون تغییر
-                else:
-                    level_title = self.level.title  # بدون تغییر
-            else:
-                # ارتقا بر اساس مجموع خرید (منطق قدیمی)
-                if self.total_purchase >= 500000000:  # ۵۰۰ میلیون
-                    level_title = 'طلایی'
-                elif self.total_purchase >= 300000000:  # ۳۰۰ میلیون
-                    level_title = 'نقره‌ای'
-                else:
-                    level_title = 'میهمان'
-            
-            level = UserLevel.objects.get(title=level_title)
-            if self.level != level:
-                self.level = level
-                self.save(update_fields=['level'])
-            
-            # تنظیم هدف پیشرفت بر اساس سطح فعلی
-            from datetime import timedelta
-            if self.level.title == 'میهمان':
-                self.progress_target = 300000000  # ۳۰۰ میلیون برای ارتقا به نقره‌ای
-                self.progress_deadline = timezone.now().date() + timedelta(days=30)
-            elif self.level.title == 'نقره‌ای':
-                self.progress_target = 500000000  # ۵۰۰ میلیون برای ارتقا به طلایی
-                self.progress_deadline = timezone.now().date() + timedelta(days=30)
-            else:
-                self.progress_target = None
-                self.progress_deadline = None
-            self.save(update_fields=['progress_target', 'progress_deadline'])
-        except Exception as e:
-            # اگر سطح وجود ندارد یا خطای دیگری رخ داد، لاگ کن
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"خطا در آپدیت سطح برای کاربر {self.base_user.phone_number}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-    
+        verbose_name = "03- پروفایل حقیقی"
+        verbose_name_plural = "03- پروفایل‌های حقیقی"
+
     def __str__(self):
         return f'{self.base_user}'
-    
-    
-    
-
-#مدل ارسال رمز یکبار مصرف otp        
-class OTP(models.Model):
-    user = models.ForeignKey(
-        BaseUser,
-        verbose_name=_('user'),
-        on_delete=models.CASCADE,
-        related_name='otps',
-    )
-    code = models.CharField(
-        verbose_name=_('code'),
-        max_length=128,
-    )
-    created = models.DateTimeField(
-        verbose_name=_('created'),
-        auto_now_add=True,
-    )
-
-    class Meta:
-        verbose_name = "رمز یک بار مصرف"
-        verbose_name_plural = "رمزهای یک بار مصرف"
-        ordering = ('-created',)
-    
-    @property
-    def expired(self):
-        return self.created + timezone.timedelta(minutes=settings.OTP_VALID_TIME)
-
-    def set_code(self, code):
-        self.code = make_password(code)
-
-    def check_code(self, code):
-        return check_password(code, self.code)
-
-    def __str__(self):
-        return f'OTP for {self.user}'
 
 
-
-
-
-#مدل پروفایل حقوقی 
+# ۴. پروفایل حقوقی
 class JuridicalProfile(models.Model):
     natural_profile = models.OneToOneField(
         NaturalProfile,
@@ -561,9 +419,7 @@ class JuridicalProfile(models.Model):
     postal_code = models.CharField(
         verbose_name=_('کد پستی'),
         max_length=10,
-        validators=(
-            validate_postal_code,
-        ),
+        validators=(validate_postal_code,),
     )
     address = models.CharField(
         verbose_name=_('آدرس'),
@@ -581,9 +437,7 @@ class JuridicalProfile(models.Model):
         upload_to='images/juridical-profiles/',
         null=True,
         blank=True,
-        validators=[
-            FileSizeValidator(10),
-        ]
+        validators=[FileSizeValidator(10)]
     )
     status = models.CharField(
         verbose_name=_('وضعیت'),
@@ -602,12 +456,11 @@ class JuridicalProfile(models.Model):
     )
 
     class Meta:
-        verbose_name = 'پروفایل حقوقی'
-        verbose_name_plural = 'پروفایل‌های حقوقی'
-    
+        verbose_name = '04- پروفایل حقوقی'
+        verbose_name_plural = '04- پروفایل‌های حقوقی'
+
     def clean(self):
         super().clean()
-
         if self.status == 'rejected' and not self.reject_reason.strip():
             raise ValidationError({
                 'reject_reason': f'فیلد {self._meta.get_field("reject_reason").verbose_name} الزامی است.'
@@ -618,15 +471,12 @@ class JuridicalProfile(models.Model):
 
 
 def juridical_profile_document_upload_to(instance, filename):
-        try:
-            return f'legal-profiles/documents/{instance.profile.natural_profile.base_user.pk}/{filename}'
-        except:
-            return f'legal-profiles/documents/default/{filename}'
+    try:
+        return f'legal-profiles/documents/{instance.profile.natural_profile.base_user.pk}/{filename}'
+    except:
+        return f'legal-profiles/documents/default/{filename}'
 
 
-
-
-#مدل مدارک حقوقی کاربران 
 class JuridicalProfileDocument(models.Model):
     profile = models.ForeignKey(
         JuridicalProfile,
@@ -637,159 +487,67 @@ class JuridicalProfileDocument(models.Model):
     file = models.FileField(
         verbose_name=_('فایل مدارک'),
         upload_to=juridical_profile_document_upload_to,
-        validators=[
-            FileSizeValidator(30),
-        ],
+        validators=[FileSizeValidator(30)],
     )
 
     class Meta:
-        verbose_name = 'مدرک پروفایل حقوقی'
-        verbose_name_plural = 'مدارک پروفایل حقوقی'
+        verbose_name = '05- مدرک پروفایل حقوقی'
+        verbose_name_plural = '05- مدارک پروفایل‌های حقوقی'
 
     def __str__(self):
         return f'مدرک {self.profile}'
-    
-    
-    
-    
-    
-    
-# مدل شماره کارت های حقیقی 
-# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
-validate_card_number = RegexValidator(
-    regex=r'^\d{16}$',
-    message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
-)
 
-# اعتبارسنجی برای شماره شبا (دقیقاً ۲۴ رقم)
-validate_iban = RegexValidator(
-    regex=r'^\d{24}$',
-    message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
-)
 
-# اعتبارسنجی برای نام صاحب حساب (حروف فارسی و فاصله)
-validate_account_holder_name = RegexValidator(
-    regex=r'^[\u0600-\u06FF\s]+$',
-    message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
-)
+# ۵. کارت‌ها و سایر موارد
+validate_card_number = RegexValidator(regex=r'^\d{16}$', message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.'))
+validate_iban = RegexValidator(regex=r'^\d{24}$', message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.'))
+validate_account_holder_name = RegexValidator(regex=r'^[\u0600-\u06FF\s]+$', message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.'))
 
 class CardNumber(models.Model):
-    profile = models.ForeignKey(
-        NaturalProfile,
-        on_delete=models.CASCADE,
-        related_name='card_numbers',
-        verbose_name=_('پروفایل کاربر'),
-    )
-    card_number = models.CharField(
-        verbose_name=_('شماره کارت'),
-        max_length=16,
-        validators=(validate_card_number,),
-        unique=True,
-    )
-    iban = models.CharField(
-        verbose_name=_('شماره شبا'),
-        max_length=24,
-        validators=(validate_iban,),
-        unique=True,
-        null=True,
-        blank=True,
-    )
-    account_holder_name = models.CharField(
-        verbose_name=_('نام صاحب حساب'),
-        max_length=100,
-        validators=(validate_account_holder_name,),
-        default='ناشناس',
-    )
+    profile = models.ForeignKey(NaturalProfile, on_delete=models.CASCADE, related_name='card_numbers', verbose_name=_('پروفایل کاربر'))
+    card_number = models.CharField(verbose_name=_('شماره کارت'), max_length=16, validators=(validate_card_number,), unique=True)
+    iban = models.CharField(verbose_name=_('شماره شبا'), max_length=24, validators=(validate_iban,), unique=True, null=True, blank=True)
+    account_holder_name = models.CharField(verbose_name=_('نام صاحب حساب'), max_length=100, validators=(validate_account_holder_name,), default='ناشناس')
 
     class Meta:
-        verbose_name = _('شماره کارت')
-        verbose_name_plural = _('شماره‌های کارت')
-
-    def clean(self):
-        """
-        هر کاربر فقط می‌تواند حداکثر ۲ شماره کارت داشته باشد.
-        این اعتبارسنجی فقط زمانی انجام می‌شود که پروفایل ذخیره شده باشد.
-        """
-        if not self.profile_id or not self.profile.pk:
-            return  # پروفایل هنوز ذخیره نشده، بررسی لازم نیست
-
-        if self.pk is None and self.profile.card_numbers.count() >= 2:
-            raise ValidationError(_('هر کاربر تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+        verbose_name = _('06- شماره کارت حقیقی')
+        verbose_name_plural = _('06- شماره‌های کارت حقیقی')
 
     def save(self, *args, **kwargs):
-        # قبل از ذخیره اعتبارسنجی انجام بده
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        profile_str = f'Profile-{self.profile.pk}' if self.profile_id else "بدون پروفایل"
-        return f'{self.card_number} - {self.account_holder_name} - {profile_str}'
+        return f'{self.card_number}'
 
-    
-    
-    
-    
-    
-# مدل شماره کارت های حقوقی 
-# اعتبارسنجی برای شماره کارت (دقیقاً ۱۶ رقم)
-validate_card_number = RegexValidator(
-    regex=r'^\d{16}$',
-    message=_('شماره کارت باید دقیقاً ۱۶ رقم باشد.')
-)
-
-# اعتبارسنجی برای شماره شبا (دقیقاً ۲۴ رقم)
-validate_iban = RegexValidator(
-    regex=r'^\d{24}$',
-    message=_('شماره شبا باید دقیقاً ۲۴ رقم باشد.')
-)
-
-# اعتبارسنجی برای نام صاحب حساب (حروف فارسی و فاصله)
-validate_account_holder_name = RegexValidator(
-    regex=r'^[\u0600-\u06FF\s]+$',
-    message=_('نام صاحب حساب فقط می‌تواند شامل حروف فارسی و فاصله باشد.')
-)
 
 class JuridicalCardNumber(models.Model):
-    profile = models.ForeignKey(
-        JuridicalProfile,
-        on_delete=models.CASCADE,
-        related_name='card_numbers',
-        verbose_name=_('پروفایل حقوقی'),
-    )
-    card_number = models.CharField(
-        verbose_name=_('شماره کارت'),
-        max_length=16,
-        validators=(validate_card_number,),
-        unique=True,
-    )
-    iban = models.CharField(
-        verbose_name=_('شماره شبا'),
-        max_length=24,
-        validators=(validate_iban,),
-        unique=True,
-        null=True,
-        blank=True,
-    )
-    account_holder_name = models.CharField(
-        verbose_name=_('نام صاحب حساب'),
-        max_length=100,
-        validators=(validate_account_holder_name,),
-        
-    )
+    profile = models.ForeignKey(JuridicalProfile, on_delete=models.CASCADE, related_name='card_numbers', verbose_name=_('پروفایل حقوقی'))
+    card_number = models.CharField(verbose_name=_('شماره کارت'), max_length=16, validators=(validate_card_number,), unique=True)
+    iban = models.CharField(verbose_name=_('شماره شبا'), max_length=24, validators=(validate_iban,), unique=True, null=True, blank=True)
+    account_holder_name = models.CharField(verbose_name=_('نام صاحب حساب'), max_length=100, validators=(validate_account_holder_name,))
 
     class Meta:
-        verbose_name = _('شماره کارت حقوقی')
-        verbose_name_plural = _('شماره‌های کارت حقوقی')
-
-    def clean(self):
-        # بررسی محدودیت تعداد کارت‌ها (حداکثر ۲ کارت)
-        if self.profile.card_numbers.count() >= 2 and not self.pk:
-            raise ValidationError(_('هر پروفایل حقوقی تنها می‌تواند حداکثر ۲ شماره کارت ثبت کند.'))
+        verbose_name = _('07- شماره کارت حقوقی')
+        verbose_name_plural = _('07- شماره‌های کارت حقوقی')
 
     def save(self, *args, **kwargs):
-        # اجرای اعتبارسنجی قبل از ذخیره
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.card_number} - {self.account_holder_name} - {self.profile}'
+        return f'{self.card_number}'
+
+
+class OTP(models.Model):
+    user = models.ForeignKey(BaseUser, verbose_name=_('user'), on_delete=models.CASCADE, related_name='otps')
+    code = models.CharField(verbose_name=_('code'), max_length=128)
+    created = models.DateTimeField(verbose_name=_('created'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = "08- رمز یک بار مصرف"
+        verbose_name_plural = "08- رمزهای یک بار مصرف"
+        ordering = ('-created',)
+
+    def __str__(self):
+        return f'OTP for {self.user}'
