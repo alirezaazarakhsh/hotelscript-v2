@@ -241,54 +241,6 @@ class AdminAdmin(admin.ModelAdmin):
 
 
 # ==========================================
-# مدیریت گروه‌های دسترسی (Group)
-# ==========================================
-
-try:
-    admin.site.unregister(Group)
-except Exception:
-    pass
-
-class GroupExtensionInline(admin.StackedInline):
-    model = GroupExtension
-    extra = 0
-    autocomplete_fields = ['icon']
-    fields = ('icon', 'order', 'description')
-    verbose_name = "تنظیمات گروه"
-    verbose_name_plural = "تنظیمات گروه"
-    classes = []
-
-
-@admin.register(Group)
-class GroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "get_icon", "get_order", "admin_members_count")
-    search_fields = ("name", "extension__display_name")
-    ordering = ("extension__order", "name")
-    inlines = [GroupExtensionInline]
-    filter_horizontal = ('permissions',)
-    
-    def get_icon(self, obj):
-        try:
-            if obj.extension.icon:
-                return obj.extension.icon.title_icon
-        except GroupExtension.DoesNotExist:
-            pass
-        return "—"
-    get_icon.short_description = "آیکون"
-    
-    def get_order(self, obj):
-        try:
-            return obj.extension.order
-        except GroupExtension.DoesNotExist:
-            return 0
-    get_order.short_description = "ترتیب"
-
-    def admin_members_count(self, obj):
-        return BaseUser.objects.filter(groups=obj, admin__isnull=False).count()
-    admin_members_count.short_description = "تعداد ادمین‌های سایت"
-
-
-# ==========================================
 # مدیریت کاربران پایه (BaseUser)
 # ==========================================
 
@@ -639,13 +591,13 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
 
     def get_natural_profile_first_name(self, obj):
         if obj.pk and obj.natural_profile:
-            return obj.natural_profile.first_name
+            return obj.natural_profile.first_name or ''
         return ''
     get_natural_profile_first_name.short_description = 'نام'
 
     def get_natural_profile_last_name(self, obj):
         if obj.pk and obj.natural_profile:
-            return obj.natural_profile.last_name
+            return obj.natural_profile.last_name or ''
         return ''
     get_natural_profile_last_name.short_description = 'نام خانوادگی'
 
@@ -658,22 +610,23 @@ class OTPAdmin(admin.ModelAdmin):
 
 
 # ==========================================
-# مدیریت پروکسی مدل‌های OTP جهت انتقال به اپلیکیشن 2- مدیریت کاربران و ادمین ها
+# پروکسی مدل‌ها (Groups, TOTP, Static Devices) جهت انتقال به اپلیکیشن 2- مدیریت کاربران و ادمین ها
 # ==========================================
 
-# پاکسازی ثبت‌های قبلی در صورت وجود
-for model in [TOTPDevice, StaticDevice, StaticToken]:
+# پاکسازی ثبت‌های قبلی
+for model in [Group, TOTPDevice, StaticDevice, StaticToken]:
     try:
         admin.site.unregister(model)
     except admin.sites.NotRegistered:
         pass
 
 
-class AuthProxyAppMixin:
-    """میکسینی برای تغییر app_label به اپلیکیشن authentication جهت انتقال منو به بخش مدیریت کاربران"""
-    @classmethod
-    def get_app_list(cls, request, app_label=None):
-        pass
+class GroupProxy(Group):
+    class Meta:
+        proxy = True
+        app_label = 'authentication'
+        verbose_name = 'گروه'
+        verbose_name_plural = 'گروه‌ها'
 
 
 class TOTPDeviceProxy(TOTPDevice):
@@ -698,6 +651,45 @@ class StaticTokenProxy(StaticToken):
         app_label = 'authentication'
         verbose_name = 'توکن ثابت'
         verbose_name_plural = 'توکن‌های ثابت'
+
+
+class GroupExtensionInline(admin.StackedInline):
+    model = GroupExtension
+    extra = 0
+    autocomplete_fields = ['icon']
+    fields = ('icon', 'order', 'description')
+    verbose_name = "تنظیمات گروه"
+    verbose_name_plural = "تنظیمات گروه"
+    classes = []
+
+
+@admin.register(GroupProxy)
+class GroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "get_icon", "get_order", "admin_members_count")
+    search_fields = ("name", "extension__display_name")
+    ordering = ("extension__order", "name")
+    inlines = [GroupExtensionInline]
+    filter_horizontal = ('permissions',)
+    
+    def get_icon(self, obj):
+        try:
+            if obj.extension.icon:
+                return obj.extension.icon.title_icon
+        except GroupExtension.DoesNotExist:
+            pass
+        return "—"
+    get_icon.short_description = "آیکون"
+    
+    def get_order(self, obj):
+        try:
+            return obj.extension.order
+        except GroupExtension.DoesNotExist:
+            return 0
+    get_order.short_description = "ترتیب"
+
+    def admin_members_count(self, obj):
+        return BaseUser.objects.filter(groups=obj, admin__isnull=False).count()
+    admin_members_count.short_description = "تعداد ادمین‌های سایت"
 
 
 @admin.register(TOTPDeviceProxy)
@@ -917,6 +909,8 @@ class StaticTokenAdmin(admin.ModelAdmin):
 # ==========================================
 
 def tinymce_upload(request):
+    if request.model == 'POST' and request.FILES.get('file'): # type: ignore
+        pass
     if request.method == 'POST' and request.FILES.get('file'):
         file = request.FILES['file']
         file_name = default_storage.save(f'tinymce/{file.name}', ContentFile(file.read()))
