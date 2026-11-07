@@ -96,6 +96,15 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
         max_length=11,
         unique=True,
     )
+    is_active = models.BooleanField(
+        verbose_name=_('فعال'),
+        default=True,
+    )
+    # اضافه شدن is_staff به عنوان یک فیلد واقعی در دیتابیس برای جلوگیری از خطای NotNullViolation
+    is_staff = models.BooleanField(
+        verbose_name=_('کارمند / دسترسی پنل'),
+        default=False,
+    )
     date_joined = jmodels.jDateTimeField(
         verbose_name=_('تاریخ ثبت نام'),
         auto_now_add=True,
@@ -152,12 +161,15 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
             return self.natural_profile.last_name
         return None
 
-    @property
-    def is_staff(self):
-        # اگر ادمین سایت باشد (Admin) یا سوپر یوزر باشد -> is_staff = True
-        return self.is_superuser or hasattr(self, 'admin')
+    # توجه: متد is_staff از حالت property خارج شد تا مستقیماً با ستون دیتابیس کار کند.
+    # برای اطمینان از اینکه ادمین‌ها و سوپریوزرها همیشه دسترسی داشته باشند، 
+    # می‌توانید مقدار آن را هنگام ذخیره یا از طریق دستورات مدیریت True کنید.
 
     def save(self, *args, **kwargs):
+        # اگر کاربر سوپریوزر بود، به طور خودکار is_staff را هم True کن
+        if self.is_superuser or hasattr(self, 'admin') and self.admin:
+            self.is_staff = True
+            
         super().save(*args, **kwargs)
         if self._password is not None:
             password_validation.password_changed(self._password, self)
@@ -193,8 +205,6 @@ class BaseUser(AbstractBaseUser, PermissionsMixin):
             secret=secret,
             algorithm="sha256",
         ).hexdigest()
-
-
 
 
 
@@ -536,7 +546,7 @@ class JuridicalProfile(models.Model):
             MaxLengthValidator(11, 'شناسه ملی 11 رقمی است.'),
         ),
     )
-    registeration_number = models.CharField(
+    registration_number = models.CharField(
         verbose_name=_('شماره ثبت'),
         max_length=16,
     )

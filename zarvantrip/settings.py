@@ -26,7 +26,6 @@ SECRET_KEY = os.environ.get(
 
 # خواندن DEBUG از متغیر محیطی داکر (پیش‌فرض True)
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1')
-
 # خواندن ALLOWED_HOSTS از محیط Docker یا استفاده از لیست پیش‌فرض
 if os.environ.get('ALLOWED_HOSTS'):
     ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS').split(',')]

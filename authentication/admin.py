@@ -559,7 +559,7 @@ class JuridicalProfileAdmin(admin.ModelAdmin):
         'get_natural_profile_last_name',
         'organization_name',
         'national_id',
-        'registeration_number',
+        'registration_number',
         'economical_code',
         'phone_number',
         'email',

@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
 from authentication.models import BaseUser
 
-
 class Command(BaseCommand):
     help = 'ساخت یا تنظیم مجدد رمز سوپریوزر (مدیر کل)'
 
@@ -13,15 +12,21 @@ class Command(BaseCommand):
         phone = options['phone'].strip()
         password = options['password'].strip()
 
-        user, created = BaseUser.objects.get_or_create(phone_number=phone)
+        # چک کردن اینکه آیا کاربر از قبل وجود دارد یا خیر
+        user = BaseUser.objects.filter(phone_number=phone).first()
+        created = False
+
+        if not user:
+            user = BaseUser(phone_number=phone)
+            created = True
+
+        # تنظیم پسورد به صورت هش شده پیش از ذخیره سازی
         user.set_password(password)
-        
-        # در BaseUser فیلد is_staff به صورت خودکار از روی is_superuser خوانده می‌شود
         user.is_superuser = True
         user.is_active = True
         user.save()
 
         if created:
-            self.stdout.write(self.style.SUCCESS(f'✅ سوپریوزر با شماره {phone} ساخته شد.'))
+            self.stdout.write(self.style.SUCCESS(f'✅ سوپریوزر با شماره {phone} با موفقیت ساخته شد.'))
         else:
-            self.stdout.write(self.style.SUCCESS(f'✅ دسترسی سوپریوزر و رمز کاربر {phone} به‌روزرسانی شد.'))
+            self.stdout.write(self.style.SUCCESS(f'✅ دسترسی سوپریوزر و رمز کاربر {phone} با موفقیت به‌روزرسانی شد.'))
